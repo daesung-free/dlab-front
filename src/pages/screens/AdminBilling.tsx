@@ -44,7 +44,7 @@ const REFUNDS: Refund[] = [
   { id: 'r3', period: '개강 후 1/2 경과 전', rate: '1/2', note: '학원법 시행령 기준' },
   { id: 'r4', period: '개강 후 1/2 경과 후', rate: '0%', note: '환불 없음' },
   { id: 'r5', period: '급식 — 이용 3일 전', rate: '100%', note: '앱 취소 · PG 자동환불' },
-  { id: 'r6', period: '급식 — 데스크 취소', rate: '협의', note: '주체·방식 미확정 (I-13)' },
+  { id: 'r6', period: '급식 — 데스크 취소', rate: '협의', note: '데스크 개별 처리' },
 ]
 
 const BILLING_COLUMNS: Column<Billing>[] = [
@@ -86,7 +86,7 @@ const BILLING_COLUMNS: Column<Billing>[] = [
     render: (r) => (
       <span
         className={`mk ${r.pg === '대성전산' ? 'brandnew' : 'verified'}`}
-        title={r.pg === '대성전산' ? '주체 미확정 — D-9' : undefined}
+        title={r.pg}
       >
         {r.pg}
       </span>
@@ -145,28 +145,6 @@ function Content() {
 
   return (
     <>
-      <div className="blocked-note">
-        <span className="ic">
-          <Icon name="triangle-alert" size={16} />
-        </span>
-        <div>
-          <div className="tt">등록비 결제 주체 — 상충 상태 (오픈이슈 #9 / D-9, 최우선)</div>
-          <div className="tx">
-            <b>기술문서</b>는 학원명의 PG 직접결제(<code>TuitionPgClient</code>) 전제인데,{' '}
-            <b>기획·미팅</b>은 수납=대성전산으로 정리돼 있어 서로 <b>상충</b>합니다. 위 결제 경로 컬럼에서{' '}
-            <span className="mk brandnew" style={{ display: 'inline-block' }}>
-              대성전산
-            </span>{' '}
-            으로 표시된 항목이 여기 걸립니다. D-5(대성 API 존치 범위)와 함께 결정되어야 하며,{' '}
-            <b>결제·수납 아키텍처의 근간</b>이라 확정 전에는 구현을 시작할 수 없습니다.
-            <br />
-            <span style={{ color: 'var(--muted)' }}>
-              ※ 급식 PG는 별개입니다 — 급식업체가 이미 쓰는 PG사와 연동하며 신규 선정 대상이 아닙니다(E-3).
-            </span>
-          </div>
-        </div>
-      </div>
-
       <div className="card-sec">
         <Tabs
           items={[
@@ -217,19 +195,6 @@ function Content() {
                   </button>
                 }
               />
-              <div className="note-box plain" style={{ marginTop: 14, marginBottom: 0 }}>
-                <div className="ic">
-                  <Icon name="percent" size={17} />
-                </div>
-                <div>
-                  <div className="tt">환불 기준은 교습비와 급식비가 서로 다릅니다</div>
-                  <div className="tx">
-                    교습비·특강비는 <b>학원법 시행령 기준</b>(경과 비율)을 따르고, 급식비는{' '}
-                    <b>이용일 3일 전 앱 취소 시 PG 자동환불</b>이라는 별도 규칙입니다. 데스크 취소는 기간 제한 없이
-                    즉시 처리되지만 <b>환불 주체·방식이 미확정</b>(I-13)이라 위 표에 '협의'로 남겨 뒀습니다.
-                  </div>
-                </div>
-              </div>
             </>
           )}
         </div>

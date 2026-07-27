@@ -151,24 +151,6 @@ function Content() {
 
   return (
     <>
-      <div className="blocked-note">
-        <span className="ic">
-          <Icon name="triangle-alert" size={16} />
-        </span>
-        <div>
-          <div className="tt">규칙 엔진 자동 부여 — 미확정 (오픈이슈 #25 / I-5, 높음)</div>
-          <div className="tx">
-            <code>trigger → point·reason</code> 매핑 규칙을 운영팀이 확정해야 <b>PenaltyRuleEngine</b>을 설계할 수
-            있습니다. 아래 목록의 <b>자동</b> 배지는 규칙 확정 시 어떻게 보일지 미리 그린 것이고, 지금 실제로 동작하는
-            것은 <b>수기 부여</b>뿐입니다. 규칙 설정 화면은 확정 후 붙습니다.
-            <br />
-            <span style={{ color: 'var(--muted)' }}>
-              ※ [0723] 학생 노출 명칭 완화 검토 중(관리점수 / 나의점수 등) — 운영팀 확정 대기
-            </span>
-          </div>
-        </div>
-      </div>
-
       <div className="stat-strip">
         <div className="stat">
           <div className="l">

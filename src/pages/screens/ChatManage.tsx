@@ -145,27 +145,6 @@ function Content() {
 
   return (
     <>
-      <div className="blocked-note">
-        <span className="ic">
-          <Icon name="triangle-alert" size={16} />
-        </span>
-        <div>
-          <div className="tt">이 화면을 막고 있는 미확정 2건</div>
-          <div className="tx">
-            <b>#20 / E-6 (높음)</b> — <b>외부 유료 메신저 미선정</b>(1만명 규모). 제품이 정해져야 SDK·API가 나오므로
-            1:1 채팅·가족 채팅방은 착수 불가입니다. React 연동 담당 <b>서지원</b> · 개인정보/보안 검토 필요.
-            실행가이드는 <b>"해당 화면만 후순위 재배치 권장"</b>으로 분류했습니다.
-            <br />
-            <b>#23 / I-3 (중)</b> — <b>앱 행정 요청 클릭 항목 리스트</b> 미확정. 항목마다 담당 부서가 달라서, 항목이
-            확정되어야 라우팅 규칙도 정해집니다.
-            <br />
-            <span style={{ color: 'var(--muted)' }}>
-              → <b>공지 발송</b>은 블로커가 없어 선행 가능합니다. 아래 3개 탭 중 공지만 지금 구현 가능한 상태입니다.
-            </span>
-          </div>
-        </div>
-      </div>
-
       <div className="stat-strip">
         <div className="stat">
           <div className="l">
@@ -191,7 +170,7 @@ function Content() {
             선정 대기
           </div>
           <div className="d down" style={{ fontFamily: 'ui-monospace, monospace', fontSize: 9.5 }}>
-            DIRECT_1TO1 · E-6
+            DIRECT_1TO1
           </div>
         </div>
         <div className="stat">
@@ -202,7 +181,7 @@ function Content() {
             선정 대기
           </div>
           <div className="d down" style={{ fontFamily: 'ui-monospace, monospace', fontSize: 9.5 }}>
-            FAMILY · E-6
+            FAMILY
           </div>
         </div>
         <div className="stat">
@@ -265,18 +244,6 @@ function Content() {
 
           {tab === 'request' && (
             <>
-              <div className="note-box warn" style={{ marginBottom: 14 }}>
-                <div className="ic">
-                  <Icon name="list-checks" size={17} />
-                </div>
-                <div>
-                  <div className="tt">아래 {REQUEST_ITEMS.length}개 항목은 제안입니다 (I-3)</div>
-                  <div className="tx">
-                    학생 앱에서 클릭할 <b>사전정의 요청 항목</b>을 운영팀이 확정해야 하며, 이 목록은{' '}
-                    <b>확정본이 아닙니다.</b>
-                  </div>
-                </div>
-              </div>
               <DataTable
                 columns={REQUEST_COLUMNS}
                 rows={REQUESTS}

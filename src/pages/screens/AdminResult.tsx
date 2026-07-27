@@ -141,20 +141,6 @@ function Content() {
 
   return (
     <>
-      <div className="note-box plain">
-        <div className="ic">
-          <Icon name="trophy" size={17} />
-        </div>
-        <div>
-          <div className="tt">계열 명칭·순서 표준 (오픈이슈 #42 / I-22, 하)</div>
-          <div className="tx">
-            [0723] 목표 계열은 <b>①메디컬 ②서울 최상위 ③서울 지거국 ④수도권 ⑤지방 4년제</b> 5분류로 표준화하고
-            마스터로 관리합니다. 이 순서는 <b>실적·신상기록부·목표 설정</b>에서 공통으로 쓰이므로, 세 곳이 같은
-            마스터를 참조해야 합니다. 아래 집계·표의 정렬도 이 순서를 따릅니다.
-          </div>
-        </div>
-      </div>
-
       <div className="stat-strip">
         {TRACKS.map((t) => (
           <div className="stat" key={t}>

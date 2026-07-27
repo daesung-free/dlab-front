@@ -1,11 +1,12 @@
 import { NavLink } from 'react-router-dom'
 import { GROUPS } from '../data/menu'
+import { ME } from '../data/mockDashboard'
 import { Icon } from '../components/Icon'
 
 export function TopNav() {
   return (
     <header className="topnav">
-      <div className="brand">
+      <NavLink to="/" className="brand">
         <div className="logo">
           D<b>'</b>Lab
         </div>
@@ -13,14 +14,14 @@ export function TopNav() {
           <b>통합관리</b>
           <span>대성 · 관리형 독학재수</span>
         </div>
-      </div>
+      </NavLink>
 
       <nav className="cat-tabs">
         <NavLink to="/" end className={({ isActive }) => `cat-tab${isActive ? ' on' : ''}`}>
           <span className="ico">
             <Icon name="layout-dashboard" />
           </span>
-          전체 구성
+          대시보드
         </NavLink>
         {GROUPS.map((g) => (
           <NavLink key={g.id} to={`/g/${g.id}`} className={({ isActive }) => `cat-tab${isActive ? ' on' : ''}`}>
@@ -33,10 +34,14 @@ export function TopNav() {
       </nav>
 
       <div className="who">
-        <div className="av">관</div>
+        <button className="icon-btn" title="알림 3건">
+          <Icon name="bell" size={17} />
+          <span className="badge" />
+        </button>
+        <div className="av">{ME.initial}</div>
         <div className="wt">
-          <b>전체 메뉴</b>
-          <span>마스터 뷰 · 全 권한</span>
+          <b>{ME.name}</b>
+          <span>{ME.role}</span>
         </div>
       </div>
     </header>

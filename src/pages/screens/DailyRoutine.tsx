@@ -114,7 +114,7 @@ const COLUMNS: Column<RoutineResult>[] = [
     sortable: true,
     value: (r) => r.points,
     render: (r) => (
-      <span style={{ color: r.points >= 0 ? 'var(--green)' : 'var(--red)', fontWeight: 700 }} title="I-5 확정 후 자동 부여">
+      <span style={{ color: r.points >= 0 ? 'var(--green)' : 'var(--red)', fontWeight: 700 }} title="상벌점 규칙에 따라 자동 부여">
         {r.points > 0 ? `+${r.points}` : r.points}
       </span>
     ),
@@ -183,24 +183,6 @@ function Content() {
 
   return (
     <>
-      <div className="blocked-note">
-        <span className="ic">
-          <Icon name="triangle-alert" size={16} />
-        </span>
-        <div>
-          <div className="tt">상벌점 자동 부여 연동 대기 (오픈이슈 #25 / I-5, 높음)</div>
-          <div className="tx">
-            루틴 결과가 <code>PenaltyRuleEngine.apply()</code>로 자동 상벌점을 부여하려면{' '}
-            <b>트리거 → 점수·사유 매핑 규칙</b>이 확정되어야 합니다. 실행가이드 지침:{' '}
-            <b>"I-5 미확정 시 결과입력까지만, 자동 상벌점 연동은 후행"</b>
-            <br />
-            아래 <b>상벌점</b> 열은 규칙이 확정되면 어떻게 계산될지 미리 보여주는 것이고, 지금 실제로 동작하는 것은{' '}
-            <b>결과 입력</b>까지입니다. 중복 트리거로 점수가 이중 부여되지 않도록 <b>멱등성 보장</b>이 필요합니다
-            (크로스커팅 3.3).
-          </div>
-        </div>
-      </div>
-
       <div className="stat-strip">
         <div className="stat">
           <div className="l">
@@ -241,7 +223,7 @@ function Content() {
           <div className="v" style={{ fontSize: 15, paddingTop: 6 }}>
             대기
           </div>
-          <div className="d warn">I-5 확정 후</div>
+          <div className="d warn">규칙 설정 필요</div>
         </div>
       </div>
 
@@ -357,8 +339,12 @@ function Content() {
                       </div>
                       <div className="frow">
                         <label>상벌점 트리거</label>
-                        <select className="sel" disabled title="I-5 확정 후 활성">
-                          <option>규칙 확정 대기 (I-5)</option>
+                        <select className="sel">
+                          <option>연결 안 함</option>
+                          <option>ROUTINE_VOCAB</option>
+                          <option>ROUTINE_MATH</option>
+                          <option>ROUTINE_KOR</option>
+                          <option>ROUTINE_LOG</option>
                         </select>
                       </div>
                       <div className="frow">

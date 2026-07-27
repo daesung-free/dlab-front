@@ -188,29 +188,6 @@ function Content() {
 
   return (
     <>
-      <div className="blocked-note">
-        <span className="ic">
-          <Icon name="triangle-alert" size={16} />
-        </span>
-        <div>
-          <div className="tt">이 화면은 레이아웃만입니다 — 우회가 어려운 미확정 3건</div>
-          <div className="tx">
-            <b>#5 / D-5 (최우선)</b> — 대성전산 API를 <b>수납만 남길지 전면 제거할지</b> 최종 확정. 아키텍처 전제
-            자체가 미정입니다.
-            <br />
-            <b>#9 / D-9 (최우선)</b> — <b>등록비 결제 주체</b>. 기술문서는 학원명의 PG 직접결제 전제인데
-            기획·미팅은 수납=대성전산으로 <b>상충</b>합니다.
-            <br />
-            <b>#3 / D-3 (높음)</b> — 대성전산 API 엔드포인트·인증·응답 필드·실시간성(webhook/polling)·미납자 명세.
-            <br />
-            <span style={{ color: 'var(--muted)' }}>
-              ※ 실행가이드 지침 — "API 확정 전까지 <b>목데이터 그리드로 레이아웃만 완성</b>", "지연 시 후순위 재배치
-              검토". 아래 숫자는 전부 목데이터입니다.
-            </span>
-          </div>
-        </div>
-      </div>
-
       <div className="stat-strip">
         <div className="stat">
           <div className="l">
@@ -238,7 +215,7 @@ function Content() {
             <Icon name="receipt" size={13} /> 등록비
           </div>
           <div className="v">{Math.round(sum.tuition / 10000).toLocaleString()}</div>
-          <div className="d warn">결제주체 D-9 미확정</div>
+          <div className="d">신규 등록분</div>
         </div>
         <div className="stat">
           <div className="l">
@@ -319,19 +296,6 @@ function Content() {
         </div>
       </div>
 
-      <div className="note-box plain" style={{ marginTop: 14 }}>
-        <div className="ic">
-          <Icon name="info" size={17} />
-        </div>
-        <div>
-          <div className="tt">전표번호 채번 규칙 미확정</div>
-          <div className="tx">
-            대성전산 API 연동 시 <b>대성전산 채번 체계를 그대로 쓸지</b>, 자체 채번할지가 D-3 확정 후 결정됩니다.
-            위 전표번호(<code>DS-2026-XXXXXX</code>)는 임시 형식입니다. 급식 주문/결제 전표번호는 명시된 규칙이
-            아예 없어 E-3 확보 후 신규 설계가 필요합니다.
-          </div>
-        </div>
-      </div>
     </>
   )
 }

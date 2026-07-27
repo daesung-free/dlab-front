@@ -1,11 +1,13 @@
-import { Navigate, useParams } from 'react-router-dom'
-import { KIND_LABEL, PHASE, findGroup, screensOf, type PhaseNo } from '../data/menu'
-import { ScreenCard } from '../components/ScreenCard'
+import { Link, Navigate, useParams } from 'react-router-dom'
+import { findGroup, screensOf } from '../data/menu'
 import { PageHead } from '../components/PageHead'
+import { Icon } from '../components/Icon'
 import './screen.css'
 
-const PHASE_ORDER: PhaseNo[] = [0, 1, 2, 3, 4]
-
+/**
+ * 대분류 진입 화면 — 하위 메뉴로 넘어가는 허브.
+ * 요구사항·이슈는 노출하지 않는다(제품 화면).
+ */
 export function GroupPage() {
   const { groupId } = useParams()
   const group = groupId ? findGroup(groupId) : undefined
@@ -15,43 +17,22 @@ export function GroupPage() {
 
   return (
     <>
-      <PageHead
-        crumb={
-          <>
-            <b>
-              {group.no} {group.name}
-            </b>{' '}
-            · {screens.length}개 화면
-          </>
-        }
-        title={group.name}
-        icon={group.icon}
-        sub={group.desc}
-      />
+      <PageHead crumb={<b>{group.name}</b>} title={group.name} icon={group.icon} sub={group.desc} />
 
-      <div className="legend-inline">
-        <div className="li">
-          <span className="mk verified">{KIND_LABEL.verified}</span>
-        </div>
-        <div className="li">
-          <span className="mk supplement">{KIND_LABEL.supplement}</span>
-        </div>
-        <div className="li">
-          <span className="mk brandnew">{KIND_LABEL.brandnew}</span>
-        </div>
-        <div className="li" style={{ marginLeft: 'auto' }}>
-          Phase&nbsp;{' '}
-          {PHASE_ORDER.map((p) => (
-            <span className={`ph p${p}`} key={p} style={{ marginLeft: 4 }} title={PHASE[p].name}>
-              P{p}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <div className="cards">
+      <div className="ov-grid">
         {screens.map((s) => (
-          <ScreenCard key={s.id} s={s} />
+          <Link className="menu-card" to={`/s/${s.id}`} key={s.id}>
+            <span className="ic">
+              <Icon name={s.icon} size={19} />
+            </span>
+            <div className="tx">
+              <div className="nm">{s.name}</div>
+              <div className="ds">{s.summary}</div>
+            </div>
+            <span className="go">
+              <Icon name="chevron-right" size={17} />
+            </span>
+          </Link>
         ))}
       </div>
     </>

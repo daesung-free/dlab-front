@@ -190,27 +190,6 @@ function Content() {
 
   return (
     <div className="p-matrix">
-      <div className="note-box warn">
-        <div className="ic">
-          <Icon name="shield" size={17} />
-        </div>
-        <div>
-          <div className="tt">Phase 0에서 반드시 완성해야 하는 화면입니다</div>
-          <div className="tx">
-            실행가이드: <b>"RBAC는 이 Phase에서 완성 필수 — Phase 1부터 개인정보 노출 메뉴가 개발되므로 권한골격 없이
-            진입하면 보안구멍이 열린 채 진행됨(리스크#5)"</b>
-            <br />
-            DSA에서 지점별 접근제어가 운영 중인 것은 화면으로 관찰됐지만, <b>RBAC 5단계 세부 권한모델은 코드가 없어
-            전량 신규 설계</b>입니다. 아래 매트릭스는 <b>초안이며 확정본이 아닙니다</b> — 운영팀 검토가 필요합니다.
-            <br />
-            <span style={{ color: 'var(--muted)' }}>
-              [0723] 개인정보 민감도 상향 — 신상기록부·좌석위치·(도입 시)생체인식이 추가되므로 수집 최소화·암호화·
-              접근권한·마스킹·<b>감사로그</b>를 이 단계 설계에 반드시 포함합니다.
-            </span>
-          </div>
-        </div>
-      </div>
-
       <div className="stat-strip">
         {ROLES.map((r) => (
           <div className="stat" key={r.key}>
@@ -322,28 +301,13 @@ function Content() {
                 <span className="pm p-none">없음</span> 메뉴 미노출
               </span>
               <span style={{ marginLeft: 'auto', color: 'var(--muted)' }}>
-                FE 라우트 가드는 이 표와 <b>1:1로 대응</b>해야 합니다 (실행가이드 Phase 0 FE 3번)
+                메뉴 노출과 기능 접근이 이 표에 따라 자동으로 제한됩니다
               </span>
             </div>
           </div>
         )}
       </div>
 
-      <div className="note-box plain" style={{ marginTop: 14 }}>
-        <div className="ic">
-          <Icon name="history" size={17} />
-        </div>
-        <div>
-          <div className="tt">감사로그는 나중에 추가할 수 없습니다</div>
-          <div className="tx">
-            실행가이드 3.2: <b>"감사로그(작성자/수정자/변경이력)는 보안심사 직결 항목이므로 Phase 0 공통 컬럼 설계에
-            이력 테이블 또는 감사 컬럼을 반드시 포함시킬 것 — 뒤늦게 추가하면 과거 데이터의 이력이 소실된다."</b>
-            <br />
-            위 목록의 <b>권한 수정시간</b>이 그 최소 형태입니다. 누가 누구의 권한을 언제 어떻게 바꿨는지까지 남아야
-            합니다. 인증은 <b>Supabase Auth + JWT 검증 필터</b>를 쓰고, 지점 스코프는 토큰 클레임으로 전달합니다.
-          </div>
-        </div>
-      </div>
     </div>
   )
 }

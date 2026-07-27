@@ -143,19 +143,6 @@ function Content() {
         emptyText="미배정 학생이 없습니다."
       />
 
-      <div className="note-box" style={{ marginTop: 14 }}>
-        <div className="ic">
-          <Icon name="info" size={17} />
-        </div>
-        <div>
-          <div className="tt">고정반 / 이동수업반</div>
-          <div className="tx">
-            이 화면은 <b>고정반</b> 배정입니다. 이동수업반은 같은 <code>class_assignments</code> 테이블에 유형만 달리
-            저장되며, 한 학생이 고정반 1개 + 이동수업반 N개를 가질 수 있습니다. DSA 실사에서는 고정반 목록(계열/학과/담임/정원/원생수)과
-            배정·원생·그룹·등록 버튼까지 확인했고, 전년도 복사 동작은 화면 미진입으로 미검증입니다.
-          </div>
-        </div>
-      </div>
     </>
   )
 }

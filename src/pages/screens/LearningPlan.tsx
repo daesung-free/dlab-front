@@ -265,32 +265,6 @@ function Content() {
 
   return (
     <div className="p-plan">
-      <div className="blocked-note">
-        <span className="ic">
-          <Icon name="triangle-alert" size={16} />
-        </span>
-        <div>
-          <div className="tt">이 화면을 막고 있는 미확정 3건 + 회신 대기 1건</div>
-          <div className="tx">
-            <b>#27 / I-7 (중)</b> — <b>'파란색' 항목 정의</b>. 선생님 편집 영역과 학생 입력 영역의 경계가
-            확정돼야 <code>PATCH items</code>의 권한 분기를 짤 수 있습니다. 아래 그리드에서 파란 셀이 교사 편집
-            영역이라는 가정이며, <b>확정본이 아닙니다.</b>
-            <br />
-            <b>#39 / I-19 (높음)</b> — <b>이행 표시 방식</b>. %+드래그(1안) / ○△빈칸(2안) 중 미확정이라{' '}
-            <b>두 안을 모두 구현해 토글</b>로 비교할 수 있게 했습니다. 상담 리포트의 별점(1~5)과 층위도 함께
-            정리되어야 합니다.
-            <br />
-            <b>#41 / I-21 (중)</b> — <b>연간 행사 마스터</b> 입력 주체·행사 유형·반영 규칙. 아래 <b>6/4 목요일</b>이
-            행사로 차단된 예시입니다.
-            <br />
-            <span style={{ color: 'var(--muted)' }}>
-              ※ 교시 <b>20분 세분 편집</b>은 UI 복잡도 대비 실익이 낮다는 개발팀 의견을 회신 예정이라 반영하지
-              않았습니다 — 지금 구조는 교시 단위입니다.
-            </span>
-          </div>
-        </div>
-      </div>
-
       {/* ── 컨트롤 바 ── */}
       <div className="plan-bar">
         <div className="wk">
@@ -339,7 +313,7 @@ function Content() {
                 key={v.key}
                 className={`chip${doneView === v.key ? ' on' : ''}`}
                 onClick={() => setDoneView(v.key)}
-                title="#39 / I-19 확정 대기 — 두 안을 나란히 비교"
+                title="이행 표시 방식 전환"
               >
                 {v.label}
               </button>
@@ -419,7 +393,7 @@ function Content() {
                           className={`cell${c.teacher ? ' teacher' : ''}`}
                           title={
                             c.teacher
-                              ? `${s.label} · ${c.type} — 교사 편집 영역 (I-7 확정 대기)`
+                              ? `${s.label} · ${c.type} — 교사 편집 영역`
                               : `${s.label} · ${c.type} — 학생 입력`
                           }
                         >
@@ -582,42 +556,6 @@ function Content() {
       </div>
 
       {/* ── 범례 ── */}
-      <div className="note-box plain" style={{ marginTop: 14 }}>
-        <div className="ic">
-          <Icon name="info" size={17} />
-        </div>
-        <div>
-          <div className="tt">그리드 읽는 법</div>
-          <div className="tx">
-            <span
-              style={{
-                display: 'inline-block',
-                width: 11,
-                height: 11,
-                background: 'var(--blue-wash)',
-                borderLeft: '3px solid var(--blue)',
-                verticalAlign: -1,
-                marginRight: 4,
-              }}
-            />
-            <b>파란 셀 = 교사 편집 영역</b> (경계는 I-7 확정 대기) · 흰 셀 = 학생 입력 ·{' '}
-            <span
-              style={{
-                display: 'inline-block',
-                width: 11,
-                height: 11,
-                background: '#fdf3e4',
-                verticalAlign: -1,
-                margin: '0 4px 0 2px',
-              }}
-            />
-            <b>빗금 = 연간 행사로 차단</b>
-            <br />
-            드롭다운 선택목록(과목·학습형태·교재)은 <code>learning_plan_options</code> 마스터에서 관리하며, 관리자가
-            항목을 추가·수정합니다. 교시 시간대와 주말 의무자습 여부도 관리자 편집 대상입니다.
-          </div>
-        </div>
-      </div>
     </div>
   )
 }

@@ -186,28 +186,6 @@ function Content() {
 
   return (
     <>
-      <div className="blocked-note">
-        <span className="ic">
-          <Icon name="triangle-alert" size={16} />
-        </span>
-        <div>
-          <div className="tt">순공시간 산출 정의 미확정 (오픈이슈 #26 / I-6, 중)</div>
-          <div className="tx">
-            <b>입퇴실·좌석없음을 순공시간에 어떻게 반영할지</b> 운영팀 확정이 필요합니다. 정의가 없으면 배치 집계
-            로직을 확정할 수 없습니다.
-            <br />
-            실행가이드 지침대로 지금은 <b>원시로그 집계</b>만 합니다 — 표의 <b>재실시간</b>이 키오스크 로그 그대로이고,{' '}
-            <b>순공시간</b>은 임시 계수를 적용한 값입니다. 확정되면 차감 규칙(화장실·강의실 이동·좌석없음 등)이
-            이 자리에 들어갑니다.
-            <br />
-            <span style={{ color: 'var(--muted)' }}>
-              ※ 좌석 이탈/복귀(F-4.11-8)의 위치 구분값이 확정되면 그 데이터가 차감 근거가 됩니다 — I-16과 함께
-              결정하는 게 효율적입니다.
-            </span>
-          </div>
-        </div>
-      </div>
-
       <div className="stat-strip c6">
         <div className="stat">
           <div className="l">
@@ -259,7 +237,7 @@ function Content() {
           <div className="v" style={{ fontSize: 15, paddingTop: 6 }}>
             scope × period
           </div>
-          <div className="d warn">I-6 확정 후 확정</div>
+          <div className="d">매일 23:00 실행</div>
         </div>
       </div>
 
@@ -373,22 +351,6 @@ function Content() {
               })}
             </div>
 
-            <div className="note-box plain" style={{ marginTop: 16, marginBottom: 0 }}>
-              <div className="ic">
-                <Icon name="smartphone" size={17} />
-              </div>
-              <div>
-                <div className="tt">이 데이터가 앱에서 쓰이는 곳</div>
-                <div className="tx">
-                  <code>GET daily-reports/{'{studentId}'}/{'{date}'}</code> · <code>.../monthly</code> —
-                  달력 뷰 · <code>PATCH .../self-feedback</code> — 학생 셀프 피드백 ·{' '}
-                  <code>GET study-time-rankings</code> — 랭킹.
-                  <br />
-                  매일 밤 <b>FCM 요약 푸시</b>가 나가며, 영단어 시험(F-4.11-7) 결과는 참고링크로 연결됩니다.
-                  상벌점·출결·루틴·질의응답이 모두 여기로 모이므로 <b>선행 도메인이 전부 끝난 뒤</b> 착수합니다.
-                </div>
-              </div>
-            </div>
           </div>
         )}
       </div>

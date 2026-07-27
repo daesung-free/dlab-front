@@ -1,0 +1,216 @@
+/* ============================================================================
+ * 대시보드 — 관리자가 로그인하면 처음 보는 화면
+ * ========================================================================== */
+
+.dash-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.dash-head .greet { font-size: 22px; font-weight: 800; letter-spacing: -0.03em; }
+.dash-head .greet b { color: var(--mint-d); }
+.dash-head .sub { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+.dash-head .right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* ── 출결 요약 (오늘의 핵심 지표) ── */
+.att-strip {
+  display: grid;
+  grid-template-columns: 1.3fr repeat(4, 1fr);
+  gap: 1px;
+  background: var(--line);
+  border-radius: var(--r);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  margin-bottom: 16px;
+}
+.att-cell { background: #fff; padding: 16px 18px; display: flex; flex-direction: column; gap: 3px; }
+.att-cell.lead { background: var(--mint-soft); }
+.att-cell .l {
+  font-size: 11.5px;
+  color: var(--muted);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.att-cell .v {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+.att-cell .v small { font-size: 13px; font-weight: 700; color: var(--muted); }
+.att-cell .d { font-size: 11.5px; color: var(--muted); font-weight: 600; }
+.att-cell .bar { height: 6px; border-radius: 4px; background: var(--line-2); overflow: hidden; margin-top: 7px; }
+.att-cell .bar i { display: block; height: 100%; border-radius: 4px; background: var(--mint); }
+.att-cell.urgent .v { color: var(--red); }
+.att-cell.warn .v { color: var(--amber); }
+.att-cell a { color: var(--mint-d); font-weight: 700; }
+
+/* ── 본문 3단 ── */
+.dash-grid { display: grid; grid-template-columns: 1.55fr 1fr; gap: 16px; align-items: start; }
+.dash-col { display: flex; flex-direction: column; gap: 16px; }
+
+/* ── 오늘 처리할 일 ── */
+.todo-list { display: flex; flex-direction: column; }
+.todo {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 13px 17px;
+  border-bottom: 1px solid var(--line-2);
+  cursor: pointer;
+  color: inherit;
+}
+.todo:last-child { border-bottom: none; }
+.todo:hover { background: var(--mint-soft); }
+.todo .ic {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  background: var(--bg);
+  color: var(--ink-2);
+}
+.todo.urgent .ic { background: var(--red-wash); color: var(--red); }
+.todo.warn .ic { background: var(--amber-wash); color: var(--amber); }
+.todo.normal .ic { background: var(--mint-wash); color: var(--mint-d); }
+.todo .body { flex: 1; min-width: 0; }
+.todo .lb { font-size: 13.5px; font-weight: 700; }
+.todo .hint { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.todo .cnt { font-size: 20px; font-weight: 800; letter-spacing: -0.03em; white-space: nowrap; }
+.todo .cnt small { font-size: 12px; font-weight: 700; color: var(--muted); margin-left: 2px; }
+.todo.urgent .cnt { color: var(--red); }
+.todo.warn .cnt { color: var(--amber); }
+.todo .go { color: var(--muted); display: flex; flex-shrink: 0; }
+.todo:hover .go { color: var(--mint-d); }
+
+/* ── 주간 출결 차트 ── */
+.wk-chart { display: flex; align-items: flex-end; gap: 14px; height: 168px; padding: 6px 4px 0; }
+.wk-day { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 7px; height: 100%; }
+.wk-stack {
+  flex: 1;
+  width: 100%;
+  max-width: 46px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 2px;
+}
+.wk-stack i { display: block; border-radius: 3px; }
+.wk-stack i.ar { background: var(--mint); }
+.wk-stack i.la { background: var(--amber); }
+.wk-stack i.ab { background: var(--red); }
+.wk-day .lb { font-size: 11px; color: var(--muted); font-weight: 700; text-align: center; }
+.wk-day .lb b { display: block; color: var(--ink-2); font-size: 11.5px; }
+.wk-day.today .lb b { color: var(--mint-d); }
+.wk-legend {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-2);
+}
+.wk-legend .sw { width: 9px; height: 9px; border-radius: 3px; display: inline-block; margin-right: 5px; vertical-align: -1px; }
+
+/* ── 활동 타임라인 ── */
+.act-list { display: flex; flex-direction: column; gap: 0; max-height: 340px; overflow: auto; }
+.act {
+  display: flex;
+  gap: 11px;
+  padding: 10px 17px;
+  border-bottom: 1px solid var(--line-2);
+  align-items: flex-start;
+}
+.act:last-child { border-bottom: none; }
+.act .at {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  padding-top: 1px;
+}
+.act .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; }
+.act .dot.in { background: var(--mint); }
+.act .dot.late { background: var(--amber); }
+.act .dot.req { background: var(--blue); }
+.act .dot.out { background: var(--violet); }
+.act .dot.sys { background: var(--line); }
+.act .tx { font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+.act .tx b { font-weight: 700; color: var(--ink); }
+
+/* ── 랭킹 ── */
+.rank-list { display: flex; flex-direction: column; gap: 11px; padding: 15px 17px; }
+.rank-row { display: grid; grid-template-columns: 24px 1fr 72px; gap: 10px; align-items: center; }
+.rank-row .no {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 800;
+  background: var(--bg);
+  color: var(--muted);
+}
+.rank-row.top1 .no { background: #e8920f; color: #fff; }
+.rank-row.top2 .no { background: #8b94a3; color: #fff; }
+.rank-row.top3 .no { background: #b87333; color: #fff; }
+.rank-row .who { font-size: 12.5px; font-weight: 600; }
+.rank-row .who span { color: var(--muted); font-size: 11px; margin-left: 5px; font-weight: 500; }
+.rank-row .track { height: 6px; background: var(--line-2); border-radius: 4px; overflow: hidden; margin-top: 4px; }
+.rank-row .track i { display: block; height: 100%; background: var(--mint); border-radius: 4px; }
+.rank-row .tm { font-size: 12px; font-weight: 800; color: var(--mint-d); text-align: right; white-space: nowrap; }
+
+/* ── 요약 3연 카드 ── */
+.mini-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.mini-b { padding: 15px 17px; }
+.mini-b .big { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; }
+.mini-b .big small { font-size: 12px; color: var(--muted); font-weight: 700; margin-left: 3px; }
+.mini-b .sub { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+.mini-b .track { height: 7px; background: var(--line-2); border-radius: 4px; overflow: hidden; margin-top: 10px; }
+.mini-b .track i { display: block; height: 100%; border-radius: 4px; }
+
+/* ── 공지 / 일정 리스트 ── */
+.simple-list { display: flex; flex-direction: column; }
+.simple-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 17px;
+  border-bottom: 1px solid var(--line-2);
+  font-size: 12.5px;
+}
+.simple-row:last-child { border-bottom: none; }
+.simple-row .t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.simple-row .meta { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.simple-row .dday {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--amber);
+  background: var(--amber-wash);
+  padding: 2px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+@media (max-width: 1400px) {
+  .att-strip { grid-template-columns: repeat(3, 1fr); }
+  .dash-grid { grid-template-columns: 1fr; }
+  .mini-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 820px) {
+  .att-strip { grid-template-columns: repeat(2, 1fr); }
+}

@@ -124,26 +124,6 @@ function Content() {
 
   return (
     <>
-      <div className="blocked-note">
-        <span className="ic">
-          <Icon name="triangle-alert" size={16} />
-        </span>
-        <div>
-          <div className="tt">입력 주체·유형·반영 규칙 미확정 (오픈이슈 #41 / I-21, 중)</div>
-          <div className="tx">
-            누가 연간 행사를 입력하는지(본사 / 지점 / 교무), 행사 유형을 어떻게 나눌지, 학습계획에 어떤 규칙으로
-            반영할지가 운영팀 확정 대기입니다. 아래 <b>5종 유형</b>과 <b>학습계획 차단 여부</b>는 제안이며 확정본이
-            아닙니다.
-            <br />
-            <span style={{ color: 'var(--muted)' }}>
-              ※ 이 마스터는 <b>학습계획(F-4.11-2)</b>이 참조합니다 — 차단으로 설정된 날은 교시×요일 그리드에서 열
-              전체가 잠깁니다. <b>휴원</b>은 급식 가능일(F-4.5 MealPolicy)에서도 제외되어야 하므로, 공휴일 provider와
-              이 마스터의 관계도 함께 정리되어야 합니다.
-            </span>
-          </div>
-        </div>
-      </div>
-
       <div className="stat-strip">
         <div className="stat">
           <div className="l">

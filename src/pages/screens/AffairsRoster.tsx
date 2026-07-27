@@ -53,7 +53,7 @@ const FIELDS: Field[] = [
 const UNDEFINED_COL: Column<RosterRow> = {
   key: 'gubun',
   header: (
-    <span title="오픈이슈 #21 / I-1 — 운영팀 재정의 대기" style={{ color: 'var(--amber)' }}>
+    <span title="항목 정의 준비 중" style={{ color: 'var(--amber)' }}>
       구분 <Icon name="triangle-alert" size={11} />
     </span>
   ),
@@ -70,7 +70,7 @@ const UNDEFINED_COL: Column<RosterRow> = {
         padding: '2px 8px',
         borderRadius: 5,
       }}
-      title="항목 정의 미확정 — I-1 확정 후 채워집니다"
+      title="항목 정의 준비 중"
     >
       미정
     </span>
@@ -154,23 +154,6 @@ function Content() {
 
   return (
     <>
-      <div className="blocked-note">
-        <span className="ic">
-          <Icon name="triangle-alert" size={16} />
-        </span>
-        <div>
-          <div className="tt">'구분' 항목 재정의 — 우회 불가 (오픈이슈 #21 / I-1, 최우선)</div>
-          <div className="tx">
-            오픈이슈 42건 중 <b>유일하게 "우회 불가"로 분류된 항목</b>입니다. DSA 화면에도 <code>(!!)</code>로
-            표기돼 있던 미정 항목이라, 운영팀 확정 없이는 <b>필드 정의 자체가 불가능</b>합니다.
-            <br />
-            실행가이드 Phase 2 주의사항: <b>"운영팀 확정 전 임의로 필드정의하고 개발 시작하지 말 것(재작업 확률 높음)"</b>
-            <br />→ 아래 표의 <b>구분</b> 컬럼은 값을 지어내지 않고 <b>미정</b>으로 비워 뒀습니다. 나머지 컬럼과
-            Copy·Excel·Print 동선은 DSA 실사에서 검증된 대로 먼저 만들었습니다.
-          </div>
-        </div>
-      </div>
-
       <SearchForm fields={FIELDS} onSearch={setQuery} presetKey="affairs" />
 
       <div className="card-sec">
@@ -199,24 +182,6 @@ function Content() {
         </div>
       </div>
 
-      <div className="note-box plain" style={{ marginTop: 14 }}>
-        <div className="ic">
-          <Icon name="lock" size={17} />
-        </div>
-        <div>
-          <div className="tt">개인정보 — 이 화면이 가장 민감합니다</div>
-          <div className="tx">
-            수강생 대장은 <b>주소·학생 연락처·학부모 연락처</b>를 한 화면에 모읍니다. 크로스커팅 3.2에 따라 목록과
-            엑셀 모두 <b>마스킹 기본 ON</b>이며, 해제 권한은 서버 RBAC(<code>BRANCH_ADMIN 이상</code>)이 결정합니다.
-            Copy·Print도 동일한 마스킹 상태를 따릅니다.
-            <br />
-            <span style={{ color: 'var(--muted)' }}>
-              [0723] 발주처 개인정보 민감도 상향 — 상대 학원의 유출 조사·벌금 사례가 배경입니다. 감사로그는 Phase 0
-              공통 컬럼 설계에 포함됩니다.
-            </span>
-          </div>
-        </div>
-      </div>
     </>
   )
 }

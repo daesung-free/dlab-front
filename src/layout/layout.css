@@ -87,6 +87,30 @@
 .topnav .who .wt b { font-size: 12px; font-weight: 700; color: var(--ink); display: block; line-height: 1.2; }
 .topnav .who .wt span { font-size: 10.5px; color: var(--muted); }
 
+.topnav .icon-btn {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: none;
+  background: none;
+  color: var(--ink-2);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.topnav .icon-btn:hover { background: var(--bg); }
+.topnav .icon-btn .badge {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--red);
+  border: 1.5px solid #fff;
+}
+
 /* ===== Shell ===== */
 .wrap {
   display: grid;

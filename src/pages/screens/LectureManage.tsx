@@ -136,20 +136,6 @@ function Content() {
 
   return (
     <>
-      <div className="note-box">
-        <div className="ic">
-          <Icon name="presentation" size={17} />
-        </div>
-        <div>
-          <div className="tt">신청명단·출석부는 요구사항 검증됨 · 설명회 신청만 보완 개발</div>
-          <div className="tx">
-            DSA <b>'특강관리 &gt; 접수 &gt; 신청명단'</b>에서 조건검색(월/과정/학과)·진행상태 결과·일괄이동/수정
-            동선이 확인됐습니다. <b>설명회 신청 관리</b>만 DSA에 대응 화면이 없어 추가 개발 범위이며, 기초 설정은
-            관리자 기능(F-4.10-4)에서 다룹니다.
-          </div>
-        </div>
-      </div>
-
       <div className="stat-strip">
         <div className="stat">
           <div className="l">

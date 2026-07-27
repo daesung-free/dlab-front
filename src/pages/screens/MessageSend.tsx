@@ -96,20 +96,6 @@ function Content() {
 
   return (
     <>
-      <div className="blocked-note">
-        <span className="ic">
-          <Icon name="triangle-alert" size={16} />
-        </span>
-        <div>
-          <div className="tt">카카오 알림톡 심사 — 미완료 (오픈이슈 #19 / E-5, 최우선)</div>
-          <div className="tx">
-            발신 프로필·템플릿 사전 승인이 나야 알림톡을 주 채널로 쓸 수 있습니다. 심사 결과에 따라
-            <b> FCM 단독 vs 알림톡 병행</b>이 갈리며(#34 / I-14), 지연 시 <b>SMS 폴백</b>으로 착수합니다.
-            알림톡·푸시 <b>전체 문구</b>도 운영팀 확정 대기입니다(#24 / I-4) — 아래 템플릿 본문은 임시안입니다.
-          </div>
-        </div>
-      </div>
-
       <div className="split-3-2">
         {/* ── 발송 작성 ── */}
         <div className="card-sec">
@@ -246,7 +232,7 @@ function Content() {
               알림 템플릿
             </div>
             <div className="r">
-              <span style={{ fontSize: 11, color: 'var(--muted)' }}>Phase 0 · 설정</span>
+              <span style={{ fontSize: 11, color: 'var(--muted)' }}>설정 &gt; 알림 템플릿</span>
             </div>
           </div>
           <div className="card-sec-b" style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>

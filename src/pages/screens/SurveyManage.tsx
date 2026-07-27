@@ -171,23 +171,6 @@ function Content() {
 
   return (
     <>
-      <div className="note-box">
-        <div className="ic">
-          <Icon name="clipboard-list" size={17} />
-        </div>
-        <div>
-          <div className="tt">의존성이 낮아 성적 모듈과 병행 가능한 화면입니다</div>
-          <div className="tx">
-            실행가이드 Phase 3: <b>"설문 관리(+템플릿) — 성적모듈과 병행 가능, 의존성 낮음"</b>. 외부 연동이나 미확정
-            이슈가 걸려 있지 않은 몇 안 되는 화면이라, Phase 3에서 다른 화면이 블로커에 막혔을 때 먼저 진행할 수
-            있습니다.
-            <br />
-            역할 분담은 <b>관리 = 템플릿·배포</b> / <b>앱 = 응답</b>입니다. 수능·평가원 직후 가채점 설문이 주 용도이며,
-            응답 결과는 성적 리포트(F-4.6)와 결합됩니다.
-          </div>
-        </div>
-      </div>
-
       <div className="stat-strip">
         <div className="stat">
           <div className="l">
@@ -338,18 +321,6 @@ function Content() {
                     </span>
                   </div>
                 ))}
-                <div className="note-box plain" style={{ marginTop: 16, marginBottom: 0 }}>
-                  <div className="ic">
-                    <Icon name="info" size={17} />
-                  </div>
-                  <div>
-                    <div className="tt">등급 표기 방식은 클라이언트 회신 대기</div>
-                    <div className="tx">
-                      [0723] 전과목 등급 표시로 확정됐으나, <b>등급 / 백분위% / 평균</b> 중 어떤 형태로 노출할지는
-                      회신 대기 상태입니다. 위 표는 셋을 모두 병기한 안입니다.
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
           )}

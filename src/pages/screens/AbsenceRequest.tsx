@@ -135,20 +135,6 @@ function Content() {
 
   return (
     <>
-      <div className="note-box">
-        <div className="ic">
-          <Icon name="route" size={17} />
-        </div>
-        <div>
-          <div className="tt">승인 라우팅 — 이 화면이 Phase 3 승인 관리(F-4.11-5)의 선행 구현입니다</div>
-          <div className="tx">
-            학생이 앱에서 제출한 사유가 <code>approval_items.approver_type</code>에 따라 <b>학부모 / 담임 / 자동</b>으로
-            자동 라우팅됩니다. 두 화면이 <b>approval_items · approval_requests 스키마를 공유</b>하므로, 여기서 임시
-            모델로 만들었다가 Phase 3에서 다시 설계하는 이중작업이 없도록 처음부터 같은 구조로 갑니다.
-          </div>
-        </div>
-      </div>
-
       <div className="stat-strip">
         <div className="stat">
           <div className="l">
@@ -180,7 +166,7 @@ function Content() {
           <div className="v" style={{ color: 'var(--red)' }}>
             {escalation.length}
           </div>
-          <div className="d warn">응답시간 미확정</div>
+          <div className="d warn">학부모 미응답 2시간+</div>
         </div>
         <div className="stat">
           <div className="l">
@@ -189,7 +175,7 @@ function Content() {
           <div className="v" style={{ color: 'var(--red)' }}>
             {penaltyConflict.length}
           </div>
-          <div className="d warn">기준 미확정</div>
+          <div className="d warn">벌점 확정 건</div>
         </div>
       </div>
 
@@ -218,24 +204,6 @@ function Content() {
         </div>
       </div>
 
-      <div className="blocked-note">
-        <span className="ic">
-          <Icon name="triangle-alert" size={16} />
-        </span>
-        <div>
-          <div className="tt">이 화면을 막고 있는 미확정 3건</div>
-          <div className="tx">
-            <b>#32 / I-12 (높음)</b> — 신청 항목별 승인 주체(학부모·선생님·자동) 매트릭스 확정. 방화벽 해제 승인
-            주체는 특히 미결.
-            <br />
-            <b>#30 / I-10 (중)</b> — <b>'벌점 확정 후 사유 승인 불가'</b>의 확정 기준. 위 목록의 '벌점 확정 충돌'
-            {penaltyConflict.length}건이 여기 해당하며, 기준이 없으면 승인 버튼의 동작을 정의할 수 없습니다.
-            <br />
-            <b>#40 / I-20 (중)</b> — 학부모 미응답 시 담임으로 넘기는 <b>에스컬레이션 응답시간</b>, 입학 시 승인자
-            사전지정 가능 여부. 클라이언트 미확약 상태라 <b>스키마에 필드만 미리 확보</b>해 둡니다(Phase 0).
-          </div>
-        </div>
-      </div>
     </>
   )
 }

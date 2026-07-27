@@ -183,20 +183,6 @@ function Content() {
 
   return (
     <>
-      <div className="note-box">
-        <div className="ic">
-          <Icon name="info" size={17} />
-        </div>
-        <div>
-          <div className="tt">의존성이 가장 낮은 화면 — 여유 시 배치</div>
-          <div className="tx">
-            실행가이드 Phase 3 BE 순서에서 <b>마지막 10번</b>, FE 순서에서도 <b>8순위(여유 시)</b>입니다. 다른 화면이
-            블로커에 막혔을 때 대신 진행할 수 있는 후보입니다. 영단어 시험 결과는{' '}
-            <b>Daily Report(F-4.11-6)의 참고링크</b>로 노출되고, 대면 질의응답 횟수도 Daily Report에 집계됩니다.
-          </div>
-        </div>
-      </div>
-
       <div className="stat-strip">
         <div className="stat">
           <div className="l">

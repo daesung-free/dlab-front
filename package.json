@@ -12,7 +12,8 @@
     "typecheck": "tsc -b --noEmit",
     "handoff": "node scripts/gen-handoff.ts",
     "asks": "node scripts/gen-asks.ts",
-    "docs": "npm run handoff && npm run asks"
+    "assumptions": "node scripts/gen-assumptions.ts",
+    "docs": "npm run handoff && npm run asks && npm run assumptions"
   },
   "dependencies": {
     "lucide-react": "^1.27.0",

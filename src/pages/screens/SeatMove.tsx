@@ -152,27 +152,6 @@ function Content() {
 
   return (
     <div className="p-seat">
-      <div className="blocked-note">
-        <span className="ic">
-          <Icon name="triangle-alert" size={16} />
-        </span>
-        <div>
-          <div className="tt">위치 구분값·키오스크 병행 범위 미확정 (오픈이슈 #36 / I-16, 높음 · D-2 종속)</div>
-          <div className="tx">
-            아래 5종 위치 구분값(<code>SEAT / CLASSROOM / RESTROOM / COMMON / SUBJECT</code>)은{' '}
-            <b>제안이며 확정본이 아닙니다.</b> 좌석표 실시간 반영 방식, 앱↔키오스크 병행 처리, 잔여 키오스크
-            <b> 6대</b>의 연동 범위가 운영팀·대성전산 협의 대기입니다.
-            <br />
-            실행가이드 지침: <b>"D-2 종속 — 미확정 시 앱만 우선"</b>. 키오스크 경로는 스펙 수령 후 붙입니다.
-            <br />
-            <span style={{ color: 'var(--muted)' }}>
-              ※ 배경 — 키오스크 증설이 중단되어 앱으로 대체합니다. 패드 소지자는 앱, 미소지자는 키오스크 병행.
-              기존 <b>사감 순찰기록을 "좌석 이탈 현황"으로 재정의</b>해 연동합니다(<code>patrol_logs</code> 재정의).
-            </span>
-          </div>
-        </div>
-      </div>
-
       <div className="stat-strip c6">
         <div className="stat">
           <div className="l">
@@ -295,20 +274,6 @@ function Content() {
         }
       />
 
-      <div className="note-box plain" style={{ marginTop: 14 }}>
-        <div className="ic">
-          <Icon name="qr-code" size={17} />
-        </div>
-        <div>
-          <div className="tt">사감 순찰 기록과의 관계</div>
-          <div className="tx">
-            기존 순찰 기록(교시별 구역 QR 스캔 — 공부중 / 졸음 / 좌석없음)의 <b>'좌석없음'</b>이 이 화면의{' '}
-            <b>미신고 이탈</b>과 같은 사건입니다. 학생이 앱으로 이동을 신청하면 순찰에서 '좌석없음'으로 잡혀도
-            정상 처리되고, 신청 없이 자리를 비운 경우만 미신고로 남습니다. <b>2회 연속 졸음 → 벌점</b> 규칙은
-            상벌점 규칙 엔진(I-5)에 함께 매핑되어야 합니다.
-          </div>
-        </div>
-      </div>
     </div>
   )
 }

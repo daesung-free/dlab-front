@@ -151,27 +151,6 @@ function Content() {
 
   return (
     <>
-      <div className="blocked-note">
-        <span className="ic">
-          <Icon name="triangle-alert" size={16} />
-        </span>
-        <div>
-          <div className="tt">양식 미확정 — 입력 폼은 만들 수 없습니다 (오픈이슈 #37 / I-17, 최우선)</div>
-          <div className="tx">
-            <b>신상기록부 4종 양식·항목·학년별 폼 분기·PDF 양식</b>이 운영팀 확정 대기입니다. 실행가이드도
-            <b> "양식 확정 전 폼 확정 불가 — 회원가입 온보딩 착수 전 필수"</b>로 못박고 있어, 항목을 임의로 지어내면
-            재작업이 확정적입니다.
-            <br />
-            그래서 <b>입력 폼은 비워 두고</b>, 양식과 무관하게 지금 확정 가능한 <b>작성 현황 관리</b>만 먼저
-            만들었습니다. 양식이 오면 폼 컴포넌트만 끼워 넣으면 됩니다.
-            <br />
-            <span style={{ color: 'var(--muted)' }}>
-              ※ 원본은 구글시트로 운영 중인 초도상담 자료입니다 — 구조 실사·이관 계획은 #35 / I-15 (Phase 0)
-            </span>
-          </div>
-        </div>
-      </div>
-
       <div className="stat-strip">
         <div className="stat">
           <div className="l">
@@ -248,7 +227,7 @@ function Content() {
                 >
                   <Icon name="lock" size={14} />
                   <b style={{ fontSize: 12.5 }}>{f}</b>
-                  <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--muted)' }}>양식 확정 대기</span>
+                  <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--muted)' }}>준비 중</span>
                 </div>
               ))}
               <div style={{ fontSize: 11.5, color: 'var(--muted)', lineHeight: 1.6, marginTop: 2 }}>
@@ -288,19 +267,6 @@ function Content() {
         }
       />
 
-      <div className="note-box" style={{ marginTop: 14 }}>
-        <div className="ic">
-          <Icon name="link" size={17} />
-        </div>
-        <div>
-          <div className="tt">상담 화면 연계 (F-4.11-4)</div>
-          <div className="tx">
-            [0723] 담임별·반별 상담현황 조회에 <b>신상기록부 작성여부</b>와 <b>초도상담현황(미상담 시 빨간 경고)</b>이
-            함께 노출됩니다. 선생님은 상담 탭에서 이 기록부를 <b>열람하고 PDF로 출력</b>합니다 — 그래서 PDF 양식도
-            I-17 확정 범위에 포함됩니다.
-          </div>
-        </div>
-      </div>
     </>
   )
 }

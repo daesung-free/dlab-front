@@ -147,20 +147,6 @@ function Content() {
 
   return (
     <>
-      <div className="blocked-note">
-        <span className="ic">
-          <Icon name="triangle-alert" size={16} />
-        </span>
-        <div>
-          <div className="tt">키오스크 직접 연동 — 스펙 미확정 (오픈이슈 #2 / D-2, 최우선)</div>
-          <div className="tx">
-            키오스크 소유·펌웨어 제어 주체, <code>Webhook</code> 엔드포인트 변경 가능 여부, payload 포맷,
-            NFC/RFID 카드-학번 매핑이 모두 대성전산 협의 대기입니다. <b>이 화면은 목업 payload 기준</b>이며, 실제
-            스펙 수령 시 수신부만 교체되도록 인터페이스를 분리해 구현합니다.
-          </div>
-        </div>
-      </div>
-
       <div className="stat-strip c6">
         <div className="stat">
           <div className="l">
@@ -215,19 +201,6 @@ function Content() {
         }
       />
 
-      <div className="note-box plain" style={{ marginTop: 14 }}>
-        <div className="ic">
-          <Icon name="info" size={17} />
-        </div>
-        <div>
-          <div className="tt">순공시간 산출 정의 미확정 (오픈이슈 #26 / I-6, 중)</div>
-          <div className="tx">
-            입퇴실·좌석없음을 순공시간에 어떻게 반영할지 운영팀 확정이 필요합니다. 지금 표의 순공시간은
-            <b> 단순 재실시간</b>이며, Daily Report 집계(F-4.11-6) 설계 전까지 확정되어야 합니다. 결석은 배치
-            스케줄러가 최종 확정하고, 상태 전이 후 알림톡 + 상벌점이 자동 트리거됩니다.
-          </div>
-        </div>
-      </div>
     </>
   )
 }

@@ -1,6 +1,44 @@
 /* 안내 배너(.note-box)와 지표 스트립(.stat-strip)은 styles/blocks.css 공통 */
 .home-stats { margin-top: 18px; }
 
+/* 대분류 진입 화면의 하위 메뉴 카드 */
+.menu-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--card);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 17px 18px;
+  border: 1px solid transparent;
+  color: inherit;
+}
+.menu-card:hover { border-color: #d6efea; box-shadow: var(--shadow-2); }
+.menu-card .ic {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--mint-wash);
+  color: var(--mint-d);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.menu-card .tx { flex: 1; min-width: 0; }
+.menu-card .nm { font-size: 14.5px; font-weight: 800; letter-spacing: -0.02em; }
+.menu-card .ds {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 3px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.menu-card .go { color: var(--muted); display: flex; flex-shrink: 0; }
+.menu-card:hover .go { color: var(--mint-d); }
+
 /* ===== 대분류 카드 그리드 — 시안 .ov-grid 이관 ===== */
 .ov-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
 .ov-cat {

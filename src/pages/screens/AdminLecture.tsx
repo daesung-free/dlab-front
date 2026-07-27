@@ -107,23 +107,7 @@ function Content() {
 
   return (
     <>
-      {tab === 'briefing' && (
-        <div className="blocked-note">
-          <span className="ic">
-            <Icon name="triangle-alert" size={16} />
-          </span>
-          <div>
-            <div className="tt">설명회 신청 — 추가 개발 범위 확인 필요</div>
-            <div className="tx">
-              DSA '관리자 &gt; 특강관리'에는 <b>설명회 신청 항목이 없습니다</b>. 특강 마스터에 유형만 추가해 재사용할지,
-              별도 도메인으로 분리할지 확정이 필요합니다. 지금은 <b>특강 마스터의 유형 하나(설명회)</b>로 다루는 안을
-              그려 뒀습니다 — 신청자 관리는 특강 신청명단(F-4.7)을 그대로 쓸 수 있습니다.
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="card-sec">
+            <div className="card-sec">
         <Tabs
           items={[
             { key: 'lecture', label: '특강 기초 설정', count: MASTERS.length },

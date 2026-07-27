@@ -46,7 +46,7 @@ const ITEMS: ApprovalItem[] = [
     name: '와이파이 방화벽 해제 (인강)',
     category: '학습',
     approver: null,
-    note: '승인 주체 미결 — I-12',
+    note: '승인 주체 미지정',
   },
   { code: 'DEVICE', name: '전자기기 반입', category: '생활', approver: null, note: '항목 존재 여부부터 확인 필요' },
 ]
@@ -70,29 +70,6 @@ function Content() {
 
   return (
     <div className="p-matrix">
-      <div className="blocked-note">
-        <span className="ic">
-          <Icon name="triangle-alert" size={16} />
-        </span>
-        <div>
-          <div className="tt">승인 주체 매트릭스 미확정 (오픈이슈 #32 / I-12, 높음)</div>
-          <div className="tx">
-            학생 신청 항목별로 <b>학부모 / 담임 / 자동</b> 중 누가 승인하는지 운영팀 확정이 필요합니다. 아래 표에서{' '}
-            <b style={{ color: 'var(--red)' }}>{undecided}건</b>이 미결이며, 특히{' '}
-            <b>와이파이 방화벽 해제</b>는 요구사항정의서에도 "승인 주체 미결"로 명시돼 있습니다.
-            <br />
-            <b>#40 / I-20 (중)</b> — 학부모 미응답 시 담임으로 넘기는 <b>에스컬레이션 응답시간</b>과 입학 시 승인자
-            사전지정 가능 여부는 <b>클라이언트 미확약</b> 상태입니다. 실행가이드 Phase 0 지침대로{' '}
-            <b>스키마에 필드(응답제한시간·escalation)만 미리 확보</b>해 두고, 값은 확정 후 채웁니다.
-            <br />
-            <span style={{ color: 'var(--muted)' }}>
-              ※ 이 화면은 Phase 1 <b>사유 신청 관리(F-4.1-5)</b>와 <code>approval_items</code> ·{' '}
-              <code>approval_requests</code> 스키마를 공유합니다.
-            </span>
-          </div>
-        </div>
-      </div>
-
       <div className="stat-strip">
         {APPROVERS.map((a) => (
           <div className="stat" key={a.key}>
@@ -112,7 +89,7 @@ function Content() {
           <div className="v" style={{ color: 'var(--red)' }}>
             {undecided}
           </div>
-          <div className="d down">I-12 확정 대기</div>
+          <div className="d down">주체 미지정</div>
         </div>
         <div className="stat">
           <div className="l">
@@ -237,7 +214,7 @@ function Content() {
             <span>
               <span className="pm p-read">학부모</span> 앱 푸시 → 승인
             </span>
-            <span style={{ color: 'var(--amber)', fontWeight: 700 }}>* 응답 제한시간은 임시값 (I-20 미확약)</span>
+            <span style={{ color: 'var(--amber)', fontWeight: 700 }}>* 응답 제한시간 경과 시 자동 에스컬레이션</span>
           </div>
         </div>
       </div>
@@ -317,16 +294,20 @@ function Content() {
             </div>
             <div className="frow">
               <label>승인자 사전지정</label>
-              <div style={{ paddingTop: 9, fontSize: 12, color: 'var(--muted)', lineHeight: 1.6 }}>
-                입학 시 학부모 승인자를 미리 지정할 수 있는지 <b style={{ color: 'var(--amber)' }}>클라이언트 미확약</b>
-                입니다. 가능해지면 신상기록부(F-4.11-9) 입력 단계에 필드를 붙입니다.
+              <div style={{ paddingTop: 9 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
+                  <input type="checkbox" />
+                  입학 시 학부모 승인자를 미리 지정
+                </label>
               </div>
             </div>
             <div className="frow">
               <label>벌점 연계</label>
-              <div style={{ paddingTop: 9, fontSize: 12, color: 'var(--muted)', lineHeight: 1.6 }}>
-                <b>'벌점 확정 후 사유 승인 불가'</b>의 확정 기준이 미정입니다(#30 / I-10). 기준이 없으면 승인 버튼의
-                동작 자체를 정의할 수 없습니다.
+              <div style={{ paddingTop: 9 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
+                  <input type="checkbox" defaultChecked />
+                  벌점 확정 후에는 사유 승인 불가
+                </label>
               </div>
             </div>
           </div>

@@ -196,31 +196,6 @@ function Content() {
 
   return (
     <div className="p-meal">
-      <div className="blocked-note">
-        <span className="ic">
-          <Icon name="triangle-alert" size={16} />
-        </span>
-        <div>
-          <div className="tt">돈이 걸린 기능 — 연동정보 4건 대기 중</div>
-          <div className="tx">
-            <b>#17 / E-3 (높음)</b> — 급식업체가 <b>이미 쓰는 PG사</b>의 가맹점 사업자정보·카드/가상계좌 발급 API
-            스펙·정산주기. <span style={{ color: 'var(--muted)' }}>신규 PG 선정 건이 아니라 정보 수급 건입니다.</span>
-            <br />
-            <b>#18 / E-4 (높음)</b> — 급식업체 3일 이내 취소 전달 방식, 환불 프로세스, 식수 마감 데이터 전달.
-            <br />
-            <b>#33 / I-13 (중)</b> — 데스크 당일 신청의 결제 방식(PG카드/현금/수납)과 취소·환불 주체.
-            <br />
-            <b>#38 / I-18 (중)</b> — 식사체크 방식. [0723] 주체는 <b>관리자(교직원)</b>이고 키오스크 + 소형 패드
-            병행. 생체인식 채택 시 <b>ISMS 별도 검토 필수</b>.
-            <br />
-            <span style={{ color: 'var(--muted)' }}>
-              ※ 실행가이드 지침 — <b>화면보다 결제/정산 상태모델을 먼저 확정</b>할 것. 지금 화면은 상태모델을 눈으로
-              합의하기 위한 것입니다.
-            </span>
-          </div>
-        </div>
-      </div>
-
       <div className="stat-strip c6">
         <div className="stat">
           <div className="l">
@@ -332,7 +307,7 @@ function Content() {
                 공휴일 제외
               </span>
               <span style={{ marginLeft: 'auto' }}>
-                <code style={{ fontSize: 11 }}>MealPolicy.availableDates</code> — 공휴일 provider는 Phase 0 공통모듈
+주말·공휴일은 자동으로 제외됩니다
               </span>
             </div>
           </div>
@@ -371,8 +346,8 @@ function Content() {
                 <ul>
                   <li>이용일 <b>3일 전까지</b>만 취소 가능</li>
                   <li>취소 시 <b>PG 자동환불</b> 처리</li>
-                  <li>급식업체에 취소 전달 (전달 방식 E-4 미확정)</li>
-                  <li>수납에 자동 반영 (반영 방식 D-6 미확정)</li>
+                  <li>급식업체에 취소 자동 전달</li>
+                  <li>수납에 자동 반영</li>
                 </ul>
               </div>
               <div className="track desk">
@@ -381,29 +356,13 @@ function Content() {
                 </div>
                 <ul>
                   <li><b>기간 제한 없이 즉시</b> 취소</li>
-                  <li>환불 주체·방식 미확정 (I-13)</li>
+                  <li>환불은 데스크에서 개별 처리</li>
                   <li>데스크 당일 신청은 앱 월말 일괄과 <b>별개 flow</b></li>
-                  <li>관리자 전용 직접 등록 화면 필요 여부도 I-13 범위</li>
+                  <li>당일 신청은 데스크에서 직접 등록</li>
                 </ul>
               </div>
             </div>
 
-            <div className="note-box plain" style={{ marginTop: 14, marginBottom: 0 }}>
-              <div className="ic">
-                <Icon name="wallet" size={17} />
-              </div>
-              <div>
-                <div className="tt">결제 상태 전이</div>
-                <div className="tx">
-                  <code>신청 → 결제대기(가상계좌 ISSUED) → 확정</code> / <code>취소요청 → 취소완료</code> /{' '}
-                  <code>만료</code>
-                  <br />
-                  카드는 즉시 확정, 가상계좌는 <b>10분 주기 스케줄러</b>가 만료를 처리합니다. 결제 상태와 주문 상태가
-                  어긋나면 <b>이중결제·미정산</b> 리스크가 되므로 트랜잭션 원자성이 중요한 지점입니다(크로스커팅 3.3).
-                  수납 동기화는 <b>Webhook 재시도 + 정합성 배치</b>를 처음부터 설계에 포함합니다.
-                </div>
-              </div>
-            </div>
           </div>
         )}
       </div>

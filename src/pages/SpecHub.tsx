@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import {
   GROUPS,
   KIND_LABEL,
@@ -15,15 +15,17 @@ import './home.css'
 
 const PHASE_ORDER: PhaseNo[] = [0, 1, 2, 3, 4]
 
-export function Home() {
-  const nav = useNavigate()
-
+/**
+ * 요구사항 명세 허브 — 내부 개발팀용. 제품 내비게이션에는 노출하지 않는다(`/spec`).
+ * 제품 진입 화면은 Dashboard.tsx.
+ */
+export function SpecHub() {
   return (
     <>
       <PageHead
         crumb={
           <>
-            <b>전체 메뉴 구성</b> · IA
+            <b>내부 문서</b> · 요구사항 명세
           </>
         }
         title="통합관리프로그램 · 전체 화면 구성"
@@ -107,7 +109,7 @@ export function Home() {
         {GROUPS.map((g) => {
           const items = screensOf(g.id)
           return (
-            <button type="button" className="ov-cat" key={g.id} onClick={() => nav(`/g/${g.id}`)}>
+            <div className="ov-cat" key={g.id}>
               <div className="ov-cat-h">
                 <span className="ic">
                   <Icon name={g.icon} size={17} />
@@ -119,7 +121,7 @@ export function Home() {
               <div className="cd">{g.desc}</div>
               <div className="ov-items">
                 {items.map((s) => (
-                  <div className="ov-item" key={s.id}>
+                  <Link className="ov-item" to={`/spec/${s.id}`} key={s.id}>
                     <span className="d" style={{ background: PHASE[s.phase].color }} title={PHASE[s.phase].name} />
                     <span className="nm">{s.name}</span>
                     <span
@@ -128,10 +130,10 @@ export function Home() {
                     >
                       {s.kind === 'brandnew' ? '신규' : s.kind === 'supplement' ? '보완' : '검증'}
                     </span>
-                  </div>
+                  </Link>
                 ))}
               </div>
-            </button>
+            </div>
           )
         })}
       </div>

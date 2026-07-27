@@ -1,94 +1,97 @@
-import { NavLink, useParams } from 'react-router-dom'
-import {
-  GROUPS,
-  KIND_LABEL,
-  PHASE,
-  SCREENS,
-  countByKind,
-  findGroup,
-  screensOf,
-  type PhaseNo,
-} from '../data/menu'
-import { ISSUES, countByPriority } from '../data/issues'
+import { Link, NavLink, useLocation, useParams } from 'react-router-dom'
+import { GROUPS, SCREENS, findGroup, screensOf } from '../data/menu'
+import { ATTENDANCE, TODOS } from '../data/mockDashboard'
 import { Icon } from '../components/Icon'
 
-const PHASE_ORDER: PhaseNo[] = [1, 2, 3, 4, 0]
+/** 대시보드에서 보이는 사이드바 — 오늘 요약 + 자주 쓰는 메뉴 */
+function DashboardSide() {
+  const urgent = TODOS.filter((t) => t.tone === 'urgent')
+  const quick = [
+    { id: 'student-search', icon: 'search', label: '학생 검색' },
+    { id: 'attendance', icon: 'scan-line', label: '출결 현황' },
+    { id: 'student-absence', icon: 'check-check', label: '사유 승인' },
+    { id: 'consult', icon: 'message-square', label: '상담일지' },
+    { id: 'message-send', icon: 'send', label: '알림 발송' },
+    { id: 'payment', icon: 'receipt', label: '수납현황' },
+  ]
 
-/** 전체 구성(홈)에서 보이는 요약 사이드바 */
-function OverviewSide() {
   return (
     <>
       <div className="side-cat">
         <span className="ico">
           <Icon name="layout-dashboard" size={18} />
         </span>{' '}
-        전체 구성
+        오늘
       </div>
-      <div className="side-desc">
-        요구사항정의서 1시트 기준 전체 화면 IA. 상단 대분류 탭을 눌러 세부 화면을 확인하세요.
-      </div>
+      <div className="side-desc">2026년 5월 28일 목요일 · 분당지점</div>
 
       <div className="side-summary">
         <div className="ss-row">
-          <span className="k">대분류</span>
-          <span className="v">{GROUPS.length}개</span>
+          <span className="k">재원생</span>
+          <span className="v">{ATTENDANCE.enrolled}명</span>
         </div>
         <div className="ss-row">
-          <span className="k">세부 화면</span>
-          <span className="v">{SCREENS.length}개</span>
+          <span className="k">등원</span>
+          <span className="v" style={{ color: 'var(--mint-d)' }}>
+            {ATTENDANCE.arrived}명
+          </span>
         </div>
         <div className="ss-row">
-          <span className="k">요구사항 신규</span>
+          <span className="k">지각</span>
           <span className="v" style={{ color: 'var(--amber)' }}>
-            {countByKind('brandnew')}개
+            {ATTENDANCE.late}명
           </span>
         </div>
         <div className="ss-row">
-          <span className="k">요구사항 보완</span>
-          <span className="v" style={{ color: 'var(--blue)' }}>
-            {countByKind('supplement')}개
-          </span>
-        </div>
-        <div className="ss-row">
-          <span className="k">요구사항 검증됨</span>
-          <span className="v" style={{ color: 'var(--green)' }}>
-            {countByKind('verified')}개
+          <span className="k">미등원</span>
+          <span className="v" style={{ color: 'var(--red)' }}>
+            {ATTENDANCE.missing}명
           </span>
         </div>
       </div>
 
-      <div className="legend-block">
-        <div className="lt">Phase 범례</div>
-        {PHASE_ORDER.map((p) => (
-          <div className="legend-row" key={p}>
-            <span className={`ph p${p}`}>P{p}</span> {PHASE[p].name}
+      {urgent.length > 0 && (
+        <div className="legend-block" style={{ background: 'var(--red-wash)' }}>
+          <div className="lt" style={{ color: 'var(--red)' }}>
+            즉시 확인
           </div>
-        ))}
-      </div>
+          {urgent.map((t) => (
+            <Link
+              to={t.to}
+              key={t.id}
+              className="legend-row"
+              style={{ color: 'var(--ink-2)', justifyContent: 'space-between' }}
+            >
+              <span>{t.label}</span>
+              <b style={{ color: 'var(--red)' }}>
+                {t.count}
+                {t.unit}
+              </b>
+            </Link>
+          ))}
+        </div>
+      )}
 
-      <div className="legend-block">
-        <div className="lt">오픈이슈 {ISSUES.length}건</div>
-        <div className="legend-row">
-          <span className="mk brandnew">최우선</span> {countByPriority('최우선')}건
+      <div style={{ marginTop: 14 }}>
+        <div className="lt" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--muted)', padding: '0 8px 8px' }}>
+          자주 쓰는 메뉴
         </div>
-        <div className="legend-row">
-          <span className="mk supplement">높음</span> {countByPriority('높음')}건
-        </div>
-        <div className="legend-row">
-          <span className="mk verified">중 · 하</span> {countByPriority('중') + countByPriority('하')}건
-        </div>
-      </div>
-
-      <div className="side-foot">
-        기준: DSA_DLab_요구사항정의서 v1.0
-        <br />
-        개발착수 실행가이드 v1.0 (2026-07-19)
+        <nav className="nav">
+          {quick.map((q) => (
+            <NavLink key={q.id} to={`/s/${q.id}`} className={({ isActive }) => (isActive ? 'on' : undefined)}>
+              <span className="ico">
+                <Icon name={q.icon} />
+              </span>
+              <span className="nm">{q.label}</span>
+            </NavLink>
+          ))}
+        </nav>
       </div>
     </>
   )
 }
 
-/** 대분류 진입 시 보이는 화면 목록 사이드바 */
+/** 대분류 진입 시 — 하위 메뉴 목록 */
 function GroupSide({ groupId }: { groupId: string }) {
   const group = findGroup(groupId)
   const screens = screensOf(groupId)
@@ -100,7 +103,7 @@ function GroupSide({ groupId }: { groupId: string }) {
         <span className="ico">
           <Icon name={group.icon} size={18} />
         </span>{' '}
-        {group.no} {group.name}
+        {group.name}
       </div>
       <div className="side-desc">{group.desc}</div>
 
@@ -111,16 +114,36 @@ function GroupSide({ groupId }: { groupId: string }) {
               <Icon name={s.icon} />
             </span>
             <span className="nm">{s.name}</span>
-            {s.kind === 'brandnew' && <span className="nwdot" title={KIND_LABEL.brandnew} />}
-            <span className={`ph p${s.phase}`}>P{s.phase}</span>
           </NavLink>
         ))}
       </nav>
+    </>
+  )
+}
 
+/** 내부 문서(/spec) 사이드바 */
+function SpecSide() {
+  return (
+    <>
+      <div className="side-cat">
+        <span className="ico">
+          <Icon name="file-text" size={18} />
+        </span>{' '}
+        내부 문서
+      </div>
+      <div className="side-desc">요구사항 명세 · 개발팀 전용. 제품 화면이 아닙니다.</div>
+      <nav className="nav">
+        <NavLink to="/spec" end className={({ isActive }) => (isActive ? 'on' : undefined)}>
+          <span className="ico">
+            <Icon name="layout-dashboard" />
+          </span>
+          <span className="nm">전체 화면 구성</span>
+        </NavLink>
+      </nav>
       <div className="side-foot">
-        P 배지 = 개발 Phase
+        화면별 상세는 카드에서 메뉴명을 누르세요.
         <br />
-        노란 점 = 요구사항 신규(DSA 대응 화면 없음)
+        API·테이블 전체 목록은 <code style={{ fontSize: 10.5 }}>docs/</code> 참고.
       </div>
     </>
   )
@@ -128,7 +151,12 @@ function GroupSide({ groupId }: { groupId: string }) {
 
 export function SideNav() {
   const { groupId, screenId } = useParams()
-  const owning = groupId ?? (screenId ? SCREENS.find((s) => s.id === screenId)?.groupId : undefined)
+  const { pathname } = useLocation()
 
-  return <aside className="side">{owning ? <GroupSide groupId={owning} /> : <OverviewSide />}</aside>
+  if (pathname.startsWith('/spec')) return <aside className="side"><SpecSide /></aside>
+
+  const owning = groupId ?? (screenId ? SCREENS.find((s) => s.id === screenId)?.groupId : undefined)
+  const valid = owning && GROUPS.some((g) => g.id === owning)
+
+  return <aside className="side">{valid ? <GroupSide groupId={owning} /> : <DashboardSide />}</aside>
 }
