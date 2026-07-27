@@ -1,0 +1,6 @@
+.dr { display: flex; flex-direction: column; gap: 7px; }
+.dr-inputs { display: flex; align-items: center; gap: 6px; }
+.dr-inputs .inp { flex: 1; min-width: 0; }
+.dr-tilde { color: var(--muted); font-size: 12px; flex-shrink: 0; }
+.dr-presets { display: flex; gap: 5px; flex-wrap: wrap; }
+.dr-presets .chip { font-size: 11px; padding: 4px 9px; }

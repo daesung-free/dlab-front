@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DLab 통합관리 · 입학예약 상담</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<style>
+  :root{
+    --ink:#212934; --ink-2:#3F4753; --muted:#8B94A3; --line:#ECEEF1; --line-2:#F1F3F6;
+    --bg:#EDF0F4; --card:#ffffff;
+    --mint:#0E9E8E; --mint-d:#0b8073; --mint-b:#16B9A8; --mint-wash:#E7F6F3; --mint-soft:#F2FBFA;
+    --amber:#E8920F; --amber-wash:#FEF1E2;
+    --red:#E0533D; --red-wash:#FBEBE8; --green:#2E9E5B; --green-wash:#EAF7EF;
+    --violet:#6C5CE0; --violet-wash:#EEEBFB; --blue:#3B6FE0; --blue-wash:#EAF1FF;
+    --shadow:0 1px 3px rgba(20,30,50,.05); --r:16px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Pretendard",-apple-system,sans-serif;
+    background:var(--bg); color:var(--ink); font-size:14px; line-height:1.5;letter-spacing:-.01em;-webkit-font-smoothing:antialiased}
+  .wrap{display:grid;grid-template-columns:244px 1fr;min-height:calc(100vh - 60px)}
+
+  /* ===== Top category nav ===== */
+  .topnav{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:6px;
+    background:#fff;border-bottom:1px solid var(--line);padding:0 18px;height:60px}
+  .topnav .brand{display:flex;align-items:center;gap:9px;padding-right:16px;margin-right:4px;border-right:1px solid var(--line)}
+  .topnav .brand .logo{font-weight:800;font-size:21px;color:var(--mint);letter-spacing:-.03em}
+  .topnav .brand .logo b{font-size:10px;vertical-align:top;font-weight:800}
+  .topnav .brand .txt b{color:var(--ink);font-size:13px;font-weight:700;letter-spacing:-.02em;display:block;line-height:1.15}
+  .topnav .brand .txt span{display:block;font-size:10.5px;color:var(--muted);font-weight:500}
+  .cat-tabs{display:flex;align-items:center;gap:2px;flex:1;overflow-x:auto;scrollbar-width:none}
+  .cat-tabs::-webkit-scrollbar{display:none}
+  .cat-tab{display:flex;align-items:center;gap:7px;padding:8px 12px;border-radius:10px;font-size:13px;
+    font-weight:600;color:var(--ink-2);white-space:nowrap;text-decoration:none}
+  .cat-tab .ico{color:var(--muted);display:flex}
+  .cat-tab:hover{background:var(--bg)}
+  .cat-tab.on{background:var(--mint-wash);color:var(--mint-d)}
+  .cat-tab.on .ico{color:var(--mint-d)}
+  .topnav .who{display:flex;align-items:center;gap:9px;padding-left:14px;margin-left:4px;border-left:1px solid var(--line);white-space:nowrap}
+  .topnav .who .av{width:30px;height:30px;border-radius:9px;background:var(--mint-wash);color:var(--mint-d);display:grid;place-items:center;font-weight:700;font-size:12px}
+  .topnav .who .wt b{font-size:12px;font-weight:700;color:var(--ink);display:block;line-height:1.2}
+  .topnav .who .wt span{font-size:10.5px;color:var(--muted)}
+
+  /* ===== Sub sidebar ===== */
+  .side{background:#fff;color:var(--ink-2);padding:18px 14px;position:sticky;top:60px;height:calc(100vh - 60px);border-right:1px solid var(--line);overflow:auto}
+  .side-cat{display:flex;align-items:center;gap:9px;font-size:15px;font-weight:800;color:var(--ink);letter-spacing:-.02em;padding:2px 8px 4px}
+  .side-cat .ico{color:var(--mint-d);display:flex}
+  .side-desc{font-size:11.5px;color:var(--muted);padding:0 8px 12px;line-height:1.5;border-bottom:1px solid var(--line-2);margin-bottom:10px}
+  .nav a{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:10px;color:var(--ink-2);
+    text-decoration:none;font-size:13px;font-weight:500;margin-bottom:2px}
+  .nav a .ico{color:var(--muted);display:flex;flex-shrink:0}
+  .nav a .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .nav a:hover{background:var(--bg)}
+  .nav a.on{background:var(--mint-wash);color:var(--mint-d);font-weight:700}
+  .nav a.on .ico{color:var(--mint-d)}
+  .ph{font-size:8.5px;font-weight:800;padding:1px 5px;border-radius:5px;letter-spacing:.02em;flex-shrink:0}
+  .ph.p0{background:#E7E9ED;color:var(--ink-2)}
+  .ph.p1{background:var(--mint-wash);color:var(--mint-d)}
+  .ph.p2{background:var(--blue-wash);color:var(--blue)}
+  .ph.p3{background:var(--violet-wash);color:var(--violet)}
+  .ph.p4{background:var(--amber-wash);color:var(--amber)}
+  .nwdot{width:6px;height:6px;border-radius:50%;background:var(--amber);flex-shrink:0}
+  .side-foot{margin-top:16px;font-size:11px;color:var(--muted);border-top:1px solid var(--line);padding-top:12px}
+
+  .main{padding:22px 26px 60px;min-width:0}
+  .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+  .crumb{font-size:12px;color:var(--muted)} .crumb b{color:var(--ink-2);font-weight:600}
+  .h1{font-size:22px;font-weight:800;letter-spacing:-.03em;margin-top:3px}
+  .top-actions{display:flex;gap:8px;align-items:center}
+  .btn{border:1px solid var(--line);background:#fff;border-radius:11px;padding:9px 15px;font-size:13px;
+    font-weight:600;cursor:pointer;color:var(--ink-2);font-family:inherit}
+  .btn:hover{border-color:#D6DBE2}
+  .btn.pri{background:var(--mint);border-color:var(--mint);color:#fff} .btn.pri:hover{background:var(--mint-d)}
+
+  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:18px}
+  .kpi{background:var(--card);border-radius:14px;padding:15px 16px;box-shadow:var(--shadow)}
+  .kpi .l{font-size:11.5px;color:var(--muted);font-weight:600}
+  .kpi .v{font-size:24px;font-weight:800;letter-spacing:-.6px;margin-top:4px}
+  .kpi .d{font-size:11px;font-weight:700;margin-top:2px}
+  .kpi .d.up{color:var(--green)} .kpi .d.warn{color:var(--amber)} .kpi .d.mut{color:var(--muted)}
+
+  .board{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;align-items:start}
+  .col{background:#fff;border-radius:var(--r);min-height:400px;box-shadow:var(--shadow)}
+  .col-h{padding:13px 14px;border-bottom:1px solid var(--line-2);display:flex;align-items:center;justify-content:space-between;
+    position:sticky;top:0;background:#fff;border-radius:var(--r) var(--r) 0 0}
+  .col-h .t{font-weight:700;font-size:13px;display:flex;align-items:center;gap:7px}
+  .col-h .dot{width:8px;height:8px;border-radius:50%}
+  .col-h .n{font-size:11.5px;color:var(--muted);font-weight:700;background:var(--bg);padding:2px 9px;border-radius:12px}
+  .col-b{padding:11px;display:flex;flex-direction:column;gap:10px}
+
+  .lead{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 13px;cursor:pointer}
+  .lead:hover{border-color:#D6DBE2;box-shadow:0 2px 8px rgba(20,30,50,.06)}
+  .lead-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px}
+  .lead-top .nm{font-weight:700;font-size:13.5px}
+  .lead-top .cat{font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px}
+  .cat.na{background:var(--mint-wash);color:var(--mint-d)}
+  .cat.in{background:var(--amber-wash);color:var(--amber)}
+  .lead-meta{font-size:11.5px;color:var(--muted);line-height:1.55}
+  .lead-meta .grade{font-family:ui-monospace,monospace;color:var(--ink-2);font-weight:600}
+  .lead-foot{display:flex;align-items:center;justify-content:space-between;margin-top:9px;padding-top:9px;border-top:1px solid var(--line-2)}
+  .src{font-size:10.5px;color:var(--muted);display:inline-flex;align-items:center;gap:4px}
+  .mini{font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:6px}
+  .mini.book{background:var(--blue-wash);color:var(--blue)}
+  .mini.jang{background:var(--violet-wash);color:var(--violet)}
+  .mini.done{background:var(--green-wash);color:var(--green)}
+  .lead.block{border-color:#F5CFC7;background:#FEF7F5}
+  .block-flag{font-size:10.5px;font-weight:700;color:var(--red);background:var(--red-wash);
+    padding:3px 8px;border-radius:6px;display:inline-flex;align-items:center;gap:4px;margin-top:7px}
+  .auto-note{font-size:10.5px;color:var(--mint-d);background:var(--mint-wash);padding:6px 9px;
+    border-radius:8px;margin-top:8px;display:flex;align-items:center;gap:5px}
+
+  .colnote{grid-column:1/-1;margin-top:16px;padding:18px 20px;background:var(--card);border-radius:var(--r);box-shadow:var(--shadow)}
+  .colnote h3{font-size:14px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .before-after{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .ba-col{background:var(--bg);border-radius:12px;padding:14px 16px}
+  .ba-col .lab{font-size:11px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;margin-bottom:9px}
+  .ba-col.before .lab{color:var(--red)} .ba-col.after .lab{color:var(--mint-d)}
+  .ba-col ul{list-style:none;font-size:12.5px;color:var(--ink-2);line-height:1.8}
+  .ba-col li{padding-left:22px;position:relative}
+  .ba-col.before li::before{content:"✕";position:absolute;left:0;color:var(--red);font-weight:700}
+  .ba-col.after li::before{content:"✓";position:absolute;left:0;color:var(--mint);font-weight:700}
+  @media(max-width:1200px){.kpis{grid-template-columns:repeat(3,1fr)}.board{grid-template-columns:1fr 1fr}.before-after{grid-template-columns:1fr}}
+</style>
+<style media="print">
+  @page{margin:12mm}
+  .pdf-btn{display:none!important}
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+
+  .side{position:static!important;height:auto!important}
+  .col{min-height:0!important}
+</style>
+</head>
+<body>
+<header class="topnav">
+  <div class="brand"><div class="logo">D<b>'</b>Lab</div><div class="txt"><b>통합관리</b><span>대성 · 관리형 독학재수</span></div></div>
+  <div class="cat-tabs">
+    <a class="cat-tab" href="00_admin_menu.html"><span class="ico"><i data-lucide="layout-dashboard" width="16" height="16"></i></span>전체 구성</a>
+    <a class="cat-tab on" href="02_admin_ipsi.html"><span class="ico"><i data-lucide="user-plus" width="16" height="16"></i></span>입학</a>
+    <a class="cat-tab" href="00_admin_menu.html#student"><span class="ico"><i data-lucide="users" width="16" height="16"></i></span>원생</a>
+    <a class="cat-tab" href="01_admin_sangdam.html"><span class="ico"><i data-lucide="message-square" width="16" height="16"></i></span>상담</a>
+    <a class="cat-tab" href="03_admin_seongjeok.html"><span class="ico"><i data-lucide="line-chart" width="16" height="16"></i></span>성적</a>
+    <a class="cat-tab" href="00_admin_menu.html#att"><span class="ico"><i data-lucide="clipboard-check" width="16" height="16"></i></span>출결·학습</a>
+    <a class="cat-tab" href="00_admin_menu.html#meal"><span class="ico"><i data-lucide="credit-card" width="16" height="16"></i></span>급식·수납</a>
+    <a class="cat-tab" href="00_admin_menu.html#comm"><span class="ico"><i data-lucide="send" width="16" height="16"></i></span>소통</a>
+    <a class="cat-tab" href="00_admin_menu.html#affairs"><span class="ico"><i data-lucide="folder-open" width="16" height="16"></i></span>교무</a>
+    <a class="cat-tab" href="00_admin_menu.html#settings"><span class="ico"><i data-lucide="settings" width="16" height="16"></i></span>설정</a>
+  </div>
+  <div class="who"><div class="av">최</div><div class="wt"><b>최지원</b><span>분당 · 입학상담</span></div></div>
+</header>
+<div class="wrap">
+  <aside class="side">
+    <div class="side-cat"><span class="ico"><i data-lucide="user-plus" width="18" height="18"></i></span> 입학</div>
+    <div class="side-desc">디멤버 입학예약폼 유입부터 등록까지</div>
+    <nav class="nav">
+      <a class="on" href="02_admin_ipsi.html"><span class="ico"><i data-lucide="git-branch" width="16" height="16"></i></span><span class="nm">입학예약 상담</span><span class="ph p1">P1</span></a>
+      <a href="00_admin_menu.html#admit"><span class="ico"><i data-lucide="list-ordered" width="16" height="16"></i></span><span class="nm">대기자 관리</span><span class="nwdot"></span><span class="ph p1">P1</span></a>
+      <a href="00_admin_menu.html#admit"><span class="ico"><i data-lucide="megaphone" width="16" height="16"></i></span><span class="nm">설명회 신청</span><span class="nwdot"></span><span class="ph p2">P2</span></a>
+    </nav>
+    <div class="side-foot">최지원 (분당 · 입학상담)<br>입학예약 · 좌석배정 권한</div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <div class="crumb"><b>입학</b> · 입학예약 상담</div>
+        <div class="h1">입학예약 상담 파이프라인</div>
+      </div>
+      <div class="top-actions">
+        <button class="btn">2025 시즌 ▾</button>
+        <button class="btn">문자 자동발송 설정</button>
+        <button class="btn pri">+ 예약 수동등록</button>
+      </div>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi"><div class="l">신규 예약 (구글폼)</div><div class="v">148</div><div class="d up">▲ 오늘 +6</div></div>
+      <div class="kpi"><div class="l">방문상담 예정</div><div class="v">42</div><div class="d warn">이번 주 18건</div></div>
+      <div class="kpi"><div class="l">입학 확정</div><div class="v">89</div><div class="d up">▲ 전환율 60%</div></div>
+      <div class="kpi"><div class="l">입학불가</div><div class="v">11</div><div class="d mut">성적미달·검고졸</div></div>
+      <div class="kpi"><div class="l">좌석 대기</div><div class="v">7</div><div class="d warn">배정 대기중</div></div>
+      <div class="kpi"><div class="l">장학 신청</div><div class="v">23</div><div class="d mut">수능100·평가원 등</div></div>
+    </div>
+
+    <div class="board">
+      <div class="col">
+        <div class="col-h"><div class="t"><span class="dot" style="background:var(--mint)"></span>신규 예약</div><span class="n">148</span></div>
+        <div class="col-b">
+          <div class="lead">
+            <div class="lead-top"><span class="nm">정민주</span><span class="cat na">자연</span></div>
+            <div class="lead-meta">2006년생 · 태원고 · 재수<br>등원희망 <b>06/02</b> · 출신 기숙학원</div>
+            <div class="auto-note"><i data-lucide="zap" width="12" height="12"></i> 구글폼 자동수집 · 개인정보 동의 완료</div>
+            <div class="lead-foot"><span class="src"><i data-lucide="clipboard-list" width="12" height="12"></i> 구글폼</span><span class="mini book">방문예약 잡기</span></div>
+          </div>
+          <div class="lead">
+            <div class="lead-top"><span class="nm">김도윤</span><span class="cat in">인문</span></div>
+            <div class="lead-meta">2005년생 · 송림고 · 삼수<br>등원희망 <b>06/02</b> · 출신 잇올</div>
+            <div class="lead-foot"><span class="src"><i data-lucide="clipboard-list" width="12" height="12"></i> 구글폼</span><span class="mini book">방문예약 잡기</span></div>
+          </div>
+          <div class="lead block">
+            <div class="lead-top"><span class="nm">강현준</span><span class="cat na">자연</span></div>
+            <div class="lead-meta">2005년생 · 유신고<br>등원희망 06/02</div>
+            <div class="block-flag"><i data-lucide="alert-triangle" width="12" height="12"></i> 입학불가 자동감지 — 연락처 크로스체크</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="col-h"><div class="t"><span class="dot" style="background:var(--blue)"></span>방문상담</div><span class="n">42</span></div>
+        <div class="col-b">
+          <div class="lead">
+            <div class="lead-top"><span class="nm">박수빈</span><span class="cat na">자연</span></div>
+            <div class="lead-meta">삼수 · 상담예약 <b>05/26 09:10</b><br>담당 김유진</div>
+            <div class="auto-note"><i data-lucide="mail" width="12" height="12"></i> 방문안내 문자 자동발송됨</div>
+            <div class="lead-foot"><span class="src">지인추천</span><span class="mini">상담일지 작성</span></div>
+          </div>
+          <div class="lead">
+            <div class="lead-top"><span class="nm">이서연</span><span class="cat in">인문</span></div>
+            <div class="lead-meta">재수 · 상담예약 <b>05/26 10:30</b><br>담당 최지원</div>
+            <div class="lead-foot"><span class="src">홈페이지</span><span class="mini jang">장학상담</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="col-h"><div class="t"><span class="dot" style="background:var(--amber)"></span>입학기준 확인</div><span class="n">31</span></div>
+        <div class="col-b">
+          <div class="lead">
+            <div class="lead-top"><span class="nm">한지우</span><span class="cat na">자연</span></div>
+            <div class="lead-meta">입학기준 성적<br><span class="grade">국2 · 수2 · 영1 · 탐3</span> · 내신 2등급</div>
+            <div class="auto-note"><i data-lucide="check" width="12" height="12"></i> 입학기준 충족 · 검고졸 아님</div>
+            <div class="lead-foot"><span class="src">성적 검증완료</span><span class="mini done">등록 진행</span></div>
+          </div>
+          <div class="lead">
+            <div class="lead-top"><span class="nm">오세훈</span><span class="cat in">인문</span></div>
+            <div class="lead-meta">입학기준 성적<br><span class="grade">국3 · 수4 · 영2 · 탐3</span> · 내신 3등급</div>
+            <div class="lead-foot"><span class="src">담임 검토중</span><span class="mini jang">장학기준 확인</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="col-h"><div class="t"><span class="dot" style="background:var(--violet)"></span>좌석 · 장학 배정</div><span class="n">18</span></div>
+        <div class="col-b">
+          <div class="lead">
+            <div class="lead-top"><span class="nm">한지우</span><span class="cat na">자연</span></div>
+            <div class="lead-meta">좌석 <b>A-31</b> 배정 · 독서실 A<br>장학: 수능100 적용</div>
+            <div class="auto-note"><i data-lucide="armchair" width="12" height="12"></i> 좌석배치도 실시간 반영</div>
+            <div class="lead-foot"><span class="src">배정완료</span><span class="mini done">등록대기</span></div>
+          </div>
+          <div class="lead">
+            <div class="lead-top"><span class="nm">임채원</span><span class="cat in">인문</span></div>
+            <div class="lead-meta">좌석 <b>대기 3순위</b><br>장학: 평가원50 신청</div>
+            <div class="block-flag" style="background:var(--amber-wash);color:var(--amber)"><i data-lucide="clock" width="12" height="12"></i> 좌석대기 · 장학대기 동시</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="col-h"><div class="t"><span class="dot" style="background:var(--green)"></span>입학확정 · 등원</div><span class="n">89</span></div>
+        <div class="col-b">
+          <div class="lead">
+            <div class="lead-top"><span class="nm">이승민</span><span class="cat na">자연</span></div>
+            <div class="lead-meta">원생코드 <span class="grade">DL-2026-0419</span><br>3반 4019 · 좌석 A-24 · 등원 03/02</div>
+            <div class="auto-note"><i data-lucide="link" width="12" height="12"></i> 재원생 전환 → 상담일지 연결</div>
+            <div class="lead-foot"><span class="src">등원 안내문자 발송</span><span class="mini done">재원생</span></div>
+          </div>
+          <div class="lead">
+            <div class="lead-top"><span class="nm">정하늘</span><span class="cat in">인문</span></div>
+            <div class="lead-meta">원생코드 <span class="grade">DL-2026-0387</span><br>1반 1105 · 좌석 B-12 · 등원 03/02</div>
+            <div class="lead-foot"><span class="src">서류제출 완료</span><span class="mini done">재원생</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="colnote">
+        <h3><i data-lucide="bar-chart-3" width="17" height="17"></i> 이 화면 하나가 대체하는 것 — 현재 「입학_예약_및_상담_현황.xlsx」 14개 시트</h3>
+        <div class="before-after">
+          <div class="ba-col before">
+            <div class="lab">현재 (엑셀 수기)</div>
+            <ul>
+              <li>구글폼 → 예약현황 → 좌석/장학/대기 시트로 사람이 반복 복사</li>
+              <li>입학불가(성적미달·검고졸)를 연락처로 눈대조</li>
+              <li>방문·좌석·장학·대기가 서로 다른 시트에 분리</li>
+              <li>방문/예약/등원 안내 문자를 양식에서 복붙 발송</li>
+              <li>상담 내용은 셀 한 칸에 텍스트 한 덩어리 (추적 불가)</li>
+            </ul>
+          </div>
+          <div class="ba-col after">
+            <div class="lab">DLab 통합관리 (To-Be)</div>
+            <ul>
+              <li>구글폼 유입이 파이프라인 카드로 자동 생성</li>
+              <li>입학기준·검고졸 자동 크로스체크, 미달 시 자동 플래그</li>
+              <li>좌석배치도·장학·대기가 한 화면에서 실시간 연동</li>
+              <li>단계 전환 시 안내 문자 자동발송</li>
+              <li>입학상담이 그대로 재원생 상담일지의 첫 기록으로 연결</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script>lucide.createIcons();</script>
+<template id="__bundler_thumbnail" data-bg-color="#0E9E8E">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#0E9E8E"/>
+    <text x="600" y="370" font-family="Pretendard, sans-serif" font-size="150" font-weight="800" fill="#ffffff" text-anchor="middle" letter-spacing="-4">입학예약</text>
+    <text x="600" y="460" font-family="Pretendard, sans-serif" font-size="48" font-weight="600" fill="#BDF3EC" text-anchor="middle">상담 파이프라인</text>
+  </svg>
+</template>
+<button class="pdf-btn" onclick="window.print()" style="position:fixed;right:22px;bottom:22px;z-index:9999;background:#0E9E8E;color:#fff;border:none;border-radius:12px;padding:13px 20px;font:700 15px 'Pretendard',sans-serif;letter-spacing:-.01em;box-shadow:0 6px 20px rgba(14,105,95,.35);cursor:pointer;display:inline-flex;align-items:center;gap:8px;">📄 PDF 저장</button>
+</body>
+</html>

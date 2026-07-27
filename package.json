@@ -1,0 +1,30 @@
+{
+  "name": "dlab-front",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "DSA/D.Lab 통합관리프로그램 재구축 — 프론트엔드",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "build:offline": "tsc -b && vite build --mode offline --outDir dist-offline",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --noEmit",
+    "handoff": "node scripts/gen-handoff.ts",
+    "asks": "node scripts/gen-asks.ts",
+    "docs": "npm run handoff && npm run asks"
+  },
+  "dependencies": {
+    "lucide-react": "^1.27.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^7.18.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.4",
+    "typescript": "^7.0.2",
+    "vite": "^8.1.5"
+  }
+}

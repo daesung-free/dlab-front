@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DLab 통합관리 · 학생상담(상담일지)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<style>
+  :root{
+    --ink:#212934; --ink-2:#3F4753; --muted:#8B94A3; --line:#ECEEF1; --line-2:#F1F3F6;
+    --bg:#EDF0F4; --card:#ffffff;
+    --mint:#0E9E8E; --mint-d:#0b8073; --mint-b:#16B9A8; --mint-wash:#E7F6F3; --mint-soft:#F2FBFA;
+    --amber:#E8920F; --amber-wash:#FEF1E2;
+    --red:#E0533D; --red-wash:#FBEBE8; --green:#2E9E5B; --green-wash:#EAF7EF;
+    --violet:#6C5CE0; --violet-wash:#EEEBFB; --blue:#3B6FE0; --blue-wash:#EAF1FF;
+    --shadow:0 1px 3px rgba(20,30,50,.05); --r:16px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Pretendard",-apple-system,sans-serif;
+    background:var(--bg); color:var(--ink); font-size:14px; line-height:1.5;letter-spacing:-.01em;-webkit-font-smoothing:antialiased}
+  .wrap{display:grid; grid-template-columns:244px 1fr; min-height:calc(100vh - 60px);}
+
+  /* ===== Top category nav ===== */
+  .topnav{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:6px;
+    background:#fff;border-bottom:1px solid var(--line);padding:0 18px;height:60px}
+  .topnav .brand{display:flex;align-items:center;gap:9px;padding-right:16px;margin-right:4px;border-right:1px solid var(--line)}
+  .topnav .brand .logo{font-weight:800;font-size:21px;color:var(--mint);letter-spacing:-.03em}
+  .topnav .brand .logo b{font-size:10px;vertical-align:top;font-weight:800}
+  .topnav .brand .txt b{color:var(--ink);font-size:13px;font-weight:700;letter-spacing:-.02em;display:block;line-height:1.15}
+  .topnav .brand .txt span{display:block;font-size:10.5px;color:var(--muted);font-weight:500}
+  .cat-tabs{display:flex;align-items:center;gap:2px;flex:1;overflow-x:auto;scrollbar-width:none}
+  .cat-tabs::-webkit-scrollbar{display:none}
+  .cat-tab{display:flex;align-items:center;gap:7px;padding:8px 12px;border-radius:10px;font-size:13px;
+    font-weight:600;color:var(--ink-2);white-space:nowrap;text-decoration:none}
+  .cat-tab .ico{color:var(--muted);display:flex}
+  .cat-tab:hover{background:var(--bg)}
+  .cat-tab.on{background:var(--mint-wash);color:var(--mint-d)}
+  .cat-tab.on .ico{color:var(--mint-d)}
+  .topnav .who{display:flex;align-items:center;gap:9px;padding-left:14px;margin-left:4px;border-left:1px solid var(--line);white-space:nowrap}
+  .topnav .who .av{width:30px;height:30px;border-radius:9px;background:var(--mint-wash);color:var(--mint-d);display:grid;place-items:center;font-weight:700;font-size:12px}
+  .topnav .who .wt b{font-size:12px;font-weight:700;color:var(--ink);display:block;line-height:1.2}
+  .topnav .who .wt span{font-size:10.5px;color:var(--muted)}
+
+  /* ===== Sub sidebar ===== */
+  .side{background:#fff; color:var(--ink-2); padding:18px 14px; position:sticky; top:60px; height:calc(100vh - 60px);border-right:1px solid var(--line);overflow:auto}
+  .side-cat{display:flex;align-items:center;gap:9px;font-size:15px;font-weight:800;color:var(--ink);letter-spacing:-.02em;padding:2px 8px 4px}
+  .side-cat .ico{color:var(--mint-d);display:flex}
+  .side-desc{font-size:11.5px;color:var(--muted);padding:0 8px 12px;line-height:1.5;border-bottom:1px solid var(--line-2);margin-bottom:10px}
+  .nav a{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:10px;
+    color:var(--ink-2);text-decoration:none;font-size:13px;font-weight:500;margin-bottom:2px}
+  .nav a .ico{color:var(--muted);display:flex;flex-shrink:0}
+  .nav a .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .nav a:hover{background:var(--bg)}
+  .nav a.on{background:var(--mint-wash);color:var(--mint-d);font-weight:700}
+  .nav a.on .ico{color:var(--mint-d)}
+  .ph{font-size:8.5px;font-weight:800;padding:1px 5px;border-radius:5px;letter-spacing:.02em;flex-shrink:0}
+  .ph.p0{background:#E7E9ED;color:var(--ink-2)}
+  .ph.p1{background:var(--mint-wash);color:var(--mint-d)}
+  .ph.p2{background:var(--blue-wash);color:var(--blue)}
+  .ph.p3{background:var(--violet-wash);color:var(--violet)}
+  .ph.p4{background:var(--amber-wash);color:var(--amber)}
+  .nwdot{width:6px;height:6px;border-radius:50%;background:var(--amber);flex-shrink:0}
+  .side-foot{margin-top:16px;font-size:11px;color:var(--muted);border-top:1px solid var(--line);padding-top:12px}
+
+  /* ===== Main ===== */
+  .main{padding:22px 26px 60px; min-width:0}
+  .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+  .crumb{font-size:12px;color:var(--muted)}
+  .crumb b{color:var(--ink-2);font-weight:600}
+  .h1{font-size:22px;font-weight:800;letter-spacing:-.03em;margin-top:3px}
+  .top-actions{display:flex;gap:8px;align-items:center}
+  .search{position:relative;display:flex;align-items:center}
+  .search .ico{position:absolute;left:12px;color:var(--muted);display:flex}
+  .search input{border:1px solid var(--line);background:#fff;border-radius:11px;padding:9px 12px 9px 34px;
+    font-size:13px;width:250px;font-family:inherit;color:var(--ink)}
+  .btn{border:1px solid var(--line);background:#fff;border-radius:11px;padding:9px 15px;font-size:13px;
+    font-weight:600;cursor:pointer;color:var(--ink-2);font-family:inherit}
+  .btn:hover{border-color:#D6DBE2}
+  .btn.pri{background:var(--mint);border-color:var(--mint);color:#fff}
+  .btn.pri:hover{background:var(--mint-d)}
+
+  .layout{display:grid;grid-template-columns:308px 1fr;gap:18px;align-items:start}
+
+  .panel{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow)}
+  .panel-h{padding:15px 17px;border-bottom:1px solid var(--line-2);display:flex;align-items:center;justify-content:space-between}
+  .panel-h .t{font-weight:700;font-size:14px}
+  .panel-h .c{font-size:11.5px;color:var(--muted)}
+  .filter-row{display:flex;gap:6px;padding:11px 14px;border-bottom:1px solid var(--line-2);flex-wrap:wrap}
+  .chip{font-size:11.5px;padding:5px 11px;border-radius:20px;border:1px solid var(--line);background:#fff;
+    color:var(--ink-2);cursor:pointer;font-weight:600}
+  .chip.on{background:var(--mint);border-color:var(--mint);color:#fff}
+  .slist{max-height:640px;overflow:auto}
+  .srow{display:flex;gap:11px;padding:12px 15px;border-bottom:1px solid var(--line-2);cursor:pointer;align-items:center}
+  .srow:hover{background:var(--bg)}
+  .srow.on{background:var(--mint-wash);border-left:3px solid var(--mint);padding-left:12px}
+  .avatar{width:36px;height:36px;border-radius:11px;background:var(--mint-wash);color:var(--mint-d);
+    display:grid;place-items:center;font-weight:700;font-size:13px;flex-shrink:0}
+  .srow.warn .avatar{background:var(--red-wash);color:var(--red)}
+  .sinfo{min-width:0;flex:1}
+  .sinfo .n{font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:6px}
+  .sinfo .m{font-size:11.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tag{font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;letter-spacing:.02em}
+  .tag.na{background:var(--mint-wash);color:var(--mint-d)}
+  .tag.in{background:var(--amber-wash);color:var(--amber)}
+  .tag.risk{background:var(--red-wash);color:var(--red)}
+  .sdate{font-size:11px;color:var(--muted);text-align:right;flex-shrink:0}
+  .sdate .due{color:var(--amber);font-weight:700}
+
+  .stu-head{display:flex;align-items:flex-start;gap:16px;padding:20px;border-bottom:1px solid var(--line-2)}
+  .stu-head .big{width:54px;height:54px;border-radius:14px;background:var(--mint-wash);color:var(--mint-d);
+    display:grid;place-items:center;font-weight:800;font-size:20px}
+  .stu-meta h2{font-size:18px;font-weight:800;letter-spacing:-.02em;display:flex;align-items:center;gap:8px}
+  .stu-meta .sub{font-size:12.5px;color:var(--muted);margin-top:4px}
+  .stu-meta .sub b{color:var(--ink-2);font-weight:600}
+  .code-pill{font-size:11px;font-family:ui-monospace,monospace;background:var(--line-2);color:var(--ink-2);
+    padding:3px 8px;border-radius:6px}
+  .stu-right{margin-left:auto;text-align:right}
+  .stu-right .risk-badge{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;
+    color:var(--red);background:var(--red-wash);padding:6px 11px;border-radius:20px}
+
+  .score-strip{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:var(--line-2);border-bottom:1px solid var(--line-2)}
+  .sc{background:#fff;padding:13px 14px}
+  .sc .l{font-size:10.5px;color:var(--muted);font-weight:600;letter-spacing:.02em}
+  .sc .v{font-size:19px;font-weight:800;letter-spacing:-.5px;margin-top:3px;display:flex;align-items:baseline;gap:4px}
+  .sc .v small{font-size:11px;font-weight:600;color:var(--muted)}
+  .sc .d{font-size:10.5px;font-weight:700;margin-top:2px}
+  .up{color:var(--green)} .down{color:var(--red)}
+
+  .tabs{display:flex;gap:2px;padding:0 20px;border-bottom:1px solid var(--line-2)}
+  .tab{padding:13px 14px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;
+    border-bottom:2px solid transparent;margin-bottom:-1px}
+  .tab.on{color:var(--mint-d);border-color:var(--mint)}
+  .tab .cnt{font-size:10.5px;background:var(--line-2);color:var(--ink-2);padding:1px 7px;border-radius:10px;margin-left:5px;font-weight:700}
+
+  .body{padding:20px}
+
+  .composer{border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:20px}
+  .comp-h{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;
+    background:var(--mint-wash);border-bottom:1px solid #D6EFEA}
+  .comp-h .t{font-weight:700;font-size:13.5px;color:var(--mint-d);display:flex;align-items:center;gap:8px}
+  .comp-body{padding:16px}
+  .frow{display:grid;grid-template-columns:112px 1fr;gap:12px;align-items:start;margin-bottom:14px}
+  .frow>label{font-size:12.5px;color:var(--ink-2);font-weight:600;padding-top:9px}
+  .frow .req::after{content:" *";color:var(--red)}
+  .type-picks{display:flex;gap:6px;flex-wrap:wrap}
+  .type-pick{font-size:12px;padding:7px 13px;border-radius:9px;border:1px solid var(--line);background:#fff;
+    cursor:pointer;font-weight:600;color:var(--ink-2)}
+  .type-pick.on{background:var(--mint);border-color:var(--mint);color:#fff}
+  .type-pick.on.sc{background:var(--amber);border-color:var(--amber)}
+  .type-pick.on.li{background:var(--violet);border-color:var(--violet)}
+  .inp,.sel,.ta{width:100%;border:1px solid var(--line);border-radius:10px;padding:9px 12px;font-size:13px;
+    font-family:inherit;color:var(--ink)}
+  .ta{min-height:78px;resize:vertical;line-height:1.55}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .link-box{background:var(--mint-soft);border:1px dashed #BFE6DF;border-radius:11px;padding:11px 13px;
+    display:flex;align-items:center;gap:10px;font-size:12px;color:var(--ink-2)}
+  .link-box .chk{width:17px;height:17px;border-radius:5px;background:var(--mint);
+    display:grid;place-items:center;color:#fff;flex-shrink:0}
+  .link-box b{color:var(--mint-d)}
+  .comp-foot{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;
+    border-top:1px solid var(--line-2);background:#FBFCFD}
+  .comp-foot .hint{font-size:11.5px;color:var(--muted)}
+
+  .tl-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+  .tl-head .t{font-weight:700;font-size:15px}
+  .timeline{position:relative;padding-left:24px}
+  .timeline::before{content:"";position:absolute;left:7px;top:6px;bottom:6px;width:2px;background:var(--line)}
+  .entry{position:relative;margin-bottom:16px}
+  .entry::before{content:"";position:absolute;left:-21px;top:5px;width:12px;height:12px;border-radius:50%;
+    background:#fff;border:2.5px solid var(--mint)}
+  .entry.sc::before{border-color:var(--amber)}
+  .entry.li::before{border-color:var(--violet)}
+  .entry.na::before{background:var(--mint);border-color:var(--mint)}
+  .ecard{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .ecard-h{display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid var(--line-2);background:#FBFCFD}
+  .ecard-h .ty{font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px}
+  .ty.reg{background:var(--mint-wash);color:var(--mint-d)}
+  .ty.scr{background:var(--amber-wash);color:var(--amber)}
+  .ty.lif{background:var(--violet-wash);color:var(--violet)}
+  .ty.adm{background:var(--mint-wash);color:var(--mint-d)}
+  .ecard-h .dt{font-size:12px;font-weight:600}
+  .ecard-h .who{font-size:11.5px;color:var(--muted);margin-left:auto}
+  .ecard-b{padding:13px 15px}
+  .ecard-b .esec{margin-bottom:10px}
+  .ecard-b .esec:last-child{margin-bottom:0}
+  .ecard-b .sl{font-size:10.5px;font-weight:700;color:var(--muted);letter-spacing:.03em;text-transform:uppercase;margin-bottom:3px}
+  .ecard-b .sx{font-size:13px;color:var(--ink-2);line-height:1.6}
+  .action-tag{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;
+    background:var(--amber-wash);color:var(--amber);padding:6px 11px;border-radius:8px;margin-top:2px}
+  .done-tag{background:var(--green-wash);color:var(--green)}
+  .score-ref{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;background:var(--mint-soft);
+    color:var(--ink-2);padding:5px 10px;border-radius:7px;font-weight:500}
+  .score-ref b{color:var(--mint-d)}
+
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:22px;padding:14px 17px;background:var(--card);
+    border-radius:12px;box-shadow:var(--shadow);font-size:12px;color:var(--muted)}
+  .legend b{color:var(--ink-2)}
+  .legend .dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px;vertical-align:middle}
+
+  @media(max-width:1100px){.layout{grid-template-columns:1fr}.score-strip{grid-template-columns:repeat(3,1fr)}}
+</style>
+<style media="print">
+  @page{margin:12mm}
+  .pdf-btn{display:none!important}
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+
+  .side{position:static!important;height:auto!important}
+  .slist{max-height:none!important;overflow:visible!important}
+</style>
+</head>
+<body>
+<header class="topnav">
+  <div class="brand">
+    <div class="logo">D<b>'</b>Lab</div>
+    <div class="txt"><b>통합관리</b><span>대성 · 관리형 독학재수</span></div>
+  </div>
+  <div class="cat-tabs">
+    <a class="cat-tab" href="00_admin_menu.html"><span class="ico"><i data-lucide="layout-dashboard" width="16" height="16"></i></span>전체 구성</a>
+    <a class="cat-tab" href="02_admin_ipsi.html"><span class="ico"><i data-lucide="user-plus" width="16" height="16"></i></span>입학</a>
+    <a class="cat-tab" href="00_admin_menu.html#student"><span class="ico"><i data-lucide="users" width="16" height="16"></i></span>원생</a>
+    <a class="cat-tab on" href="01_admin_sangdam.html"><span class="ico"><i data-lucide="message-square" width="16" height="16"></i></span>상담</a>
+    <a class="cat-tab" href="03_admin_seongjeok.html"><span class="ico"><i data-lucide="line-chart" width="16" height="16"></i></span>성적</a>
+    <a class="cat-tab" href="00_admin_menu.html#att"><span class="ico"><i data-lucide="clipboard-check" width="16" height="16"></i></span>출결·학습</a>
+    <a class="cat-tab" href="00_admin_menu.html#meal"><span class="ico"><i data-lucide="credit-card" width="16" height="16"></i></span>급식·수납</a>
+    <a class="cat-tab" href="00_admin_menu.html#comm"><span class="ico"><i data-lucide="send" width="16" height="16"></i></span>소통</a>
+    <a class="cat-tab" href="00_admin_menu.html#affairs"><span class="ico"><i data-lucide="folder-open" width="16" height="16"></i></span>교무</a>
+    <a class="cat-tab" href="00_admin_menu.html#settings"><span class="ico"><i data-lucide="settings" width="16" height="16"></i></span>설정</a>
+  </div>
+  <div class="who">
+    <div class="av">이</div>
+    <div class="wt"><b>이승민</b><span>분당 · 담임</span></div>
+  </div>
+</header>
+<div class="wrap">
+  <!-- Sub sidebar : 상담 -->
+  <aside class="side">
+    <div class="side-cat"><span class="ico"><i data-lucide="message-square" width="18" height="18"></i></span> 상담</div>
+    <div class="side-desc">상담일지와 담임 상담 리포트</div>
+    <nav class="nav">
+      <a class="on" href="01_admin_sangdam.html"><span class="ico"><i data-lucide="message-square" width="16" height="16"></i></span><span class="nm">학생상담 (상담일지)</span><span class="ph p1">P1</span></a>
+      <a href="00_admin_menu.html#counsel"><span class="ico"><i data-lucide="clipboard-list" width="16" height="16"></i></span><span class="nm">상담 리포트</span><span class="nwdot"></span><span class="ph p3">P3</span></a>
+    </nav>
+    <div class="side-foot">이승민 (분당 · 담임)<br>학생상담 · 성적열람 권한</div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <div class="crumb"><b>상담</b> · 학생상담 (상담일지)</div>
+        <div class="h1">학생상담 · 상담일지</div>
+      </div>
+      <div class="top-actions">
+        <div class="search">
+          <span class="ico"><i data-lucide="search" width="15" height="15"></i></span>
+          <input placeholder="이름 · 학번 · 원생코드 검색">
+        </div>
+        <button class="btn">이번 주 상담 25건 ▾</button>
+      </div>
+    </div>
+
+    <div class="layout">
+      <!-- Left: student list -->
+      <section class="panel">
+        <div class="panel-h">
+          <div class="t">재원생</div>
+          <div class="c">전체 312명</div>
+        </div>
+        <div class="filter-row">
+          <div class="chip on">전체</div>
+          <div class="chip">상담 필요</div>
+          <div class="chip">성적 하락</div>
+          <div class="chip">징계 관찰</div>
+        </div>
+        <div class="slist">
+          <div class="srow on">
+            <div class="avatar">이</div>
+            <div class="sinfo">
+              <div class="n">이승민 <span class="tag na">정기</span></div>
+              <div class="m">자연 · 재수 · 3반 4019</div>
+            </div>
+            <div class="sdate"><span class="due">D-1 예정</span><br>05/28</div>
+          </div>
+          <div class="srow warn">
+            <div class="avatar">박</div>
+            <div class="sinfo">
+              <div class="n">박서준 <span class="tag risk">성적↓</span></div>
+              <div class="m">자연 · 삼수 · 3반 4021</div>
+            </div>
+            <div class="sdate"><span class="due">지연 3일</span><br>05/22</div>
+          </div>
+          <div class="srow">
+            <div class="avatar">김</div>
+            <div class="sinfo">
+              <div class="n">김하윤</div>
+              <div class="m">인문 · 재수 · 1반 1102</div>
+            </div>
+            <div class="sdate">05/25</div>
+          </div>
+          <div class="srow">
+            <div class="avatar">정</div>
+            <div class="sinfo">
+              <div class="n">정민재 <span class="tag in">생활</span></div>
+              <div class="m">자연 · 재수 · 2반 2210</div>
+            </div>
+            <div class="sdate">05/24</div>
+          </div>
+          <div class="srow">
+            <div class="avatar">최</div>
+            <div class="sinfo">
+              <div class="n">최유나</div>
+              <div class="m">인문 · 재수 · 1반 1108</div>
+            </div>
+            <div class="sdate">05/20</div>
+          </div>
+          <div class="srow">
+            <div class="avatar">강</div>
+            <div class="sinfo">
+              <div class="n">강도현</div>
+              <div class="m">자연 · 재수 · 3반 4033</div>
+            </div>
+            <div class="sdate">05/19</div>
+          </div>
+          <div class="srow">
+            <div class="avatar">윤</div>
+            <div class="sinfo">
+              <div class="n">윤지호 <span class="tag na">진학</span></div>
+              <div class="m">자연 · 삼수 · 2반 2231</div>
+            </div>
+            <div class="sdate">05/18</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right: detail -->
+      <section class="panel">
+        <div class="stu-head">
+          <div class="big">이</div>
+          <div class="stu-meta">
+            <h2>이승민 <span class="code-pill">DL-2026-0419</span></h2>
+            <div class="sub"><b>자연 · 재수</b> · 3반 4019 · 독서실 A-24 · 등원 2026.03.02 · <b>담임</b> 이장원</div>
+          </div>
+          <div class="stu-right">
+            <div class="risk-badge"><i data-lucide="alert-circle" width="13" height="13"></i> 정기상담 D-1</div>
+          </div>
+        </div>
+
+        <div class="score-strip">
+          <div class="sc"><div class="l">국어 (언매)</div><div class="v">2<small>등급</small></div><div class="d up">▲ 백분위 94</div></div>
+          <div class="sc"><div class="l">수학 (미적)</div><div class="v">1<small>등급</small></div><div class="d up">▲ 백분위 96</div></div>
+          <div class="sc"><div class="l">영어</div><div class="v">2<small>등급</small></div><div class="d">— 84점</div></div>
+          <div class="sc"><div class="l">탐구 소계</div><div class="v">3<small>등급</small></div><div class="d down">▼ 백분위 88</div></div>
+          <div class="sc"><div class="l">국수탐 백분위</div><div class="v">278</div><div class="d up">▲ 상위 5.7%</div></div>
+          <div class="sc"><div class="l">최근 응시</div><div class="v" style="font-size:15px">05/20</div><div class="d" style="color:var(--muted);font-weight:600">THE PREMIUM</div></div>
+        </div>
+
+        <div class="tabs">
+          <div class="tab on">상담 이력 <span class="cnt">8</span></div>
+          <div class="tab">성적 추이</div>
+          <div class="tab">출결 · 상벌점</div>
+          <div class="tab">학부모 공유내역</div>
+        </div>
+
+        <div class="body">
+          <!-- Composer -->
+          <div class="composer">
+            <div class="comp-h">
+              <div class="t"><i data-lucide="pencil" width="15" height="15"></i> 새 상담일지 작성</div>
+              <div style="font-size:11.5px;color:var(--mint-d)">작성자: 이장원 · 2026.05.28</div>
+            </div>
+            <div class="comp-body">
+              <div class="frow">
+                <label class="req">상담 유형</label>
+                <div class="type-picks">
+                  <div class="type-pick on">정기 상담</div>
+                  <div class="type-pick sc">성적 상담</div>
+                  <div class="type-pick li">생활 · 태도</div>
+                  <div class="type-pick">진학 상담</div>
+                  <div class="type-pick">학부모 상담</div>
+                </div>
+              </div>
+              <div class="frow">
+                <label class="req">상담 방식</label>
+                <div class="two">
+                  <select class="sel"><option>대면 (개별)</option><option>전화</option><option>온라인</option></select>
+                  <input class="inp" value="20분 · 상담실 2" placeholder="소요시간 · 장소">
+                </div>
+              </div>
+              <div class="frow">
+                <label>성적 근거</label>
+                <div class="link-box">
+                  <div class="chk"><i data-lucide="check" width="12" height="12"></i></div>
+                  <div>이 상담에 <b>THE PREMIUM 05/20 성적표</b>를 근거로 첨부 — 탐구(지구과학 4등급, 백분위 82) 하락, 수학 미적 1등급 유지가 자동 표시됩니다.</div>
+                </div>
+              </div>
+              <div class="frow">
+                <label class="req">상담 내용</label>
+                <textarea class="ta" placeholder="상담에서 다룬 내용을 기록하세요. (학생 상태, 학습 현황, 논의사항)">탐구 소계 등급 하락(3→ 지구과학 개별 4등급) 원인 점검. 개념 이해는 되나 신유형 대응 시간이 부족. 최근 수면 패턴 흐트러져 오전 집중력 저하 호소.</textarea>
+              </div>
+              <div class="frow">
+                <label class="req">합의 · 다음 행동</label>
+                <textarea class="ta" style="min-height:56px" placeholder="학생과 합의한 실행 계획 (Action)">지구과학 신유형 주 3세트 추가 · D.FINE 실전모의 병행. 취침시간 24시 고정. 2주 뒤 재점검.</textarea>
+              </div>
+              <div class="frow">
+                <label>후속 상담</label>
+                <div class="two">
+                  <input class="inp" type="text" value="2026.06.11" placeholder="다음 상담 예정일">
+                  <select class="sel"><option>학부모 공유: 요약본 전송</option><option>학부모 공유: 안 함</option><option>학부모 공유: 전체</option></select>
+                </div>
+              </div>
+            </div>
+            <div class="comp-foot">
+              <div class="hint">저장 시 학생 앱 · 학부모 앱(공유 설정에 따라)에 즉시 반영됩니다.</div>
+              <div style="display:flex;gap:8px">
+                <button class="btn">임시저장</button>
+                <button class="btn pri">상담일지 저장</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Timeline -->
+          <div class="tl-head">
+            <div class="t">상담 이력</div>
+            <div style="font-size:12px;color:var(--muted)">최신순 · 입학예약 상담부터 연속 기록</div>
+          </div>
+          <div class="timeline">
+            <div class="entry sc">
+              <div class="ecard">
+                <div class="ecard-h"><span class="ty scr">성적 상담</span><span class="dt">2026.05.14</span><span class="who">이장원 · 대면 25분</span></div>
+                <div class="ecard-b">
+                  <div class="esec"><div class="sl">근거 성적</div>
+                    <span class="score-ref"><i data-lucide="file-text" width="13" height="13"></i> THE PREMIUM 04/16 · 국수탐 백분위 <b>271</b> · 탐구 <b>2등급</b></span></div>
+                  <div class="esec"><div class="sl">상담 내용</div>
+                    <div class="sx">중간 점검. 국어 언매 안정적 2등급 진입. 탐구는 지구과학 상위, 물리Ⅱ 표본 적어 변동성 큼. 목표 대학(고려대 반도체공) 기준 국수탐 합 상향 필요 공감.</div></div>
+                  <div class="esec"><div class="sl">합의 · 다음 행동</div>
+                    <span class="action-tag done-tag"><i data-lucide="check" width="13" height="13"></i> 완료 — 물리Ⅱ 주간 실전세트 이행 확인</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="entry na">
+              <div class="ecard">
+                <div class="ecard-h"><span class="ty reg">정기 상담</span><span class="dt">2026.04.30</span><span class="who">이장원 · 대면 15분</span></div>
+                <div class="ecard-b">
+                  <div class="esec"><div class="sl">상담 내용</div>
+                    <div class="sx">4월 적응 상태 양호. 독서실 좌석(A-24) 만족. 오전 등원시간 준수 중. 학습량 자체는 충분하나 복습 회독이 밀린다는 자기진단.</div></div>
+                  <div class="esec"><div class="sl">합의 · 다음 행동</div>
+                    <span class="action-tag done-tag"><i data-lucide="check" width="13" height="13"></i> 완료 — 주간 복습 체크리스트 도입</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="entry li">
+              <div class="ecard">
+                <div class="ecard-h"><span class="ty lif">생활 · 태도</span><span class="dt">2026.04.09</span><span class="who">이장원 · 전화 10분</span></div>
+                <div class="ecard-b">
+                  <div class="esec"><div class="sl">상담 내용</div>
+                    <div class="sx">4/8 지각 1회 관련 확인. 대중교통 지연 사유, 상습성 없음. 벌점 미부과 안내.</div></div>
+                  <div class="esec"><div class="sl">학부모 공유</div>
+                    <span class="score-ref"><i data-lucide="users" width="13" height="13"></i> 요약본 전송됨 · 05.09 열람</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="entry">
+              <div class="ecard">
+                <div class="ecard-h"><span class="ty adm">입학예약 상담</span><span class="dt">2026.02.24</span><span class="who">최지원 · 대면 40분</span></div>
+                <div class="ecard-b">
+                  <div class="esec"><div class="sl">유입 · 배경</div>
+                    <div class="sx">지인추천 유입. 전년도 정시 상향 실패, 자연계열 재수 결정. 입학기준(수능 최저) 충족 확인.</div></div>
+                  <div class="esec"><div class="sl">입학 시 성적</div>
+                    <span class="score-ref">입학기준: 국2 수1 영2 탐3 · 내신 2등급 · 목표 <b>고려대 반도체공</b></span></div>
+                  <div class="esec"><div class="sl">결정</div>
+                    <span class="action-tag done-tag"><i data-lucide="check" width="13" height="13"></i> 등록 완료 — 원생코드 DL-2026-0419 발번 · 3반 배정</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="legend">
+            <span><span class="dot" style="background:var(--mint)"></span><b>정기</b></span>
+            <span><span class="dot" style="background:var(--amber)"></span><b>성적</b></span>
+            <span><span class="dot" style="background:var(--violet)"></span><b>생활·태도</b></span>
+            <span><span class="dot" style="background:var(--mint-d)"></span><b>입학예약</b></span>
+            <span style="margin-left:auto">모든 상담은 <b>원생코드</b>로 입학예약 → 재원생 → 성적리포트와 연결됩니다.</span>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script>lucide.createIcons();</script>
+<template id="__bundler_thumbnail" data-bg-color="#0E9E8E">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#0E9E8E"/>
+    <text x="600" y="370" font-family="Pretendard, sans-serif" font-size="150" font-weight="800" fill="#ffffff" text-anchor="middle" letter-spacing="-4">학생상담</text>
+    <text x="600" y="460" font-family="Pretendard, sans-serif" font-size="48" font-weight="600" fill="#BDF3EC" text-anchor="middle">상담일지 · 통합관리</text>
+  </svg>
+</template>
+<button class="pdf-btn" onclick="window.print()" style="position:fixed;right:22px;bottom:22px;z-index:9999;background:#0E9E8E;color:#fff;border:none;border-radius:12px;padding:13px 20px;font:700 15px 'Pretendard',sans-serif;letter-spacing:-.01em;box-shadow:0 6px 20px rgba(14,105,95,.35);cursor:pointer;display:inline-flex;align-items:center;gap:8px;">📄 PDF 저장</button>
+</body>
+</html>

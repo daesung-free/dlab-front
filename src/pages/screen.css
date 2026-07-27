@@ -1,0 +1,161 @@
+/* ===== 화면 카드 — 시안 .scard 이관 ===== */
+.cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.scard {
+  background: var(--card);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 16px 17px 15px;
+  border: 1.5px solid transparent;
+  transition: box-shadow 0.15s, border-color 0.15s;
+  display: flex;
+  flex-direction: column;
+}
+.scard:hover { border-color: #d6efea; }
+.scard-h { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; }
+.scard-h .sc-ic {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--mint-wash);
+  color: var(--mint-d);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.scard-h .sc-t { font-size: 15px; font-weight: 800; letter-spacing: -0.02em; flex: 1; min-width: 0; }
+.scard-h .sc-code {
+  font-size: 10.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--line-2);
+  color: var(--ink-2);
+  padding: 3px 7px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.sc-marks { display: flex; gap: 6px; align-items: center; margin-bottom: 9px; flex-wrap: wrap; }
+.sc-desc { font-size: 12.5px; color: var(--ink-2); line-height: 1.6; margin-bottom: 11px; }
+
+.sc-sub {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 2px 0 6px;
+}
+.sc-feats { list-style: none; display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+.sc-feats li { font-size: 12px; color: var(--muted); padding-left: 17px; position: relative; line-height: 1.45; }
+.sc-feats li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: var(--mint-b);
+}
+
+.sc-tables { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 12px; }
+.sc-tables code {
+  font-size: 10.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--bg);
+  color: var(--ink-2);
+  padding: 3px 7px;
+  border-radius: 6px;
+}
+
+.sc-issues { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 12px; }
+.iss {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: help;
+  border: 1px solid transparent;
+}
+.iss.p0 { background: var(--red-wash); color: var(--red); border-color: #f3cfc7; }
+.iss.p1 { background: var(--amber-wash); color: var(--amber); }
+.iss.p2 { background: var(--bg); color: var(--ink-2); }
+
+.sc-dsa {
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.55;
+  background: var(--bg);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+.sc-dsa b { color: var(--ink-2); }
+
+.sc-0723 {
+  font-size: 11.5px;
+  color: #8a5a00;
+  line-height: 1.55;
+  background: var(--amber-wash);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+.sc-0723 b { color: #7a4f00; }
+
+.sc-foot { margin-top: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sc-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--mint-d);
+  background: var(--mint-wash);
+  padding: 7px 13px;
+  border-radius: 9px;
+}
+.sc-open:hover { background: #d6efea; }
+.sc-ref { font-size: 11px; color: var(--muted); font-weight: 600; }
+.sc-fe {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--violet);
+  background: var(--violet-wash);
+  padding: 4px 9px;
+  border-radius: 7px;
+}
+
+/* ===== 개별 화면 상세(플레이스홀더) ===== */
+.detail-grid { display: grid; grid-template-columns: 1fr 320px; gap: 18px; align-items: start; }
+.detail-body { display: flex; flex-direction: column; gap: 14px; }
+.dsec { background: var(--card); border-radius: 14px; box-shadow: var(--shadow); padding: 17px 19px; }
+.dsec h3 {
+  font-size: 13.5px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.dsec h3 .ico { color: var(--mint-d); display: flex; }
+
+.mock-stub {
+  border: 1.5px dashed #cdd4de;
+  border-radius: 14px;
+  background: repeating-linear-gradient(45deg, #fff, #fff 10px, #fafbfc 10px, #fafbfc 20px);
+  padding: 44px 24px;
+  text-align: center;
+}
+.mock-stub .t { font-size: 15px; font-weight: 800; color: var(--ink-2); margin-bottom: 6px; }
+.mock-stub .x { font-size: 12.5px; color: var(--muted); line-height: 1.6; max-width: 460px; margin: 0 auto; }
+
+.kv { display: flex; flex-direction: column; gap: 0; }
+.kv .row { display: flex; gap: 10px; font-size: 12.5px; padding: 8px 0; border-bottom: 1px solid var(--line-2); }
+.kv .row:last-child { border-bottom: none; }
+.kv .k { color: var(--muted); font-weight: 600; width: 92px; flex-shrink: 0; }
+.kv .v { color: var(--ink-2); flex: 1; min-width: 0; }
+
+@media (max-width: 1180px) {
+  .cards { grid-template-columns: 1fr; }
+  .detail-grid { grid-template-columns: 1fr; }
+}

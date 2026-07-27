@@ -1,0 +1,75 @@
+/* F-4.11-8 좌석 이탈/복귀 — 실시간 좌석표 */
+.p-seat .seatmap { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; }
+.p-seat .seat {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 6px 5px;
+  min-height: 54px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: #fff;
+  cursor: pointer;
+  position: relative;
+}
+.p-seat .seat:hover { border-color: var(--mint-b); }
+.p-seat .seat .sc {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.p-seat .seat .sn {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.p-seat .seat .sl { font-size: 9.5px; font-weight: 700; }
+
+/* 위치 구분값 — I-16에서 확정되어야 하는 enum */
+.p-seat .seat.at-seat { background: var(--mint-wash); border-color: #d6efea; }
+.p-seat .seat.at-seat .sc { color: var(--mint-d); }
+.p-seat .seat.at-class { background: var(--blue-wash); border-color: #cfdefb; }
+.p-seat .seat.at-rest { background: var(--amber-wash); border-color: #f6dcb4; }
+.p-seat .seat.at-common { background: var(--violet-wash); border-color: #ddd6f7; }
+.p-seat .seat.at-subject { background: #e9f7ee; border-color: #c6e7d2; }
+.p-seat .seat.empty { background: var(--line-2); border-color: var(--line-2); }
+.p-seat .seat.empty .sn { color: var(--muted); font-weight: 500; }
+
+.p-seat .seat .dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--red);
+}
+
+.p-seat .loc-legend {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 11.5px;
+  color: var(--ink-2);
+  margin-top: 14px;
+  padding-top: 13px;
+  border-top: 1px solid var(--line-2);
+}
+.p-seat .loc-legend .sw {
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+  display: inline-block;
+  margin-right: 5px;
+  vertical-align: -2px;
+  border: 1px solid var(--line);
+}
+.p-seat .loc-legend code { font-size: 10.5px; color: var(--muted); margin-left: 3px; }

@@ -1,0 +1,75 @@
+/* DSA 실사에서 확인된 다중조건 검색 패널의 일반형 */
+.sf {
+  background: var(--card);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+.sf-h {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--line-2);
+  flex-wrap: wrap;
+}
+.sf-h .t { font-weight: 700; font-size: 13.5px; display: flex; align-items: center; gap: 7px; }
+.sf-h .t .ico { color: var(--mint-d); display: flex; }
+.sf-h .sf-right { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+.sf-body { padding: 16px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px 16px; }
+.sf-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.sf-field.span2 { grid-column: span 2; }
+.sf-field.span4 { grid-column: span 4; }
+.sf-field > label { font-size: 11.5px; color: var(--muted); font-weight: 700; letter-spacing: 0.01em; }
+.sf-chips { display: flex; gap: 5px; flex-wrap: wrap; }
+
+.sf-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 16px;
+  border-top: 1px solid var(--line-2);
+  background: #fbfcfd;
+  flex-wrap: wrap;
+}
+.sf-foot .sf-hint { font-size: 11.5px; color: var(--muted); }
+.sf-foot .sf-btns { margin-left: auto; display: flex; gap: 8px; }
+
+/* 저장된 검색조건 (F-4.1-1 신규 요구사항) */
+.sf-presets { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.sf-preset {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 6px 4px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink-2);
+  cursor: pointer;
+  font-family: inherit;
+}
+.sf-preset:hover { border-color: var(--mint-b); color: var(--mint-d); }
+.sf-preset .del {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  color: var(--muted);
+}
+.sf-preset .del:hover { background: var(--red-wash); color: var(--red); }
+
+@media (max-width: 1180px) {
+  .sf-body { grid-template-columns: repeat(2, 1fr); }
+  .sf-field.span4 { grid-column: span 2; }
+}
+@media (max-width: 720px) {
+  .sf-body { grid-template-columns: 1fr; }
+  .sf-field.span2,
+  .sf-field.span4 { grid-column: span 1; }
+}

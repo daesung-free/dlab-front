@@ -1,0 +1,27 @@
+.mask-pill {
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--mint-wash);
+  color: var(--mint-d);
+  letter-spacing: 0.02em;
+}
+.mask-pill.off { background: var(--red-wash); color: var(--red); }
+
+.mask-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 11px;
+  padding: 9px 13px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--red);
+  cursor: pointer;
+  font-family: inherit;
+}
+.mask-toggle.on { color: var(--mint-d); background: var(--mint-wash); border-color: #d6efea; }
+.mask-toggle:hover { border-color: #d6dbe2; }

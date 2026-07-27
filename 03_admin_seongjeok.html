@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DLab 통합관리 · 성적 리포트 관리</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<style>
+  :root{
+    --ink:#212934; --ink-2:#3F4753; --muted:#8B94A3; --line:#ECEEF1; --line-2:#F1F3F6;
+    --bg:#EDF0F4; --card:#ffffff;
+    --mint:#0E9E8E; --mint-d:#0b8073; --mint-b:#16B9A8; --mint-wash:#E7F6F3; --mint-soft:#F2FBFA;
+    --amber:#E8920F; --amber-wash:#FEF1E2;
+    --red:#E0533D; --red-wash:#FBEBE8; --green:#2E9E5B; --green-wash:#EAF7EF;
+    --violet:#6C5CE0; --violet-wash:#EEEBFB; --blue:#3B6FE0; --blue-wash:#EAF1FF;
+    --shadow:0 1px 3px rgba(20,30,50,.05); --r:16px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Pretendard",-apple-system,sans-serif;background:var(--bg);color:var(--ink);
+    font-size:14px;line-height:1.5;letter-spacing:-.01em;-webkit-font-smoothing:antialiased}
+  a{color:inherit;text-decoration:none}
+
+  /* ===== Top category nav ===== */
+  .topnav{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:6px;
+    background:#fff;border-bottom:1px solid var(--line);padding:0 18px;height:60px}
+  .topnav .brand{display:flex;align-items:center;gap:9px;padding-right:16px;margin-right:4px;border-right:1px solid var(--line)}
+  .topnav .brand .logo{font-weight:800;font-size:21px;color:var(--mint);letter-spacing:-.03em}
+  .topnav .brand .logo b{font-size:10px;vertical-align:top;font-weight:800}
+  .topnav .brand .txt b{color:var(--ink);font-size:13px;font-weight:700;letter-spacing:-.02em;display:block;line-height:1.15}
+  .topnav .brand .txt span{display:block;font-size:10.5px;color:var(--muted);font-weight:500}
+  .cat-tabs{display:flex;align-items:center;gap:2px;flex:1;overflow-x:auto;scrollbar-width:none}
+  .cat-tabs::-webkit-scrollbar{display:none}
+  .cat-tab{display:flex;align-items:center;gap:7px;padding:8px 12px;border-radius:10px;font-size:13px;
+    font-weight:600;color:var(--ink-2);white-space:nowrap;text-decoration:none}
+  .cat-tab .ico{color:var(--muted);display:flex}
+  .cat-tab:hover{background:var(--bg)}
+  .cat-tab.on{background:var(--mint-wash);color:var(--mint-d)}
+  .cat-tab.on .ico{color:var(--mint-d)}
+  .topnav .who{display:flex;align-items:center;gap:9px;padding-left:14px;margin-left:4px;border-left:1px solid var(--line);white-space:nowrap}
+  .topnav .who .av{width:30px;height:30px;border-radius:9px;background:var(--mint-wash);color:var(--mint-d);display:grid;place-items:center;font-weight:700;font-size:12px}
+  .topnav .who .wt b{font-size:12px;font-weight:700;color:var(--ink);display:block;line-height:1.2}
+  .topnav .who .wt span{font-size:10.5px;color:var(--muted)}
+
+  .wrap{display:grid;grid-template-columns:244px 1fr;min-height:calc(100vh - 60px)}
+
+  /* ===== Sub sidebar ===== */
+  .side{background:#fff;padding:18px 14px;border-right:1px solid var(--line);position:sticky;top:60px;height:calc(100vh - 60px);overflow:auto}
+  .side-cat{display:flex;align-items:center;gap:9px;font-size:15px;font-weight:800;color:var(--ink);letter-spacing:-.02em;padding:2px 8px 4px}
+  .side-cat .ico{color:var(--mint-d);display:flex}
+  .side-desc{font-size:11.5px;color:var(--muted);padding:0 8px 12px;line-height:1.5;border-bottom:1px solid var(--line-2);margin-bottom:10px}
+  .nav a{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:10px;color:var(--ink-2);text-decoration:none;font-size:13px;font-weight:500;margin-bottom:2px}
+  .nav a .ico{color:var(--muted);display:flex;flex-shrink:0}
+  .nav a .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .nav a:hover{background:var(--bg)}
+  .nav a.on{background:var(--mint-wash);color:var(--mint-d);font-weight:700}
+  .nav a.on .ico{color:var(--mint-d)}
+  .ph{font-size:8.5px;font-weight:800;padding:1px 5px;border-radius:5px;letter-spacing:.02em;flex-shrink:0}
+  .ph.p1{background:var(--mint-wash);color:var(--mint-d)}
+  .ph.p3{background:var(--violet-wash);color:var(--violet)}
+  .nwdot{width:6px;height:6px;border-radius:50%;background:var(--amber);flex-shrink:0}
+  .side-foot{margin-top:16px;font-size:11px;color:var(--muted);border-top:1px solid var(--line);padding-top:12px}
+
+  /* ===== Main ===== */
+  .main{padding:22px 26px 60px;min-width:0}
+  .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+  .crumb{font-size:12px;color:var(--muted)} .crumb b{color:var(--ink-2);font-weight:600}
+  .h1{font-size:22px;font-weight:800;letter-spacing:-.03em;margin-top:3px}
+  .top-actions{display:flex;gap:8px;align-items:center}
+  .btn{border:1px solid var(--line);background:#fff;border-radius:11px;padding:9px 15px;font-size:13px;
+    font-weight:600;cursor:pointer;color:var(--ink-2);font-family:inherit;display:inline-flex;align-items:center;gap:7px}
+  .btn:hover{border-color:#D6DBE2}
+  .btn.pri{background:var(--mint);border-color:var(--mint);color:#fff}
+  .btn.pri:hover{background:var(--mint-d)}
+
+  .layout{display:grid;grid-template-columns:308px 1fr;gap:18px;align-items:start}
+  .panel{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow)}
+  .panel-h{padding:15px 17px;border-bottom:1px solid var(--line-2);display:flex;align-items:center;justify-content:space-between}
+  .panel-h .t{font-weight:700;font-size:14px}
+  .panel-h .c{font-size:11.5px;color:var(--muted)}
+  .filter-row{display:flex;gap:6px;padding:11px 14px;border-bottom:1px solid var(--line-2);flex-wrap:wrap}
+  .chip{font-size:11.5px;padding:5px 11px;border-radius:20px;border:1px solid var(--line);background:#fff;color:var(--ink-2);cursor:pointer;font-weight:600}
+  .chip.on{background:var(--mint);border-color:var(--mint);color:#fff}
+  .slist{max-height:660px;overflow:auto}
+  .srow{display:flex;gap:11px;padding:12px 15px;border-bottom:1px solid var(--line-2);cursor:pointer;align-items:center}
+  .srow:hover{background:var(--bg)}
+  .srow.on{background:var(--mint-wash);border-left:3px solid var(--mint);padding-left:12px}
+  .avatar{width:36px;height:36px;border-radius:11px;background:var(--mint-wash);color:var(--mint-d);display:grid;place-items:center;font-weight:700;font-size:13px;flex-shrink:0}
+  .srow.warn .avatar{background:var(--red-wash);color:var(--red)}
+  .sinfo{min-width:0;flex:1}
+  .sinfo .n{font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:6px}
+  .sinfo .m{font-size:11.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tag{font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;letter-spacing:.02em}
+  .tag.up{background:var(--green-wash);color:var(--green)}
+  .tag.risk{background:var(--red-wash);color:var(--red)}
+  .sdate{font-size:11px;color:var(--muted);text-align:right;flex-shrink:0}
+
+  .stu-head{display:flex;align-items:flex-start;gap:16px;padding:20px;border-bottom:1px solid var(--line-2)}
+  .stu-head .big{width:54px;height:54px;border-radius:14px;background:var(--mint-wash);color:var(--mint-d);display:grid;place-items:center;font-weight:800;font-size:20px}
+  .stu-meta h2{font-size:18px;font-weight:800;letter-spacing:-.02em;display:flex;align-items:center;gap:8px}
+  .stu-meta .sub{font-size:12.5px;color:var(--muted);margin-top:4px}
+  .stu-meta .sub b{color:var(--ink-2);font-weight:600}
+  .code-pill{font-size:11px;font-family:ui-monospace,monospace;background:var(--line-2);color:var(--ink-2);padding:3px 8px;border-radius:6px}
+  .stu-right{margin-left:auto;text-align:right;display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+  .src-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;background:var(--mint-soft);color:var(--mint-d);padding:5px 10px;border-radius:8px}
+
+  .body{padding:20px}
+  .sec-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .sec-h .t{font-weight:800;font-size:15px;letter-spacing:-.02em;display:flex;align-items:center;gap:8px}
+  .sec-h .t .ic{color:var(--mint-d);display:flex}
+  .sec-h .note{font-size:11.5px;color:var(--muted)}
+
+  /* 회차별 성적 표 */
+  .rtable{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:8px}
+  .rtable th,.rtable td{padding:10px 8px;text-align:center;border-bottom:1px solid var(--line-2)}
+  .rtable thead th{font-size:11px;color:var(--muted);font-weight:700;background:#FBFCFD;border-bottom:1px solid var(--line)}
+  .rtable thead th.rd{text-align:left;padding-left:14px}
+  .rtable td.rd{text-align:left;padding-left:14px;font-weight:700;color:var(--ink)}
+  .rtable td.rd small{display:block;font-weight:500;color:var(--muted);font-size:10.5px;margin-top:1px}
+  .rtable tbody tr:hover{background:var(--mint-soft)}
+  .rtable tbody tr.latest{background:var(--mint-wash)}
+  .rtable tbody tr.latest:hover{background:#DBF1ED}
+  .gr{font-weight:800;font-size:14px;color:var(--ink)}
+  .gr small{font-weight:600;font-size:10px;color:var(--muted);margin-left:2px}
+  .gr.g1{color:var(--mint-d)} .gr.g4{color:var(--red)}
+  .pn{font-size:10px;color:var(--muted);display:block;margin-top:1px}
+  .sum{font-weight:800;color:var(--ink)}
+  .delta{font-size:10px;font-weight:700}
+  .delta.up{color:var(--green)} .delta.down{color:var(--red)}
+
+  /* 과목 상세 */
+  .detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:22px}
+  .box{border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .box-h{padding:12px 15px;border-bottom:1px solid var(--line-2);background:#FBFCFD;display:flex;align-items:center;justify-content:space-between}
+  .box-h .bt{font-weight:700;font-size:13px;display:flex;align-items:center;gap:8px}
+  .box-h .subj-pick{display:flex;gap:5px}
+  .subj-opt{font-size:11px;font-weight:700;padding:3px 9px;border-radius:7px;border:1px solid var(--line);color:var(--ink-2);cursor:pointer}
+  .subj-opt.on{background:var(--amber);border-color:var(--amber);color:#fff}
+  .box-b{padding:15px}
+  .chart-wrap{display:flex;flex-direction:column;gap:8px}
+  .chart-cap{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
+  svg.trend{width:100%;height:150px;display:block}
+  .bars{display:flex;flex-direction:column;gap:11px}
+  .bar-row{display:grid;grid-template-columns:96px 1fr 82px;gap:10px;align-items:center}
+  .bar-row .bl{font-size:12px;color:var(--ink-2);font-weight:600}
+  .bar-track{height:9px;background:var(--line-2);border-radius:6px;overflow:hidden;position:relative}
+  .bar-track .me{height:100%;border-radius:6px;background:var(--mint)}
+  .bar-track .me.low{background:var(--red)}
+  .bar-track .nat{position:absolute;top:-3px;width:2px;height:15px;background:var(--ink-2);opacity:.55}
+  .bar-val{font-size:11px;color:var(--muted);text-align:right}
+  .bar-val b{color:var(--ink);font-weight:700}
+
+  .callout{display:flex;gap:11px;align-items:flex-start;background:var(--amber-wash);border:1px solid #F6DCB4;border-radius:12px;padding:13px 15px;margin-top:18px}
+  .callout .ic{width:28px;height:28px;border-radius:8px;background:var(--amber);color:#fff;display:grid;place-items:center;flex-shrink:0}
+  .callout .tt{font-weight:700;font-size:12.5px;color:#9A5A00;margin-bottom:2px}
+  .callout .tx{font-size:12px;color:var(--ink-2);line-height:1.55}
+  .callout a{color:var(--mint-d);font-weight:700}
+
+  .upload-note{display:flex;gap:11px;align-items:center;background:var(--mint-soft);border:1px dashed #BFE6DF;border-radius:12px;padding:12px 15px;margin-bottom:18px;font-size:12px;color:var(--ink-2)}
+  .upload-note .ic{width:28px;height:28px;border-radius:8px;background:var(--mint);color:#fff;display:grid;place-items:center;flex-shrink:0}
+  .upload-note b{color:var(--mint-d)}
+
+  @media(max-width:1180px){.layout{grid-template-columns:1fr}.detail-grid{grid-template-columns:1fr}}
+</style>
+<style media="print">
+  @page{margin:12mm}
+  .pdf-btn{display:none!important}
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+  .side{position:static!important;height:auto!important}
+  .slist{max-height:none!important;overflow:visible!important}
+</style>
+</head>
+<body>
+<header class="topnav">
+  <div class="brand"><div class="logo">D<b>'</b>Lab</div><div class="txt"><b>통합관리</b><span>대성 · 관리형 독학재수</span></div></div>
+  <div class="cat-tabs">
+    <a class="cat-tab" href="00_admin_menu.html"><span class="ico"><i data-lucide="layout-dashboard" width="16" height="16"></i></span>전체 구성</a>
+    <a class="cat-tab" href="02_admin_ipsi.html"><span class="ico"><i data-lucide="user-plus" width="16" height="16"></i></span>입학</a>
+    <a class="cat-tab" href="00_admin_menu.html#student"><span class="ico"><i data-lucide="users" width="16" height="16"></i></span>원생</a>
+    <a class="cat-tab" href="01_admin_sangdam.html"><span class="ico"><i data-lucide="message-square" width="16" height="16"></i></span>상담</a>
+    <a class="cat-tab on" href="03_admin_seongjeok.html"><span class="ico"><i data-lucide="line-chart" width="16" height="16"></i></span>성적</a>
+    <a class="cat-tab" href="00_admin_menu.html#att"><span class="ico"><i data-lucide="clipboard-check" width="16" height="16"></i></span>출결·학습</a>
+    <a class="cat-tab" href="00_admin_menu.html#meal"><span class="ico"><i data-lucide="credit-card" width="16" height="16"></i></span>급식·수납</a>
+    <a class="cat-tab" href="00_admin_menu.html#comm"><span class="ico"><i data-lucide="send" width="16" height="16"></i></span>소통</a>
+    <a class="cat-tab" href="00_admin_menu.html#affairs"><span class="ico"><i data-lucide="folder-open" width="16" height="16"></i></span>교무</a>
+    <a class="cat-tab" href="00_admin_menu.html#settings"><span class="ico"><i data-lucide="settings" width="16" height="16"></i></span>설정</a>
+  </div>
+  <div class="who"><div class="av">이</div><div class="wt"><b>이승민</b><span>분당 · 담임</span></div></div>
+</header>
+
+<div class="wrap">
+  <aside class="side">
+    <div class="side-cat"><span class="ico"><i data-lucide="line-chart" width="18" height="18"></i></span> 성적</div>
+    <div class="side-desc">모의고사 성적 입력과 담임 상담용 리포트</div>
+    <nav class="nav">
+      <a href="00_admin_menu.html#score"><span class="ico"><i data-lucide="table" width="16" height="16"></i></span><span class="nm">모의고사 성적 입력</span><span class="ph p1">P1</span></a>
+      <a class="on" href="03_admin_seongjeok.html"><span class="ico"><i data-lucide="line-chart" width="16" height="16"></i></span><span class="nm">성적 리포트 관리</span><span class="ph p3">P3</span></a>
+      <a href="00_admin_menu.html#score"><span class="ico"><i data-lucide="clipboard-check" width="16" height="16"></i></span><span class="nm">가채점 설문</span><span class="nwdot"></span><span class="ph p3">P3</span></a>
+    </nav>
+    <div class="side-foot">이승민 (분당 · 담임)<br>성적열람 · 상담 권한</div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <div class="crumb"><b>성적</b> · 성적 리포트 관리</div>
+        <div class="h1">성적 리포트 관리</div>
+      </div>
+      <div class="top-actions">
+        <button class="btn"><i data-lucide="refresh-cw" width="14" height="14"></i> 더프리미엄 동기화</button>
+        <button class="btn"><i data-lucide="upload" width="14" height="14"></i> 상세 엑셀 업로드</button>
+        <button class="btn pri"><i data-lucide="file-text" width="14" height="14"></i> 성적표 PDF → D.Lab</button>
+      </div>
+    </div>
+
+    <div class="layout">
+      <!-- Left: student list -->
+      <section class="panel">
+        <div class="panel-h"><div class="t">재원생</div><div class="c">응시 296명</div></div>
+        <div class="filter-row">
+          <div class="chip on">전체</div>
+          <div class="chip">성적 상승</div>
+          <div class="chip">성적 하락</div>
+          <div class="chip">미응시</div>
+        </div>
+        <div class="slist">
+          <div class="srow on">
+            <div class="avatar">이</div>
+            <div class="sinfo"><div class="n">이승민 <span class="tag risk">탐구↓</span></div><div class="m">자연 · 재수 · 3반 4019</div></div>
+            <div class="sdate">05/20<br>응시</div>
+          </div>
+          <div class="srow warn">
+            <div class="avatar">박</div>
+            <div class="sinfo"><div class="n">박서준 <span class="tag risk">수학↓</span></div><div class="m">자연 · 삼수 · 3반 4021</div></div>
+            <div class="sdate">05/20</div>
+          </div>
+          <div class="srow">
+            <div class="avatar">김</div>
+            <div class="sinfo"><div class="n">김하윤 <span class="tag up">국어↑</span></div><div class="m">인문 · 재수 · 1반 1102</div></div>
+            <div class="sdate">05/20</div>
+          </div>
+          <div class="srow">
+            <div class="avatar">정</div>
+            <div class="sinfo"><div class="n">정민재</div><div class="m">자연 · 재수 · 2반 2210</div></div>
+            <div class="sdate">05/20</div>
+          </div>
+          <div class="srow">
+            <div class="avatar">최</div>
+            <div class="sinfo"><div class="n">최유나 <span class="tag up">전과목↑</span></div><div class="m">인문 · 재수 · 1반 1108</div></div>
+            <div class="sdate">05/20</div>
+          </div>
+          <div class="srow">
+            <div class="avatar">강</div>
+            <div class="sinfo"><div class="n">강도현</div><div class="m">자연 · 재수 · 3반 4033</div></div>
+            <div class="sdate">05/20</div>
+          </div>
+          <div class="srow">
+            <div class="avatar">윤</div>
+            <div class="sinfo"><div class="n">윤지호</div><div class="m">자연 · 삼수 · 2반 2231</div></div>
+            <div class="sdate">미응시</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right: detail -->
+      <section class="panel">
+        <div class="stu-head">
+          <div class="big">이</div>
+          <div class="stu-meta">
+            <h2>이승민 <span class="code-pill">DL-2026-0419</span></h2>
+            <div class="sub"><b>자연 · 재수</b> · 3반 4019 · 목표 <b>고려대 반도체공</b> · 담임 이장원</div>
+          </div>
+          <div class="stu-right">
+            <span class="src-badge"><i data-lucide="link" width="12" height="12"></i> 더프리미엄 API 연동</span>
+            <span class="src-badge" style="background:var(--violet-wash);color:var(--violet)"><i data-lucide="file-spreadsheet" width="12" height="12"></i> 상세 엑셀 05/20 반영</span>
+          </div>
+        </div>
+
+        <div class="body">
+          <div class="upload-note">
+            <div class="ic"><i data-lucide="info" width="15" height="15"></i></div>
+            <div>회차별 원점수·표준점수·백분위·등급은 <b>더프리미엄모의고사 API(전화번호 기반)</b>로 자동 조회되고, 단원별 정답률 등 <b>상세 분석은 엑셀 업로드</b>로 반영됩니다. 양식이 바뀌어도 컬럼 매핑으로 흡수합니다.</div>
+          </div>
+
+          <!-- 회차별 성적 표 -->
+          <div class="sec-h">
+            <div class="t"><span class="ic"><i data-lucide="table-2" width="17" height="17"></i></span> 회차별 성적 (원 / 표 / 백 · 등급)</div>
+            <div class="note">국·수·영·한국사·탐구1·탐구2 · 최신 회차 강조</div>
+          </div>
+          <table class="rtable">
+            <thead>
+              <tr>
+                <th class="rd">회차</th>
+                <th>국어<br><small style="font-weight:500;color:var(--muted)">언매</small></th>
+                <th>수학<br><small style="font-weight:500;color:var(--muted)">미적</small></th>
+                <th>영어</th>
+                <th>한국사</th>
+                <th>탐구1<br><small style="font-weight:500;color:var(--muted)">물리Ⅱ</small></th>
+                <th>탐구2<br><small style="font-weight:500;color:var(--muted)">지구과학</small></th>
+                <th>국수탐<br><small style="font-weight:500;color:var(--muted)">백분위합</small></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="rd">3월 학평<small>2026.03.26</small></td>
+                <td><span class="gr">3</span><span class="pn">88</span></td>
+                <td><span class="gr">2</span><span class="pn">92</span></td>
+                <td><span class="gr">3</span><span class="pn">77점</span></td>
+                <td><span class="gr">3</span><span class="pn">42</span></td>
+                <td><span class="gr">2</span><span class="pn">89</span></td>
+                <td><span class="gr">3</span><span class="pn">78</span></td>
+                <td><span class="sum">259</span></td>
+              </tr>
+              <tr>
+                <td class="rd">4월 학평<small>2026.04.10</small></td>
+                <td><span class="gr">2</span><span class="pn">91</span></td>
+                <td><span class="gr g1">1</span><span class="pn">95</span></td>
+                <td><span class="gr">2</span><span class="pn">82점</span></td>
+                <td><span class="gr">2</span><span class="pn">55</span></td>
+                <td><span class="gr">2</span><span class="pn">90</span></td>
+                <td><span class="gr">2</span><span class="pn">85</span></td>
+                <td><span class="sum">271</span></td>
+              </tr>
+              <tr>
+                <td class="rd">THE PREMIUM<small>2026.04.16</small></td>
+                <td><span class="gr">2</span><span class="pn">93</span></td>
+                <td><span class="gr g1">1</span><span class="pn">96</span></td>
+                <td><span class="gr">2</span><span class="pn">83점</span></td>
+                <td><span class="gr">2</span><span class="pn">58</span></td>
+                <td><span class="gr">2</span><span class="pn">90</span></td>
+                <td><span class="gr">2</span><span class="pn">84</span></td>
+                <td><span class="sum">271</span></td>
+              </tr>
+              <tr class="latest">
+                <td class="rd">THE PREMIUM<small>2026.05.20 · 최신</small></td>
+                <td><span class="gr">2</span><span class="pn">94</span></td>
+                <td><span class="gr g1">1</span><span class="pn">96</span></td>
+                <td><span class="gr">2</span><span class="pn">84점</span></td>
+                <td><span class="gr">2</span><span class="pn">61</span></td>
+                <td><span class="gr">2</span><span class="pn">90</span></td>
+                <td><span class="gr g4">4</span><span class="pn">82</span></td>
+                <td><span class="sum">278 <span class="delta up">▲7</span></span></td>
+              </tr>
+              <tr style="color:var(--muted)">
+                <td class="rd" style="color:var(--muted)">6월 평가원<small>예정 · 06.04</small></td>
+                <td colspan="7" style="text-align:center;font-size:11.5px;color:var(--muted)">응시 예정 — API 자동 조회 대기</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <!-- 과목별 상세 -->
+          <div class="detail-grid">
+            <div class="box">
+              <div class="box-h">
+                <div class="bt"><i data-lucide="trending-down" width="15" height="15" style="color:var(--red)"></i> 백분위 추이 · 지구과학</div>
+                <div class="subj-pick">
+                  <span class="subj-opt">국어</span><span class="subj-opt">수학</span><span class="subj-opt on">지구과학</span>
+                </div>
+              </div>
+              <div class="box-b">
+                <div class="chart-wrap">
+                  <svg class="trend" viewBox="0 0 360 150" preserveAspectRatio="none">
+                    <line x1="34" y1="16" x2="34" y2="120" stroke="#ECEEF1" stroke-width="1"/>
+                    <line x1="34" y1="120" x2="352" y2="120" stroke="#ECEEF1" stroke-width="1"/>
+                    <line x1="34" y1="16" x2="352" y2="16" stroke="#F1F3F6" stroke-width="1" stroke-dasharray="3 3"/>
+                    <line x1="34" y1="68" x2="352" y2="68" stroke="#F1F3F6" stroke-width="1" stroke-dasharray="3 3"/>
+                    <text x="28" y="20" text-anchor="end" font-size="9" fill="#8B94A3">95</text>
+                    <text x="28" y="72" text-anchor="end" font-size="9" fill="#8B94A3">80</text>
+                    <text x="28" y="123" text-anchor="end" font-size="9" fill="#8B94A3">65</text>
+                    <!-- 전국 평균선 -->
+                    <polyline points="60,86 133,80 206,82 279,84" fill="none" stroke="#8B94A3" stroke-width="1.5" stroke-dasharray="4 3" opacity=".7"/>
+                    <text x="285" y="86" font-size="9" fill="#8B94A3">전국</text>
+                    <!-- 이승민 -->
+                    <polyline points="60,75 133,51 206,54 279,61" fill="none" stroke="#E0533D" stroke-width="2.5"/>
+                    <circle cx="60" cy="75" r="3.5" fill="#E0533D"/>
+                    <circle cx="133" cy="51" r="3.5" fill="#E0533D"/>
+                    <circle cx="206" cy="54" r="3.5" fill="#E0533D"/>
+                    <circle cx="279" cy="61" r="4.5" fill="#fff" stroke="#E0533D" stroke-width="2.5"/>
+                    <text x="60" y="138" text-anchor="middle" font-size="9" fill="#8B94A3">3월</text>
+                    <text x="133" y="138" text-anchor="middle" font-size="9" fill="#8B94A3">4월</text>
+                    <text x="206" y="138" text-anchor="middle" font-size="9" fill="#8B94A3">04/16</text>
+                    <text x="279" y="138" text-anchor="middle" font-size="9" fill="#E0533D" font-weight="700">05/20</text>
+                  </svg>
+                  <div class="chart-cap"><span>백분위 78 → <b style="color:var(--red)">82</b> (직전 85 대비 <b style="color:var(--red)">−3</b>)</span><span style="color:var(--red);font-weight:700">신유형 취약</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="box">
+              <div class="box-h"><div class="bt"><i data-lucide="bar-chart-3" width="15" height="15"></i> 단원별 정답률 · 지구과학 05/20</div></div>
+              <div class="box-b">
+                <div class="bars">
+                  <div class="bar-row"><span class="bl">고체지구</span><div class="bar-track"><div class="me" style="width:88%"></div><div class="nat" style="left:74%"></div></div><span class="bar-val"><b>88%</b> / 전국 74</span></div>
+                  <div class="bar-row"><span class="bl">대기와 해양</span><div class="bar-track"><div class="me" style="width:71%"></div><div class="nat" style="left:68%"></div></div><span class="bar-val"><b>71%</b> / 전국 68</span></div>
+                  <div class="bar-row"><span class="bl">우주</span><div class="bar-track"><div class="me low" style="width:46%"></div><div class="nat" style="left:63%"></div></div><span class="bar-val"><b style="color:var(--red)">46%</b> / 전국 63</span></div>
+                  <div class="bar-row"><span class="bl">지구의 역사</span><div class="bar-track"><div class="me low" style="width:52%"></div><div class="nat" style="left:70%"></div></div><span class="bar-val"><b style="color:var(--red)">52%</b> / 전국 70</span></div>
+                  <div class="bar-row"><span class="bl">신유형(통합)</span><div class="bar-track"><div class="me low" style="width:38%"></div><div class="nat" style="left:59%"></div></div><span class="bar-val"><b style="color:var(--red)">38%</b> / 전국 59</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="callout">
+            <div class="ic"><i data-lucide="message-square-text" width="15" height="15"></i></div>
+            <div>
+              <div class="tt">담임 상담 연동</div>
+              <div class="tx">우주·신유형 단원 정답률이 전국 대비 크게 낮습니다. 이 분석은 <a href="01_admin_sangdam.html">학생상담(상담일지)</a>의 「성적 근거」로 자동 첨부되며, 상담 리포트의 과목별 이행률·코멘트와 결합됩니다.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script>lucide.createIcons();</script>
+<template id="__bundler_thumbnail" data-bg-color="#0E9E8E">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#0E9E8E"/>
+    <text x="600" y="370" font-family="Pretendard, sans-serif" font-size="150" font-weight="800" fill="#ffffff" text-anchor="middle" letter-spacing="-4">성적 리포트</text>
+    <text x="600" y="460" font-family="Pretendard, sans-serif" font-size="46" font-weight="600" fill="#BDF3EC" text-anchor="middle">회차별 · 단원별 분석</text>
+  </svg>
+</template>
+<button class="pdf-btn" onclick="window.print()" style="position:fixed;right:22px;bottom:22px;z-index:9999;background:#0E9E8E;color:#fff;border:none;border-radius:12px;padding:13px 20px;font:700 15px 'Pretendard',sans-serif;letter-spacing:-.01em;box-shadow:0 6px 20px rgba(14,105,95,.35);cursor:pointer;display:inline-flex;align-items:center;gap:8px;">📄 PDF 저장</button>
+</body>
+</html>

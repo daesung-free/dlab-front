@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DLab 통합관리 · 전체 메뉴 구성 (IA)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<style>
+  :root{
+    --ink:#212934; --ink-2:#3F4753; --muted:#8B94A3; --line:#ECEEF1; --line-2:#F1F3F6;
+    --bg:#EDF0F4; --card:#ffffff;
+    --mint:#0E9E8E; --mint-d:#0b8073; --mint-b:#16B9A8; --mint-wash:#E7F6F3; --mint-soft:#F2FBFA;
+    --amber:#E8920F; --amber-wash:#FEF1E2;
+    --red:#E0533D; --red-wash:#FBEBE8; --green:#2E9E5B; --green-wash:#EAF7EF;
+    --violet:#6C5CE0; --violet-wash:#EEEBFB; --blue:#3B6FE0; --blue-wash:#EAF1FF;
+    --shadow:0 1px 3px rgba(20,30,50,.05); --r:16px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Pretendard",-apple-system,sans-serif;background:var(--bg);color:var(--ink);
+    font-size:14px;line-height:1.5;letter-spacing:-.01em;-webkit-font-smoothing:antialiased}
+  a{color:inherit;text-decoration:none}
+
+  /* ===== Top category nav ===== */
+  .topnav{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:6px;
+    background:#fff;border-bottom:1px solid var(--line);padding:0 18px;height:60px}
+  .topnav .brand{display:flex;align-items:center;gap:9px;padding-right:16px;margin-right:4px;border-right:1px solid var(--line)}
+  .topnav .brand .logo{font-weight:800;font-size:21px;color:var(--mint);letter-spacing:-.03em}
+  .topnav .brand .logo b{font-size:10px;vertical-align:top;font-weight:800}
+  .topnav .brand .txt b{color:var(--ink);font-size:13px;font-weight:700;letter-spacing:-.02em;display:block;line-height:1.15}
+  .topnav .brand .txt span{display:block;font-size:10.5px;color:var(--muted);font-weight:500}
+  .cat-tabs{display:flex;align-items:center;gap:2px;flex:1;overflow-x:auto;scrollbar-width:none}
+  .cat-tabs::-webkit-scrollbar{display:none}
+  .cat-tab{display:flex;align-items:center;gap:7px;padding:8px 12px;border-radius:10px;font-size:13px;
+    font-weight:600;color:var(--ink-2);white-space:nowrap;cursor:pointer;border:none;background:none;font-family:inherit}
+  .cat-tab .ico{color:var(--muted);display:flex}
+  .cat-tab:hover{background:var(--bg)}
+  .cat-tab.on{background:var(--mint-wash);color:var(--mint-d)}
+  .cat-tab.on .ico{color:var(--mint-d)}
+  .topnav .who{display:flex;align-items:center;gap:9px;padding-left:14px;margin-left:4px;border-left:1px solid var(--line);white-space:nowrap}
+  .topnav .who .av{width:30px;height:30px;border-radius:9px;background:var(--mint-wash);color:var(--mint-d);
+    display:grid;place-items:center;font-weight:700;font-size:12px}
+  .topnav .who .wt b{font-size:12px;font-weight:700;color:var(--ink);display:block;line-height:1.2}
+  .topnav .who .wt span{font-size:10.5px;color:var(--muted)}
+
+  .wrap{display:grid;grid-template-columns:250px 1fr;min-height:calc(100vh - 60px)}
+
+  /* ===== Sub sidebar ===== */
+  .side{background:#fff;padding:18px 14px;border-right:1px solid var(--line);
+    position:sticky;top:60px;height:calc(100vh - 60px);overflow:auto}
+  .side-cat{display:flex;align-items:center;gap:9px;font-size:15px;font-weight:800;color:var(--ink);
+    letter-spacing:-.02em;padding:2px 8px 4px}
+  .side-cat .ico{color:var(--mint-d);display:flex}
+  .side-desc{font-size:11.5px;color:var(--muted);padding:0 8px 12px;line-height:1.5;border-bottom:1px solid var(--line-2);margin-bottom:10px}
+  .nav a{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:10px;color:var(--ink-2);
+    font-size:13px;font-weight:500;margin-bottom:2px;cursor:pointer}
+  .nav a .ico{color:var(--muted);display:flex;flex-shrink:0}
+  .nav a .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .nav a:hover{background:var(--bg)}
+  .nav a.on{background:var(--mint-wash);color:var(--mint-d);font-weight:700}
+  .nav a.on .ico{color:var(--mint-d)}
+  .ph{font-size:8.5px;font-weight:800;padding:1px 5px;border-radius:5px;letter-spacing:.02em;flex-shrink:0}
+  .ph.p0{background:#E7E9ED;color:var(--ink-2)}
+  .ph.p1{background:var(--mint-wash);color:var(--mint-d)}
+  .ph.p2{background:var(--blue-wash);color:var(--blue)}
+  .ph.p3{background:var(--violet-wash);color:var(--violet)}
+  .ph.p4{background:var(--amber-wash);color:var(--amber)}
+  .nwdot{width:6px;height:6px;border-radius:50%;background:var(--amber);flex-shrink:0}
+
+  .side-summary{padding:6px 8px}
+  .ss-row{display:flex;align-items:center;justify-content:space-between;font-size:12px;padding:7px 0;border-bottom:1px solid var(--line-2)}
+  .ss-row .k{color:var(--muted);font-weight:600}
+  .ss-row .v{font-weight:800;color:var(--ink)}
+  .legend-block{margin-top:14px;padding:12px;background:var(--bg);border-radius:12px}
+  .legend-block .lt{font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:9px}
+  .legend-row{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--ink-2);margin-bottom:7px}
+  .legend-row:last-child{margin-bottom:0}
+  .side-foot{margin-top:16px;font-size:11px;color:var(--muted);border-top:1px solid var(--line);padding-top:12px}
+
+  /* ===== Main ===== */
+  .main{padding:24px 28px 60px;min-width:0}
+  .m-head{margin-bottom:20px}
+  .m-head .crumb{font-size:12px;color:var(--muted)}
+  .m-head .crumb b{color:var(--ink-2);font-weight:600}
+  .m-head h1{font-size:24px;font-weight:800;letter-spacing:-.03em;margin-top:4px;display:flex;align-items:center;gap:10px}
+  .m-head .sub{font-size:13px;color:var(--muted);margin-top:6px;max-width:640px;line-height:1.6}
+
+  /* overview */
+  .ov-note{display:flex;gap:12px;align-items:flex-start;background:var(--mint-soft);border:1px solid #BFE6DF;
+    border-radius:14px;padding:15px 18px;margin-bottom:22px}
+  .ov-note .ic{width:30px;height:30px;border-radius:9px;background:var(--mint);color:#fff;display:grid;place-items:center;flex-shrink:0}
+  .ov-note .tt{font-weight:700;font-size:13.5px;color:var(--mint-d);margin-bottom:3px}
+  .ov-note .tx{font-size:12.5px;color:var(--ink-2);line-height:1.6}
+  .ov-note b{color:var(--mint-d)}
+
+  .ov-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .ov-cat{background:var(--card);border-radius:14px;box-shadow:var(--shadow);padding:16px 17px;cursor:pointer;border:1px solid transparent}
+  .ov-cat:hover{border-color:#D6EFEA;box-shadow:0 4px 14px rgba(20,30,50,.07)}
+  .ov-cat-h{display:flex;align-items:center;gap:9px;margin-bottom:4px}
+  .ov-cat-h .ic{width:30px;height:30px;border-radius:9px;background:var(--mint-wash);color:var(--mint-d);display:grid;place-items:center;flex-shrink:0}
+  .ov-cat-h .nm{font-size:15px;font-weight:800;letter-spacing:-.02em}
+  .ov-cat-h .ct{margin-left:auto;font-size:11px;font-weight:700;color:var(--muted);background:var(--bg);padding:2px 9px;border-radius:11px}
+  .ov-cat .cd{font-size:11.5px;color:var(--muted);margin-bottom:11px;line-height:1.45;min-height:32px}
+  .ov-items{display:flex;flex-direction:column;gap:5px}
+  .ov-item{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-2);padding:4px 0}
+  .ov-item .d{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+  .ov-item .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ov-item .mk{font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px}
+  .ov-item .mk.cur{background:var(--green-wash);color:var(--green)}
+  .ov-item .mk.new{background:var(--amber-wash);color:var(--amber)}
+
+  /* category cards */
+  .legend-inline{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:18px;font-size:12px;color:var(--muted)}
+  .legend-inline .li{display:flex;align-items:center;gap:6px}
+  .legend-inline .li b{color:var(--ink-2)}
+  .cards{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+  .scard{background:var(--card);border-radius:14px;box-shadow:var(--shadow);padding:16px 17px 15px;border:1.5px solid transparent;transition:box-shadow .15s,border-color .15s}
+  .scard.flash{border-color:var(--mint);box-shadow:0 6px 20px rgba(14,105,95,.16)}
+  .scard-h{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+  .scard-h .sc-ic{width:34px;height:34px;border-radius:10px;background:var(--mint-wash);color:var(--mint-d);display:grid;place-items:center;flex-shrink:0}
+  .scard-h .sc-t{font-size:15px;font-weight:800;letter-spacing:-.02em;flex:1;min-width:0}
+  .sc-marks{display:flex;gap:6px;align-items:center;margin-bottom:9px;flex-wrap:wrap}
+  .mk{font-size:10px;font-weight:800;padding:2px 8px;border-radius:6px;letter-spacing:.02em}
+  .mk.cur{background:var(--green-wash);color:var(--green)}
+  .mk.new{background:var(--amber-wash);color:var(--amber)}
+  .mk-ph{font-size:10px;font-weight:800;padding:2px 8px;border-radius:6px}
+  .sc-desc{font-size:12.5px;color:var(--ink-2);line-height:1.6;margin-bottom:11px}
+  .sc-feats{list-style:none;display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+  .sc-feats li{font-size:12px;color:var(--muted);padding-left:17px;position:relative;line-height:1.45}
+  .sc-feats li::before{content:"";position:absolute;left:2px;top:6px;width:6px;height:6px;border-radius:2px;background:var(--mint-b)}
+  .sc-open{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--mint-d);
+    background:var(--mint-wash);padding:7px 13px;border-radius:9px}
+  .sc-open:hover{background:#D6EFEA}
+  .sc-ref{font-size:11px;color:var(--muted);font-weight:600}
+
+  @media(max-width:1180px){.ov-grid{grid-template-columns:repeat(2,1fr)}.cards{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+  <header class="topnav">
+    <div class="brand">
+      <div class="logo">D<b>'</b>Lab</div>
+      <div class="txt"><b>통합관리</b><span>대성 · 관리형 독학재수</span></div>
+    </div>
+    <div class="cat-tabs" id="catTabs"></div>
+    <div class="who">
+      <div class="av">관</div>
+      <div class="wt"><b>전체 메뉴</b><span>마스터 뷰 · 全 권한</span></div>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <aside class="side" id="side"></aside>
+    <main class="main" id="main"></main>
+  </div>
+
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script>
+const PHASE = {
+  0:{cls:'p0', label:'선행', name:'Phase 0 · 선행 인프라', color:'#3F4753'},
+  1:{cls:'p1', label:'MVP',  name:'Phase 1 · MVP',        color:'#0b8073'},
+  2:{cls:'p2', label:'핵심', name:'Phase 2 · 핵심',        color:'#3B6FE0'},
+  3:{cls:'p3', label:'교육·소통', name:'Phase 3 · 교육·성적·소통', color:'#6C5CE0'},
+  4:{cls:'p4', label:'부가', name:'Phase 4 · 부가',        color:'#E8920F'},
+};
+
+const CATS = [
+  {id:'admit',   name:'입학',      icon:'user-plus',       desc:'디멤버 입학예약폼 유입부터 등록까지'},
+  {id:'student', name:'원생',      icon:'users',           desc:'재원생 명부·반·좌석·장학·상벌점'},
+  {id:'counsel', name:'상담',      icon:'message-square',  desc:'상담일지와 담임 상담 리포트'},
+  {id:'score',   name:'성적',      icon:'line-chart',      desc:'모의고사 성적 입력과 리포트'},
+  {id:'att',     name:'출결·학습', icon:'clipboard-check', desc:'출결·승인·순찰·루틴·학습계획'},
+  {id:'meal',    name:'급식·수납', icon:'credit-card',     desc:'급식 신청·결제와 수납 현황'},
+  {id:'comm',    name:'소통',      icon:'send',            desc:'공지·알림·메시지·설문'},
+  {id:'affairs', name:'교무',      icon:'folder-open',     desc:'명단·특강·실적'},
+  {id:'settings',name:'설정',      icon:'settings',        desc:'기초·권한·규칙·템플릿'},
+];
+
+const ITEMS = [
+  // ── 입학
+  {cat:'admit', name:'입학예약 상담', icon:'git-branch', phase:1, mark:'현재', href:'02_admin_ipsi.html',
+    desc:'디멤버 입학예약폼 유입을 신규예약 → 방문상담 → 입학기준 확인 → 좌석·장학 배정 → 입학확정 파이프라인으로 관리.',
+    feats:['입학기준·검고졸 자동 크로스체크, 미달 시 자동 플래그','좌석·장학·대기 한 화면 실시간 연동','단계 전환 시 안내 문자 자동발송','입학상담이 재원생 상담일지 첫 기록으로 연결']},
+  {cat:'admit', name:'대기자 관리', icon:'list-ordered', phase:1, mark:'신규',
+    desc:'입학 예약자를 대기자로 자동 등록하고 순번 처리 알림을 자동 발송. 대기자 → 원생 원클릭 전환.',
+    feats:['순번 처리 알림 자동발송(등록 가능 날짜·시간)','개별 메시지 발송','대기자 → 원생 전환 + 앱 초대 알림','디멤버 입학예약폼 연동(S-1 / D-7)']},
+  {cat:'admit', name:'설명회 신청', icon:'megaphone', phase:2, mark:'신규',
+    desc:'입학 설명회 신청자 접수 및 참석 명단 관리.',
+    feats:['설명회 신청 접수','참석 명단·출력']},
+
+  // ── 원생
+  {cat:'student', name:'재원생 명부', icon:'users', phase:1, mark:'현재',
+    desc:'통합 검색(이름·학번·전화)·정렬·검색조건 저장. 신규 접수 등록(학번 자동 채번, 매년 초기화).',
+    feats:['이름·학번·전화 통합 검색 + 조건 저장','학번 = year+seq 채번 (PK 아님)','엑셀 다운로드 · 마스킹 기본 ON']},
+  {cat:'student', name:'반 배정 관리', icon:'layout-grid', phase:1,
+    desc:'고정반·이동수업반 배정. 전년도 반 구성 복사.',
+    feats:['고정반 / 이동수업반','전년도 복사(YearlySnapshot)']},
+  {cat:'student', name:'좌석 배정', icon:'armchair', phase:1, mark:'현재',
+    desc:'독서실 좌석 배치도 기반 배정·현황.',
+    feats:['좌석 배치도 실시간 반영','입학예약 좌석배정과 연동']},
+  {cat:'student', name:'장학 · 환급', icon:'star', phase:1, mark:'현재',
+    desc:'장학 기준 적용과 환급 관리.',
+    feats:['수능100·평가원 등 장학 기준','환급 처리 내역']},
+  {cat:'student', name:'징계 · 상벌점', icon:'triangle-alert', phase:1, mark:'현재',
+    desc:'상벌점 항목 전년도 복사, 학생별 조회/수정. 앱 Daily Report 연동.',
+    feats:['항목 전년도 복사','학생별 조회·수정','상벌점 규칙 엔진 자동 부여 연동']},
+
+  // ── 상담
+  {cat:'counsel', name:'학생상담 (상담일지)', icon:'message-square', phase:1, mark:'현재', href:'01_admin_sangdam.html',
+    desc:'원생코드 기준 상담 이력 관리. 성적표를 근거로 첨부, 학부모 공유 설정.',
+    feats:['정기·성적·생활·진학·학부모 상담 유형','THE PREMIUM 성적표 근거 자동 첨부','저장 시 학생·학부모 앱 즉시 반영','입학예약 → 재원생 → 성적리포트 연결']},
+  {cat:'counsel', name:'상담 리포트', icon:'clipboard-list', phase:3, mark:'신규',
+    desc:'0710 구조 확정 — 과목별 학습계획 이행률(별점) + 상담 항목 태그(선택형) + 담임 스티커 + 코멘트.',
+    feats:['과목별 이행률 별점(1~5)','상담 항목 마스터(관리자 편집·최대 노출 개수)','담임 스티커 + 코멘트','Weekly ABC·수강진도·성적 상세 결합']},
+
+  // ── 성적
+  {cat:'score', name:'모의고사 성적 입력', icon:'table', phase:1, mark:'현재',
+    desc:'더프리미엄모의고사 API(전화번호 기반) 자동 조회 + 상세 엑셀 업로드.',
+    feats:['더프리미엄 API 전화번호 기반 조회','엑셀 업로드(상세·상담용)','양식 변경 대응 유연 매핑(ColumnMapping, I-11)']},
+  {cat:'score', name:'성적 리포트 관리', icon:'line-chart', phase:3, mark:'현재', href:'03_admin_seongjeok.html',
+    desc:'6과목 회차별 표(원/표/백/등급) + 단원별 정답률·전국 대비. 성적표 PDF → D.Lab 사이트 업로드.',
+    feats:['국·수·영·한국사·탐1·탐2 회차별 표','내용영역 단원별 정답률·전국 대비','성적표 PDF → D.Lab 업로드(S-2)']},
+  {cat:'score', name:'가채점 설문', icon:'clipboard-check', phase:3, mark:'신규',
+    desc:'수능 직후 점수 입력 가채점 설문 생성·배포·수집.',
+    feats:['가채점 설문 생성·배포','응답 수집·집계']},
+
+  // ── 출결·학습
+  {cat:'att', name:'출결 현황', icon:'scan-line', phase:1, mark:'현재',
+    desc:'키오스크 내역 실시간 수신(대성전산 API 경유 없이 직접). 일별 현황·담당 반 필터.',
+    feats:['키오스크 Webhook 직접 수신(HMAC 검증)','등원/지각/결석 자동 계산','담당 반 필터 · 학부모 알림톡']},
+  {cat:'att', name:'사유 · 정기일정 승인', icon:'check-check', phase:1, mark:'신규',
+    desc:'승인 라우팅 — 학생 신청 항목별 승인 주체(선생님 직접/학부모/자동) 분리 처리.',
+    feats:['approver_type 기반 승인 라우팅','사유·정기일정 실시간 수신·승인/수정','벌점 확정 시점 검증(I-10 / I-12)']},
+  {cat:'att', name:'사감 순찰 기록', icon:'footprints', phase:2, mark:'신규',
+    desc:'교시별 구역 QR 순찰 기록(공부중/졸음/좌석없음). 2회 연속 졸음 → 벌점.',
+    feats:['구역별 고정 QR 스캔 기록','공부중 / 졸음 / 좌석없음 상태','벌점·Daily Report 자동 연동']},
+  {cat:'att', name:'데일리 루틴 관리', icon:'repeat', phase:3, mark:'신규',
+    desc:'월별 루틴/테스트 세팅(과목·배점·권장) + 전월 복사. 반별 결과 입력, 상벌점 규칙 매핑.',
+    feats:['월별 루틴 정의(과목 매월 상이) + 전월 복사','학생/반별 결과(완료·미완료·점수)','상벌점 규칙 엔진 자동 연동']},
+  {cat:'att', name:'주·일 학습 계획', icon:'calendar-range', phase:3, mark:'신규',
+    desc:'0710 — 교시×요일 그리드(셀=과목+학습형태+교재/내용). 파란색=관리자 편집, 비교그래프·비율 파이.',
+    feats:['교시×요일 그리드, 주말 의무자습 토글','선택목록(드롭다운) 마스터 관리','과목×유형 계획 대비 실제 비교그래프','주차별 시간·비율 파이(Recharts)']},
+  {cat:'att', name:'대면 질의응답 예약', icon:'calendar-clock', phase:3, mark:'신규',
+    desc:'질의응답 OFF(대면) — 상담실 가능 타임 개설·예약 현황 관리.',
+    feats:['상담실 가능 타임 개설','희망 타임 예약 현황','질의응답 횟수 Daily Report 반영']},
+  {cat:'att', name:'영단어 시험(디랩 콘텐츠)', icon:'book-a', phase:3, mark:'신규',
+    desc:'디랩 콘텐츠 영단어 시험 생성·배포 및 결과 관리.',
+    feats:['시험 생성·배포','응시 결과 조회','Daily Report 참고링크 연동']},
+
+  // ── 급식·수납
+  {cat:'meal', name:'급식 신청 현황', icon:'utensils', phase:2, mark:'신규',
+    desc:'월별 급식 신청 현황(달력 뷰·요일별·주말/공휴일 제외).',
+    feats:['월 달력 뷰 · 요일별 선택','주말 + 공휴일 필터(mealPolicy)','월별 신청 현황·식수 마감']},
+  {cat:'meal', name:'급식 결제 · 취소', icon:'wallet', phase:2, mark:'신규',
+    desc:'카드/가상계좌 결제. 앱 취소(3일 전 PG 자동환불) / 데스크 취소(기간 제한 없이 즉시).',
+    feats:['카드 / 가상계좌 분기 + 만료 스케줄러','앱 3일 전 → PG 자동환불','데스크 즉시 취소(관리자)','벤더 명의 PG · 수납 반영']},
+  {cat:'meal', name:'데스크 당일 신청', icon:'concierge-bell', phase:2, mark:'신규',
+    desc:'데스크 방문 당일 급식 신청(관리자 직접 등록). 앱 월말 일괄과 별개 흐름.',
+    feats:['관리자 전용 직접 등록 화면','앱(월말 일괄)과 별개 flow','결제·환불 주체 확정 후 착수(I-13)']},
+  {cat:'meal', name:'수납 현황', icon:'receipt', phase:2,
+    desc:'통합 매출장(카드·가상계좌·등록비), 기간·지점별 수납 통계.',
+    feats:['통합 매출장 · 기간·지점별 통계','등록비 결제 주체 확정 반영(D-9)','대성전산 수납 API 연동(D-3)']},
+  {cat:'meal', name:'미납자 관리', icon:'alert-circle', phase:2,
+    desc:'미납자 명단 관리 및 알림톡 자동 발송.',
+    feats:['미납자 명단','알림톡 자동 발송']},
+
+  // ── 소통
+  {cat:'comm', name:'공지 발송', icon:'bell', phase:1, mark:'현재',
+    desc:'전체/지점/반/개별 공지 발송(권한별 범위 제어).',
+    feats:['scope: ALL / BRANCH / CLASS / INDIVIDUAL','발송 권한: 전체=본사·지점=지점관리자·반=담임']},
+  {cat:'comm', name:'카카오톡 · 알림 발송', icon:'message-circle', phase:1, mark:'현재',
+    desc:'개별·단체 발송, 출결 자동발송 템플릿(등원·지각·결석), 대기자 알림.',
+    feats:['카카오 알림톡(트랜잭션) + FCM 이중화','출결 자동발송 템플릿','문자 대체발송(주 채널 우선순위 확정)']},
+  {cat:'comm', name:'메시지 관리', icon:'messages-square', phase:3, mark:'신규',
+    desc:'학생↔담임 1:1 채팅(외부 유료 메신저 React 연동) + 가족 채팅방(학부모+학생+관리자).',
+    feats:['1:1 채팅(외부 메신저, 담당 유현님)','가족 채팅방(FAMILY 그룹 스레드)','메타·참조ID만 저장, 본문은 벤더(E-6)']},
+  {cat:'comm', name:'행정 요청 수신함', icon:'inbox', phase:3, mark:'신규',
+    desc:'학생 앱의 사전정의 행정 요청 항목 클릭 → 담당자 수신·처리.',
+    feats:['사전정의 항목 클릭 → 담당자 전송','행정 요청 수신함·처리','표준 항목 목록 확정(I-3)']},
+  {cat:'comm', name:'설문 관리', icon:'clipboard-signature', phase:2, mark:'신규',
+    desc:'설문 생성·배포·수집 + 템플릿 저장·재사용.',
+    feats:['설문 생성·배포·수집','템플릿 저장·재사용(survey_templates)','관리=템플릿·배포 / 앱=응답']},
+
+  // ── 교무
+  {cat:'affairs', name:'명단 조회 · 출력', icon:'file-spreadsheet', phase:2,
+    desc:'수강생 대장·직반·장학생 명단(청구기수·반 필터), 엑셀 다운로드. 구분 항목 정리.',
+    feats:['수강생 대장(청구기수·반 필터)','직반·장학생 명단 엑셀','구분 항목 재정의 확정 필요(I-1)']},
+  {cat:'affairs', name:'특강 관리', icon:'presentation', phase:2,
+    desc:'특강 신청 명단(신청자·대기자), 특강 출석부.',
+    feats:['특강 신청 명단·대기자','특강 출석부']},
+  {cat:'affairs', name:'실적 관리', icon:'trophy', phase:2,
+    desc:'합격 실적 입력·현황·통계.',
+    feats:['합격 실적 입력','현황·통계 집계']},
+
+  // ── 설정
+  {cat:'settings', name:'기초 관리', icon:'sliders-horizontal', phase:1,
+    desc:'학과·전형·반·강의실·사물함·장학 기초 데이터. 전년도 복사 포함.',
+    feats:['학과·전형·반·강의실·사물함·장학','전년도 복사(의존 순서 그래프 순회)']},
+  {cat:'settings', name:'수납 기초 설정', icon:'badge-dollar-sign', phase:2,
+    desc:'교습비·특강비·환불 기준 설정.',
+    feats:['교습비·특강비 설정','환불 기준 설정']},
+  {cat:'settings', name:'상벌점 규칙', icon:'scale', phase:0, mark:'신규',
+    desc:'루틴·순찰·출결 트리거 → 상벌점 자동 부여 매핑 규칙(규칙 엔진).',
+    feats:['trigger → point·reason 매핑','루틴·순찰·출결 자동 부여','규칙 정의 확정(I-5) · Phase 0 선행']},
+  {cat:'settings', name:'사용자 · 권한 관리', icon:'shield-check', phase:1,
+    desc:'직원·강사 계정·권한. 지점별 접근 제어(RBAC).',
+    feats:['SUPER/BRANCH/TEACHER/STAFF/READONLY','지점별 접근 제어','개인정보 필드 권한·마스킹 · Phase 0 선행']},
+  {cat:'settings', name:'승인 항목 설정', icon:'route', phase:3, mark:'신규',
+    desc:'신청 항목별 승인 주체(학부모/선생님/자동) 매트릭스 설정.',
+    feats:['approval_items 마스터(approver_type)','항목별 승인 주체 매트릭스(I-12)','방화벽 해제 승인 주체 미결']},
+  {cat:'settings', name:'알림 템플릿', icon:'file-text', phase:0,
+    desc:'카카오 알림톡·FCM 알림 템플릿 관리.',
+    feats:['알림톡 템플릿 일괄 등록·심사','FCM 푸시 문구 관리(I-4)']},
+  {cat:'settings', name:'지점 설정', icon:'building-2', phase:0,
+    desc:'지점별 키오스크 시크릿·PG 가맹점·Nebula 장비 설정.',
+    feats:['branch_configs(키오스크 시크릿·PG·Nebula)','지점별 config 관리']},
+];
+
+let active = 'overview';
+const _validCats = new Set(['overview', ...CATS.map(c=>c.id)]);
+if(location.hash){ const h=location.hash.slice(1); if(_validCats.has(h)) active=h; }
+
+const phEl = (p)=>`<span class="ph ${PHASE[p].cls}">P${p}·${PHASE[p].label}</span>`;
+
+function renderTabs(){
+  const t = document.getElementById('catTabs');
+  let html = `<button class="cat-tab ${active==='overview'?'on':''}" data-cat="overview"><span class="ico"><i data-lucide="layout-dashboard" width="16" height="16"></i></span>전체 구성</button>`;
+  html += CATS.map(c=>`<button class="cat-tab ${active===c.id?'on':''}" data-cat="${c.id}"><span class="ico"><i data-lucide="${c.icon}" width="16" height="16"></i></span>${c.name}</button>`).join('');
+  t.innerHTML = html;
+  t.querySelectorAll('.cat-tab').forEach(b=>b.onclick=()=>{active=b.dataset.cat;history.replaceState(null,'','#'+active);renderAll();});
+}
+
+function renderSide(){
+  const s = document.getElementById('side');
+  if(active==='overview'){
+    const total = ITEMS.length;
+    const news = ITEMS.filter(i=>i.mark==='신규').length;
+    const cur = ITEMS.filter(i=>i.mark==='현재').length;
+    s.innerHTML = `
+      <div class="side-cat"><span class="ico"><i data-lucide="layout-dashboard" width="18" height="18"></i></span> 전체 구성</div>
+      <div class="side-desc">통합관리프로그램(웹)의 전체 메뉴 IA. 상단 대분류 탭을 눌러 세부 화면을 확인하세요.</div>
+      <div class="side-summary">
+        <div class="ss-row"><span class="k">대분류</span><span class="v">${CATS.length}개</span></div>
+        <div class="ss-row"><span class="k">세부 화면</span><span class="v">${total}개</span></div>
+        <div class="ss-row"><span class="k">신규 추가</span><span class="v" style="color:var(--amber)">${news}개</span></div>
+        <div class="ss-row"><span class="k">기존 반영</span><span class="v" style="color:var(--green)">${cur}개</span></div>
+      </div>
+      <div class="legend-block">
+        <div class="lt">Phase 범례</div>
+        ${[1,2,3,4,0].map(p=>`<div class="legend-row"><span class="ph ${PHASE[p].cls}">P${p}</span> ${PHASE[p].name}</div>`).join('')}
+      </div>
+      <div class="side-foot">기준: DLab 통합 기획정리 v4 · Dlab통합관리프로그램 기술문서 v1.2 (2026-07-13)</div>`;
+  } else {
+    const c = CATS.find(x=>x.id===active);
+    const its = ITEMS.filter(i=>i.cat===active);
+    s.innerHTML = `
+      <div class="side-cat"><span class="ico"><i data-lucide="${c.icon}" width="18" height="18"></i></span> ${c.name}</div>
+      <div class="side-desc">${c.desc}</div>
+      <nav class="nav">
+        ${its.map((i,idx)=>`<a data-idx="${idx}"><span class="ico"><i data-lucide="${i.icon}" width="16" height="16"></i></span><span class="nm">${i.name}</span>${i.mark==='신규'?'<span class="nwdot"></span>':''}<span class="ph ${PHASE[i.phase].cls}">P${i.phase}</span></a>`).join('')}
+      </nav>
+      <div class="side-foot">P 배지 = 개발 Phase · 노란 점 = 신규 메뉴</div>`;
+    s.querySelectorAll('.nav a').forEach(a=>a.onclick=()=>flashCard(+a.dataset.idx));
+  }
+}
+
+function renderMain(){
+  const m = document.getElementById('main');
+  if(active==='overview'){
+    let html = `<div class="m-head">
+      <div class="crumb"><b>전체 메뉴 구성</b> · IA</div>
+      <h1>통합관리프로그램 · 전체 메뉴 구성</h1>
+      <div class="sub">기존 메뉴(상담·원생관리·성적 3개 그룹)를 기획문서 기준 <b>9개 대분류 · ${ITEMS.length}개 화면</b>으로 재구성했습니다. 상단 탭 또는 아래 카드를 눌러 대분류로 이동하세요.</div>
+    </div>
+    <div class="ov-note">
+      <div class="ic"><i data-lucide="git-compare" width="17" height="17"></i></div>
+      <div>
+        <div class="tt">무엇이 바뀌었나</div>
+        <div class="tx">기존 사이드바에 없던 <b>대기자·급식·수납·교무·데일리루틴·학습계획·메시지·설문·승인 라우팅·기초설정</b> 등을 편입했습니다. 각 화면에는 개발 <b>Phase(P1 MVP → P4 부가)</b>를 표기해 우선순위를 함께 확인할 수 있습니다.</div>
+      </div>
+    </div>
+    <div class="ov-grid">`;
+    CATS.forEach(c=>{
+      const its = ITEMS.filter(i=>i.cat===c.id);
+      html += `<div class="ov-cat" data-cat="${c.id}">
+        <div class="ov-cat-h"><span class="ic"><i data-lucide="${c.icon}" width="17" height="17"></i></span><span class="nm">${c.name}</span><span class="ct">${its.length}</span></div>
+        <div class="cd">${c.desc}</div>
+        <div class="ov-items">${its.map(i=>`<div class="ov-item"><span class="d" style="background:${PHASE[i.phase].color}"></span><span class="nm">${i.name}</span>${i.mark==='신규'?'<span class="mk new">신규</span>':i.mark==='현재'?'<span class="mk cur">현재</span>':''}</div>`).join('')}</div>
+      </div>`;
+    });
+    html += `</div>`;
+    m.innerHTML = html;
+    m.querySelectorAll('.ov-cat').forEach(el=>el.onclick=()=>{active=el.dataset.cat;history.replaceState(null,'','#'+active);renderAll();});
+  } else {
+    const c = CATS.find(x=>x.id===active);
+    const its = ITEMS.filter(i=>i.cat===active);
+    let html = `<div class="m-head">
+      <div class="crumb"><b>${c.name}</b> · ${its.length}개 화면</div>
+      <h1><span style="width:34px;height:34px;border-radius:10px;background:var(--mint-wash);color:var(--mint-d);display:inline-grid;place-items:center"><i data-lucide="${c.icon}" width="19" height="19"></i></span> ${c.name}</h1>
+      <div class="sub">${c.desc}</div>
+    </div>
+    <div class="legend-inline">
+      <div class="li"><span class="mk cur">현재</span> <b>기존 화면 반영</b></div>
+      <div class="li"><span class="mk new">신규</span> <b>기획문서 신규 편입</b></div>
+      <div class="li" style="margin-left:auto">Phase&nbsp; ${[1,2,3,4,0].map(p=>`<span class="ph ${PHASE[p].cls}">P${p}</span>`).join(' ')}</div>
+    </div>
+    <div class="cards">`;
+    its.forEach((i,idx)=>{
+      html += `<div class="scard" data-idx="${idx}">
+        <div class="scard-h"><span class="sc-ic"><i data-lucide="${i.icon}" width="18" height="18"></i></span><span class="sc-t">${i.name}</span></div>
+        <div class="sc-marks">
+          <span class="mk-ph ${PHASE[i.phase].cls}" style="background:${PHASE[i.phase].cls==='p0'?'#E7E9ED':''}">${PHASE[i.phase].name}</span>
+          ${i.mark==='신규'?'<span class="mk new">신규 편입</span>':i.mark==='현재'?'<span class="mk cur">기존 반영</span>':''}
+        </div>
+        <div class="sc-desc">${i.desc}</div>
+        <ul class="sc-feats">${i.feats.map(f=>`<li>${f}</li>`).join('')}</ul>
+        ${i.href?`<a class="sc-open" href="${i.href}"><i data-lucide="external-link" width="14" height="14"></i> 화면 열기</a>`:`<span class="sc-ref">화면 설계 예정 · ${PHASE[i.phase].name}</span>`}
+      </div>`;
+    });
+    html += `</div>`;
+    m.innerHTML = html;
+    // fix p0 phase pill bg
+    m.querySelectorAll('.mk-ph.p0').forEach(e=>{e.style.background='#E7E9ED';e.style.color='#3F4753';});
+  }
+}
+
+let flashTimer=null;
+function flashCard(idx){
+  const card = document.querySelector(`.scard[data-idx="${idx}"]`);
+  if(!card) return;
+  document.querySelectorAll('.scard.flash').forEach(c=>c.classList.remove('flash'));
+  card.classList.add('flash');
+  const top = card.getBoundingClientRect().top + window.scrollY - 120;
+  window.scrollTo({top, behavior:'smooth'});
+  clearTimeout(flashTimer);
+  flashTimer=setTimeout(()=>card.classList.remove('flash'),1600);
+}
+
+function renderAll(){
+  renderTabs(); renderSide(); renderMain();
+  window.scrollTo({top:0});
+  lucide.createIcons();
+}
+renderAll();
+</script>
+
+<template id="__bundler_thumbnail" data-bg-color="#0E9E8E">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#0E9E8E"/>
+    <text x="600" y="370" font-family="Pretendard, sans-serif" font-size="140" font-weight="800" fill="#ffffff" text-anchor="middle" letter-spacing="-4">전체 메뉴</text>
+    <text x="600" y="460" font-family="Pretendard, sans-serif" font-size="46" font-weight="600" fill="#BDF3EC" text-anchor="middle">통합관리 · IA 구성</text>
+  </svg>
+</template>
+</body>
+</html>

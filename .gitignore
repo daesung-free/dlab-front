@@ -1,0 +1,15 @@
+node_modules
+dist
+dist-offline
+dist-ssr
+*.local
+.vite
+.DS_Store
+tsconfig.tsbuildinfo
+
+# 배포 패키지 (npm run build:offline 로 다시 만들 수 있음)
+*.zip
+
+# 개인 로컬 설정 (.claude/settings.json 은 팀 공유용이라 커밋)
+.claude/settings.local.json
+

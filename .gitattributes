@@ -1,0 +1,15 @@
+# 팀원마다 OS가 달라도 저장소 안의 줄바꿈은 LF로 통일한다.
+# (Windows 작업본은 체크아웃 시 CRLF로 변환되므로 편집에는 영향 없음)
+* text=auto eol=lf
+
+# 원본 요구사항 문서 — 바이너리로 취급해 diff·머지 시도를 막는다
+*.xlsx binary
+*.xls  binary
+*.pdf  binary
+
+# 이미지·폰트
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.woff binary
+*.woff2 binary

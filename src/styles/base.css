@@ -1,0 +1,137 @@
+@import './tokens.css';
+@import './blocks.css';
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+}
+
+/* ===== Phase 배지 ===== */
+.ph {
+  font-size: 8.5px;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 5px;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+.ph.p0 { background: #e7e9ed; color: var(--ink-2); }
+.ph.p1 { background: var(--mint-wash); color: var(--mint-d); }
+.ph.p2 { background: var(--blue-wash); color: var(--blue); }
+.ph.p3 { background: var(--violet-wash); color: var(--violet); }
+.ph.p4 { background: var(--amber-wash); color: var(--amber); }
+
+/* ===== 구분(개발 범위) 배지 ===== */
+.mk {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.mk.verified { background: var(--green-wash); color: var(--green); }
+.mk.supplement { background: var(--blue-wash); color: var(--blue); }
+.mk.brandnew { background: var(--amber-wash); color: var(--amber); }
+
+.mk-ph {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.mk-ph.p0 { background: #e7e9ed; color: var(--ink-2); }
+.mk-ph.p1 { background: var(--mint-wash); color: var(--mint-d); }
+.mk-ph.p2 { background: var(--blue-wash); color: var(--blue); }
+.mk-ph.p3 { background: var(--violet-wash); color: var(--violet); }
+.mk-ph.p4 { background: var(--amber-wash); color: var(--amber); }
+
+.nwdot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--amber);
+  flex-shrink: 0;
+}
+
+/* ===== 공통 버튼 ===== */
+.btn {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 11px;
+  padding: 9px 15px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--ink-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.btn:hover { border-color: #d6dbe2; }
+.btn.pri { background: var(--mint); border-color: var(--mint); color: #fff; }
+.btn.pri:hover { background: var(--mint-d); }
+
+/* ===== 필터 칩 (상담·성적 시안 공통) ===== */
+.filter-row {
+  display: flex;
+  gap: 6px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line-2);
+  flex-wrap: wrap;
+}
+.chip {
+  font-size: 11.5px;
+  padding: 5px 11px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink-2);
+  cursor: pointer;
+  font-weight: 600;
+}
+.chip.on { background: var(--mint); border-color: var(--mint); color: #fff; }
+
+/* ===== 2단 목록+상세 레이아웃 (상담·성적 시안 공통) ===== */
+.layout { display: grid; grid-template-columns: 308px 1fr; gap: 18px; align-items: start; }
+@media (max-width: 1180px) { .layout { grid-template-columns: 1fr; } }
+
+/* 패널 본문 기본 패딩 */
+.panel-body { padding: 20px; }
+
+/* ===== 공통 패널 ===== */
+.panel {
+  background: var(--card);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+}
+.panel-h {
+  padding: 15px 17px;
+  border-bottom: 1px solid var(--line-2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.panel-h .t { font-weight: 700; font-size: 14px; }
+.panel-h .c { font-size: 11.5px; color: var(--muted); }

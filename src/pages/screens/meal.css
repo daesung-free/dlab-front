@@ -1,0 +1,76 @@
+/* F-4.5 급식 관리 — 월 달력 뷰 (MealPolicy: 주말 + 공휴일 제외) */
+.p-meal .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+.p-meal .cal-dow {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--muted);
+  padding: 4px 0 6px;
+}
+.p-meal .cal-dow.sun { color: var(--red); }
+.p-meal .cal-dow.sat { color: var(--blue); }
+
+.p-meal .cal-cell {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  min-height: 72px;
+  padding: 7px 8px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.p-meal .cal-cell.pad { border: none; background: transparent; }
+.p-meal .cal-cell .dnum { font-size: 12px; font-weight: 700; color: var(--ink-2); }
+.p-meal .cal-cell.off { background: var(--line-2); border-color: var(--line-2); }
+.p-meal .cal-cell.off .dnum { color: var(--muted); }
+.p-meal .cal-cell.holiday { background: var(--red-wash); border-color: #f3cfc7; }
+.p-meal .cal-cell.holiday .dnum { color: var(--red); }
+.p-meal .cal-cell.on { border-color: var(--mint-b); background: var(--mint-soft); }
+.p-meal .cal-cell .cnt { font-size: 15px; font-weight: 800; color: var(--mint-d); letter-spacing: -0.02em; }
+.p-meal .cal-cell .lbl { font-size: 10px; color: var(--muted); font-weight: 600; margin-top: auto; }
+.p-meal .cal-cell .off-lbl { font-size: 10px; font-weight: 700; color: var(--red); margin-top: auto; }
+
+.p-meal .cal-legend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-2);
+}
+.p-meal .cal-legend .sw { width: 11px; height: 11px; border-radius: 3px; display: inline-block; margin-right: 5px; vertical-align: -1px; }
+
+/* 결제 2트랙 안내 */
+.p-meal .track-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.p-meal .track {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 13px 15px;
+}
+.p-meal .track .th { display: flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 800; margin-bottom: 7px; }
+.p-meal .track ul { list-style: none; display: flex; flex-direction: column; gap: 5px; }
+.p-meal .track li {
+  font-size: 11.5px;
+  color: var(--ink-2);
+  padding-left: 15px;
+  position: relative;
+  line-height: 1.5;
+}
+.p-meal .track li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 6px;
+  width: 5px;
+  height: 5px;
+  border-radius: 2px;
+  background: var(--mint-b);
+}
+.p-meal .track.desk li::before { background: var(--amber); }
+
+@media (max-width: 1180px) {
+  .p-meal .track-grid { grid-template-columns: 1fr; }
+}

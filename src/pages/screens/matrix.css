@@ -1,0 +1,69 @@
+/* 권한 매트릭스 / 승인 라우팅 매트릭스 공용 */
+.p-matrix .mx-scroll { overflow-x: auto; }
+.p-matrix table.mx { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; }
+
+.p-matrix table.mx thead th {
+  background: #fbfcfd;
+  border-bottom: 1px solid var(--line);
+  padding: 10px 8px;
+  font-size: 11.5px;
+  font-weight: 800;
+  text-align: center;
+  white-space: nowrap;
+}
+.p-matrix table.mx thead th .rk {
+  display: block;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  margin-top: 1px;
+}
+.p-matrix table.mx th.area {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #fbfcfd;
+  border-right: 1px solid var(--line);
+  text-align: left;
+  padding-left: 12px;
+  min-width: 156px;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+.p-matrix table.mx thead th.area { z-index: 3; }
+.p-matrix table.mx th.area .an { display: block; font-size: 10px; font-weight: 500; color: var(--muted); margin-top: 1px; }
+
+.p-matrix table.mx td {
+  border-bottom: 1px solid var(--line-2);
+  padding: 8px;
+  text-align: center;
+}
+.p-matrix table.mx tbody tr:hover td,
+.p-matrix table.mx tbody tr:hover th.area { background: var(--mint-soft); }
+
+.p-matrix .pm {
+  display: inline-block;
+  font-size: 10.5px;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 6px;
+  min-width: 46px;
+}
+.p-matrix .pm.p-full { background: var(--mint); color: #fff; }
+.p-matrix .pm.p-own { background: var(--mint-wash); color: var(--mint-d); }
+.p-matrix .pm.p-read { background: var(--blue-wash); color: var(--blue); }
+.p-matrix .pm.p-none { background: var(--line-2); color: var(--muted); }
+
+.p-matrix .mx-legend {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  color: var(--ink-2);
+  margin-top: 14px;
+  padding-top: 13px;
+  border-top: 1px solid var(--line-2);
+}
+.p-matrix .mx-legend .pm { margin-right: 5px; }

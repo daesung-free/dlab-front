@@ -1,0 +1,36 @@
+/* 상담 시안 .tabs — 패널 내부 탭 */
+.tabs { display: flex; gap: 2px; padding: 0 20px; border-bottom: 1px solid var(--line-2); }
+.tab {
+  padding: 13px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  border: none;
+  background: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  display: flex;
+  align-items: center;
+}
+.tab.on { color: var(--mint-d); border-color: var(--mint); }
+.tab .cnt {
+  font-size: 10.5px;
+  background: var(--line-2);
+  color: var(--ink-2);
+  padding: 1px 7px;
+  border-radius: 10px;
+  margin-left: 5px;
+  font-weight: 700;
+}
+
+/* 패널 밖에서 단독으로 쓸 때 (화면 목업 / 요구사항 명세 전환) */
+.tabs.standalone {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px 12px 0 0;
+  padding: 0 12px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 12px;
+}

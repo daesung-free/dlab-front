@@ -1,0 +1,42 @@
+/* ===========================================================
+   D.Lab 디자인 토큰 — 00~03 HTML 시안에서 그대로 이관
+   시안이 각 파일에 인라인으로 복제돼 있던 :root 변수를 단일 소스로 통합
+   =========================================================== */
+:root {
+  /* text / line / surface */
+  --ink: #212934;
+  --ink-2: #3f4753;
+  --muted: #8b94a3;
+  --line: #eceef1;
+  --line-2: #f1f3f6;
+  --bg: #edf0f4;
+  --card: #ffffff;
+
+  /* brand */
+  --mint: #0e9e8e;
+  --mint-d: #0b8073;
+  --mint-b: #16b9a8;
+  --mint-wash: #e7f6f3;
+  --mint-soft: #f2fbfa;
+
+  /* status */
+  --amber: #e8920f;
+  --amber-wash: #fef1e2;
+  --red: #e0533d;
+  --red-wash: #fbebe8;
+  --green: #2e9e5b;
+  --green-wash: #eaf7ef;
+  --violet: #6c5ce0;
+  --violet-wash: #eeebfb;
+  --blue: #3b6fe0;
+  --blue-wash: #eaf1ff;
+
+  /* elevation / radius */
+  --shadow: 0 1px 3px rgba(20, 30, 50, 0.05);
+  --shadow-2: 0 4px 14px rgba(20, 30, 50, 0.07);
+  --r: 16px;
+
+  /* layout */
+  --topnav-h: 60px;
+  --side-w: 250px;
+}

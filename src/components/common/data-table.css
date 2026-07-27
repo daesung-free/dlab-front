@@ -1,0 +1,86 @@
+/* 성적 시안 .rtable의 테이블 문법을 일반화한 공통 목록 그리드 */
+.dt-wrap { background: var(--card); border-radius: var(--r); box-shadow: var(--shadow); overflow: hidden; }
+
+.dt-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line-2);
+  flex-wrap: wrap;
+}
+.dt-toolbar .dt-count { font-size: 12.5px; color: var(--muted); font-weight: 600; }
+.dt-toolbar .dt-count b { color: var(--ink); font-weight: 800; }
+.dt-toolbar .dt-sel {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--mint-d);
+  background: var(--mint-wash);
+  padding: 4px 10px;
+  border-radius: 7px;
+}
+.dt-toolbar .dt-right { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.dt-scroll { overflow-x: auto; }
+
+.dt {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.dt th,
+.dt td { padding: 10px 12px; border-bottom: 1px solid var(--line-2); text-align: left; }
+.dt thead th {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 700;
+  background: #fbfcfd;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+  position: relative;
+}
+.dt thead th.sortable { cursor: pointer; user-select: none; }
+.dt thead th.sortable:hover { color: var(--ink-2); background: var(--line-2); }
+.dt thead th .sort-ico { display: inline-flex; vertical-align: middle; margin-left: 4px; opacity: 0.45; }
+.dt thead th.sorted { color: var(--mint-d); }
+.dt thead th.sorted .sort-ico { opacity: 1; }
+
+.dt tbody tr:hover { background: var(--mint-soft); }
+.dt tbody tr.on { background: var(--mint-wash); }
+.dt tbody tr.clickable { cursor: pointer; }
+.dt td.al-center, .dt th.al-center { text-align: center; }
+.dt td.al-right, .dt th.al-right { text-align: right; }
+.dt td.masked { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+
+.dt .cb-col { width: 40px; text-align: center; padding-left: 14px; padding-right: 0; }
+.dt input[type='checkbox'] { width: 15px; height: 15px; accent-color: var(--mint); cursor: pointer; }
+
+.dt-empty { padding: 48px 20px; text-align: center; color: var(--muted); font-size: 13px; }
+
+.dt-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line-2);
+  flex-wrap: wrap;
+}
+.dt-pager { display: flex; align-items: center; gap: 4px; }
+.dt-pager button {
+  min-width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0 8px;
+}
+.dt-pager button:hover:not(:disabled) { border-color: #d6dbe2; }
+.dt-pager button.on { background: var(--mint); border-color: var(--mint); color: #fff; }
+.dt-pager button:disabled { opacity: 0.4; cursor: default; }
+.dt-page-info { font-size: 12px; color: var(--muted); }

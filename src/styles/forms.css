@@ -1,0 +1,75 @@
+/* ===========================================================
+   폼 프리미티브 — 상담 시안 .frow/.inp/.sel/.ta에서 이관.
+   앞으로 만들 모든 입력 화면이 이 규칙을 공유한다.
+   =========================================================== */
+.frow { display: grid; grid-template-columns: 112px 1fr; gap: 12px; align-items: start; margin-bottom: 14px; }
+.frow > label { font-size: 12.5px; color: var(--ink-2); font-weight: 600; padding-top: 9px; }
+.frow .req::after { content: ' *'; color: var(--red); }
+.frow:last-child { margin-bottom: 0; }
+
+.inp,
+.sel,
+.ta {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--ink);
+  background: #fff;
+}
+.inp:focus,
+.sel:focus,
+.ta:focus { outline: 2px solid var(--mint-wash); border-color: var(--mint-b); }
+.ta { min-height: 78px; resize: vertical; line-height: 1.55; }
+
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* 선택형 토글 버튼 묶음 */
+.type-picks { display: flex; gap: 6px; flex-wrap: wrap; }
+.type-pick {
+  font-size: 12px;
+  padding: 7px 13px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: #fff;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--ink-2);
+  font-family: inherit;
+}
+.type-pick.on { background: var(--mint); border-color: var(--mint); color: #fff; }
+.type-pick.on.sc { background: var(--amber); border-color: var(--amber); }
+.type-pick.on.li { background: var(--violet); border-color: var(--violet); }
+
+/* 근거 자동첨부 안내 박스 */
+.link-box {
+  background: var(--mint-soft);
+  border: 1px dashed #bfe6df;
+  border-radius: 11px;
+  padding: 11px 13px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--ink-2);
+  line-height: 1.55;
+}
+.link-box .chk {
+  width: 17px;
+  height: 17px;
+  border-radius: 5px;
+  background: var(--mint);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  flex-shrink: 0;
+}
+.link-box b { color: var(--mint-d); }
+
+@media (max-width: 720px) {
+  .frow { grid-template-columns: 1fr; }
+  .frow > label { padding-top: 0; }
+  .two { grid-template-columns: 1fr; }
+}

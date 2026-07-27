@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(npm run build 2>&1)",
+      "PowerShell(Get-ChildItem \"dist\" -Recurse -File | Select-Object -ExpandProperty FullName | ForEach-Object { $_.Replace\\(\\(Get-Location\\).Path + '\\\\', ''\\) })",
+      "PowerShell(Start-Sleep -Seconds 4; $r = Invoke-WebRequest -Uri \"http://localhost:5173/\" -UseBasicParsing -TimeoutSec 10; \"status=$\\($r.StatusCode\\) len=$\\($r.Content.Length\\)\"; \"---\"; $d = Invoke-WebRequest -Uri \"http://localhost:5173/design/01_admin_sangdam.html\" -UseBasicParsing -TimeoutSec 10; \"design status=$\\($d.StatusCode\\) len=$\\($d.Content.Length\\)\")"
+    ]
+  }
+}
