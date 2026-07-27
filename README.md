@@ -12,6 +12,24 @@ npm run build      # dist/
 npm run typecheck
 ```
 
+## 공유 · 문서
+
+```bash
+npm run docs           # docs/ 2종을 데이터에서 재생성 (이슈가 풀릴 때마다 실행)
+npm run build:offline  # dist-offline/ — 웹서버 없이 index.html 더블클릭으로 열림
+```
+
+| 문서 | 내용 |
+|---|---|
+| [docs/BACKEND_HANDOFF.md](docs/BACKEND_HANDOFF.md) | 화면 30개 × API·테이블·오픈이슈 매핑 |
+| [docs/ASKS.md](docs/ASKS.md) | 착수 요청 목록 — 누구에게 무엇을 받아야 하는가 |
+
+두 문서 모두 `src/data/menu.ts` · `issues.ts` 에서 **자동 생성**됩니다.
+직접 고치지 말고 데이터를 고친 뒤 `npm run docs` 를 다시 돌리세요.
+
+> ⚠ **공개 호스팅 금지.** 오픈이슈 42건에 거래처 협상 상태·계약 종료 시점·인력 구성이
+> 그대로 들어 있습니다. 사내 private 저장소 / 사내망으로만 공유하세요.
+
 ## 이 저장소가 기준으로 삼는 문서
 
 | 문서 | 이 저장소에서의 역할 |
