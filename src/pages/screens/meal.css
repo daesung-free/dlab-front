@@ -71,6 +71,60 @@
 }
 .p-meal .track.desk li::before { background: var(--amber); }
 
+/* ── 관리자 등록 급식 중단일 ── */
+.p-meal .cal-cell.closed { background: var(--amber-wash); border-color: #f6dcb4; }
+.p-meal .cal-cell.closed .dnum { color: var(--amber); }
+.p-meal .cal-cell .closed-lbl {
+  font-size: 9.5px;
+  font-weight: 800;
+  color: #8a5a00;
+  margin-top: auto;
+  line-height: 1.3;
+}
+
+/* 일정 관리 탭 — 셀을 눌러 운영/중단을 토글한다 */
+.p-meal .cal-cell.editable { cursor: pointer; font: inherit; text-align: left; width: 100%; }
+.p-meal .cal-cell.editable:hover { border-color: var(--mint); box-shadow: var(--shadow-2); }
+.p-meal .cal-cell.editable:disabled { cursor: not-allowed; opacity: 0.55; }
+
+/* ── 배식 체크 단말 ── */
+.p-meal .dev-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+.p-meal .dev {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 13px 15px;
+  background: #fff;
+}
+.p-meal .dev.off { background: var(--bg); border-style: dashed; }
+.p-meal .dev .dh { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.p-meal .dev .dh b { font-size: 12.5px; }
+.p-meal .dev .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.p-meal .dev.off .dot { background: var(--muted); }
+.p-meal .dev .dm { font-size: 11px; color: var(--muted); line-height: 1.6; }
+.p-meal .dev .dm b { color: var(--ink-2); }
+
+/* 태깅 결과 배지 */
+.p-meal .tag-r {
+  font-size: 10.5px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.p-meal .tag-r.ok { background: var(--green-wash); color: var(--green); }
+.p-meal .tag-r.manual { background: var(--blue-wash); color: var(--blue); }
+.p-meal .tag-r.dup { background: var(--amber-wash); color: var(--amber); }
+.p-meal .tag-r.noorder { background: var(--line-2); color: var(--muted); }
+.p-meal .tag-r.fail { background: var(--red-wash); color: var(--red); }
+
 @media (max-width: 1180px) {
   .p-meal .track-grid { grid-template-columns: 1fr; }
+  .p-meal .dev-grid { grid-template-columns: 1fr; }
 }

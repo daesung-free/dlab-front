@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { GROUPS } from '../data/menu'
+import { NAV, navItemCount } from '../data/nav'
 import { ME } from '../data/mockDashboard'
 import { Icon } from '../components/Icon'
 
@@ -23,12 +23,13 @@ export function TopNav() {
           </span>
           대시보드
         </NavLink>
-        {GROUPS.map((g) => (
-          <NavLink key={g.id} to={`/g/${g.id}`} className={({ isActive }) => `cat-tab${isActive ? ' on' : ''}`}>
+        {NAV.map((c) => (
+          <NavLink key={c.id} to={`/g/${c.id}`} className={({ isActive }) => `cat-tab${isActive ? ' on' : ''}`}>
             <span className="ico">
-              <Icon name={g.icon} />
+              <Icon name={c.icon} />
             </span>
-            {g.name}
+            {c.name}
+            <span className="cat-n">{navItemCount(c)}</span>
           </NavLink>
         ))}
       </nav>

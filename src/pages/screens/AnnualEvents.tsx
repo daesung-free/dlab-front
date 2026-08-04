@@ -3,51 +3,19 @@ import { DataTable, ExcelButton, type Column } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import type { Mockup } from './types'
+import { ACADEMY_EVENTS, TYPE_META, type AcademyEvent, type EventType } from './academyEvents'
 import '../../styles/forms.css'
 
 /* F-4.11-10 연간 행사 마스터 → 학습계획 반영 — 신규개발-요구사항신규
  *
- * 관리자가 사전에 연간 행사를 입력하면 학생 학습계획(F-4.11-2) 입력 시
- * 해당일이 자동 반영/차단된다. 기초설정(4.10) 하위 배치도 가능.
+ * 관리자가 여기 캘린더에 일정을 입력하면 그 날 학생은 학습계획(F-4.11-2)을 세울 수 없다.
+ * 그래서 일정 데이터는 `academyEvents.ts` 한 곳에 두고 두 화면이 같이 읽는다.
+ * 화면마다 따로 들고 있으면 "달력엔 휴원인데 계획은 써지는" 상태가 생긴다.
  *
  * ⚠ #41 / I-21 (중) — 입력 주체·행사 유형·학습계획 반영 규칙 미확정. */
 
-type EventType = '모의고사' | '휴원' | '특강' | '설명회' | '행사'
-
-const TYPE_META: Record<EventType, { cls: string; color: string; blocks: boolean }> = {
-  모의고사: { cls: 'brandnew', color: 'var(--amber)', blocks: true },
-  휴원: { cls: 'brandnew', color: 'var(--red)', blocks: true },
-  특강: { cls: 'supplement', color: 'var(--blue)', blocks: false },
-  설명회: { cls: 'supplement', color: 'var(--violet)', blocks: false },
-  행사: { cls: 'verified', color: 'var(--mint)', blocks: false },
-}
-
-interface AnnualEvent {
-  id: string
-  from: string
-  to: string
-  title: string
-  type: EventType
-  target: string
-  /** 학습계획에서 해당일을 차단 */
-  blockPlan: boolean
-  note: string
-}
-
-const EVENTS: AnnualEvent[] = [
-  { id: 'e1', from: '2026-03-26', to: '2026-03-26', title: '3월 학력평가', type: '모의고사', target: '전체', blockPlan: true, note: '종일 · 학습계획 차단' },
-  { id: 'e2', from: '2026-04-10', to: '2026-04-10', title: '4월 학력평가', type: '모의고사', target: '전체', blockPlan: true, note: '종일 · 학습계획 차단' },
-  { id: 'e3', from: '2026-04-16', to: '2026-04-16', title: 'THE PREMIUM 모의고사', type: '모의고사', target: '전체', blockPlan: true, note: '종일' },
-  { id: 'e4', from: '2026-05-05', to: '2026-05-05', title: '어린이날 휴원', type: '휴원', target: '전체', blockPlan: true, note: '공휴일 · 급식 제외' },
-  { id: 'e5', from: '2026-05-20', to: '2026-05-20', title: 'THE PREMIUM 모의고사', type: '모의고사', target: '전체', blockPlan: true, note: '종일' },
-  { id: 'e6', from: '2026-05-24', to: '2026-05-25', title: '부처님오신날 · 대체공휴일', type: '휴원', target: '전체', blockPlan: true, note: '연휴 · 급식 제외' },
-  { id: 'e7', from: '2026-06-04', to: '2026-06-04', title: '6월 평가원 모의고사', type: '모의고사', target: '전체', blockPlan: true, note: '종일 · 학습계획 차단' },
-  { id: 'e8', from: '2026-06-13', to: '2026-06-13', title: '2027학년도 입학 설명회 (1차)', type: '설명회', target: '외부', blockPlan: false, note: '재원생 학습 영향 없음' },
-  { id: 'e9', from: '2026-06-22', to: '2026-06-26', title: '6월 단과 특강 주간', type: '특강', target: '신청자', blockPlan: false, note: '특강 신청자만' },
-  { id: 'e10', from: '2026-09-03', to: '2026-09-03', title: '9월 평가원 모의고사', type: '모의고사', target: '전체', blockPlan: true, note: '종일 · 학습계획 차단' },
-  { id: 'e11', from: '2026-11-19', to: '2026-11-19', title: '2027학년도 수능', type: '모의고사', target: '전체', blockPlan: true, note: '수능 당일' },
-  { id: 'e12', from: '2026-11-20', to: '2026-11-20', title: '가채점 설문 · 상담 주간 시작', type: '행사', target: '전체', blockPlan: false, note: '설문 배포 연동' },
-]
+type AnnualEvent = AcademyEvent
+const EVENTS = ACADEMY_EVENTS
 
 const COLUMNS: Column<AnnualEvent>[] = [
   {
@@ -139,7 +107,7 @@ function Content() {
           <div className="v" style={{ color: 'var(--amber)' }}>
             {blocking}
           </div>
-          <div className="d warn">그리드 열 잠금</div>
+          <div className="d warn">해당일 학생 입력 불가</div>
         </div>
         <div className="stat">
           <div className="l">
@@ -181,6 +149,23 @@ function Content() {
         <div style={{ padding: 14 }}>
           {tab === 'list' ? (
             <>
+              <div className="note-box">
+                <div className="ic">
+                  <Icon name="lock" size={17} />
+                </div>
+                <div>
+                  <div className="tt">여기에 등록한 일정이 학생 앱의 학습계획 작성을 막습니다</div>
+                  <div className="tx">
+                    <b>학습계획 입력 차단</b>으로 등록한 날은 학생 앱에서 계획을 세울 수 없고, 담임 화면(
+                    <b>주·일 학습계획</b>)에도 자물쇠로 표시되며 <b>미작성 집계에서 제외</b>됩니다. 차단하지 않으면
+                    휴원일마다 전교생이 미작성자로 잡혀 경고가 무의미해집니다.
+                    <br />
+                    <b>차단은 입력 금지이지 삭제가 아닙니다.</b> 이미 계획을 쓴 날을 뒤늦게 차단으로 바꿨을 때 기존
+                    계획을 어떻게 할지(보존·읽기전용 / 이행 집계 제외 / 학생 알림)는 아직 정해지지 않았습니다.
+                  </div>
+                </div>
+              </div>
+
               <DataTable
                 columns={COLUMNS}
                 rows={EVENTS}

@@ -1,5 +1,6 @@
 import { Link, NavLink, useLocation, useParams } from 'react-router-dom'
-import { GROUPS, SCREENS, findGroup, screensOf } from '../data/menu'
+import { findScreen } from '../data/menu'
+import { NAV, findNavCat, navCatOfScreen, navItemCount, navPath, type NavItem } from '../data/nav'
 import { ATTENDANCE, TODOS } from '../data/mockDashboard'
 import { Icon } from '../components/Icon'
 
@@ -91,33 +92,63 @@ function DashboardSide() {
   )
 }
 
-/** 대분류 진입 시 — 하위 메뉴 목록 */
-function GroupSide({ groupId }: { groupId: string }) {
-  const group = findGroup(groupId)
-  const screens = screensOf(groupId)
-  if (!group) return null
+/**
+ * 대분류 진입 시 — 중분류로 묶인 기능 목록.
+ * 클라이언트 메뉴표(대분류 > 중분류 > 기능) 3단 구조를 그대로 편다.
+ */
+function CatSide({ catId, here }: { catId: string; here: string }) {
+  const cat = findNavCat(catId)
+  if (!cat) return null
 
   return (
     <>
       <div className="side-cat">
         <span className="ico">
-          <Icon name={group.icon} size={18} />
+          <Icon name={cat.icon} size={18} />
         </span>{' '}
-        {group.name}
+        {cat.name}
       </div>
-      <div className="side-desc">{group.desc}</div>
+      <div className="side-desc">{cat.desc}</div>
 
-      <nav className="nav">
-        {screens.map((s) => (
-          <NavLink key={s.id} to={`/s/${s.id}`} className={({ isActive }) => (isActive ? 'on' : undefined)}>
-            <span className="ico">
-              <Icon name={s.icon} />
-            </span>
-            <span className="nm">{s.name}</span>
-          </NavLink>
-        ))}
-      </nav>
+      {cat.sections.map((sec) => (
+        <div className="nav-sec" key={sec.name}>
+          <div className="nav-sec-t">{sec.name}</div>
+          <nav className="nav">
+            {sec.items.map((item) => (
+              <NavItemLink key={`${item.screenId}-${item.tab ?? ''}`} item={item} here={here} />
+            ))}
+          </nav>
+        </div>
+      ))}
+
+      <div className="side-foot">
+        <b style={{ color: 'var(--ink-2)' }}>{cat.name}</b> · 중분류 {cat.sections.length}개 · 기능 {navItemCount(cat)}개
+        <br />
+        <span className="nwdot" style={{ display: 'inline-block', verticalAlign: 1, marginRight: 5 }} />
+        표시는 기획 신규 도메인을 이 자리에 편입한 메뉴입니다.
+      </div>
     </>
+  )
+}
+
+/**
+ * 기능 링크 한 줄.
+ * `?tab=` 으로 같은 화면을 나눠 거는 메뉴(기초관리 과정/학과/학과계열)가 있으므로
+ * NavLink 기본 활성 판정(pathname만 비교)을 쓰면 세 개가 동시에 켜진다. 직접 비교한다.
+ */
+function NavItemLink({ item, here }: { item: NavItem; here: string }) {
+  const to = navPath(item)
+  const screen = findScreen(item.screenId)
+  const on = here === to
+
+  return (
+    <NavLink to={to} className={on ? 'on' : undefined} title={item.note}>
+      <span className="ico">
+        <Icon name={item.icon ?? screen?.icon ?? 'circle-dot'} />
+      </span>
+      <span className="nm">{item.label}</span>
+      {item.added && <span className="nwdot" title="기획 신규 도메인 — 이 자리에 편입" />}
+    </NavLink>
   )
 }
 
@@ -151,12 +182,16 @@ function SpecSide() {
 
 export function SideNav() {
   const { groupId, screenId } = useParams()
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
 
   if (pathname.startsWith('/spec')) return <aside className="side"><SpecSide /></aside>
 
-  const owning = groupId ?? (screenId ? SCREENS.find((s) => s.id === screenId)?.groupId : undefined)
-  const valid = owning && GROUPS.some((g) => g.id === owning)
+  const owning = groupId ?? (screenId ? navCatOfScreen(screenId)?.id : undefined)
+  const valid = owning && NAV.some((c) => c.id === owning)
 
-  return <aside className="side">{valid ? <GroupSide groupId={owning} /> : <DashboardSide />}</aside>
+  return (
+    <aside className="side">
+      {valid ? <CatSide catId={owning} here={`${pathname}${search}`} /> : <DashboardSide />}
+    </aside>
+  )
 }

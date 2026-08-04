@@ -48,6 +48,7 @@ npm run build:offline  # dist-offline/ — 웹서버 없이 index.html 더블클
 src/
   data/
     menu.ts        ← 화면 IA (SSOT). 문서가 갱신되면 여기부터 고친다
+    nav.ts         ← 메뉴 트리. 클라이언트 메뉴표(대분류>중분류>기능)에 화면을 배치
     issues.ts      ← 오픈이슈 관리대장 42건
   styles/
     tokens.css     ← 시안 :root 변수 통합 (4개 HTML에 복제돼 있던 것)
@@ -55,8 +56,8 @@ src/
     forms.css      ← 폼 프리미티브 (.frow/.inp/.sel/.ta/.type-pick/.link-box)
   layout/
     AppLayout.tsx  ← 상단탭 + 사이드바 + 본문 셸
-    TopNav.tsx     ← 대분류 11개 탭
-    SideNav.tsx    ← 홈=요약 / 대분류=화면 목록
+    TopNav.tsx     ← 대분류 2개 탭 (학원생 관리 / 관리자)
+    SideNav.tsx    ← 홈=요약 / 대분류=중분류별 기능 목록
   components/
     Icon.tsx           ← 시안의 kebab 아이콘명 → lucide-react 매핑
     PageHead.tsx       ← 모든 페이지 공통 헤더 (crumb + 제목 + 액션)
@@ -75,6 +76,29 @@ src/
       AdmissionPipeline.tsx ← F-4.2 입학예약 파이프라인
 public/design/     ← 기존 정적 HTML 시안 (비교용, 앱에서 링크로 열림)
 ```
+
+### IA가 두 겹인 이유 — `menu.ts` vs `nav.ts`
+
+요구사항정의서의 화면 분류(4.1~4.11)와 클라이언트가 실제로 쓰는 메뉴 구조가 서로 다릅니다.
+하나로 합치려다 보면 둘 중 하나가 반드시 망가지므로, **역할을 나눠 두 겹으로 둡니다.**
+
+| | `data/menu.ts` | `data/nav.ts` |
+|---|---|---|
+| 기준 | 요구사항정의서 (SSOT) | 클라이언트 메뉴표 |
+| 담는 것 | F-4.x 코드 · Phase · 구분 · 오픈이슈 · 테이블 | 대분류 > 중분류 > 기능 배치 |
+| 쓰는 곳 | `docs/` 자동 생성, `/spec` 명세 뷰 | 상단탭 · 사이드바 · 대분류 허브 |
+| 바꾸면 | 백엔드 핸드오프 문서가 바뀐다 | 메뉴 위치만 바뀐다 |
+
+**화면을 새로 만들 때 등록 순서**
+
+1. `data/menu.ts` — `SCREENS` 에 추가 (SSOT)
+2. `pages/screens/` — 목업 컴포넌트 작성 후 `index.ts` 의 `MOCKUPS` 에 등록
+3. `data/nav.ts` — 어느 중분류에 걸지 배치
+4. `npm run docs` — 문서 3종 재생성
+
+요구사항정의서에 없고 클라이언트 메뉴표에만 있는 화면은 코드를 `F-C-n` 으로 부여해
+원본(`F-4.x`)과 구분합니다. 메뉴에서 노란 점(`nwdot`)이 붙은 항목은 반대로,
+클라이언트 메뉴표에 없던 기획 신규 도메인을 그 자리에 편입한 것입니다.
 
 ## 디자인 시스템 (시안 3개 이관으로 확정)
 

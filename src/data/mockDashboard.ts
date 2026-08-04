@@ -80,6 +80,16 @@ export const TODOS: TodoItem[] = [
   },
   {
     id: 't6',
+    label: '학습계획 미작성',
+    count: 11,
+    unit: '명',
+    to: '/s/learning-plan',
+    icon: 'pencil',
+    tone: 'warn',
+    hint: '오늘 계획을 한 건도 쓰지 않음',
+  },
+  {
+    id: 't7',
     label: '신상기록부 미작성',
     count: 8,
     unit: '명',
@@ -88,6 +98,28 @@ export const TODOS: TodoItem[] = [
     tone: 'normal',
     hint: '등록 미완 상태',
   },
+]
+
+/* ── 학습계획 이행 (F-4.11-2) ──
+ * 8/3 회신서로 이행 표시가 O/X로 확정됐다. 부분이행(%)·△ 개념은 없다.
+ * 순공시간과 다른 지표다 — 순공시간은 "얼마나 앉아 있었나", 이행은 "쓴 대로 했나". */
+export const PLAN = {
+  /** 오늘 계획을 쓴 학생 수 */
+  written: 285,
+  enrolled: 296,
+  /** 오늘 O 체크 */
+  done: 1284,
+  /** 오늘 X 체크 */
+  missed: 213,
+  /** 아직 체크하지 않음 */
+  unchecked: 168,
+}
+
+export const PLAN_BY_CLASS = [
+  { classNo: '1반', teacher: '최지원', o: 312, x: 41, unwritten: 1 },
+  { classNo: '2반', teacher: '김유진', o: 338, x: 36, unwritten: 2 },
+  { classNo: '3반', teacher: '이장원', o: 291, x: 74, unwritten: 5 },
+  { classNo: '4반', teacher: '박서영', o: 343, x: 62, unwritten: 3 },
 ]
 
 /* ── 실시간 활동 ── */

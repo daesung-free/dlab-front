@@ -6,11 +6,15 @@ import { MOCK_STUDENTS } from './mockStudents'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
 
-/* F-4.11-3 메시지 관리(공지·행정요청·1:1채팅·가족채팅방) — 신규개발-요구사항신규
+/* F-4.11-3 메시지 관리(공지·행정요청·1:1채팅) — 신규개발-요구사항신규
+ *
+ * 가족 채팅방(FAMILY)은 범위에서 제외한다. 스레드 유형은 DIRECT_1TO1 하나뿐이다.
+ *   → 학부모는 참여자가 아니라 알림톡 수신자로만 남는다(F-4.4).
+ *   → chat_threads 에 type 컬럼을 두더라도 값은 DIRECT_1TO1 단일이므로,
+ *     참여자 모델을 그룹 대응으로 미리 설계할 필요가 없다.
  *
  * ⚠ #20 / E-6 (높음) — 1:1 채팅용 외부 유료 메신저 선정(1만명 규모).
  *   React 연동 담당: 서지원. 개인정보/보안 검토 필요. 선정 전까지 착수 불가.
- *   실행가이드: "공지·행정요청 선행 가능, 1:1채팅은 ★메신저선정 선결"
  * ⚠ #23 / I-3 (중) — 앱 행정 요청 클릭 항목 리스트 미확정.
  *
  * 본문은 외부 벤더가 저장하고 자체 DB에는 메타·참조ID만 남긴다. */
@@ -95,7 +99,7 @@ interface AdminRequest {
 }
 
 /** ⚠ I-3 미확정 — 아래 항목은 제안이며 확정 목록이 아니다 */
-const REQUEST_ITEMS = ['재학증명서 발급', '출결확인서 발급', '사물함 변경', '좌석 변경 요청', '교재 재구매', '기숙사 외박 신청']
+const REQUEST_ITEMS = ['재학증명서 발급', '출결확인서 발급', '사물함 변경', '좌석 변경 요청', '교재 재구매', '자습실 연장 신청']
 
 const REQUESTS: AdminRequest[] = MOCK_STUDENTS.slice(0, 22).map((s, i) => ({
   id: `ar-${i + 1}`,
@@ -175,14 +179,12 @@ function Content() {
         </div>
         <div className="stat">
           <div className="l">
-            <Icon name="users" size={13} /> 가족 채팅방
+            <Icon name="users" size={13} /> 참여 대상
           </div>
           <div className="v" style={{ fontSize: 15, paddingTop: 6 }}>
-            선정 대기
+            학생 ↔ 담임
           </div>
-          <div className="d down" style={{ fontFamily: 'ui-monospace, monospace', fontSize: 9.5 }}>
-            FAMILY
-          </div>
+          <div className="d">학부모는 알림톡 수신만</div>
         </div>
         <div className="stat">
           <div className="l">
@@ -200,7 +202,7 @@ function Content() {
           items={[
             { key: 'notice', label: '공지 발송', count: NOTICES.length },
             { key: 'request', label: '행정 요청 수신함', count: REQUESTS.filter((r) => r.status !== '완료').length },
-            { key: 'chat', label: '1:1 채팅 · 가족 채팅방' },
+            { key: 'chat', label: '1:1 채팅' },
           ]}
           active={tab}
           onChange={setTab}
@@ -268,8 +270,9 @@ function Content() {
                   <div className="tt">메신저 선정 전에도 확정된 것</div>
                   <div className="tx">
                     <b>본문은 벤더가 저장</b>하고 자체 DB에는 <code>chat_threads</code>의 메타·참조ID만 남깁니다.
-                    스레드 유형은 <code>DIRECT_1TO1</code> / <code>FAMILY</code> 2종이며, 가족 채팅방은 학부모 +
-                    학생 + 관리자가 참여합니다. 이 구조는 제품이 바뀌어도 유지됩니다.
+                    스레드 유형은 <code>DIRECT_1TO1</code> <b>1종</b>이며 참여자는 <b>학생 ↔ 담임</b>입니다.
+                    <b> 가족 채팅방(그룹 스레드)은 범위에서 제외</b>되어, 학부모는 채팅 참여자가 아니라 알림톡
+                    수신자로만 남습니다. 이 구조는 제품이 바뀌어도 유지됩니다.
                   </div>
                 </div>
               </div>
@@ -284,11 +287,15 @@ function Content() {
                     notes: ['외부 메신저 React 위젯 임베드', '담임별 스레드 목록', '읽음·미응답 알림'],
                   },
                   {
-                    t: '가족 채팅방',
-                    code: 'FAMILY',
-                    icon: 'users',
-                    members: '학부모 + 학생 + 관리자',
-                    notes: ['그룹 스레드', '관리자 참여 여부 정책 필요', '학부모 앱 연동'],
+                    t: '학부모 소통',
+                    code: '(채팅 아님)',
+                    icon: 'message-circle',
+                    members: '학부모 — 수신 전용',
+                    notes: [
+                      '가족 채팅방 제외 — 그룹 스레드 없음',
+                      '출결·성적 알림은 알림톡(F-4.4)으로 전달',
+                      '학부모 문의는 행정 요청 수신함으로 접수',
+                    ],
                   },
                 ].map((c) => (
                   <div
@@ -320,11 +327,11 @@ function Content() {
                         paddingTop: 12,
                         borderTop: '1px solid var(--line)',
                         fontSize: 11,
-                        color: 'var(--amber)',
+                        color: c.code === 'DIRECT_1TO1' ? 'var(--amber)' : 'var(--muted)',
                         fontWeight: 700,
                       }}
                     >
-                      메신저 선정 후 착수
+                      {c.code === 'DIRECT_1TO1' ? '메신저 선정 후 착수' : '개발 대상 아님 — 기존 채널로 처리'}
                     </div>
                   </div>
                 ))}

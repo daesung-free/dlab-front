@@ -1,5 +1,6 @@
-import { Navigate, useParams } from 'react-router-dom'
-import { findGroup, findScreen } from '../data/menu'
+import { Navigate, useParams, useSearchParams } from 'react-router-dom'
+import { findScreen } from '../data/menu'
+import { NAV, navCatOfScreen, navSectionOfScreen } from '../data/nav'
 import { PageHead } from '../components/PageHead'
 import { MOCKUPS } from './screens'
 import './screen.css'
@@ -10,23 +11,37 @@ import './screen.css'
  */
 export function ScreenPage() {
   const { screenId } = useParams()
+  const [params] = useSearchParams()
   const s = screenId ? findScreen(screenId) : undefined
   if (!s) return <Navigate to="/" replace />
 
-  const group = findGroup(s.groupId)!
   const mockup = MOCKUPS[s.id]
-  if (!mockup) return <Navigate to={`/g/${group.id}`} replace />
+  if (!mockup) return <Navigate to="/" replace />
+
+  const cat = navCatOfScreen(s.id)
+  const section = navSectionOfScreen(s.id)
+
+  /* 같은 화면을 ?tab= 으로 나눠 건 메뉴(기초관리 과정/학과/학과계열)는
+   * 진입한 메뉴 이름을 제목으로 쓴다. 사이드바에서 누른 것과 제목이 달라 보이면 안 된다. */
+  const tab = params.get('tab')
+  const navItem = tab
+    ? NAV.flatMap((c) => c.sections)
+        .flatMap((x) => x.items)
+        .find((i) => i.screenId === s.id && i.tab === tab)
+    : undefined
+  const title = navItem?.label ?? s.name
 
   return (
     <>
       <PageHead
         crumb={
           <>
-            <b>{group.name}</b> · {s.name}
+            <b>{cat?.name ?? '화면'}</b>
+            {section && <> · {section}</>} · {title}
           </>
         }
-        title={s.name}
-        icon={s.icon}
+        title={title}
+        icon={navItem?.icon ?? s.icon}
         actions={mockup.actions}
       />
       <mockup.Content />

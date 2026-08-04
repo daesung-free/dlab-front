@@ -1,11 +1,16 @@
-import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { DataTable, ExcelButton, type Column } from '../../components/common'
 import { Icon } from '../../components/Icon'
 import type { Mockup } from './types'
 
 /* F-4.10-1 기초 관리 — 신규개발-요구사항검증됨
- * 학과·전형·반·강의실·사물함·장학 마스터 + 전년도 복사.
- * 복사 의존 순서를 화면에서 그대로 보여준다(단순 INSERT SELECT 금지). */
+ * 학과계열·학과·과정(전형)·반·강의실·사물함·장학 마스터 + 전년도 복사.
+ * 복사 의존 순서를 화면에서 그대로 보여준다(단순 INSERT SELECT 금지).
+ *
+ * 클라이언트 메뉴표는 '과정 관리 / 학과 관리 / 학과계열 관리'를 각각 별도 메뉴로 둔다.
+ * 마스터마다 화면을 복제하면 전년도 복사 의존 그래프가 화면에 흩어져 버리므로,
+ * 화면은 하나로 두고 `?tab=` 으로 진입 마스터만 달리한다.
+ * (사이드바의 세 메뉴는 각각 track / department / course_type 탭으로 들어온다) */
 
 interface MasterRow {
   id: string
@@ -39,23 +44,37 @@ function rows(items: [string, string, string][]): MasterRow[] {
 
 const MASTERS: Master[] = [
   {
+    key: 'track',
+    label: '학과계열',
+    icon: 'git-compare',
+    table: 'department_tracks',
+    copyOrder: 1,
+    rows: rows([
+      ['TR-NA', '자연계열', '수학 미적/기하 · 과탐 2과목'],
+      ['TR-IN', '인문계열', '수학 확통 · 사탐 2과목'],
+      ['TR-AR', '예체능계열', '실기 병행 · 수능 최저 관리'],
+    ]),
+  },
+  {
     key: 'department',
     label: '학과',
     icon: 'graduation-cap',
     table: 'departments',
-    copyOrder: 1,
+    copyOrder: 2,
     rows: rows([
-      ['DEP-NA', '자연계열', '수학 미적/기하 · 과탐 2과목'],
-      ['DEP-IN', '인문계열', '수학 확통 · 사탐 2과목'],
-      ['DEP-ME', '메디컬', '의·치·한·수 목표반'],
+      ['DEP-ME', '메디컬', '자연계열 · 의·치·한·수 목표반'],
+      ['DEP-NA1', '자연 상위', '자연계열 · 서울 최상위 목표'],
+      ['DEP-NA2', '자연 일반', '자연계열 · 수도권~지방 4년제'],
+      ['DEP-IN1', '인문 상위', '인문계열 · 서울 최상위 목표'],
+      ['DEP-IN2', '인문 일반', '인문계열 · 수도권~지방 4년제'],
     ]),
   },
   {
     key: 'course_type',
-    label: '전형',
+    label: '과정(전형)',
     icon: 'award',
     table: 'course_types',
-    copyOrder: 2,
+    copyOrder: 3,
     rows: rows([
       ['CT-RE', '재수 정규', '3월 개강 정규과정'],
       ['CT-SA', '삼수 이상', 'N수 포함'],
@@ -67,7 +86,7 @@ const MASTERS: Master[] = [
     label: '반',
     icon: 'layout-grid',
     table: 'class_groups',
-    copyOrder: 3,
+    copyOrder: 4,
     rows: rows([
       ['CG-1', '1반', '인문 · 담임 최지원 · 정원 14'],
       ['CG-2', '2반', '자연 · 담임 김유진 · 정원 14'],
@@ -80,7 +99,7 @@ const MASTERS: Master[] = [
     label: '교육과정',
     icon: 'clipboard-list',
     table: 'curriculums',
-    copyOrder: 4,
+    copyOrder: 5,
     rows: rows([
       ['CU-KOR', '국어', '언매 / 화작'],
       ['CU-MAT', '수학', '미적 / 기하 / 확통'],
@@ -93,7 +112,7 @@ const MASTERS: Master[] = [
     label: '상벌점 항목',
     icon: 'star',
     table: 'penalty_items',
-    copyOrder: 5,
+    copyOrder: 6,
     rows: rows([
       ['PI-LATE', '지각', '-2점 · 트리거 ATTENDANCE_LATE'],
       ['PI-ABS', '무단결석', '-5점 · 트리거 ATTENDANCE_ABSENT'],
@@ -105,7 +124,7 @@ const MASTERS: Master[] = [
     label: '교습비',
     icon: 'badge-dollar-sign',
     table: 'tuitions',
-    copyOrder: 6,
+    copyOrder: 7,
     rows: rows([
       ['TU-REG', '정규 교습비', '월 단위 청구'],
       ['TU-SPC', '특강비', '특강별 별도'],
@@ -183,7 +202,14 @@ const COLUMNS: Column<MasterRow>[] = [
 ]
 
 function Content() {
-  const [active, setActive] = useState(MASTERS[0])
+  /* 진입 마스터는 URL이 결정한다 — 사이드바의 '과정/학과/학과계열 관리'가
+   * 각각 다른 탭으로 들어오고, 새로고침·뒤로가기에도 그 상태가 유지된다. */
+  const [params, setParams] = useSearchParams()
+  const active = MASTERS.find((m) => m.key === params.get('tab')) ?? MASTERS[0]
+
+  function setActive(m: Master) {
+    setParams({ tab: m.key }, { replace: true })
+  }
 
   return (
     <>

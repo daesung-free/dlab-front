@@ -1,0 +1,114 @@
+/* 교무업무 > 시간표 · 이동수업 — 교시 × 요일 그리드 */
+.p-tt .tt-scroll { overflow-x: auto; }
+
+.p-tt table.tt {
+  width: 100%;
+  min-width: 780px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12px;
+}
+
+/* 요일 헤더는 스크롤해도 붙어 있어야 한다 (학습계획 시안 0723 피드백과 동일 규칙) */
+.p-tt table.tt thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #fbfcfd;
+  border-bottom: 1px solid var(--line);
+  padding: 9px 8px;
+  font-size: 11.5px;
+  font-weight: 800;
+  text-align: center;
+  white-space: nowrap;
+}
+.p-tt table.tt thead th.sat { color: var(--blue); }
+
+.p-tt table.tt th.pr {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: #fbfcfd;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line-2);
+  text-align: left;
+  padding: 8px 10px;
+  min-width: 96px;
+  font-weight: 700;
+  color: var(--ink-2);
+  font-size: 11.5px;
+}
+.p-tt table.tt thead th.pr { z-index: 3; }
+.p-tt table.tt th.pr .tm {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  margin-top: 1px;
+}
+
+.p-tt table.tt td {
+  border-bottom: 1px solid var(--line-2);
+  border-right: 1px solid var(--line-2);
+  padding: 5px;
+  vertical-align: top;
+  height: 58px;
+}
+
+/* 한 칸 = 한 수업 */
+.p-tt .cell {
+  border-radius: 8px;
+  padding: 6px 8px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid transparent;
+}
+.p-tt .cell .sj { font-size: 11.5px; font-weight: 800; letter-spacing: -0.02em; }
+.p-tt .cell .mt { font-size: 10px; color: var(--muted); font-weight: 600; }
+.p-tt .cell .mv {
+  font-size: 9.5px;
+  font-weight: 800;
+  color: var(--violet);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* 고정반 수업 */
+.p-tt .cell.fix { background: var(--mint-wash); border-color: #d6efea; }
+.p-tt .cell.fix .sj { color: var(--mint-d); }
+/* 이동수업 — 학생이 고정반을 떠나 수준별 반으로 이동 */
+.p-tt .cell.move { background: var(--violet-wash); border-color: #ddd6f7; }
+.p-tt .cell.move .sj { color: var(--violet); }
+/* 자습 */
+.p-tt .cell.self { background: var(--bg); border-color: var(--line); }
+.p-tt .cell.self .sj { color: var(--ink-2); font-weight: 700; }
+/* 빈 교시 */
+.p-tt .cell.none {
+  background: repeating-linear-gradient(45deg, #fff, #fff 6px, #fafbfc 6px, #fafbfc 12px);
+  border-color: var(--line-2);
+}
+
+.p-tt .tt-legend {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  color: var(--ink-2);
+  margin-top: 14px;
+  padding-top: 13px;
+  border-top: 1px solid var(--line-2);
+}
+.p-tt .tt-legend .sw {
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+  display: inline-block;
+  margin-right: 5px;
+  vertical-align: -2px;
+  border: 1px solid var(--line);
+}

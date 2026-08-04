@@ -1,212 +1,332 @@
 /* ============================================================================
- * F-4.11-2 주·일 학습 계획 관리
- * 이 프로젝트에서 가장 이질적이고 공수가 큰 단일 화면 (실행가이드 FE 5순위)
+ * F-4.11-2 주·일 학습 계획 관리 — 8/3 회신서 반영 구조
+ *
+ * 교시 × 요일 격자를 폐기하고 '순번 리스트'로 바꿨다.
+ * 학생이 찍은 시작시각·소요시간을 그대로 세로로 쌓고, 사이가 비면 빈 시간으로 표시한다.
  * ========================================================================== */
 
-/* ── 상단 컨트롤 바 ── */
-.p-plan .plan-bar {
+/* ── 학생 선택 목록 ── */
+.p-plan .plan-slist { max-height: 620px; overflow: auto; padding: 6px; }
+.p-plan .plan-srow {
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
+  padding: 10px 11px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  margin-bottom: 3px;
+}
+.p-plan .plan-srow:hover { background: var(--bg); }
+.p-plan .plan-srow.on { background: var(--mint-wash); border-color: #cfe9e4; }
+.p-plan .plan-srow .av {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--ink-2);
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 12.5px;
+  flex-shrink: 0;
+}
+.p-plan .plan-srow.on .av { background: #fff; color: var(--mint-d); }
+.p-plan .plan-srow .info { flex: 1; min-width: 0; }
+.p-plan .plan-srow .n { font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+.p-plan .plan-srow .n .cls { font-size: 10.5px; font-weight: 600; color: var(--muted); }
+.p-plan .plan-srow .track {
+  height: 5px;
+  background: var(--line-2);
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 5px 0 4px;
+}
+.p-plan .plan-srow .track i { display: block; height: 100%; }
+.p-plan .plan-srow .m { font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.p-plan .plan-srow .m .warn { color: var(--amber); font-weight: 700; }
+.p-plan .plan-srow .ox-col { flex-shrink: 0; text-align: right; }
+.p-plan .plan-srow .ox-col b { display: block; font-size: 13px; font-weight: 800; letter-spacing: -0.02em; }
+.p-plan .plan-srow .ox-col span { font-size: 9.5px; color: var(--muted); font-weight: 600; }
+
+/* ── 학생 헤더 바 ── */
+.p-plan .plan-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   flex-wrap: wrap;
-  padding: 12px 16px;
+  padding: 13px 16px;
   background: var(--card);
   border-radius: var(--r);
   box-shadow: var(--shadow);
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
-.p-plan .wk { display: flex; align-items: center; gap: 6px; }
-.p-plan .wk .wk-label { font-size: 13.5px; font-weight: 800; letter-spacing: -0.02em; min-width: 168px; text-align: center; }
-.p-plan .wk button {
-  width: 30px;
-  height: 30px;
-  border: 1px solid var(--line);
-  background: #fff;
-  border-radius: 9px;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  color: var(--ink-2);
+.p-plan .plan-bar .who .nm {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  display: flex;
+  align-items: center;
+  gap: 7px;
 }
-.p-plan .wk button:hover { border-color: #d6dbe2; }
-.p-plan .bar-sep { width: 1px; height: 22px; background: var(--line); }
+.p-plan .plan-bar .who .mt { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
 .p-plan .bar-group { display: flex; align-items: center; gap: 5px; }
 .p-plan .bar-group > .lbl { font-size: 11px; font-weight: 700; color: var(--muted); margin-right: 2px; }
 .p-plan .bar-right { margin-left: auto; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
 
-/* ── 교시 × 요일 그리드 ── */
-.p-plan .grid-wrap { background: var(--card); border-radius: var(--r); box-shadow: var(--shadow); overflow: hidden; }
-.p-plan .grid-scroll { max-height: 640px; overflow: auto; }
-
-.p-plan table.pg { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; }
-
-/* ③ 스크롤 시 요일 헤더 고정 */
-.p-plan table.pg thead th {
-  position: sticky;
-  top: 0;
-  z-index: 3;
-  background: #fbfcfd;
-  border-bottom: 1px solid var(--line);
-  padding: 9px 8px;
-  font-size: 11.5px;
-  font-weight: 800;
-  color: var(--ink-2);
-  text-align: center;
-  white-space: nowrap;
+/* ── 날짜 선택 (교시 개념 없음 — 날짜만 고른다) ── */
+.p-plan .daypick {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  margin-bottom: 12px;
 }
-.p-plan table.pg thead th .dw { font-size: 10.5px; font-weight: 600; color: var(--muted); display: block; margin-top: 1px; }
-.p-plan table.pg thead th.sun { color: var(--red); }
-.p-plan table.pg thead th.sat { color: var(--blue); }
-.p-plan table.pg thead th.event { background: var(--amber-wash); color: var(--amber); }
-
-/* 교시 열 고정 */
-.p-plan table.pg th.pcol,
-.p-plan table.pg thead th.pcol {
-  position: sticky;
-  left: 0;
-  z-index: 4;
-  width: 92px;
-  min-width: 92px;
-  background: #fbfcfd;
-  border-right: 1px solid var(--line);
-  text-align: left;
-  padding-left: 12px;
-}
-.p-plan table.pg tbody th.pcol { z-index: 2; font-weight: 700; font-size: 11.5px; color: var(--ink-2); }
-.p-plan table.pg tbody th.pcol .tm { display: block; font-size: 10px; font-weight: 500; color: var(--muted); margin-top: 1px; }
-.p-plan table.pg tbody tr.break th.pcol,
-.p-plan table.pg tbody tr.break td { background: #fafbfc; }
-
-.p-plan table.pg td {
-  border-bottom: 1px solid var(--line-2);
-  border-right: 1px solid var(--line-2);
-  padding: 0;
-  vertical-align: top;
-  width: calc((100% - 92px) / 7);
-}
-
-/* ── 셀 ── */
-.p-plan .cell {
-  min-height: 58px;
-  padding: 6px 8px 7px;
+.p-plan .dcell {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  cursor: pointer;
-  border-left: 3px solid transparent;
-  height: 100%;
-}
-.p-plan .cell:hover { background: var(--mint-soft); }
-.p-plan .cell .ch { display: flex; align-items: center; gap: 5px; }
-.p-plan .cell .sub {
-  font-size: 10.5px;
-  font-weight: 800;
-  padding: 1px 6px;
-  border-radius: 5px;
-  color: #fff;
-  white-space: nowrap;
-}
-.p-plan .cell .ty { font-size: 10.5px; color: var(--muted); font-weight: 600; }
-.p-plan .cell .ct {
-  font-size: 11px;
-  color: var(--ink-2);
-  line-height: 1.35;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-.p-plan .cell.empty { color: var(--muted); }
-.p-plan .cell.empty .ct { color: var(--muted); font-style: italic; }
-
-/* 파란색 = 관리자(교사) 편집 영역 — I-7에서 경계 확정 필요 */
-.p-plan .cell.teacher { background: var(--blue-wash); border-left-color: var(--blue); }
-.p-plan .cell.teacher:hover { background: #dfeaff; }
-
-/* ⑨ 연간행사(종일 모의고사 등) — 학생 입력 차단 */
-.p-plan td.locked { background: repeating-linear-gradient(45deg, #fff9f1, #fff9f1 8px, #fdf3e4 8px, #fdf3e4 16px); }
-.p-plan .cell.locked { cursor: not-allowed; }
-.p-plan .cell.locked:hover { background: transparent; }
-.p-plan .event-cell {
-  display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
-  font-size: 11.5px;
-  font-weight: 800;
-  color: var(--amber);
-  min-height: 58px;
+  gap: 2px;
+  padding: 9px 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--card);
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: var(--shadow);
+}
+.p-plan .dcell:hover { border-color: var(--mint-b); }
+.p-plan .dcell.on { background: var(--mint); border-color: var(--mint); color: #fff; }
+.p-plan .dcell.empty { background: repeating-linear-gradient(45deg, #fff, #fff 7px, #fafbfc 7px, #fafbfc 14px); }
+.p-plan .dcell.on.empty { background: var(--mint); }
+.p-plan .dcell .dw { font-size: 10px; font-weight: 700; opacity: 0.7; }
+.p-plan .dcell .dd { font-size: 18px; font-weight: 800; line-height: 1.05; letter-spacing: -0.03em; }
+.p-plan .dcell .dc { font-size: 10px; font-weight: 600; opacity: 0.75; }
+
+/* ── 순번 계획 목록 ── */
+.p-plan .plan-rows { padding: 4px 0; }
+.p-plan .prow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 16px;
+  border-top: 1px solid var(--line-2);
+}
+.p-plan .plan-rows > div:first-child .prow { border-top: none; }
+.p-plan .prow .seq {
+  width: 20px;
+  flex-shrink: 0;
   text-align: center;
-  padding: 6px;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--muted);
+  letter-spacing: -0.03em;
+  line-height: 1.2;
 }
-
-/* ── ⑧ 이행 표시 2안 ── */
-.p-plan .done-bar {
-  height: 5px;
-  border-radius: 3px;
-  background: var(--line-2);
+.p-plan .prow .cbar { width: 3px; align-self: stretch; border-radius: 2px; flex-shrink: 0; }
+.p-plan .prow .body { flex: 1; min-width: 0; }
+.p-plan .prow .tline { display: flex; align-items: baseline; gap: 7px; }
+.p-plan .prow .tm {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.p-plan .prow .du { font-size: 10.5px; color: var(--muted); font-weight: 600; }
+.p-plan .prow .sline { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.p-plan .prow .sj { font-size: 13px; font-weight: 700; }
+.p-plan .prow .memo {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 2px;
+  white-space: nowrap;
   overflow: hidden;
-  margin-top: auto;
+  text-overflow: ellipsis;
 }
-.p-plan .done-bar i { display: block; height: 100%; border-radius: 3px; background: var(--mint); }
-.p-plan .done-bar i.low { background: var(--amber); }
-.p-plan .done-bar i.zero { background: var(--red); }
-.p-plan .done-pct { font-size: 9.5px; font-weight: 700; color: var(--muted); text-align: right; }
 
-.p-plan .done-mark { margin-top: auto; text-align: right; font-size: 13px; font-weight: 800; line-height: 1; }
-.p-plan .done-mark.full { color: var(--mint-d); }
-.p-plan .done-mark.part { color: var(--amber); }
-.p-plan .done-mark.none { color: var(--line); }
-
-/* ── 하단 분석 3단 ── */
-.p-plan .an-grid { display: grid; grid-template-columns: 1.15fr 1fr 0.85fr; gap: 14px; margin-top: 14px; align-items: start; }
-
-/* ④⑤ 과목별 누계 + 비율 가로 게이지 */
-.p-plan .gauge-row { display: grid; grid-template-columns: 74px 1fr 92px; gap: 10px; align-items: center; margin-bottom: 10px; }
-.p-plan .gauge-row:last-child { margin-bottom: 0; }
-.p-plan .gauge-row .gl { font-size: 12px; font-weight: 700; }
-.p-plan .gauge-track { height: 16px; background: var(--line-2); border-radius: 8px; overflow: hidden; display: flex; }
-.p-plan .gauge-track i { display: block; height: 100%; }
-.p-plan .gauge-val { font-size: 11px; color: var(--muted); text-align: right; white-space: nowrap; }
-.p-plan .gauge-val b { color: var(--ink); font-weight: 800; font-size: 12.5px; }
-
-.p-plan .ratio-line {
+/* 빈 시간 — 고정 시간대가 아니라 학생이 비워둔 구간 */
+.p-plan .gap-line {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line-2);
-  font-size: 12px;
+  padding: 4px 16px 4px 49px;
+  font-size: 10.5px;
   color: var(--muted);
+}
+.p-plan .gap-line i { flex: 1; border-top: 1px dashed var(--line); }
+
+.p-plan .plan-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 34px 16px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* 학원 일정으로 차단된 날 — '안 쓴 날'과 시각적으로 확실히 구분한다 */
+.p-plan .plan-blocked {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 16px;
+  padding: 15px 16px;
+  border: 1.5px dashed #e4c48a;
+  border-radius: 12px;
+  background: repeating-linear-gradient(45deg, #fffdf8, #fffdf8 9px, #fdf6e8 9px, #fdf6e8 18px);
+}
+.p-plan .plan-blocked .ic {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--amber);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.p-plan .plan-blocked .tt { font-size: 13px; font-weight: 800; color: #8a5a00; margin-bottom: 3px; }
+.p-plan .plan-blocked .tx { font-size: 11.5px; color: var(--ink-2); line-height: 1.55; }
+.p-plan .plan-blocked .tx b { color: #8a5a00; }
+.p-plan .plan-blocked > .mk { margin-left: auto; flex-shrink: 0; }
+
+.p-plan .dcell.locked {
+  background: repeating-linear-gradient(45deg, #fffdf8, #fffdf8 6px, #fdf3e4 6px, #fdf3e4 12px);
+  border-color: #e4c48a;
+  color: #8a5a00;
+}
+.p-plan .dcell.locked .dc { display: flex; align-items: center; justify-content: center; }
+.p-plan .dcell.on.locked { background: var(--amber); border-color: var(--amber); color: #fff; }
+
+.p-plan .wk-head.locked { background: #fffdf8; color: #8a5a00; }
+.p-plan .wk-head.locked span { color: #8a5a00; display: inline-flex; align-items: center; gap: 4px; }
+
+/* ── O / X 이행 표시 (8/3 확정, △·% 없음) ── */
+.p-plan .ox {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  border-radius: 9px;
+  line-height: 1;
+}
+.p-plan .ox.md { width: 32px; height: 32px; font-size: 15px; }
+.p-plan .ox.sm { width: 26px; height: 26px; font-size: 13px; }
+.p-plan .ox.o { background: var(--mint); color: #fff; border: 1px solid var(--mint); }
+.p-plan .ox.x { background: #fff; color: var(--red); border: 1px solid var(--red); }
+.p-plan .ox.n { background: transparent; color: var(--muted); border: 1px dashed var(--line); }
+
+/* ── 주간 보기 ── */
+.p-plan .week-list { max-height: 620px; overflow: auto; }
+.p-plan .wk-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 16px 8px;
+  background: #fbfcfd;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line-2);
+  font-size: 12.5px;
+  font-weight: 800;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.p-plan .wk-head span { margin-left: auto; font-size: 11px; font-weight: 600; color: var(--muted); }
+.p-plan .plan-rows.compact .prow { padding: 8px 16px; }
+.p-plan .plan-rows.compact .prow .memo { display: none; }
+
+/* ── 과목별 통계 ── */
+.p-plan .tot-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--line-2);
+}
+.p-plan .tot-row .k { font-size: 11px; font-weight: 700; color: var(--muted); }
+.p-plan .tot-row .v { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; margin-top: 2px; }
+
+.p-plan .subj-row { margin-bottom: 13px; }
+.p-plan .subj-row:last-of-type { margin-bottom: 0; }
+.p-plan .subj-row .sh { display: flex; align-items: baseline; gap: 8px; margin-bottom: 5px; }
+.p-plan .subj-row .nm { font-size: 12.5px; font-weight: 700; min-width: 42px; }
+.p-plan .subj-row .nm .cz { font-size: 9px; color: var(--muted); margin-left: 3px; }
+.p-plan .subj-row .tm { font-size: 13px; font-weight: 800; letter-spacing: -0.02em; }
+.p-plan .subj-row .pc { margin-left: auto; font-size: 11px; color: var(--muted); font-weight: 700; }
+.p-plan .subj-row .track { height: 12px; background: var(--line-2); border-radius: 6px; overflow: hidden; }
+.p-plan .subj-row .track i { display: block; height: 100%; border-radius: 6px; }
+.p-plan .subj-row .sf { display: flex; gap: 10px; margin-top: 4px; font-size: 10.5px; color: var(--muted); }
+
+/* ── 학습형태 현황 (자습 · 인강 · 수업) ── */
+.p-plan .form-stack {
+  display: flex;
+  height: 30px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--line-2);
+}
+.p-plan .form-stack span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.p-plan .form-legend {
+  display: flex;
+  gap: 14px;
   flex-wrap: wrap;
+  margin-top: 10px;
+  padding-bottom: 13px;
+  border-bottom: 1px solid var(--line-2);
+  font-size: 11.5px;
+  color: var(--ink-2);
 }
-.p-plan .ratio-line b { font-size: 15px; color: var(--ink); letter-spacing: 0.02em; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.p-plan .form-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.p-plan .form-legend i { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+.p-plan .form-legend b { font-weight: 800; }
+.p-plan .form-legend em { font-style: normal; color: var(--muted); font-size: 10.5px; }
 
-/* 계획 대비 실제 비교 */
-.p-plan .cmp-row { display: grid; grid-template-columns: 78px 1fr; gap: 10px; align-items: center; margin-bottom: 11px; }
-.p-plan .cmp-row:last-child { margin-bottom: 0; }
-.p-plan .cmp-label { font-size: 11.5px; font-weight: 700; color: var(--ink-2); }
-.p-plan .cmp-bars { display: flex; flex-direction: column; gap: 3px; }
-.p-plan .cmp-bar { display: flex; align-items: center; gap: 7px; }
-.p-plan .cmp-bar .tag { font-size: 9.5px; font-weight: 800; color: var(--muted); width: 24px; }
-.p-plan .cmp-bar .track { flex: 1; height: 9px; background: var(--line-2); border-radius: 5px; overflow: hidden; }
-.p-plan .cmp-bar .track i { display: block; height: 100%; border-radius: 5px; }
-.p-plan .cmp-bar .num { font-size: 10.5px; color: var(--muted); width: 46px; text-align: right; }
-
-/* 주차별 비율 도넛 */
-.p-plan .donut-wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; }
-.p-plan .donut-legend { display: flex; flex-direction: column; gap: 6px; width: 100%; }
-.p-plan .donut-legend .dl { display: flex; align-items: center; gap: 7px; font-size: 11.5px; }
-.p-plan .donut-legend .dl .sw { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
-.p-plan .donut-legend .dl .nm { flex: 1; color: var(--ink-2); }
-.p-plan .donut-legend .dl .vv { color: var(--muted); font-weight: 700; }
-
-@media (max-width: 1500px) {
-  .p-plan .an-grid { grid-template-columns: 1fr 1fr; }
-  .p-plan .an-grid > :last-child { grid-column: span 2; }
+.p-plan .fs-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+  margin: 13px 0 9px;
 }
-@media (max-width: 1000px) {
+.p-plan .fs-row { display: grid; grid-template-columns: 46px 1fr 74px; gap: 9px; align-items: center; margin-bottom: 7px; }
+.p-plan .fs-row:last-of-type { margin-bottom: 0; }
+.p-plan .fs-row .nm { font-size: 12px; font-weight: 700; }
+.p-plan .fs-row .bar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--line-2); }
+.p-plan .fs-row .bar i { display: block; height: 100%; }
+.p-plan .fs-row .bar i.none { background: var(--line-2); }
+.p-plan .fs-row .tm { font-size: 11px; color: var(--muted); text-align: right; font-weight: 600; }
+
+/* ── 마스터 목록 ── */
+.p-plan .master-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+}
+.p-plan .master-row .sw { width: 12px; height: 12px; border-radius: 4px; flex-shrink: 0; }
+.p-plan .master-row .cnt { margin-left: auto; font-size: 11px; color: var(--muted); font-weight: 600; }
+.p-plan .master-row .acts { display: flex; gap: 4px; flex-shrink: 0; }
+
+/* ── 2단 배치 (계획 목록 / 통계) ── */
+.p-plan .an-grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 14px; align-items: start; }
+
+@media (max-width: 1400px) {
   .p-plan .an-grid { grid-template-columns: 1fr; }
-  .p-plan .an-grid > :last-child { grid-column: span 1; }
 }

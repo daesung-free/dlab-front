@@ -64,6 +64,17 @@
 .cat-tab.on { background: var(--mint-wash); color: var(--mint-d); }
 .cat-tab.on .ico { color: var(--mint-d); }
 
+/* 대분류 뒤 기능 개수 — 메뉴가 2개뿐이라 규모를 함께 보여준다 */
+.cat-tab .cat-n {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--muted);
+  background: var(--bg);
+  border-radius: 6px;
+  padding: 1px 6px;
+}
+.cat-tab.on .cat-n { background: #fff; color: var(--mint-d); }
+
 .topnav .who {
   display: flex;
   align-items: center;
@@ -164,6 +175,20 @@
 .nav a:hover { background: var(--bg); }
 .nav a.on { background: var(--mint-wash); color: var(--mint-d); font-weight: 700; }
 .nav a.on .ico { color: var(--mint-d); }
+
+/* ===== 중분류 그룹 — 클라이언트 메뉴표 3단 구조 ===== */
+.nav-sec { margin-bottom: 12px; }
+.nav-sec:last-of-type { margin-bottom: 4px; }
+.nav-sec-t {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+  padding: 4px 10px 6px;
+}
+.nav-sec .nav a { padding: 7px 10px; font-size: 12.5px; }
+/* 편입 메뉴 표시 점은 라벨 오른쪽 끝에 붙인다 */
+.nav-sec .nav a .nwdot { margin-left: auto; }
 
 .side-summary { padding: 6px 8px; }
 .ss-row {

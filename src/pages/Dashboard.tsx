@@ -7,6 +7,8 @@ import {
   MEAL,
   NOTICES,
   PAYMENT,
+  PLAN,
+  PLAN_BY_CLASS,
   RANKING,
   SCORE,
   TODAY_LABEL,
@@ -277,6 +279,78 @@ export function Dashboard() {
                   </span>
                 </div>
               ))}
+            </div>
+          </Card>
+
+          <Card
+            title="학습계획 이행"
+            icon="list-checks"
+            right={
+              <Link to="/s/learning-plan" style={{ fontSize: 11.5, color: 'var(--mint-d)', fontWeight: 700 }}>
+                학생별 보기
+              </Link>
+            }
+          >
+            <div className="card-sec-b">
+              <div className="plan-sum">
+                <div className="cell">
+                  <div className="k">이행 O</div>
+                  <div className="v" style={{ color: 'var(--mint-d)' }}>
+                    {PLAN.done.toLocaleString()}
+                  </div>
+                </div>
+                <div className="cell">
+                  <div className="k">미이행 X</div>
+                  <div className="v" style={{ color: 'var(--red)' }}>
+                    {PLAN.missed}
+                  </div>
+                </div>
+                <div className="cell">
+                  <div className="k">미체크</div>
+                  <div className="v" style={{ color: 'var(--muted)' }}>
+                    {PLAN.unchecked}
+                  </div>
+                </div>
+                <div className="cell">
+                  <div className="k">계획 작성</div>
+                  <div className="v">
+                    {PLAN.written}
+                    <small>/{PLAN.enrolled}</small>
+                  </div>
+                </div>
+              </div>
+
+              <div className="plan-classes">
+                {PLAN_BY_CLASS.map((c) => {
+                  const rate = Math.round((c.o / (c.o + c.x)) * 100)
+                  return (
+                    <div className="pc-row" key={c.classNo}>
+                      <span className="nm">
+                        {c.classNo}
+                        <span>{c.teacher}</span>
+                      </span>
+                      <span className="track">
+                        <i
+                          style={{
+                            width: `${rate}%`,
+                            background: rate >= 85 ? 'var(--mint)' : rate >= 75 ? 'var(--amber)' : 'var(--red)',
+                          }}
+                        />
+                      </span>
+                      <span className="pct">{rate}%</span>
+                      {c.unwritten > 0 && (
+                        <span className="un" title="오늘 계획 미작성">
+                          미작성 {c.unwritten}
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              <div className="plan-foot">
+                이행 표시는 <b>O / X</b> 2종입니다. 계획은 학생이 세우고, 담임은 이행여부·통계만 확인합니다.
+              </div>
             </div>
           </Card>
 

@@ -1,0 +1,120 @@
+/* 출결/자습/독서실 > 독서실 좌석배치표 — 실제 실 배치를 그대로 옮긴 도면 */
+.p-rr .rr-stage {
+  background: var(--bg);
+  border-radius: 14px;
+  padding: 16px;
+}
+
+/* 관리자 데스크 방향 표시 — 도면을 실제 실과 같은 방향으로 읽게 한다 */
+.p-rr .rr-front {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+  background: #fff;
+  border: 1px dashed var(--line);
+  border-radius: 9px;
+  padding: 7px;
+  margin-bottom: 14px;
+}
+
+.p-rr .rr-map { display: flex; flex-direction: column; gap: 7px; }
+.p-rr .rr-row { display: flex; gap: 6px; align-items: stretch; }
+.p-rr .rr-rowno {
+  width: 24px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.p-rr .rr-aisle {
+  width: 26px;
+  flex-shrink: 0;
+  border-left: 1px dashed #cdd4de;
+  border-right: 1px dashed #cdd4de;
+}
+
+.p-rr .rr-seat {
+  flex: 1;
+  min-width: 62px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+  padding: 6px 4px;
+  min-height: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  position: relative;
+  font-family: inherit;
+}
+.p-rr .rr-seat:hover { border-color: var(--mint-b); }
+.p-rr .rr-seat.sel { outline: 2px solid var(--mint); outline-offset: 1px; }
+.p-rr .rr-seat .sc {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.p-rr .rr-seat .sn {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--ink);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.p-rr .rr-seat .sx { font-size: 9px; font-weight: 700; }
+
+/* 좌석 상태 — 배정 여부(색)와 재실 여부(점)를 분리해서 표기한다 */
+.p-rr .rr-seat.st-in { background: var(--mint-wash); border-color: #d6efea; }
+.p-rr .rr-seat.st-in .sc { color: var(--mint-d); }
+.p-rr .rr-seat.st-out { background: var(--amber-wash); border-color: #f6dcb4; }
+.p-rr .rr-seat.st-away { background: var(--violet-wash); border-color: #ddd6f7; }
+.p-rr .rr-seat.st-free { background: #fff; }
+.p-rr .rr-seat.st-free .sn { color: var(--muted); font-weight: 500; }
+.p-rr .rr-seat.st-off {
+  background: repeating-linear-gradient(45deg, #f4f6f8, #f4f6f8 5px, #eceef1 5px, #eceef1 10px);
+  border-color: var(--line);
+  cursor: not-allowed;
+}
+.p-rr .rr-seat.st-off .sn { color: var(--muted); font-weight: 600; }
+
+.p-rr .rr-seat .live {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.p-rr .rr-legend {
+  display: flex;
+  gap: 15px;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 11.5px;
+  color: var(--ink-2);
+  margin-top: 15px;
+  padding-top: 13px;
+  border-top: 1px solid var(--line-2);
+}
+.p-rr .rr-legend .sw {
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+  display: inline-block;
+  margin-right: 5px;
+  vertical-align: -2px;
+  border: 1px solid var(--line);
+}

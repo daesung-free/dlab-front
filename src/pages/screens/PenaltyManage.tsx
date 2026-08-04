@@ -41,7 +41,8 @@ const ITEMS: { kind: Kind; item: string; point: number; trigger?: string }[] = [
   { kind: '벌점', item: '지각', point: -2, trigger: 'ATTENDANCE_LATE' },
   { kind: '벌점', item: '무단결석', point: -5, trigger: 'ATTENDANCE_ABSENT' },
   { kind: '벌점', item: '루틴 미완료', point: -1, trigger: 'ROUTINE_INCOMPLETE' },
-  { kind: '벌점', item: '순찰 졸음 2회', point: -2, trigger: 'PATROL_SLEEP_X2' },
+  /* 순찰기록이 범위에서 빠지면서 자동 트리거가 사라졌다 — 담임 수기 부여 항목으로 남긴다 */
+  { kind: '벌점', item: '자습 중 졸음 2회', point: -2 },
   { kind: '벌점', item: '면학 분위기 저해', point: -3 },
   { kind: '상점', item: '데일리테스트 만점', point: 3 },
   { kind: '상점', item: '개근', point: 5 },

@@ -5,11 +5,17 @@ import { MOCK_STUDENTS, type MockStudent } from './mockStudents'
 import type { Mockup } from './types'
 import './assign.css'
 
-/* F-4.10-3 배정 관리(기숙사·사물함·독서실) — 신규개발-요구사항검증됨
- * DSA '관리자>배정관리>기숙사 배정 관리'에서 학생목록·일괄배정/해제·기숙사목록 확인.
- * 사물함/독서실도 동일 구조로 존재한다고 실사 확인됨. */
+/* F-4.10-3 배정 관리(사물함·독서실) — 신규개발-요구사항검증됨
+ *
+ * ⚠ 기숙사는 범위에서 제외(클라이언트 요청). 배정 대상은 사물함·독서실 2종이다.
+ *   DSA '관리자>배정관리'에서 확인한 학생목록·일괄배정/해제 구조는 그대로 유지한다.
+ *
+ * ⚠ 독서실은 이 화면과 좌석배치표(F-C-4)가 같은 좌석 마스터를 공유한다.
+ *   · 여기(배정 관리)  = 명단 → 좌석. "누구에게 어느 자리를 줄 것인가"
+ *   · 좌석배치표      = 도면 → 사람. "지금 이 실이 어떤 상태인가"
+ *   배정 결과가 곧 좌석배치표의 배정 축이므로, 좌석 마스터를 두 벌 만들면 안 된다. */
 
-type Kind = 'dorm' | 'locker' | 'reading'
+type Kind = 'locker' | 'reading'
 
 interface KindDef {
   key: Kind
@@ -21,16 +27,6 @@ interface KindDef {
 }
 
 const KINDS: KindDef[] = [
-  {
-    key: 'dorm',
-    label: '기숙사',
-    icon: 'building-2',
-    unit: '호실',
-    blocks: [
-      { name: '3층 남', cols: 8, rows: 2, prefix: '3' },
-      { name: '4층 여', cols: 8, rows: 2, prefix: '4' },
-    ],
-  },
   {
     key: 'locker',
     label: '사물함',
@@ -143,6 +139,22 @@ function Content() {
           </div>
         </div>
       </div>
+
+      {kind.key === 'reading' && (
+        <div className="note-box plain">
+          <div className="ic">
+            <Icon name="git-compare" size={17} />
+          </div>
+          <div>
+            <div className="tt">독서실은 좌석배치표(출결/자습/독서실)와 같은 좌석 마스터를 씁니다</div>
+            <div className="tx">
+              <b>여기</b>는 <b>명단 → 좌석</b>(누구에게 어느 자리를 줄 것인가), <b>좌석배치표</b>는{' '}
+              <b>도면 → 사람</b>(지금 이 실이 어떤 상태인가)입니다. 여기서 배정한 결과가 곧 좌석배치표의 배정 축이므로{' '}
+              <b>좌석 마스터를 두 벌 만들면 안 됩니다.</b>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="card-sec">
         <div className="card-sec-h">

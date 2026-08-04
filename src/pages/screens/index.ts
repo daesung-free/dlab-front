@@ -31,12 +31,20 @@ import { chatMockup } from './ChatManage'
 import { consultMockup } from './ConsultLog'
 import { approvalMockup } from './ApprovalRouting'
 import { dailyReportMockup } from './DailyReport'
-import { qnaVocabMockup } from './QnaVocab'
+import { qnaMockup } from './QnaManage'
 import { annualEventsMockup } from './AnnualEvents'
+/* 클라이언트 메뉴표 기준 추가분 (F-C-n) */
+import { changeLogMockup } from './ChangeLog'
+import { studentStatusMockup } from './StudentStatus'
+import { timetableMockup } from './Timetable'
+import { readingRoomMockup } from './ReadingRoom'
+import { paymentGateMockup } from './PaymentGate'
+import { appManageMockup } from './AppManage'
 
 /**
  * screenId(= data/menu.ts) → 화면 목업.
- * 요구사항정의서 1시트의 30개 화면 전체를 덮는다.
+ * 요구사항정의서 1시트 30개 + 클라이언트 메뉴표 추가분 6개 = 36개 화면 전체를 덮는다.
+ * 메뉴 배치(대분류/중분류)는 `data/nav.ts` 가 따로 정의한다.
  */
 export const MOCKUPS: Record<string, Mockup> = {
   /* ── Phase 0 (선행 인프라) ── */
@@ -74,8 +82,16 @@ export const MOCKUPS: Record<string, Mockup> = {
   consult: consultMockup, // F-4.11-4 상담(일지·리포트)
   approval: approvalMockup, // F-4.11-5 승인 라우팅 관리
   'daily-report': dailyReportMockup, // F-4.11-6 Daily Report 집계
-  'qna-vocab': qnaVocabMockup, // F-4.11-7 대면 질의응답·영단어 시험
+  qna: qnaMockup, // F-4.11-7 질의응답 관리 (대면 · 온라인)
   'annual-events': annualEventsMockup, // F-4.11-10 연간 행사 마스터
+
+  /* ── 클라이언트 메뉴표 기준 추가분 ── */
+  'change-log': changeLogMockup, // F-C-1 금일 수정 이력 (감사 로그)
+  'student-status': studentStatusMockup, // F-C-2 학원생 현황 (집계)
+  timetable: timetableMockup, // F-C-3 시간표 · 이동수업
+  'reading-room': readingRoomMockup, // F-C-4 독서실 좌석배치표 ⭐
+  'payment-gate': paymentGateMockup, // F-C-5 결제 관리
+  'app-manage': appManageMockup, // F-C-6 앱 운영 관리
 }
 
 export type { Mockup }

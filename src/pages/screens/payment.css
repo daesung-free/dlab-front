@@ -1,0 +1,50 @@
+/* F-4.8 수납현황 — 할인 계산 과정 표시
+ * 최종 금액만 보여주면 "왜 이 금액인지"를 설명할 수 없어 상담·환불 분쟁이 생긴다.
+ * 그래서 적용 순서대로 한 줄씩, 미적용 건은 사유까지 남긴다. */
+.p-pay .calc-box {
+  margin-top: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.p-pay .crow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 13px;
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--line-2);
+}
+.p-pay .crow:last-child { border-bottom: none; }
+.p-pay .crow > span { flex: 1; min-width: 0; }
+.p-pay .crow em {
+  font-style: normal;
+  display: inline-grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  margin-right: 5px;
+  vertical-align: 1px;
+}
+.p-pay .crow i { font-style: normal; font-size: 11px; color: var(--muted); }
+.p-pay .crow b { font-weight: 800; white-space: nowrap; }
+.p-pay .crow b.cut { color: var(--red); }
+.p-pay .crow b.zero { color: var(--muted); font-weight: 600; font-size: 11px; }
+
+.p-pay .crow.base { background: #fbfcfd; }
+.p-pay .crow.skip { background: repeating-linear-gradient(45deg, #fff, #fff 7px, #fafbfc 7px, #fafbfc 14px); }
+.p-pay .crow.skip > span { color: var(--muted); }
+.p-pay .crow.none { color: var(--muted); font-size: 11.5px; justify-content: center; }
+.p-pay .crow.final {
+  background: var(--mint-wash);
+  border-top: 1px solid #cfe9e4;
+}
+.p-pay .crow.final span { font-weight: 700; color: var(--mint-d); }
+.p-pay .crow.final b { font-size: 18px; letter-spacing: -0.03em; color: var(--mint-d); }
+.p-pay .crow.sub { font-size: 11.5px; color: var(--muted); background: var(--mint-soft); }
+.p-pay .crow.sub b { color: var(--ink-2); font-size: 12px; }
