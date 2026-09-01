@@ -1,0 +1,384 @@
+# BE 변경 요청 목록 — 화면이 필요한데 API가 안 주는 것
+
+> ⚠️ 이 파일은 **수기 작성**이다. `ASKS.md`·`ASSUMPTIONS.md`·`BACKEND_HANDOFF.md`는
+> `npm run docs`로 재생성되므로 이 내용을 그쪽에 적으면 다음 생성 때 날아간다.
+>
+> **모아서 한 번에 요청한다.** 화면을 API에 맞춰 깎지 않는다 — 목업이 정본이고, 부족한 쪽은 API다.
+
+> **2026-09-01 2차 갱신** — 백엔드가 1부를 **전부** 정리했고(커밋 `b94b611`~`0b64573`),
+> 재기동 후 직접 호출해 확인했다. 2부도 학생·반명단·급식·학습계획이 해결됐다.
+> 각 항목 머리의 `✅ 해결됨`이 검증 완료 표시다.
+>
+> **프론트 필수 조치**: 스키마 이름 28종이 바뀌었으므로 `npm run api:types` **재실행**(완료).
+
+## 한 장 요약
+
+- 화면 **36개** vs 관리자 API **248개**(GET 90개)를 1:1로 대조했다.
+- **API가 아예 없는 화면 6개**(도메인 신설 필요 — 여기가 남은 최대 덩어리).
+  필드가 모자란 화면은 24개 → **19개**로 줄었다.
+  컬럼까지 대조해 그대로 붙는 것이 확인된 화면 2개 + 5개 해결, 나머지 4개는 커스텀 레이아웃이라 미확인.
+- 전 화면에 걸린 공통 문제 **5건 전부 해결**(1-1 지점 지정 · 1-2 스키마 충돌 · 1-3 정렬 ·
+  1-4 month 통일 · 1-5 타입 오류 400). 목록 응답 형태(1-6)도 `data + meta`로 통일됐다.
+- 2부에서 **학생 검색·반 명단·급식 주문·학습 계획**이 해결됐다. 남은 것은 아래 2-1(도메인 신설 6개)과
+  2-2의 나머지다.
+
+---
+
+## 검증 방법
+
+로컬에서 **실제로 호출해 확인한 것만** 적는다. 추측은 "미확인"으로 표시한다.
+
+- 대상: `dlab-api` 로컬 `:8080` (`spring.profiles.active=local`), 확인일 **2026-09-01**
+- 계정 2개로 각각 확인 — 권한에 따라 결과가 갈리기 때문이다
+  - `admin` = SUPER_ADMIN (전 지점)
+  - `branch` = BRANCH_ADMIN (분당)
+- 방법: GET 90개 전량 호출 + 응답 본문 대조. 재현 환경은 `docs/LOCAL_DEV.md`.
+
+---
+
+# 1부. 전 화면 공통 (먼저 정해야 하는 것)
+
+## 1-1. ✅ 해결됨 — 최상위 관리자가 차단되던 문제
+
+> **검증 (2026-09-01, 커밋 `79a51d0`)**
+> ```
+> GET /attendance?date=2026-09-01&academyId=8   (admin/SUPER_ADMIN)  → 200, rows 20건
+> GET /attendance?date=2026-09-01               (academyId 없음)     → 400 "지점을 지정해야 합니다"
+> ```
+> 차단됐던 8개(`attendance`, `penalties`, `penalties/items`, `absence-requests`,
+> `consults`, `consults/status`, `consults/tags`, `student-signups`) **전부 정상 동작 확인**.
+>
+> 지점 관리자 쪽 방어도 같이 확인했다 — `branch`(분당) 계정이 `academyId=1`(이매)을 보내면
+> `OTHER_BRANCH_ACCESS_DENIED`로 막히고, 안 보내면 자기 지점이 나온다. **의도대로다.**
+>
+> 프론트 규칙: **전 지점 권한 계정은 지점 선택 UI가 필수다.** 안 고르면 화면이 400으로 비어 보인다.
+
+<details><summary>원래 보고 내용</summary>
+
+### (해결 전) 최상위 관리자가 차단된다 — 지점을 고를 수단이 없다
+
+전 지점 권한(SUPER_ADMIN)으로 호출하면 **8개 엔드포인트가 에러**를 낸다.
+
+```
+GET /api/v1/admin/attendance?date=2026-09-01
+→ {"success":false,"error":{"code":"INVALID_REQUEST","message":"지점을 지정해야 합니다."}}
+```
+
+| 차단되는 엔드포인트 | 걸리는 화면 |
+|---|---|
+| `/attendance`, `/attendance/export` | 출결 관리 |
+| `/penalties`, `/penalties/items` | 상벌점 관리 |
+| `/absence-requests` | 사유 신청 관리 |
+| `/consults`, `/consults/status`, `/consults/tags` | 상담 |
+| `/student-signups` | 가입 승인 |
+
+원인은 서버 코드에 명시적으로 있다 (`AttendanceBoardService.academyOf`, `AdminPenaltyController` 등):
+
+```java
+Long academyId = me.academyScopeFilter();
+if (academyId == null) {   // null = 전 지점 권한
+    throw new BusinessException(ErrorCode.INVALID_REQUEST, "지점을 지정해야 합니다.");
+}
+```
+
+**모순이다.** "전 지점을 볼 수 있는 권한"이 곧 "지점을 지정할 수 없는 상태"가 되어,
+권한이 가장 높은 계정이 이 화면들을 **아예 못 연다**. BRANCH_ADMIN(`branch` 계정)으로는 전부 정상 동작한다.
+
+반면 `/students`는 같은 상황에서 전 지점을 잘 내려준다. **엔드포인트마다 규칙이 다르다.**
+
+> 요청: 이 8개에 `academyId` 쿼리 파라미터를 열고, **전 지점 권한자일 때만** 허용할 것.
+> (지점 권한자가 보내면 무시하거나 403 — 지금 `/students`의 `SearchScope` 방어는 그대로 유지)
+
+</details>
+
+## 1-2. ✅ 해결됨 — OpenAPI 스펙이 실제와 다르던 문제
+
+> **검증 (커밋 `b94b611`)** — 21개 엔드포인트가 가리키던 잘못된 타입이 정리됐다.
+> ```
+> POST /api/v1/admin/classes  requestBody → #/components/schemas/ClassCreate   (전: 방화벽 스키마)
+> /attendance 응답 → AttendanceRowResponse (전: 상벌점 RowResponse)
+> ```
+> 충돌 원인이던 일반 이름(`Create`, `Item`, `Detail`, `Row`, `RowResponse`, `ItemResponse`)이
+> **스펙에서 전부 사라졌다**. 스키마 478종.
+>
+> `npm run api:types` 재생성 완료 — `src/api/schema.d.ts`. 생성된 타입이 실제 응답과 일치하는 것을
+> `StudentResponse`·`AttendanceRowResponse`로 확인했다.
+
+<details><summary>원래 보고 내용</summary>
+
+### (해결 전) OpenAPI 스펙의 응답이 실제와 다르다
+
+`/v3/api-docs`가 **틀린 스키마**를 준다. 중첩 record 이름이 겹치는데 springdoc이 하나로 합쳐버린다.
+
+실제 확인 (BRANCH_ADMIN으로 호출):
+
+| 엔드포인트 | 스펙이 말하는 필드 | **실제 응답 필드** |
+|---|---|---|
+| `/attendance` | `occurredAt, category, itemName, point, grantedBy` (상벌점 필드) | `enrollmentId, studentNo, name, className, seatCd, checkInAt, checkOutAt, status, excused, studyMinutes, studyTime, guardianPhone, unexcusedLate` |
+| `/absence-requests` | 위와 동일 (상벌점 필드) | `id, approvalRequestId, submittedAt, studentNo, name, className, type, period, reason, approverType, status, escalationCandidate` |
+| `/meals/orders` | 위와 동일 (상벌점 필드) | `id, mealDate, mealType, canceledAt, cancelPath` |
+| `/routines` | 특강(`lectureType, capacity, fee`) 필드 | 루틴 필드 |
+
+겹치는 이름이 **25개 이상**이다 (`Create` 7회, `Item` 5회, `Detail`·`Update` 4회, `RowResponse`·`Submit` 3회 …).
+
+**영향**
+- `npm run api:types`로 만든 타입이 **조용히 틀린다.** 컴파일은 통과하고 런타임에 `undefined`가 된다.
+- Swagger UI의 요청/응답 예시도 같은 이유로 틀리다. 지금은 **문서를 믿을 수 없어 매번 실제 호출로 확인해야 한다.**
+
+> 요청: 중첩 record에 `@Schema(name = "AttendanceRowResponse")`처럼 고유 이름을 주거나,
+> springdoc이 바깥 클래스명을 접두어로 붙이도록 설정할 것. 프론트 타입 생성의 전제 조건이다.
+
+</details>
+
+## 1-3. ✅ 해결됨 — 정렬이 조용히 무시되던 문제
+
+> **검증 (2026-09-01, 커밋 `f24f18f`)**
+> ```
+> ?sort=name,asc               → 강민주, 강민주, 강서연, 강서연
+> ?sort=name,desc              → 한하윤, 한수빈, 한민주, 최현준
+> ?sort=grade,asc&sort=name,asc → HIGH2 묶음 안에서 이름순 (다중 정렬 동작)
+> ?sort=admissionDate,desc     → 반영됨
+> ```
+> 허용 필드: **`studentNo` · `name` · `grade` · `track` · `enrollmentStatus` · `admissionDate`**
+> (`name`은 `student.name`으로 보내도 된다). 마지막에 학번을 tie-breaker로 붙여 페이징이 흔들리지 않는다.
+>
+> ⚠️ **남은 것 2가지 — 프론트가 알아야 한다**
+> - **반(`className`) 정렬은 아직 안 된다.** 목업의 '반' 정렬 컬럼은 켜면 안 된다.
+> - **허용 밖 필드는 400이 아니라 조용히 무시**되고 기본 정렬(학번)로 떨어진다
+>   (`?sort=nonsense,asc` → 200). 백엔드가 의도한 동작이지만, 오타 하나가 화면에서는
+>   "정렬이 안 걸리는" 증상으로만 보인다. **프론트는 위 6개 목록을 코드에 고정해두고
+>   그 밖의 컬럼에는 정렬 UI를 붙이지 않는다.**
+
+<details><summary>원래 보고 내용</summary>
+
+### (해결 전) 정렬이 조용히 무시된다
+
+```
+GET /api/v1/admin/students?size=3&sort=id,desc   → [2, 3, 1]
+GET /api/v1/admin/students?size=3&sort=id,asc    → [2, 3, 1]   (같음)
+```
+
+- 원인: `StudentSearchRepository`가 `.orderBy(e.studentNo.asc())`로 고정하고 `pageable.getSort()`를 안 쓴다.
+- 컨트롤러가 `Pageable`을 받으니 **에러 없이 200이 온다.** 화면에서는 원인이 안 보인다.
+- 목록 화면의 정렬 가능 컬럼이 전부 무력화된다. 한 페이지(20건)만 클라이언트에서 정렬하면
+  전체가 정렬된 것처럼 보이지만 아니므로, **서버 정렬 전까지 프론트는 정렬 UI를 켜지 않는다.**
+
+> 요청: `pageable.getSort()` 반영. 어렵다면 지원 정렬키를 정하고 **그 외에는 400**을 낼 것.
+> 조용히 무시하는 것이 가장 나쁘다.
+
+</details>
+
+## 1-4. ✅ 해결됨 — `month` 형식 불일치
+
+> **검증 (커밋 `e008ba9`)** — 전 엔드포인트가 `yyyy-MM`으로 통일됐다.
+> ```
+> /meals/monthly?month=2026-09      → 200
+> /routines?month=2026-09           → 200   (전: 400, 정수만 받았다)
+> /schedules?month=2026-09          → 200
+> /tuition/fee-table?month=2026-09  → 200
+> ```
+
+같은 이름인데 형식이 갈리고, 틀리면 **500**이 난다.
+
+| 엔드포인트 | 형식 | 반대로 넣으면 |
+|---|---|---|
+| `/meals/monthly`, `/meals/closures` | `2026-09` (YYYY-MM) | 500 |
+| `/routines`, `/schedules`, `/tuition/fee-table` | `9` (1~12 정수) | 500 |
+
+> 요청: 하나로 통일. `YYYY-MM` 문자열을 권한다 — 연도를 따로 안 보내도 되고 오해가 없다.
+
+## 1-5. ✅ 해결됨 — 타입 오류 400
+
+> **검증 (2026-09-01, 커밋 `aef8a5b`)**
+> ```
+> ?year=abc   → 400 "파라미터 'year' 값이 올바르지 않습니다: abc"
+> ?grade=XXX  → 400 "파라미터 'grade' 값이 올바르지 않습니다: XXX (허용값: HIGH2, HIGH3, N_SU, STAFF)"
+> ```
+> enum 허용값이 응답에 실려서 프론트가 원인을 바로 안다. **여기까지는 해결.**
+>
+> ✅ **추가로 보고했던 500 잔존 경로도 해결됐다** (커밋 `ff5cb76`)
+> ```
+> GET /meals/monthly?academyId=8&month=9
+>   → 400 "파라미터 'month' 값이 올바르지 않습니다: 9"   (전: 500 INTERNAL_ERROR)
+> ```
+> <details><summary>원래 보고 내용</summary>
+>
+> ```
+> GET /meals/monthly?academyId=8&month=9   → 500 INTERNAL_ERROR
+> ```
+> ```
+> java.time.format.DateTimeParseException: Text '9' could not be parsed at index 0
+>   at AdminMealController.monthly(AdminMealController.java:60)
+> ```
+> 원인: 이 컨트롤러는 `month`를 **String으로 받아 메서드 안에서 `YearMonth.parse()`** 한다.
+> 새 핸들러는 스프링 바인딩 단계의 `MethodArgumentTypeMismatchException`을 잡는데,
+> 이건 바인딩을 통과한 뒤 메서드 본문에서 터지므로 안 걸린다.
+> 같은 패턴이 `AdminMealController` 4곳(60·72·126·144행), `AppDailyReportController` 1곳(66행)에 있다.
+>
+> > 요청: `YearMonth`를 파라미터 타입으로 직접 받거나(`@DateTimeFormat`),
+> > `DateTimeParseException`도 400으로 잡을 것.
+> </details>
+
+<details><summary>원래 보고 내용</summary>
+
+### (해결 전) 잘못된 타입의 파라미터가 400이 아니라 500이다
+
+```
+GET /api/v1/admin/students?year=abc   → 500 INTERNAL_ERROR "서버 오류가 발생했습니다."
+```
+
+`MethodArgumentTypeMismatchException`이 `GlobalExceptionHandler`에 없어 그대로 500이 된다.
+
+- 프론트 입장에서 **내 요청이 잘못된 건지 서버가 죽은 건지 구분할 수 없다.** 재시도 여부 판단이 안 된다.
+- 운영에서 잘못된 링크·오래된 북마크 하나가 500 알람을 만든다.
+
+> 요청: 타입 불일치는 400 + 어떤 파라미터가 잘못됐는지 메시지에 포함.
+
+</details>
+
+## 1-6. ✅ 통일됨 — 목록 응답 형태
+
+> **검증** — `/students`가 `data + meta` 형태로 바뀌었다.
+> ```json
+> { "success": true, "data": [ … ], "meta": { "page":0, "size":3, "totalElements":60, "totalPages":20, "hasNext":true } }
+> ```
+> 프론트 `requestPaged()`는 두 형태를 모두 흡수하도록 만들어둬서 코드 변경 없이 그대로 동작했다.
+
+<details><summary>원래 보고 내용</summary>
+
+### (통일 전) 목록 응답 형태가 두 가지다
+
+```
+ApiResponse.from(page)    → { data: [...],                 meta: {page,size,totalElements,...} }
+ApiResponse.success(page) → { data: { content:[...], number, totalElements, ... } }   ← /students
+```
+
+프론트는 `requestPaged()`에서 둘 다 흡수하도록 만들어뒀다. 다만 새 엔드포인트를 만들 때마다
+확인이 필요하므로, 통일하면 양쪽 모두 편해진다.
+
+</details>
+
+---
+
+# 2부. 화면별 대조
+
+## 2-1. API가 아예 없는 화면 (6개) ★
+
+붙일 엔드포인트 자체가 없다. 목업만 있고 서버에 대응 도메인이 없다.
+
+| 화면 | 코드 | 화면이 필요한 것 | 그나마 가까운 것 |
+|---|---|---|---|
+| 대기자 관리 | F-4.2 | 입학예약 파이프라인(단계·전환·이력) | 없음. `student-signups`는 앱 가입 승인이라 다른 것 |
+| 신상기록부 | F-4.11-9 | 폼 정의·작성 현황·제출 내용 | `consults/status.profileWritten` (작성 여부 boolean 하나뿐) |
+| 실적 관리 | F-4.10-6 | 합격 대학·학과·전형·등록확정 | 없음 |
+| Daily Report 집계 | F-4.11-6 | 학생별 순공/재실/집중도/루틴이행 **집계 + 순위** | `/statistics`(전체 개요), `/learning-plans/.../statistics`(학생 1명) |
+| 금일 수정 이력 | F-C-1 | 전 업무영역 감사 로그(수정자·전후값·IP) | `/branch-configs/{id}/history`(지점설정 전용), `/students/{id}/status-logs`(상태변경 전용) |
+| 결제 관리 | F-C-5 | PG 거래번호·결제수단·채널 | `/receipt-status`(청구/수납 기준, 거래 단위 아님) |
+
+> ⚠️ 이 6개는 "필드 추가"가 아니라 **도메인 신설**이다. 일정에 별도로 잡아야 한다.
+> 특히 감사 로그(F-C-1)는 전 화면의 쓰기 동작에 훅이 필요해 나중에 붙일수록 비싸진다.
+
+## 2-2. 필드가 모자란 화면 (24개 → **19개**)
+
+엔드포인트는 있고, 응답에 화면이 그리는 값이 없다.
+
+### ✅ 해결된 화면 (5개)
+
+| 화면 | 커밋 | 확인 내용 |
+|---|---|---|
+| F-4.1-1 학원생 검색 | `0b64573` | 응답에 `birthDate, schoolName, academyName, className, homeroomTeacher, seatCd, scholarshipTypes` 추가. 검색조건도 `teacherId`(담임)·`schoolName`(출신학교)·`admittedFrom`/`admittedTo`(등원일 범위) 3종 추가 — **요청한 것이 전부 들어왔다** |
+| F-4.9 교무업무 명단 | `0b64573` | 같은 응답을 쓴다. 주소·담임·좌석·장학유형·출신학교가 채워져 16개 컬럼 중 **학부모 연락처·청구기수만 남았다** |
+| F-4.1-4 반 배정 / F-4.10-3 배정 관리 | `87c823e` | `Member`에 `grade, track, schoolName, seatCd, academyId, academyName` 추가(전: 3개뿐) |
+| F-4.5 급식 관리 | `51e49b3` | `OrderResponse`에 `orderNo, studentNo, studentName, className, amount, paymentMethods, billedAmount, refundableAmount` 추가 |
+| F-4.11-2 주·일 학습 계획 | `53f52af` | **`GET /learning-plans` 목록 API 신설.** `completionRate`·`missingDays`까지 온다 — 학생 수만큼 호출하던 문제 해소. 실제 호출로 60명 집계 확인 |
+
+> ⚠️ 학생 응답에 **`masked` 필드**가 새로 생겼다. `true`면 `phone`·`birthDate`가 **서버에서 이미 가려져
+> 온다**(`2007-**-**`). 프론트가 또 마스킹하면 이중으로 가려지므로 `MaskToggle`이 이 값을 봐야 한다.
+
+### ❌ 남은 것
+
+#### F-4.1-1 학원생 검색 — 재수 구분만 남음
+
+`grade`가 `HIGH2/HIGH3/N_SU`까지라 **N수 안에서 재수·삼수·N수를 못 가른다.**
+필드 추가가 아니라 **데이터 모델 결정 사항**이라 그대로 남아 있다.
+
+<details><summary>(해결 전) F-4.1-1 학원생 검색 — <code>GET /students</code></summary>
+
+응답: `enrollmentId, studentId, uniqueCode, studentNo, name, phone, address, year, grade, track, enrollmentStatus, admissionDate`
+
+| 화면 컬럼 | 상태 |
+|---|---|
+| 출신학교, 생년월일 | **DB엔 있는데 DTO에서만 빠짐** (`student.school_name`, `birth_date`) — 난이도 낮음 |
+| 지점 | `academy_id` 있음. 지점**명**까지 필요(전 지점 조회 시 구분 불가) |
+| 반, 좌석, 담임 | 조인 필요 |
+| 재수 구분(재수/삼수/N수) | `grade`가 `N_SU`까지라 **구분 자체가 없음** — 모델 결정 사항 |
+
+검색조건 12개 중 서버가 받는 것 6개(`keyword, year, grade, track, status, classId`).
+없는 것: **담임 · 출신학교 · 등원일 범위**. 지점은 1-1 참고.
+
+교무업무 명단(F-4.9)은 같은 응답을 쓰는데 16개 컬럼 중 학번·성명·계열만 온다.
+급식(F-4.5)은 `id, mealDate, mealType, canceledAt, cancelPath`뿐이고,
+학습 계획(F-4.11-2)은 학생 1명씩 조회하는 API만 있었다.
+
+</details>
+
+#### 나머지 — 화면 컬럼 대 실제 응답 필드
+
+| 화면 | 엔드포인트 | 빠진 것 |
+|---|---|---|
+| F-4.1-2 상벌점 | `/penalties` | `className`(반). 검색조건 '재원 상태' 없음. 그 외 일치 |
+| F-4.10-2 사용자 관리 | `/staff/employees` | **계정·권한·상태·최근 로그인이 없다.** 직원 인적사항만 준다 — 계정 관리 API가 사실상 없음 |
+| F-4.10-1 기초 관리 | `/masters/*` | 코드·비고·사용여부(active) 없음. `name`·`sortOrder`만 |
+| F-4.7 특강 | `/lectures` | 담당 강사 없음 |
+| F-4.10-4 특강 기초 | `/lectures` | **코드·담당 강사** 없음. '월'은 `startDate`로 대체 가능 |
+| F-4.8 수납현황 | `/receipt-status` | **전표번호·지점·결제수단** 없음. 금액·상태는 일치 |
+| F-4.10-5 수납 관리 | `/tuition/prices` | 환불 규정(경과 시점·환불 비율) 없음 |
+| F-4.4 문자 발송 | `/notification-templates` | 템플릿은 일치. **발송 이력 API가 없다**(화면 하단 표 전체) |
+| F-4.11-3 메시지 관리 | `/notices` | **열람 수** 없음. 하단 '요청 관리' 표에 대응하는 API 없음 |
+| F-4.11-1 데일리 루틴 | `/routines/{id}/results` | `className`(반)·**이행률**·상벌점 트리거 없음. 루틴 마스터(루틴명·과목·배점)는 별도 확인 필요 |
+| F-4.6-부속 설문 | `/surveys` | **응답률** 없음(`questionCount`만). 하단 '템플릿 관리' 표에 대응 API 없음 |
+| F-C-4 독서실 좌석배치 | `/seats/layout` | 좌석·배정·재실은 있음. **고정반·이석 위치** 없음 |
+| F-4.11-7 질의응답 | `/qna/offline/slots` | 대면 예약만. **온라인 질의응답 없음** |
+| F-4.11-10 연간 행사 | `/schedules` | `dayOfWeek, startTime, endTime, title, place` — 화면의 기간·대상·학습계획 연동 없음 |
+| F-C-2 학원생 현황 | `/statistics` | 전체 개요만. 화면은 **반별 집계**(정원/재원/휴원/충원율) — 축이 다름 |
+| F-C-3 시간표 | `/periods`, `/masters/curriculums` | **이동수업(이동반·강의실·담당) 없음** |
+| F-C-6 앱 운영 | `/app-config` | 약관·설정만. **푸시 발송 이력·배너 클릭수 없음** |
+| F-4.11-8 좌석 이탈 | `/seats/layout` | 좌석·재실은 있음. **키오스크 단말 관리(펌웨어·최종수신) 없음** — `/branch-configs`에 식별자만 |
+
+## 2-3. 그대로 붙는 화면 (2개)
+
+컬럼을 응답 필드와 하나씩 대조해 **빠진 것이 없음을 확인**했다.
+
+| 화면 | 엔드포인트 | 확인 내용 |
+|---|---|---|
+| F-4.3 출결 관리 | `/attendance` | 반·좌석·등하원·상태·순공시간·학부모연락처 전부 대응. '알림'은 액션 버튼이라 데이터 아님 |
+| F-4.1-5 사유 신청 | `/absence-requests` | 컬럼 9개 전부 대응(`submittedAt, studentNo, name, className, type, period, reason, approverType, status`) |
+
+> 둘 다 전 지점 권한 계정으로 호출하려면 **`academyId`를 함께 보내야 한다**(1-1 해결 내용).
+> 지점 선택 UI 없이는 400으로 빈 화면이 된다.
+
+## 2-4. 자동 대조가 안 된 화면 (4개) — 수기 확인 필요
+
+표(`DataTable`) 형태가 아니라 카드·차트·폼 등 커스텀 레이아웃이라 컬럼을 기계적으로 뽑지 못했다.
+**"문제 없음"이 아니라 "아직 확인 안 함"이다.**
+
+| 화면 | 후보 엔드포인트 |
+|---|---|
+| F-4.11-4 상담(일지·리포트) | `/consults`, `/consults/status` — 필드 구성은 좋아 보인다(일지·미상담 현황 모두 있음) |
+| F-4.11-5 승인 라우팅 | `/approvals` — 에스컬레이션·타임아웃·인계 필드까지 있음 |
+| F-4.6 성적 | `/students/{id}/grades`, `/exam-forms` |
+| F-4.1-3 신규 접수 | `POST /students` (학번은 서버 채번) |
+
+# 3부. 프론트가 아직 안 붙인 것 (BE 작업 아님)
+
+"없는 줄 알고" 중복 요청하지 않기 위해 기록해둔다.
+
+- `GET/POST/DELETE /students/saved-searches` — 검색조건 저장. 현재 `SearchForm`이 localStorage에 저장해
+  **계정 간 공유가 안 된다.** 교체 대상.
+- `GET /students/export`, `/receipt-status/export`, `/attendance/export` — 서버 엑셀.
+  현재 `ExcelButton`은 화면에 있는 행만 담으므로 전체 내보내기는 이쪽으로 바꿔야 한다.
+- `POST /students/import/preview`, `/import` — 일괄 등록.
+- `GET /students/{id}/status-logs` — 상태 변경 이력.
+- `/classes` — 반 목록. 여러 화면의 '반' 드롭다운이 이걸로 채워져야 한다(현재 하드코딩).
+- `/student-signups` — 앱 가입 승인·OT 완료 처리. **대응 목업 화면이 없다.**
+  앱에서 가입한 학생을 관리자가 승인하는 흐름인데 관리 화면이 기획에 없다 — 화면이 필요한지 확인 필요.
