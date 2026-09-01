@@ -13,7 +13,8 @@
     "handoff": "node scripts/gen-handoff.ts",
     "asks": "node scripts/gen-asks.ts",
     "assumptions": "node scripts/gen-assumptions.ts",
-    "docs": "npm run handoff && npm run asks && npm run assumptions"
+    "docs": "npm run handoff && npm run asks && npm run assumptions",
+    "api:types": "npx -y openapi-typescript@7 http://localhost:8080/v3/api-docs -o src/api/schema.d.ts"
   },
   "dependencies": {
     "lucide-react": "^1.27.0",
