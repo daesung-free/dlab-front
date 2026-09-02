@@ -20,7 +20,7 @@ DSA/D.Lab 통합관리 **웹 관리자 프론트엔드**. 백엔드(`dlab-api`, 
 | 파일 | 출처 |
 |---|---|
 | `docs/BACKEND_HANDOFF.md` · `ASKS.md` · `ASSUMPTIONS.md` | `src/data/menu.ts`·`issues.ts`·`assumptions.ts` → `npm run docs` |
-| `docs/API_GAPS.md` · `LOCAL_DEV.md` | **수기 작성.** 여기에 적는다 |
+| `docs/API_GAPS.md` · `LOCAL_DEV.md` · `CONNECT_PLAN.md` | **수기 작성.** 여기에 적는다 |
 
 생성물에 적으면 다음 `npm run docs`에서 날아간다.
 
@@ -53,6 +53,8 @@ schema.d.ts npm run api:types 로 생성. 직접 수정 금지
 ## 4. 화면 연동 현황
 
 **실연동된 화면은 학원생 검색(F-4.1-1) 하나뿐이다.** 나머지 35개는 아직 목업이다.
+
+화면별 연동 순서와 담당은 `docs/CONNECT_PLAN.md`에 있다. **작업 시작 전에 거기에 담당을 적는다.**
 
 ### 목록 화면을 새로 붙일 때
 
