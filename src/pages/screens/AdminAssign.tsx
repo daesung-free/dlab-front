@@ -5,7 +5,7 @@ import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
 import {
   assignLocker,
-  assignSeat,
+  assignSeatsBulk,
   getSeatLayout,
   listLockers,
   listSeatAreas,
@@ -33,7 +33,8 @@ import './assign.css'
  * ★ 독서실 좌석 마스터를 만들 관리자 API가 없다(`AreaRequest`는 키오스크용).
  *   시드도 없어서 구역이 0개면 배치도가 빈다 — docs/API_GAPS.md 에 요청해뒀다.
  *
- * ★ 미배정 학생은 서버 필터가 없어 **받아온 페이지 안에서만** 거른다(반 배정과 같은 제약). */
+ * ★ 미배정 학생은 **서버 조건**으로 거른다. 사물함 탭이면 unassignedLocker,
+ *   독서실 탭이면 unassignedSeat — 축이 다르면 대상 명단도 달라야 한다. */
 
 type Kind = 'locker' | 'reading'
 
@@ -151,7 +152,14 @@ function Content() {
     void loadLayout()
   }, [loadLayout])
 
-  const params = useMemo(() => ({ status: 'ENROLLED' as const }), [])
+  // 보고 있는 탭의 축으로 미배정을 거른다
+  const params = useMemo(
+    () =>
+      kind === 'locker'
+        ? { status: 'ENROLLED' as const, unassignedLocker: true }
+        : { status: 'ENROLLED' as const, unassignedSeat: true },
+    [kind],
+  )
   const table = useServerTable({ fetcher: searchStudents, params, pageSize: PAGE_SIZE, sortable: SORTABLE })
 
   const total = blocks.reduce((a, b) => a + b.cells.length, 0)
@@ -172,23 +180,33 @@ function Content() {
 
     setBusy(true)
     setNotice(null)
-    const failed: string[] = []
 
-    // 일괄 배정 API가 없어 한 건씩 보낸다. 병렬로 던지면 실패 시 어디까지 반영됐는지 불분명해진다.
-    for (let i = 0; i < picked.length; i += 1) {
+    if (kind === 'reading') {
+      // 좌석은 일괄 API가 전부-아니면-전무다. 실패하면 아무것도 안 들어간다
       try {
-        if (kind === 'locker') await assignLocker(empty[i].id, picked[i].enrollmentId)
-        else await assignSeat(empty[i].id, picked[i].enrollmentId)
+        await assignSeatsBulk(picked.map((p, i) => ({ seatId: empty[i].id, enrollmentId: p.enrollmentId })))
+        setNotice(`${picked.length}명 배정 완료`)
       } catch (err) {
-        failed.push(`${picked[i].name}: ${err instanceof ApiError ? err.message : '실패'}`)
+        setNotice(
+          `배정하지 못했습니다(아무것도 반영되지 않음) — ${err instanceof ApiError ? err.message : '실패'}`,
+        )
       }
+    } else {
+      // 사물함은 일괄 API가 없어 한 건씩 보낸다. 병렬로 던지면 실패 시 어디까지 갔는지 불분명해진다
+      const failed: string[] = []
+      for (let i = 0; i < picked.length; i += 1) {
+        try {
+          await assignLocker(empty[i].id, picked[i].enrollmentId)
+        } catch (err) {
+          failed.push(`${picked[i].name}: ${err instanceof ApiError ? err.message : '실패'}`)
+        }
+      }
+      setNotice(
+        failed.length === 0
+          ? `${picked.length}명 배정 완료`
+          : `${picked.length - failed.length}명 완료 · ${failed.length}명 실패 — ${failed.join(' / ')}`,
+      )
     }
-
-    setNotice(
-      failed.length === 0
-        ? `${picked.length}명 배정 완료`
-        : `${picked.length - failed.length}명 완료 · ${failed.length}명 실패 — ${failed.join(' / ')}`,
-    )
     setSelected([])
     setBusy(false)
     await loadLayout()
@@ -246,12 +264,12 @@ function Content() {
         ))}
         <div className="stat">
           <div className="l">
-            <Icon name="user-plus" size={13} /> 재원생
+            <Icon name="user-plus" size={13} /> 미배정 학생
           </div>
           <div className="v" style={{ color: 'var(--amber)' }}>
             {table.totalElements}
           </div>
-          <div className="d warn">배정 대상</div>
+          <div className="d warn">{label} 기준</div>
         </div>
         <div className="stat">
           <div className="l">
@@ -385,13 +403,10 @@ function Content() {
         serverPaging={table.serverPaging}
         countLabel={
           <>
-            재원생 <b>{table.totalElements}</b>명{' '}
-            <span style={{ color: 'var(--muted)' }} title="서버에 '사물함·좌석 미배정' 필터가 없어 전체 재원생을 보여준다">
-              (미배정만 거르는 조건이 서버에 없음)
-            </span>
+            {label} 미배정 <b>{table.totalElements}</b>명
           </>
         }
-        emptyText="재원생이 없습니다."
+        emptyText={`${label} 미배정 학생이 없습니다.`}
       />
     </div>
   )

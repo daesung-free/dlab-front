@@ -40,8 +40,8 @@ import type { Mockup } from './types'
  * ★ 서버가 안 주는 컬럼은 지우지 않고 <Unfilled/> 로 둔다(CLAUDE.md 1).
  *   청구기수 · 학부모 연락처 · 재수 구분 3개가 그렇다 — docs/API_GAPS.md 2-2 참고.
  *
- * ★ 장학생 탭은 서버 필터가 없다. 지금은 **받아온 페이지 안에서만** 걸러지므로
- *   건수가 전체 기준이 아니다. 화면에 그 사실을 표시해뒀다. */
+ * ★ 장학생 탭은 **서버 조건(hasScholarship)** 으로 거른다. 탭을 바꾸면 조회가 다시 나간다 —
+ *   예전에는 페이지 안에서만 걸러 건수가 전체 기준이 아니었다(API_GAPS 4-6). */
 
 const PAGE_SIZE = 20
 
@@ -203,6 +203,8 @@ function Content() {
     [classes],
   )
 
+  // 장학생 탭은 서버에서 거른다. 탭이 params 에 들어가므로 탭 전환 시 다시 조회된다
+  const scholarOnly = tab === 'scholar'
   const params = useMemo(() => {
     const classId = one(query.classId)
     return {
@@ -211,8 +213,9 @@ function Content() {
       track: one(query.track) as TrackType | undefined,
       status: one(query.status) as EnrollmentStatus | undefined,
       schoolName: one(query.schoolName),
+      hasScholarship: scholarOnly ? true : undefined,
     }
-  }, [query])
+  }, [query, scholarOnly])
 
   const table = useServerTable({
     fetcher: searchStudents,
@@ -221,13 +224,7 @@ function Content() {
     sortable: SORTABLE,
   })
 
-  // 장학생 탭에는 서버 필터가 없다. 받아온 페이지 안에서만 거른다 —
-  // 전체 장학생 목록이 아니므로 건수 표기에 그 사실을 남긴다.
-  const scholarOnly = tab === 'scholar'
-  const rows = useMemo(
-    () => (scholarOnly ? table.rows.filter((r) => r.scholarshipTypes.length > 0) : table.rows),
-    [table.rows, scholarOnly],
-  )
+  const rows = table.rows
 
   const columns = tab === 'roster' ? ROSTER_COLUMNS : tab === 'class' ? CLASS_COLUMNS : SCHOLAR_COLUMNS
   const label = TABS.find((t) => t.key === tab)!.label
@@ -254,22 +251,11 @@ function Content() {
             rowKey={(r) => String(r.enrollmentId)}
             masked={effectiveMasked}
             loading={table.loading}
-            // 장학생 탭은 페이지 안에서 걸러내 행 수가 달라지므로 서버 페이징 UI를 그대로 쓰면
-            // "20건씩"과 실제 표시 건수가 어긋난다. 그래도 페이지 이동은 있어야 해서 그대로 둔다.
             serverPaging={table.serverPaging}
             countLabel={
-              scholarOnly ? (
-                <>
-                  {label} — 이 페이지 <b>{rows.length}</b>명{' '}
-                  <span style={{ color: 'var(--amber)' }} title="서버에 장학생 필터가 없어 전체 집계가 아니다">
-                    (전체 아님)
-                  </span>
-                </>
-              ) : (
-                <>
-                  {label} <b>{table.totalElements}</b>명
-                </>
-              )
+              <>
+                {label} <b>{table.totalElements}</b>명
+              </>
             }
             toolbar={
               <>

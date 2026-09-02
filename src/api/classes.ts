@@ -16,6 +16,9 @@ export interface ClassGroup {
   classType: ClassType
   homeroomTeacherId: number | null
   homeroomTeacherName: string | null
+  capacity: number | null
+  /** 현재 인원. 반마다 명단을 부르지 않아도 되게 목록에 실려 온다 */
+  memberCount: number
 }
 
 /** 반 명단의 학생 한 명. 학생 검색(Student)보다 필드가 적다 */
@@ -39,16 +42,54 @@ export function listClassMembers(classId: number): Promise<ClassMember[]> {
   return request<ClassMember[]>(`/api/v1/admin/classes/${classId}/students`)
 }
 
-/**
- * 반에 학생 배정.
- *
- * ⚠️ **한 명씩만 받는다.** 화면은 '선택 N명 일괄 배정'이라 N번 호출해야 한다.
- *   중간에 실패하면 일부만 배정된 상태로 남으므로, 호출부는 결과를 건별로 모아
- *   무엇이 실패했는지 보여줘야 한다. 일괄 API 요청은 docs/API_GAPS.md 에 적어뒀다.
- */
+/** 반 배정 한 건. 여러 명은 assignStudentsToClass 를 쓴다 */
 export function assignStudentToClass(classId: number, enrollmentId: number): Promise<void> {
   return request<void>(`/api/v1/admin/classes/${classId}/students`, {
     method: 'POST',
     body: { enrollmentId },
   })
+}
+
+/** 일괄 배정 한 건의 결과 */
+export interface BulkAssignItem {
+  enrollmentId: number
+  studentName?: string | null
+  status: string
+  message?: string | null
+}
+
+/**
+ * 일괄 배정 결과.
+ *
+ * ★ **정원을 넘겨도 배정은 된다.** 정원 초과가 필요한 운영이 실제로 있어서 서버가 막지 않고
+ *   `overCapacity` 로 알려준다 — 경고는 화면이 띄운다.
+ *
+ * ★ 좌석 일괄 배정(assignSeatsBulk)과 **응답 형태가 다르다.** 반은 건별 결과를 주고,
+ *   좌석은 전부-아니면-전무다(절반만 반영되면 배치가 뒤죽박죽 되기 때문).
+ */
+export interface BulkAssignResult {
+  classId: number
+  capacity: number | null
+  memberCount: number
+  overCapacity: boolean
+  assignedCount: number
+  failedCount: number
+  results: BulkAssignItem[]
+}
+
+export function assignStudentsToClass(classId: number, enrollmentIds: number[]): Promise<BulkAssignResult> {
+  return request<BulkAssignResult>(`/api/v1/admin/classes/${classId}/students/bulk`, {
+    method: 'POST',
+    body: { enrollmentIds },
+  })
+}
+
+/**
+ * 반 배정 해제.
+ *
+ * ★ **반 ID가 필요하다.** 한 학생에게 고정반·이동수업반이 동시에 있을 수 있어
+ *   "이 학생의 반을 뗀다"로는 어느 반인지 정해지지 않는다.
+ */
+export function releaseStudentFromClass(classId: number, enrollmentId: number): Promise<void> {
+  return request<void>(`/api/v1/admin/classes/${classId}/students/${enrollmentId}`, { method: 'DELETE' })
 }

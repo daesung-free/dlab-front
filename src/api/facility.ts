@@ -80,6 +80,16 @@ export function assignSeat(seatId: number, enrollmentId: number): Promise<void> 
   return request<void>('/api/v1/admin/seats', { method: 'POST', body: { seatId, enrollmentId } })
 }
 
+/**
+ * 좌석 일괄 배정.
+ *
+ * ★ **전부-아니면-전무다.** 반 일괄 배정(건별 결과)과 응답 형태가 다른데, 좌석은
+ *   절반만 반영되면 배치가 뒤죽박죽 되기 때문이다. 실패하면 아무것도 안 들어간 상태다.
+ */
+export function assignSeatsBulk(items: { seatId: number; enrollmentId: number }[]): Promise<SeatCell[]> {
+  return request<SeatCell[]>('/api/v1/admin/seats/bulk', { method: 'POST', body: { items } })
+}
+
 /** 좌석 해제는 좌석이 아니라 **학생** 기준이다 — 한 학생이 좌석 하나를 갖는 구조라서다 */
 export function releaseSeatOfStudent(enrollmentId: number): Promise<void> {
   return request<void>(`/api/v1/admin/seats/students/${enrollmentId}`, { method: 'DELETE' })

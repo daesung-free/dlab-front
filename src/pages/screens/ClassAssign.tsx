@@ -2,7 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { DataTable, Unfilled, useServerTable, type Column } from '../../components/common'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
-import { assignStudentToClass, listClassMembers, listClasses, type ClassGroup } from '../../api/classes'
+import {
+  assignStudentsToClass,
+  listClasses,
+  releaseStudentFromClass,
+  type BulkAssignResult,
+  type ClassGroup,
+} from '../../api/classes'
+import { useAcademy } from '../../auth/AcademyContext'
 import { SORTABLE, TRACK_LABEL, searchStudents, type Student } from '../../api/students'
 import type { Mockup } from './types'
 
@@ -11,12 +18,21 @@ import type { Mockup } from './types'
  * 전년도 복사는 단순 INSERT SELECT가 금지된다. 의존 순서를 지켜 순회해야 한다:
  *   department → course_type → class_group → curriculum → penalty_item → tuition
  *
- * ★ 서버에 없는 것 3가지. 화면을 깎지 않고 표시만 해둔다(docs/API_GAPS.md 2-2).
- *   1) 반 **정원·강의실** — ClassResponse 에 없다. 정원 대비 현황을 못 그린다
- *   2) **미배정 학생 필터** — /students 에 classId 는 있어도 "반 없음" 조건이 없다.
- *      지금은 받아온 페이지 안에서 className 이 빈 학생만 거른다 → **전체 미배정 명단이 아니다**
- *   3) **일괄 배정 API** — POST /classes/{id}/students 가 enrollmentId 를 하나씩만 받는다.
- *      N번 호출하므로 중간에 실패하면 일부만 배정된다. 아래에서 건별 결과를 모아 보여준다 */
+ * ★ 미배정 학생은 **서버 조건(unassignedClass)** 으로 거른다. 예전에는 받아온 페이지 안에서만
+ *   걸러 전체 명단이 아니었다 — 백엔드에 요청해 조건이 생겼다(API_GAPS 4-2).
+ *
+ * ★ 일괄 배정은 배열을 받는다. **정원을 넘겨도 배정은 된다** — 정원 초과가 필요한 운영이
+ *   실제로 있어서 서버가 막지 않고 overCapacity 로 알려준다. 경고는 이 화면이 띄운다.
+ *
+ * ★ 배정 해제는 **반 ID가 필요하다.** 한 학생에게 고정반·이동수업반이 동시에 있을 수 있어
+ *   "이 학생의 반을 뗀다"로는 어느 반인지 정해지지 않는다.
+ *
+ * ★ 아직 없는 것: 강의실(roomName). 반에 고정된 홈룸인지 시간표에 딸린 것인지 확인 후 추가 예정
+ *
+ * ⚠️ **전 지점 권한 계정에서는 목록에 다른 지점 학생이 섞인다.** /students 만 academyId 를
+ *   안 받아서 전 지점이 한 번에 오는데, 반은 지점에 속해 있다. 다른 지점 학생을 배정하면
+ *   서버가 건별로 "다른 지점의 반에는 배정할 수 없습니다"로 돌려준다.
+ *   그래서 지점 컬럼을 띄우고, 전 지점 계정에는 안내를 보여준다(API_GAPS 2-2). */
 
 const COPY_ORDER = ['department', 'course_type', 'class_group', 'curriculum', 'penalty_item', 'tuition']
 
@@ -38,35 +54,25 @@ const COLUMNS: Column<Student>[] = [
   },
   { key: 'schoolName', header: '출신학교', width: '92px', value: (r) => r.schoolName ?? '-' },
   { key: 'seatCd', header: '좌석', width: '68px', align: 'center', value: (r) => r.seatCd ?? '-' },
+  // 전 지점 계정에서는 다른 지점 학생이 섞여 오므로 반드시 보여준다
+  { key: 'academyName', header: '지점', width: '64px', align: 'center', value: (r) => r.academyName ?? '-' },
 ]
 
-/** 배정 결과 — 일괄 API가 없어 건별로 모은다 */
-interface AssignResult {
-  ok: number
-  failed: { name: string; message: string }[]
-}
-
 function Content() {
+  const { academies } = useAcademy()
   const [classes, setClasses] = useState<ClassGroup[]>([])
-  const [counts, setCounts] = useState<Map<number, number>>(new Map())
   const [selected, setSelected] = useState<string[]>([])
   const [target, setTarget] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
-  const [result, setResult] = useState<AssignResult | null>(null)
+  const [result, setResult] = useState<BulkAssignResult | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const loadClasses = useCallback(async () => {
     try {
+      // memberCount 가 목록에 실려 와서 반마다 명단을 부르지 않아도 된다
       const list = await listClasses()
       setClasses(list)
       setTarget((prev) => prev ?? list[0]?.id ?? null)
-
-      // 반별 현재 인원. 집계 API가 없어 반마다 명단을 부른다 —
-      // 반은 보통 한 자릿수라 감당되지만, 늘어나면 집계 API를 요청할 것.
-      const entries = await Promise.all(
-        list.map(async (c) => [c.id, (await listClassMembers(c.id)).length] as const),
-      )
-      setCounts(new Map(entries))
       setLoadError(null)
     } catch (err) {
       setLoadError(err instanceof ApiError ? err.message : '반 목록을 불러오지 못했습니다.')
@@ -77,38 +83,42 @@ function Content() {
     void loadClasses()
   }, [loadClasses])
 
-  // 재원생만 배정 대상이다
-  const params = useMemo(() => ({ status: 'ENROLLED' as const }), [])
+  // 재원생 중 반이 없는 학생만. 서버가 걸러주므로 전체 명단이 맞다
+  const params = useMemo(() => ({ status: 'ENROLLED' as const, unassignedClass: true }), [])
   const table = useServerTable({ fetcher: searchStudents, params, pageSize: PAGE_SIZE, sortable: SORTABLE })
-
-  // ⚠️ 서버에 미배정 필터가 없어 **이 페이지 안에서만** 거른다. 전체 미배정 명단이 아니다.
-  const unassigned = useMemo(() => table.rows.filter((r) => !r.className), [table.rows])
 
   async function assign() {
     if (target === null || selected.length === 0) return
     setBusy(true)
     setResult(null)
-
-    const picked = unassigned.filter((r) => selected.includes(String(r.enrollmentId)))
-    const failed: AssignResult['failed'] = []
-    let ok = 0
-
-    // 순차 호출한다. 일괄 API가 없는데 병렬로 던지면 실패했을 때
-    // 어디까지 반영됐는지가 더 불분명해진다.
-    for (const s of picked) {
-      try {
-        await assignStudentToClass(target, s.enrollmentId)
-        ok += 1
-      } catch (err) {
-        failed.push({ name: s.name, message: err instanceof ApiError ? err.message : '배정 실패' })
-      }
+    try {
+      const res = await assignStudentsToClass(target, selected.map(Number))
+      setResult(res)
+      setSelected([])
+      await loadClasses()
+      table.reload()
+    } catch (err) {
+      setLoadError(err instanceof ApiError ? err.message : '배정하지 못했습니다.')
+    } finally {
+      setBusy(false)
     }
+  }
 
-    setResult({ ok, failed })
-    setSelected([])
-    setBusy(false)
-    await loadClasses()
-    table.reload()
+  /** 선택한 학생을 그 반에서 뺀다. 대상 반이 정해져 있어야 한다 */
+  async function release() {
+    if (target === null || selected.length === 0) return
+    setBusy(true)
+    setResult(null)
+    try {
+      for (const id of selected) await releaseStudentFromClass(target, Number(id))
+      setSelected([])
+      await loadClasses()
+      table.reload()
+    } catch (err) {
+      setLoadError(err instanceof ApiError ? err.message : '배정을 해제하지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -132,6 +142,22 @@ function Content() {
         </div>
       </div>
 
+      {/* 전 지점 권한이면(지점이 2개 이상 보이면) 목록에 다른 지점 학생이 섞인다 */}
+      {academies.length > 1 && (
+        <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
+          <div className="ic">
+            <Icon name="triangle-alert" size={17} />
+          </div>
+          <div>
+            <div className="tt">전 지점 권한 계정입니다 — 목록에 다른 지점 학생이 섞여 있습니다</div>
+            <div className="tx">
+              학생 검색만 <b>지점 조건을 받지 않아</b> 전 지점이 한 번에 옵니다. 반은 지점에 속하므로
+              <b> 다른 지점 학생은 배정되지 않습니다</b>(서버가 건별로 거부합니다). 지점 컬럼을 확인하세요.
+            </div>
+          </div>
+        </div>
+      )}
+
       {loadError && (
         <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
           {loadError}
@@ -144,15 +170,14 @@ function Content() {
             <div className="l">
               <Icon name="layout-grid" size={13} /> {c.name}
             </div>
-            <div className="v">
-              {counts.get(c.id) ?? '–'}
-              {/* 정원이 ClassResponse 에 없어 '현재/정원'을 못 그린다 */}
-              <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 700 }}>
-                {' '}
-                / <Unfilled reason="반 정원이 응답에 없다" />
-              </span>
+            <div className="v" style={c.capacity !== null && c.memberCount > c.capacity ? { color: 'var(--red)' } : undefined}>
+              {c.memberCount}
+              <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 700 }}> / {c.capacity ?? '-'}</span>
             </div>
-            <div className="d">담임 {c.homeroomTeacherName ?? '미지정'}</div>
+            <div className={`d${c.capacity !== null && c.memberCount > c.capacity ? ' down' : ''}`}>
+              담임 {c.homeroomTeacherName ?? '미지정'}
+              {/* 강의실은 아직 응답에 없다 — 반 홈룸인지 시간표 소속인지 확인 중 */}
+            </div>
           </div>
         ))}
         <div className="stat">
@@ -160,9 +185,9 @@ function Content() {
             <Icon name="user-plus" size={13} /> 미배정
           </div>
           <div className="v" style={{ color: 'var(--amber)' }}>
-            {unassigned.length}
+            {table.totalElements}
           </div>
-          <div className="d warn">이 페이지 기준</div>
+          <div className="d warn">배정 필요</div>
         </div>
       </div>
 
@@ -185,14 +210,20 @@ function Content() {
               {classes.length === 0 && <option value="">등록된 반이 없습니다</option>}
               {classes.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name} ({counts.get(c.id) ?? 0}명)
+                  {c.name} ({c.memberCount}/{c.capacity ?? '-'}명)
                 </option>
               ))}
             </select>
             <button className="btn pri" disabled={selected.length === 0 || target === null || busy} onClick={() => void assign()}>
               <Icon name="check" size={14} /> {busy ? '배정 중…' : '배정'}
             </button>
-            <button className="btn" disabled title="배정 해제 API가 아직 없습니다">
+            {/* 해제는 '선택한 학생을 위 드롭다운의 반에서' 뺀다 — 반 ID가 필요해서다 */}
+            <button
+              className="btn"
+              disabled={selected.length === 0 || target === null || busy}
+              onClick={() => void release()}
+              title="선택한 학생을 위에 고른 반에서 뺍니다"
+            >
               배정 해제
             </button>
           </div>
@@ -203,19 +234,28 @@ function Content() {
         <div
           className="note-box"
           role="status"
-          style={result.failed.length > 0 ? { borderColor: 'var(--amber)' } : undefined}
+          style={result.failedCount > 0 || result.overCapacity ? { borderColor: 'var(--amber)' } : undefined}
         >
           <div className="ic">
-            <Icon name={result.failed.length > 0 ? 'triangle-alert' : 'check'} size={17} />
+            <Icon name={result.failedCount > 0 || result.overCapacity ? 'triangle-alert' : 'check'} size={17} />
           </div>
           <div>
             <div className="tt">
-              배정 {result.ok}명 완료
-              {result.failed.length > 0 && ` · ${result.failed.length}명 실패`}
+              배정 {result.assignedCount}명 완료
+              {result.failedCount > 0 && ` · ${result.failedCount}명 실패`}
             </div>
-            {result.failed.length > 0 && (
+            {/* 정원을 넘겨도 서버는 막지 않는다. 경고는 화면 몫이다 */}
+            {result.overCapacity && (
+              <div className="tx" style={{ color: 'var(--amber)' }}>
+                <b>정원 초과</b> — 현재 {result.memberCount}명 / 정원 {result.capacity ?? '-'}명
+              </div>
+            )}
+            {result.failedCount > 0 && (
               <div className="tx">
-                {result.failed.map((f) => `${f.name}: ${f.message}`).join(' / ')}
+                {result.results
+                  .filter((r) => r.status !== 'ASSIGNED')
+                  .map((r) => `${r.studentName ?? r.enrollmentId}: ${r.message ?? r.status}`)
+                  .join(' / ')}
               </div>
             )}
           </div>
@@ -224,7 +264,7 @@ function Content() {
 
       <DataTable
         columns={COLUMNS}
-        rows={unassigned}
+        rows={table.rows}
         rowKey={(r) => String(r.enrollmentId)}
         selectable
         selected={selected}
@@ -233,13 +273,10 @@ function Content() {
         serverPaging={table.serverPaging}
         countLabel={
           <>
-            미배정 학생 <b>{unassigned.length}</b>명{' '}
-            <span style={{ color: 'var(--amber)' }} title="서버에 미배정 필터가 없어 이 페이지 안에서만 거른 결과다">
-              (이 페이지 기준)
-            </span>
+            미배정 학생 <b>{table.totalElements}</b>명
           </>
         }
-        emptyText="이 페이지에는 미배정 학생이 없습니다."
+        emptyText="미배정 학생이 없습니다."
       />
     </>
   )
