@@ -5,7 +5,11 @@ import '../../styles/forms.css'
 
 /* F-4.1-3 신규 접수 등록(합격생 등록) — 신규개발-요구사항검증됨
  * 학번 채번 규칙: year + %04d(nextSeq), 매년 초기화.
- * UNIQUE(year, student_no) — 학번을 PK로 쓰지 않는다. */
+ *
+ * ★ 유일성은 UNIQUE(academy_id, year, student_no) 다 — **지점 축이 있다**.
+ *   같은 해에도 지점이 다르면 같은 학번이 존재하고(2026-0001 이 분당·이매·목동에 각각 있다),
+ *   연도가 바뀌면 같은 지점에서도 번호가 재사용된다. 그래서 학번은 PK가 아니다.
+ *   학생을 특정할 때는 enrollmentId(등록 건) 또는 studentId(사람)를 쓴다. */
 
 const nextSeq = MOCK_STUDENTS.length + 1
 const nextStudentNo = `2026-${String(nextSeq).padStart(4, '0')}`
@@ -20,9 +24,9 @@ function Content() {
         <div>
           <div className="tt">학번 자동 채번 — 저장 시 확정</div>
           <div className="tx">
-            채번 규칙은 <code>year + %04d(nextSeq)</code>이며 <b>매년 초기화</b>됩니다. 다음 학번은{' '}
-            <b>{nextStudentNo}</b>입니다. 제약은 <code>UNIQUE(year, student_no)</code>이고{' '}
-            <b>학번을 PK로 사용하지 않습니다</b> — 연도 전환 시 같은 번호가 다시 나오기 때문입니다.
+            학번은 <b>저장할 때 자동으로</b> 매겨집니다. 다음 학번은 <b>{nextStudentNo}</b>입니다.
+            번호는 <b>지점별·연도별로 따로</b> 매겨지므로, 다른 지점에 같은 학번이 있을 수 있습니다.
+            학생을 특정할 때는 학번만으로 판단하지 마세요.
           </div>
         </div>
       </div>

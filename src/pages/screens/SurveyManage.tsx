@@ -862,9 +862,9 @@ function Content() {
                 <div>
                   <div className="tt">템플릿 → 설문 인스턴스화</div>
                   <div className="tx">
-                    <code>survey_templates</code>에서 <code>instantiate</code>하면 문항이 복제된 새{' '}
-                    <code>surveys</code> 레코드가 생깁니다. 이후 템플릿을 수정해도 <b>이미 배포된 설문은 바뀌지
-                    않습니다</b> — 응답 데이터의 정합성을 지키기 위해 문항을 스냅샷으로 복제하는 구조입니다.
+                    템플릿으로 설문을 만들면 <b>그 시점의 문항이 그대로 복사</b>됩니다.
+                    그래서 나중에 템플릿을 고쳐도 <b>이미 배포한 설문은 바뀌지 않습니다</b> —
+                    응답을 받는 도중에 문항이 달라지면 결과를 신뢰할 수 없기 때문입니다.
                   </div>
                 </div>
               </div>
