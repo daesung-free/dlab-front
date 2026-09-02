@@ -52,8 +52,29 @@ schema.d.ts npm run api:types 로 생성. 직접 수정 금지
 
 ## 4. 화면 연동 현황
 
-**현재 실연동된 화면은 없다.** 36개 전부 `src/data/*`·`mockStudents.ts` 하드코딩 목업이고,
-`src/api/`·`src/auth/`는 만들어만 두고 아직 화면에 물리지 않았다.
+**실연동된 화면은 학원생 검색(F-4.1-1) 하나뿐이다.** 나머지 35개는 아직 목업이다.
+
+### 목록 화면을 새로 붙일 때
+
+`src/pages/screens/StudentSearch.tsx`를 본뜬다. 목록 화면에 필요한 게 전부 들어 있다.
+
+```tsx
+// 1. 검색조건 → 서버 파라미터.  ★ useMemo 필수 — 매 렌더 새 객체면 무한 요청이 된다
+const params = useMemo(() => ({ keyword: one(query.keyword), academyId }), [query, academyId])
+
+// 2. 호출·페이징·정렬·로딩·에러를 한 번에
+const table = useServerTable({ fetcher: searchStudents, params, sortable: SORTABLE })
+
+// 3. 표에 그대로 넘긴다
+<DataTable rows={table.rows} serverPaging={table.serverPaging} loading={table.loading} … />
+```
+
+직접 `useEffect`로 짜지 않는다. 취소 처리(느린 응답이 최신 결과를 덮어쓰는 것)와
+조건 변경 시 1페이지 복귀를 빠뜨리게 된다.
+
+**지점은 `useAcademy()`의 `academyId`를 파라미터로 넘긴다.** 안 넘기면 전 지점 권한 계정이
+400을 받아 화면이 빈 것처럼 보인다. 아직 못 고른 상태(`null`)면 `enabled: false`로 호출을 막는다.
+단 `/students`만은 `academyId`를 받지 않는다(3-1 참고).
 
 **API가 아예 없어 목업으로 두는 화면 6개** — 붙일 엔드포인트를 찾지 말 것:
 대기자 관리(F-4.2) · 신상기록부(F-4.11-9) · 실적 관리(F-4.10-6) ·
