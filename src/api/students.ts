@@ -88,6 +88,19 @@ export interface StudentSearchParams {
   /** 등원일 범위 (yyyy-MM-dd) */
   admittedFrom?: string
   admittedTo?: string
+  /**
+   * 미배정 조건. **축마다 따로다** — 미배정이 반·좌석·사물함 셋이라
+   * 하나로 묶으면 어느 축인지 못 가린다.
+   *
+   * ⚠️ `classId` 와 `unassignedClass` 처럼 모순되는 조합은 **400**
+   * (`CONFLICTING_SEARCH_CONDITION`)이다. 빈 목록으로 주면 조건을 잘못 짠 걸
+   * 모르고 넘어가므로 의도된 동작이다 — 화면에서 동시에 걸리지 않게 할 것.
+   */
+  unassignedClass?: boolean
+  unassignedSeat?: boolean
+  unassignedLocker?: boolean
+  hasScholarship?: boolean
+  scholarshipType?: string
   /** 0-based (Spring Data 규약 그대로) */
   page?: number
   size?: number
