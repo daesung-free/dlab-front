@@ -262,11 +262,23 @@
   .side { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--line); }
 }
 
-/* 지점 선택 — TopNav 우측. 전 지점 권한 계정만 보인다(지점이 하나면 숨김) */
-.branch-sel {
+/* 지점 선택 — TopNav 우측. 전 지점 권한 계정만 보인다(지점이 하나면 숨김)
+ *
+ * ★ 폼용 .sel 을 재사용하지 않는다. 그쪽은 width:100% 라 폼 그리드에서 칸을 채우는 용도인데,
+ *   flex 인 .who 안에 넣으면 눌려서 글자가 잘린다. 여기서만 쓰는 스타일로 따로 둔다. */
+.topnav .who .branch-sel {
+  width: auto;
   height: 30px;
-  min-width: 92px;
-  padding: 0 26px 0 10px;
+  padding: 0 30px 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font-family: inherit;
   font-size: 12px;
   font-weight: 600;
+}
+.topnav .who .branch-sel:focus {
+  outline: 2px solid var(--mint-wash);
+  border-color: var(--mint-b);
 }
