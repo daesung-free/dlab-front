@@ -44,7 +44,7 @@ export function TopNav() {
             안 고르면 400이라 화면이 비어 보인다. 지점이 하나뿐이면 고를 것이 없어 감춘다. */}
         {selectable && (
           <select
-            className="sel branch-sel"
+            className="branch-sel"
             value={academyId ?? ''}
             onChange={(e) => setAcademyId(Number(e.target.value))}
             aria-label="지점 선택"
