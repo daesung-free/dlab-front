@@ -1,42 +1,40 @@
-import { useMemo, useState } from 'react'
-import { DataTable, ExcelButton, MaskToggle, PrintButton, type Column } from '../../components/common'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { DataTable, ExcelButton, PrintButton, Unfilled, type Column } from '../../components/common'
 import { Icon } from '../../components/Icon'
 import { Tabs } from '../../components/Tabs'
-import { maskName } from '../../lib/mask'
-import { MOCK_STUDENTS } from './mockStudents'
+import { ApiError } from '../../api/client'
+import { useAcademy } from '../../auth/AcademyContext'
+import {
+  getSeatLayout,
+  listSeatAreas,
+  releaseSeatOfStudent,
+  setSeatUsable,
+  type SeatArea,
+  type SeatCell as ApiSeatCell,
+} from '../../api/facility'
 import type { Mockup } from './types'
 import './reading-room.css'
 
-/* 학원생 관리 > 출결/자습/독서실 > 독서실 좌석배치표
+/* 학원생 관리 > 출결/자습/독서실 > 독서실 좌석배치표 — /api/v1/admin/seats
  * ⭐ 클라이언트가 직접 추가·사용 표기한 신규 메뉴.
  *
- * 이 화면이 기존 배정 관리(F-4.10-3)와 다른 점:
- *   · 배정 관리 = "누구에게 어느 좌석을 줄 것인가" (명단 → 좌석)
+ * 이 화면이 배정 관리(F-4.10-3)와 다른 점:
+ *   · 배정 관리   = "누구에게 어느 좌석을 줄 것인가" (명단 → 좌석)
  *   · 좌석배치표 = "지금 이 실이 어떤 상태인가" (도면 → 사람)
  *   현장 확인은 명단이 아니라 도면으로 하기 때문에 화면을 나눈다.
  *
- * ⚠ 좌석 상태는 두 축이 겹친다 — 하나로 합치면 안 된다.
- *   · 배정 축 : 배정됨 / 미배정 / 사용중지
- *   · 재실 축 : 재실 / 미등원 / 이석(좌석 이탈 신청)
- *   색으로 배정+재실 조합을, 점으로 실시간 재실 여부를 표기한다.
+ * ★ 좌석 상태가 두 축인 것이 서버 응답에도 그대로 있다 — 합치면 안 된다.
+ *   · assignmentState : ASSIGNED / UNASSIGNED / DISABLED
+ *   · presence        : PRESENT / OUT / ABSENT / EMPTY
+ *   화면의 5색(재실·미등원·이석·공석·중지)은 이 둘의 조합이다(seatState).
  *
- * ⚠ BE 전제 — 재실 여부는 이 화면이 판단하지 않는다.
- *   출결(F-4.3) 등원 로그와 좌석 이탈/복귀(F-4.11-8) 신청을 합쳐 서버가 계산한 값을 받는다.
- *   화면에서 두 소스를 조합하면 새로고침마다 값이 흔들린다. */
-
-interface Room {
-  id: string
-  name: string
-  rows: number
-  cols: number
-  floor: string
-}
-
-const ROOMS: Room[] = [
-  { id: 'A', name: 'A실 (자연)', rows: 8, cols: 6, floor: '3층' },
-  { id: 'B', name: 'B실 (인문)', rows: 6, cols: 6, floor: '3층' },
-  { id: 'C', name: 'C실 (심화)', rows: 5, cols: 4, floor: '4층' },
-]
+ * ★ 재실 여부는 이 화면이 판단하지 않는다. 출결 등원 로그와 좌석 이탈/복귀 신청을
+ *   서버가 합쳐 presence 로 준다. 화면에서 두 소스를 조합하면 새로고침마다 값이 흔들린다.
+ *
+ * ★ 학생 이름이 **서버에서 이미 마스킹되어** 온다(`서*윤`). 원본을 받을 파라미터가 없어
+ *   마스킹 토글을 뒀던 자리를 안내로 바꿨다 — docs/API_GAPS.md 참고.
+ *
+ * ★ 서버가 안 주는 것: 고정반 · 이석 위치. 목업 컬럼은 남기고 <Unfilled/> 로 표시한다. */
 
 type SeatState = 'in' | 'out' | 'away' | 'free' | 'off'
 
@@ -48,76 +46,42 @@ const STATE_META: Record<SeatState, { label: string; short: string; color: strin
   off: { label: '사용중지', short: '중지', color: '#eceef1' },
 }
 
-interface Seat {
-  code: string
-  row: number
-  col: number
-  state: SeatState
-  studentNo?: string
-  name?: string
-  classNo?: string
-  /** 이석 중일 때 어디로 갔는지 — 좌석 이탈/복귀(F-4.11-8) 연동 */
-  awayTo?: string
+/** 배정 축 × 재실 축 → 화면의 5색 */
+function seatState(cell: ApiSeatCell): SeatState {
+  if (cell.assignmentState === 'DISABLED') return 'off'
+  if (cell.assignmentState !== 'ASSIGNED') return 'free'
+  if (cell.presence === 'PRESENT') return 'in'
+  if (cell.presence === 'OUT') return 'away'
+  return 'out'
 }
 
-const AWAY_PLACES = ['강의실', '화장실', '공용공간', '교과실']
-
-/** 결정적 배치 — 실 id + 좌석 인덱스로 항상 같은 도면이 나온다 */
-function buildSeats(room: Room): Seat[] {
-  const live = MOCK_STUDENTS.filter((s) => s.status === '재원')
-  const out: Seat[] = []
-  let assigned = 0
-
-  for (let r = 1; r <= room.rows; r++) {
-    for (let c = 1; c <= room.cols; c++) {
-      const idx = (r - 1) * room.cols + (c - 1)
-      const code = `${room.id}-${String(idx + 1).padStart(2, '0')}`
-      const seed = room.id.charCodeAt(0) + idx * 7
-
-      // 매 13번째 좌석은 설비 문제로 사용중지
-      if (idx % 13 === 12) {
-        out.push({ code, row: r, col: c, state: 'off' })
-        continue
-      }
-      // 매 5번째 좌석은 미배정 공석
-      if (idx % 5 === 4) {
-        out.push({ code, row: r, col: c, state: 'free' })
-        continue
-      }
-
-      const st = live[(assigned + room.id.charCodeAt(0)) % live.length]
-      assigned++
-      const state: SeatState = seed % 11 === 3 ? 'away' : seed % 7 === 2 ? 'out' : 'in'
-
-      out.push({
-        code,
-        row: r,
-        col: c,
-        state,
-        studentNo: st.studentNo,
-        name: st.name,
-        classNo: st.classNo,
-        awayTo: state === 'away' ? AWAY_PLACES[seed % AWAY_PLACES.length] : undefined,
-      })
-    }
-  }
-  return out
+interface Seat extends ApiSeatCell {
+  state: SeatState
+  row: number
+  col: number
 }
 
 interface AssignRow {
+  seatId: number
   code: string
   studentNo: string
   name: string
-  classNo: string
   state: string
-  awayTo: string
 }
 
 const ASSIGN_COLUMNS: Column<AssignRow>[] = [
   { key: 'code', header: '좌석', width: '86px', align: 'center', sortable: true, value: (r) => r.code },
   { key: 'studentNo', header: '학번', width: '104px', sortable: true, value: (r) => r.studentNo },
-  { key: 'name', header: '이름', width: '84px', mask: 'name', value: (r) => r.name },
-  { key: 'classNo', header: '고정반', width: '76px', align: 'center', sortable: true, value: (r) => r.classNo },
+  // 서버가 이미 마스킹해서 보내므로 mask 를 걸지 않는다(이중 마스킹 방지)
+  { key: 'name', header: '이름', width: '84px', value: (r) => r.name },
+  {
+    key: 'classNo',
+    header: '고정반',
+    width: '86px',
+    align: 'center',
+    value: () => '',
+    render: () => <Unfilled reason="좌석 응답에 고정반이 없다" />,
+  },
   {
     key: 'state',
     header: '현재 상태',
@@ -134,47 +98,131 @@ const ASSIGN_COLUMNS: Column<AssignRow>[] = [
   {
     key: 'awayTo',
     header: '이석 위치',
-    value: (r) => r.awayTo,
-    render: (r) => (r.awayTo === '-' ? <span style={{ color: 'var(--muted)' }}>-</span> : r.awayTo),
+    value: () => '',
+    render: () => <Unfilled reason="이석 위치가 좌석 응답에 없다 (좌석 이탈/복귀 연동 필요)" />,
   },
 ]
 
 function Content() {
+  const { academyId } = useAcademy()
   const [tab, setTab] = useState('map')
-  const [roomId, setRoomId] = useState('A')
-  const [selected, setSelected] = useState<string | null>(null)
-  const [masked, setMasked] = useState(true)
+  const [areas, setAreas] = useState<SeatArea[]>([])
+  const [areaId, setAreaId] = useState<number | null>(null)
+  const [cells, setCells] = useState<ApiSeatCell[]>([])
+  const [selectedSeatId, setSelectedSeatId] = useState<number | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
-  const room = ROOMS.find((r) => r.id === roomId)!
-  const seats = useMemo(() => buildSeats(room), [room])
+  // 구역 목록
+  useEffect(() => {
+    if (academyId === null) {
+      setLoading(false)
+      return
+    }
+    let cancelled = false
+    listSeatAreas(academyId)
+      .then((list) => {
+        if (cancelled) return
+        setAreas(list)
+        setAreaId((prev) => (list.some((a) => a.id === prev) ? prev : (list[0]?.id ?? null)))
+      })
+      .catch((err) => !cancelled && setError(err instanceof ApiError ? err.message : '좌석 구역을 불러오지 못했습니다.'))
+    return () => {
+      cancelled = true
+    }
+  }, [academyId])
+
+  const loadLayout = useCallback(async () => {
+    if (areaId === null) {
+      setCells([])
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    try {
+      setCells(await getSeatLayout(areaId))
+      setError(null)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '배치도를 불러오지 못했습니다.')
+      setCells([])
+    } finally {
+      setLoading(false)
+    }
+  }, [areaId])
+
+  useEffect(() => {
+    void loadLayout()
+  }, [loadLayout])
+
+  const seats = useMemo<Seat[]>(
+    () =>
+      cells.map((c) => ({
+        ...c,
+        state: seatState(c),
+        // 좌표가 없으면 한 줄로 늘어놓는다 — 도면이 깨지는 것보다 낫다
+        row: c.yPos ?? 1,
+        col: c.xPos ?? 1,
+      })),
+    [cells],
+  )
 
   const count = (s: SeatState) => seats.filter((x) => x.state === s).length
   const usable = seats.length - count('off')
   const assignedCount = count('in') + count('out') + count('away')
 
+  const maxRow = seats.reduce((a, s) => Math.max(a, s.row), 0)
+  const maxCol = seats.reduce((a, s) => Math.max(a, s.col), 0)
+  const half = Math.ceil(maxCol / 2)
+
   const rows = useMemo(
     () =>
-      Array.from({ length: room.rows }, (_, i) => seats.filter((s) => s.row === i + 1).sort((a, b) => a.col - b.col)),
-    [seats, room.rows],
+      Array.from({ length: maxRow }, (_, i) => seats.filter((s) => s.row === i + 1).sort((a, b) => a.col - b.col)),
+    [seats, maxRow],
   )
-  const half = Math.ceil(room.cols / 2)
 
   const assignRows: AssignRow[] = useMemo(
     () =>
       seats
-        .filter((s) => s.name)
+        .filter((s) => s.enrollmentId !== null)
         .map((s) => ({
-          code: s.code,
-          studentNo: s.studentNo!,
-          name: s.name!,
-          classNo: s.classNo!,
+          seatId: s.seatId,
+          code: s.seatCd,
+          studentNo: s.studentNo ?? '-',
+          name: s.studentName ?? '-',
           state: STATE_META[s.state].short,
-          awayTo: s.awayTo ?? '-',
         })),
     [seats],
   )
 
-  const sel = selected ? seats.find((s) => s.code === selected) : undefined
+  const sel = selectedSeatId === null ? undefined : seats.find((s) => s.seatId === selectedSeatId)
+  const area = areas.find((a) => a.id === areaId)
+
+  async function release() {
+    if (!sel?.enrollmentId) return
+    setBusy(true)
+    try {
+      await releaseSeatOfStudent(sel.enrollmentId)
+      await loadLayout()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '배정을 해제하지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function toggleUsable() {
+    if (!sel) return
+    setBusy(true)
+    try {
+      await setSeatUsable(sel.seatId, sel.state === 'off')
+      await loadLayout()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '좌석 상태를 바꾸지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <div className="p-rr">
@@ -184,9 +232,7 @@ function Content() {
             <Icon name="armchair" size={13} /> 총 좌석
           </div>
           <div className="v">{seats.length}</div>
-          <div className="d">
-            {room.name} · {room.floor}
-          </div>
+          <div className="d">{area?.areaNm ?? '구역 없음'}</div>
         </div>
         <div className="stat">
           <div className="l">
@@ -200,7 +246,7 @@ function Content() {
             <Icon name="circle-dot" size={13} /> 재실
           </div>
           <div className="v">{count('in')}</div>
-          <div className="d up">실시간 수신</div>
+          <div className="d up">서버 계산값</div>
         </div>
         <div className="stat">
           <div className="l">
@@ -225,6 +271,12 @@ function Content() {
         </div>
       </div>
 
+      {error && (
+        <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+          {error}
+        </div>
+      )}
+
       <Tabs
         items={[
           { key: 'map', label: '좌석배치표' },
@@ -243,43 +295,53 @@ function Content() {
                 <span className="ico">
                   <Icon name="layout-grid" size={15} />
                 </span>
-                {room.name} 배치도
+                {area?.areaNm ?? '독서실'} 배치도
               </div>
               <div className="r">
-                {ROOMS.map((r) => (
+                {areas.map((a) => (
                   <button
-                    key={r.id}
+                    key={a.id}
                     type="button"
-                    className={`chip${roomId === r.id ? ' on' : ''}`}
+                    className={`chip${areaId === a.id ? ' on' : ''}`}
                     onClick={() => {
-                      setRoomId(r.id)
-                      setSelected(null)
+                      setAreaId(a.id)
+                      setSelectedSeatId(null)
                     }}
                   >
-                    {r.name}
+                    {a.areaNm}
                   </button>
                 ))}
                 <PrintButton label="도면 인쇄" />
               </div>
             </div>
             <div className="card-sec-b">
-              <div className="rr-stage">
-                <div className="rr-front">관 리 자 데 스 크 · 출 입 구</div>
-                <div className="rr-map">
-                  {rows.map((rowSeats, ri) => (
-                    <div className="rr-row" key={ri}>
-                      <span className="rr-rowno">{ri + 1}</span>
-                      {rowSeats.slice(0, half).map((s) => (
-                        <SeatCell key={s.code} seat={s} masked={masked} selected={selected} onSelect={setSelected} />
-                      ))}
-                      <span className="rr-aisle" />
-                      {rowSeats.slice(half).map((s) => (
-                        <SeatCell key={s.code} seat={s} masked={masked} selected={selected} onSelect={setSelected} />
-                      ))}
-                    </div>
-                  ))}
+              {seats.length === 0 ? (
+                <div className="dt-empty">
+                  {loading
+                    ? '불러오는 중…'
+                    : academyId === null
+                      ? '지점을 먼저 선택하세요.'
+                      : '좌석 구역이 없습니다.'}
                 </div>
-              </div>
+              ) : (
+                <div className="rr-stage">
+                  <div className="rr-front">관 리 자 데 스 크 · 출 입 구</div>
+                  <div className="rr-map">
+                    {rows.map((rowSeats, ri) => (
+                      <div className="rr-row" key={ri}>
+                        <span className="rr-rowno">{ri + 1}</span>
+                        {rowSeats.slice(0, half).map((s) => (
+                          <SeatBox key={s.seatId} seat={s} selected={selectedSeatId} onSelect={setSelectedSeatId} />
+                        ))}
+                        <span className="rr-aisle" />
+                        {rowSeats.slice(half).map((s) => (
+                          <SeatBox key={s.seatId} seat={s} selected={selectedSeatId} onSelect={setSelectedSeatId} />
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="rr-legend">
                 {(['in', 'out', 'away', 'free', 'off'] as SeatState[]).map((s) => (
@@ -291,7 +353,7 @@ function Content() {
                   <span
                     style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green)', display: 'inline-block' }}
                   />
-                  실시간 재실
+                  재실
                 </span>
               </div>
             </div>
@@ -306,14 +368,14 @@ function Content() {
                 좌석 상세
               </div>
               <div className="r">
-                <MaskToggle masked={masked} onChange={setMasked} />
+                <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>이름은 서버에서 마스킹됩니다</span>
               </div>
             </div>
             <div className="card-sec-b">
               {!sel && (
                 <div className="mock-stub" style={{ padding: '34px 20px' }}>
                   <div className="t">좌석을 선택하세요</div>
-                  <div className="x">배치도에서 좌석을 누르면 배정 학생·재실 상태·이석 위치를 확인하고 바로 변경할 수 있습니다.</div>
+                  <div className="x">배치도에서 좌석을 누르면 배정 학생·재실 상태를 확인하고 해제할 수 있습니다.</div>
                 </div>
               )}
               {sel && (
@@ -322,7 +384,7 @@ function Content() {
                     <div className="row">
                       <span className="k">좌석번호</span>
                       <span className="v">
-                        <b>{sel.code}</b> · {sel.row}행 {sel.col}열
+                        <b>{sel.seatCd}</b> · {sel.row}행 {sel.col}열
                       </span>
                     </div>
                     <div className="row">
@@ -338,28 +400,36 @@ function Content() {
                     <div className="row">
                       <span className="k">배정 학생</span>
                       <span className="v">
-                        {sel.name ? `${masked ? maskName(sel.name) : sel.name} (${sel.studentNo})` : '미배정'}
+                        {sel.studentName ? `${sel.studentName} (${sel.studentNo ?? '-'})` : '미배정'}
                       </span>
                     </div>
                     <div className="row">
                       <span className="k">고정반</span>
-                      <span className="v">{sel.classNo ?? '-'}</span>
+                      <span className="v">
+                        <Unfilled reason="좌석 응답에 고정반이 없다" />
+                      </span>
                     </div>
                     <div className="row">
                       <span className="k">이석 위치</span>
-                      <span className="v">{sel.awayTo ?? '-'}</span>
+                      <span className="v">
+                        <Unfilled reason="이석 위치가 좌석 응답에 없다" />
+                      </span>
                     </div>
                   </div>
 
                   <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
-                    <button className="btn pri">
+                    <button className="btn pri" disabled title="배정은 배정 관리(F-4.10-3) 화면에서 합니다">
                       <Icon name="user-plus" size={14} /> 배정 변경
                     </button>
-                    <button className="btn">
+                    <button
+                      className="btn"
+                      disabled={sel.enrollmentId === null || busy}
+                      onClick={() => void release()}
+                    >
                       <Icon name="user-x" size={14} /> 배정 해제
                     </button>
-                    <button className="btn">
-                      <Icon name="shield-off" size={14} /> 사용중지
+                    <button className="btn" disabled={busy} onClick={() => void toggleUsable()}>
+                      <Icon name="shield-off" size={14} /> {sel.state === 'off' ? '사용 재개' : '사용중지'}
                     </button>
                   </div>
                 </>
@@ -373,22 +443,27 @@ function Content() {
         <DataTable
           columns={ASSIGN_COLUMNS}
           rows={assignRows}
-          rowKey={(r) => r.code}
-          selectable
-          masked={masked}
+          rowKey={(r) => String(r.seatId)}
+          masked={false}
+          loading={loading}
           pageSize={15}
           countLabel={
             <>
-              {room.name} 배정 <b>{assignRows.length}</b>명
+              {area?.areaNm ?? '독서실'} 배정 <b>{assignRows.length}</b>명
             </>
           }
+          emptyText="배정된 좌석이 없습니다."
           toolbar={
             <>
-              <button className="btn">
+              <button className="btn" disabled title="좌석 재배치 API가 아직 없습니다">
                 <Icon name="refresh-cw" size={14} /> 좌석 재배치
               </button>
-              <MaskToggle masked={masked} onChange={setMasked} />
-              <ExcelButton filename={`독서실_${room.id}실_배정`} columns={ASSIGN_COLUMNS} rows={assignRows} masked={masked} />
+              <ExcelButton
+                filename={`독서실_${area?.areaNm ?? ''}_배정`}
+                columns={ASSIGN_COLUMNS}
+                rows={assignRows}
+                masked={false}
+              />
             </>
           }
         />
@@ -397,50 +472,30 @@ function Content() {
   )
 }
 
-function SeatCell({
+function SeatBox({
   seat,
-  masked,
   selected,
   onSelect,
 }: {
   seat: Seat
-  masked: boolean
-  selected: string | null
-  onSelect: (code: string) => void
+  selected: number | null
+  onSelect: (id: number) => void
 }) {
-  const name = seat.name ? (masked ? maskName(seat.name) : seat.name) : '공석'
+  const name = seat.state === 'off' ? '사용중지' : (seat.studentName ?? '공석')
   return (
     <button
       type="button"
-      className={`rr-seat st-${seat.state}${selected === seat.code ? ' sel' : ''}`}
-      onClick={() => seat.state !== 'off' && onSelect(seat.code)}
-      title={`${seat.code} · ${STATE_META[seat.state].label}${seat.name ? ` · ${seat.name}` : ''}${seat.awayTo ? ` → ${seat.awayTo}` : ''}`}
+      className={`rr-seat st-${seat.state}${selected === seat.seatId ? ' sel' : ''}`}
+      onClick={() => onSelect(seat.seatId)}
+      title={`${seat.seatCd} · ${STATE_META[seat.state].label}${seat.studentName ? ` · ${seat.studentName}` : ''}`}
     >
       {seat.state === 'in' && <span className="live" />}
-      <span className="sc">{seat.code}</span>
-      <span className="sn">{seat.state === 'off' ? '사용중지' : name}</span>
-      {seat.awayTo && (
-        <span className="sx" style={{ color: 'var(--violet)' }}>
-          → {seat.awayTo}
-        </span>
-      )}
-      {seat.state === 'out' && (
-        <span className="sx" style={{ color: 'var(--amber)' }}>
-          미등원
-        </span>
-      )}
+      <span className="sc">{seat.seatCd}</span>
+      <span className="sn">{name}</span>
     </button>
   )
 }
 
 export const readingRoomMockup: Mockup = {
   Content,
-  actions: (
-    <>
-      <button className="btn">2026-05-28 ▾</button>
-      <button className="btn">
-        <Icon name="user-x" size={14} /> 미등원자 조회
-      </button>
-    </>
-  ),
 }
