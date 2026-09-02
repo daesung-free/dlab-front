@@ -40,18 +40,31 @@ export interface SeatArea {
   seatCount: number
 }
 
+/**
+ * 좌석 상태는 **두 축이 겹친다.** 하나로 합치면 안 된다.
+ *   · 배정 축(assignmentState) : 배정됨 / 미배정 / 사용중지
+ *   · 재실 축(presence)        : 재실 / 이석 / 미등원 / 빈자리
+ * 화면은 둘을 조합해 색을 정한다(ReadingRoom 의 seatState).
+ */
+export type AssignmentState = 'ASSIGNED' | 'UNASSIGNED' | 'DISABLED'
+export type Presence = 'PRESENT' | 'OUT' | 'ABSENT' | 'EMPTY'
+
 export interface SeatCell {
   seatId: number
   seatCd: string
   seatNm: string | null
-  /** 배치도 좌표. 사물함과 달리 좌석은 도면 위치를 서버가 갖고 있다 */
+  /** 배치도 좌표(1-based). 사물함과 달리 좌석은 도면 위치를 서버가 갖고 있다 */
   xPos: number | null
   yPos: number | null
-  assignmentState: string | null
+  assignmentState: AssignmentState | null
   /** 지금 앉아 있는지 — 배정과 별개다(배정된 자리라도 자리를 비울 수 있다) */
-  presence: string | null
+  presence: Presence | null
   enrollmentId: number | null
   studentNo: string | null
+  /**
+   * ⚠️ **서버가 마스킹해서 보낸다**(`서*윤`). 원본을 받을 파라미터가 없어
+   * 이 화면에서는 마스킹 토글이 의미가 없다 — docs/API_GAPS.md 참고.
+   */
   studentName: string | null
 }
 
@@ -70,4 +83,9 @@ export function assignSeat(seatId: number, enrollmentId: number): Promise<void> 
 /** 좌석 해제는 좌석이 아니라 **학생** 기준이다 — 한 학생이 좌석 하나를 갖는 구조라서다 */
 export function releaseSeatOfStudent(enrollmentId: number): Promise<void> {
   return request<void>(`/api/v1/admin/seats/students/${enrollmentId}`, { method: 'DELETE' })
+}
+
+/** 좌석 사용중지/해제. 설비 문제로 못 쓰는 자리를 도면에서 빼는 용도 */
+export function setSeatUsable(seatId: number, usable: boolean): Promise<void> {
+  return request<void>(`/api/v1/admin/seats/${seatId}/usable`, { method: 'PATCH', query: { usable } })
 }
