@@ -16,3 +16,6 @@ export { DateRange } from './DateRange'
 export type { DateRangeValue } from './DateRange'
 
 export { ExcelButton, CopyButton, PrintButton, MaskToggle } from './ExcelButton'
+
+/* 아직 API가 값을 주지 않는 셀. 컬럼을 지우는 대신 이걸 쓴다 */
+export { Unfilled } from './Unfilled'
