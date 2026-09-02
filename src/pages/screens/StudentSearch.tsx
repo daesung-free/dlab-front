@@ -6,6 +6,7 @@ import {
   MaskToggle,
   PrintButton,
   SearchForm,
+  Unfilled,
   useServerTable,
   type Column,
   type DateRangeValue,
@@ -36,8 +37,8 @@ import type { Mockup } from './types'
  *   TopNav 에서 지점을 골라도 이 목록은 안 좁혀진다 — docs/API_GAPS.md 에 적어둔 미해결 건이다.
  *   다른 화면(출결·상벌점 등)은 useAcademy()의 academyId 를 파라미터로 넘겨야 한다.
  *
- * ★ 재수 구분(재수/삼수/N수) 컬럼은 아직 없다. 서버 grade 가 N_SU 까지라 N수 안에서
- *   갈리지 않는다 — 모델 결정 사항이라 목업에 있던 컬럼을 임시로 뺐다(API_GAPS 2-2). */
+ * ★ 서버가 안 주는 컬럼은 지우지 않고 <Unfilled/> 로 둔다(CLAUDE.md 1).
+ *   재수 구분이 그렇다 — grade 가 N_SU 까지라 N수 안에서 재수/삼수가 안 갈린다(API_GAPS 2-2). */
 
 const PAGE_SIZE = 20
 
@@ -80,6 +81,14 @@ const COLUMNS: Column<Student>[] = [
   { key: 'academyName', header: '지점', width: '64px', align: 'center', value: (r) => r.academyName ?? '-' },
   { key: 'grade', header: '학년', width: '64px', align: 'center', sortable: sortableKey('grade'), value: (r) => GRADE_LABEL[r.grade] ?? r.grade },
   { key: 'track', header: '계열', width: '64px', align: 'center', sortable: sortableKey('track'), value: (r) => (r.track ? TRACK_LABEL[r.track] : '-') },
+  {
+    key: 'repeat',
+    header: '재수',
+    width: '64px',
+    align: 'center',
+    value: () => '',
+    render: (r) => <Unfilled reason={`재수 구분이 없다 (현재 학년: ${GRADE_LABEL[r.grade] ?? r.grade})`} />,
+  },
   { key: 'className', header: '반', width: '58px', align: 'center', value: (r) => r.className ?? '-' },
   { key: 'seatCd', header: '좌석', width: '68px', align: 'center', value: (r) => r.seatCd ?? '-' },
   { key: 'schoolName', header: '출신학교', width: '90px', value: (r) => r.schoolName ?? '-' },
