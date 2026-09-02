@@ -13,7 +13,7 @@
 | 0. 공통 뼈대 | 1 | ✅ 완료 (PR #1) |
 | A. 학생 명부 | 3 | ✅ 완료 |
 | B. 일별 운영 | 3 | ⬜ |
-| C. 학습·상담 | 4 | ⬜ |
+| C. 학습·상담 | 4 | 🔶 2/4 (상담·루틴 완료) |
 | D. 수납·급식 | 3 | ⬜ |
 | E. 설정·마스터 | 4 | ⬜ |
 | F. 나머지 | 12 | ⬜ |
@@ -60,12 +60,12 @@
 - [ ] F-4.1-5 사유 신청 — `GET /absence-requests` · 컬럼 전부 대응 확인됨
 - [ ] F-4.1-2 상벌점 — `GET /penalties`, `/penalties/items` · `className` 없음
 
-## 묶음 C — 학습·상담 · 담당: (미정)
+## 묶음 C — 학습·상담 · 담당: 지유림
 
-- [ ] F-4.11-4 상담 — `GET /consults`, `/consults/status`, `/consults/slots`
-- [ ] F-4.11-2 주·일 학습 계획 — `GET /learning-plans` (목록 API 신설됨)
-- [ ] F-4.11-1 데일리 루틴 — `GET /routines/{id}/results` · 반·이행률 없음
-- [ ] F-C-4 독서실 좌석배치 — `GET /seats/layout` · 고정반·이석 위치 없음
+- [x] F-4.11-4 상담 — `/consults/status`(좌측 목록) + `/consults/students/{id}`(이력) + `POST /consults`(작성)
+- [x] F-4.11-1 데일리 루틴 — `/routines` + `/routines/{id}/results`. 루틴 수만큼 호출해 매트릭스로 조립
+- [ ] F-4.11-2 주·일 학습 계획 — `GET /learning-plans` · **다음 PR** (1000줄 화면이라 따로 뗀다)
+- [ ] F-C-4 독서실 좌석배치 — ⛔ **막힘.** 좌석 구역 데이터가 없고 만들 API도 없다(API_GAPS 4-5)
 
 ## 묶음 D — 수납·급식 · 담당: (미정)
 
