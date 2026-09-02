@@ -6,99 +6,103 @@ import {
   MaskToggle,
   PrintButton,
   SearchForm,
+  useServerTable,
   type Column,
   type DateRangeValue,
   type Field,
   type SearchValues,
 } from '../../components/common'
 import { Icon } from '../../components/Icon'
-import { MOCK_STUDENTS, type MockStudent } from './mockStudents'
+import {
+  GRADE_LABEL,
+  SORTABLE,
+  STATUS_LABEL,
+  TRACK_LABEL,
+  searchStudents,
+  type EnrollmentStatus,
+  type GradeType,
+  type Student,
+  type TrackType,
+} from '../../api/students'
 import type { Mockup } from './types'
 
-/* F-4.1-1 학원생 검색·조회
- * DSA 실사에서 확인된 12개 조건 검색필터를 SearchForm으로 재현하고,
- * 화면에 없어 '신규 요구사항'으로 분류된 정렬·검색조건 저장을 얹었다. */
+/* F-4.1-1 학원생 검색·조회 — GET /api/v1/admin/students
+ *
+ * ★ 다른 화면을 붙일 때 이 파일을 본뜬다. 목록 화면이 필요로 하는 것이 전부 들어 있다:
+ *   검색조건 → 서버 파라미터 변환 → useServerTable → DataTable(서버 페이징·정렬) → 마스킹.
+ *
+ * ★ 이 화면만 지점 선택을 쓰지 않는다. /students 는 academyId 를 받지 않고,
+ *   전 지점 권한 계정에는 전 지점이 한 번에 온다(응답의 academyName 으로 구분).
+ *   TopNav 에서 지점을 골라도 이 목록은 안 좁혀진다 — docs/API_GAPS.md 에 적어둔 미해결 건이다.
+ *   다른 화면(출결·상벌점 등)은 useAcademy()의 academyId 를 파라미터로 넘겨야 한다.
+ *
+ * ★ 재수 구분(재수/삼수/N수) 컬럼은 아직 없다. 서버 grade 가 N_SU 까지라 N수 안에서
+ *   갈리지 않는다 — 모델 결정 사항이라 목업에 있던 컬럼을 임시로 뺐다(API_GAPS 2-2). */
+
+const PAGE_SIZE = 20
 
 const FIELDS: Field[] = [
-  { type: 'text', name: 'keyword', label: '통합검색 (이름 · 학번 · 전화)', placeholder: '예: 이승민 / 2026-0001 / 5678', span: 2 },
-  { type: 'select', name: 'branch', label: '지점', options: [
-    { value: '분당', label: '분당' },
-    { value: '대치', label: '대치' },
-    { value: '평촌', label: '평촌' },
-  ] },
+  { type: 'text', name: 'keyword', label: '통합검색 (이름 · 학번 · 전화)', placeholder: '예: 임민주 / 2026-0001 / 8760', span: 2 },
   { type: 'select', name: 'year', label: '연도', options: [
     { value: '2026', label: '2026' },
     { value: '2025', label: '2025' },
   ] },
-  { type: 'chips', name: 'track', label: '계열', options: ['자연', '인문'] },
-  { type: 'chips', name: 'repeat', label: '재수 구분', options: ['재수', '삼수', 'N수'], multiple: true },
-  { type: 'select', name: 'classNo', label: '반', options: ['1반', '2반', '3반', '4반'].map((v) => ({ value: v, label: v })) },
-  { type: 'select', name: 'teacher', label: '담임', options: ['이장원', '김유진', '최지원', '박서영', '정하람'].map((v) => ({ value: v, label: v })) },
-  { type: 'select', name: 'school', label: '출신학교', options: ['태원고', '송림고', '유신고', '분당고', '보평고', '낙생고', '한솔고', '이매고'].map((v) => ({ value: v, label: v })) },
-  { type: 'chips', name: 'status', label: '상태', options: ['재원', '휴원', '퇴원'], multiple: true },
-  { type: 'dateRange', name: 'enrolled', label: '등원일', presets: true, span: 2 },
+  { type: 'select', name: 'grade', label: '학년', options: (['HIGH2', 'HIGH3', 'N_SU'] as GradeType[]).map((v) => ({ value: v, label: GRADE_LABEL[v] })) },
+  // chips 는 options 가 string[] 이라 표시 라벨과 서버 enum 코드를 함께 실을 수 없다 → select
+  { type: 'select', name: 'track', label: '계열', options: (['SCIENCE', 'HUMANITIES', 'ART', 'COMMON'] as TrackType[]).map((v) => ({ value: v, label: TRACK_LABEL[v] })) },
+  { type: 'select', name: 'status', label: '상태', options: (['ENROLLED', 'LEAVE', 'WITHDRAWN', 'EXPELLED', 'GRADUATED'] as EnrollmentStatus[]).map((v) => ({ value: v, label: STATUS_LABEL[v] })) },
+  { type: 'text', name: 'schoolName', label: '출신학교', placeholder: '예: 분당고' },
+  { type: 'dateRange', name: 'admitted', label: '등원일', presets: true, span: 2 },
 ]
 
-const STATUS_TONE: Record<MockStudent['status'], string> = {
-  재원: 'verified',
-  휴원: 'supplement',
-  퇴원: 'brandnew',
+const STATUS_TONE: Record<EnrollmentStatus, string> = {
+  ENROLLED: 'verified',
+  LEAVE: 'supplement',
+  WITHDRAWN: 'brandnew',
+  EXPELLED: 'brandnew',
+  GRADUATED: 'verified',
 }
 
-const COLUMNS: Column<MockStudent>[] = [
-  { key: 'studentNo', header: '학번', width: '104px', sortable: true, value: (r) => r.studentNo },
+/** 정렬 가능 표시는 서버가 받아주는 키(SORTABLE)에만 붙인다 — 그 밖은 조용히 무시된다 */
+const sortableKey = (key: string): boolean => (SORTABLE as readonly string[]).includes(key)
+
+const COLUMNS: Column<Student>[] = [
+  { key: 'studentNo', header: '학번', width: '104px', sortable: sortableKey('studentNo'), value: (r) => r.studentNo ?? '-' },
   {
     key: 'name',
     header: '이름',
     width: '92px',
-    sortable: true,
+    sortable: sortableKey('name'),
     mask: 'name',
     value: (r) => r.name,
     render: (_r, shown) => <b style={{ fontWeight: 700 }}>{shown}</b>,
   },
-  { key: 'branch', header: '지점', width: '64px', align: 'center', sortable: true, value: (r) => r.branch },
-  { key: 'track', header: '계열', width: '64px', align: 'center', value: (r) => r.track },
-  { key: 'repeat', header: '재수', width: '64px', align: 'center', value: (r) => r.repeat },
-  { key: 'classNo', header: '반', width: '58px', align: 'center', sortable: true, value: (r) => r.classNo },
-  { key: 'seat', header: '좌석', width: '68px', align: 'center', value: (r) => r.seat },
-  { key: 'school', header: '출신학교', width: '90px', value: (r) => r.school },
-  { key: 'teacher', header: '담임', width: '72px', value: (r) => r.teacher },
-  { key: 'phone', header: '전화번호', width: '128px', mask: 'phone', value: (r) => r.phone },
-  { key: 'birth', header: '생년월일', width: '104px', mask: 'birth', sortable: true, value: (r) => r.birth },
-  { key: 'enrolledAt', header: '등원일', width: '100px', sortable: true, value: (r) => r.enrolledAt },
+  { key: 'academyName', header: '지점', width: '64px', align: 'center', value: (r) => r.academyName ?? '-' },
+  { key: 'grade', header: '학년', width: '64px', align: 'center', sortable: sortableKey('grade'), value: (r) => GRADE_LABEL[r.grade] ?? r.grade },
+  { key: 'track', header: '계열', width: '64px', align: 'center', sortable: sortableKey('track'), value: (r) => (r.track ? TRACK_LABEL[r.track] : '-') },
+  { key: 'className', header: '반', width: '58px', align: 'center', value: (r) => r.className ?? '-' },
+  { key: 'seatCd', header: '좌석', width: '68px', align: 'center', value: (r) => r.seatCd ?? '-' },
+  { key: 'schoolName', header: '출신학교', width: '90px', value: (r) => r.schoolName ?? '-' },
+  { key: 'homeroomTeacher', header: '담임', width: '72px', value: (r) => r.homeroomTeacher ?? '-' },
+  { key: 'phone', header: '전화번호', width: '128px', mask: 'phone', value: (r) => r.phone ?? '-' },
+  { key: 'birthDate', header: '생년월일', width: '104px', mask: 'birth', value: (r) => r.birthDate ?? '-' },
+  { key: 'admissionDate', header: '등원일', width: '100px', sortable: sortableKey('admissionDate'), value: (r) => r.admissionDate ?? '-' },
   {
-    key: 'status',
+    key: 'enrollmentStatus',
     header: '상태',
     width: '72px',
     align: 'center',
-    value: (r) => r.status,
-    render: (r) => <span className={`mk ${STATUS_TONE[r.status]}`}>{r.status}</span>,
+    sortable: sortableKey('enrollmentStatus'),
+    value: (r) => STATUS_LABEL[r.enrollmentStatus] ?? r.enrollmentStatus,
+    render: (r, shown) => <span className={`mk ${STATUS_TONE[r.enrollmentStatus] ?? ''}`}>{shown}</span>,
   },
 ]
 
-function matches(s: MockStudent, q: SearchValues): boolean {
-  const kw = String(q.keyword ?? '').trim()
-  if (kw && !`${s.name}${s.studentNo}${s.phone}`.includes(kw)) return false
-
-  for (const key of ['branch', 'classNo', 'teacher', 'school'] as const) {
-    const v = q[key]
-    if (typeof v === 'string' && v && s[key] !== v) return false
-  }
-
-  const track = q.track
-  if (typeof track === 'string' && track && s.track !== track) return false
-
-  const repeat = q.repeat
-  if (Array.isArray(repeat) && repeat.length > 0 && !repeat.includes(s.repeat)) return false
-
-  const status = q.status
-  if (Array.isArray(status) && status.length > 0 && !status.includes(s.status)) return false
-
-  const enrolled = q.enrolled as DateRangeValue | undefined
-  if (enrolled?.from && s.enrolledAt < enrolled.from) return false
-  if (enrolled?.to && s.enrolledAt > enrolled.to) return false
-
-  return true
+/** SearchForm 값(문자열·배열·기간 혼재)에서 단일 문자열만 꺼낸다. 빈 값은 client 가 뺀다 */
+function one(v: unknown): string | undefined {
+  if (Array.isArray(v)) return v.length > 0 ? String(v[0]) : undefined
+  if (typeof v === 'string' && v !== '') return v
+  return undefined
 }
 
 function Content() {
@@ -106,26 +110,55 @@ function Content() {
   const [selected, setSelected] = useState<string[]>([])
   const [masked, setMasked] = useState(true)
 
-  const rows = useMemo(() => MOCK_STUDENTS.filter((s) => matches(s, query)), [query])
+  // ★ useMemo 필수 — 매 렌더 새 객체를 넘기면 useServerTable 이 무한 요청한다
+  const params = useMemo(() => {
+    const admitted = query.admitted as DateRangeValue | undefined
+    const year = one(query.year)
+    return {
+      keyword: one(query.keyword),
+      year: year ? Number(year) : undefined,
+      grade: one(query.grade) as GradeType | undefined,
+      track: one(query.track) as TrackType | undefined,
+      status: one(query.status) as EnrollmentStatus | undefined,
+      schoolName: one(query.schoolName),
+      admittedFrom: admitted?.from || undefined,
+      admittedTo: admitted?.to || undefined,
+    }
+  }, [query])
+
+  const table = useServerTable({
+    fetcher: searchStudents,
+    params,
+    pageSize: PAGE_SIZE,
+    sortable: SORTABLE,
+  })
+
+  // 서버가 이미 가려서 보낸 경우(masked=true) 프론트에서 또 가리지 않는다 — 이중 마스킹이 된다.
+  // 서버 마스킹은 권한에 따라 결정되므로 사용자가 토글로 풀 수 없다.
+  const serverMasked = table.rows.some((r) => r.masked)
+  const effectiveMasked = serverMasked ? false : masked
 
   return (
     <>
       <SearchForm fields={FIELDS} onSearch={setQuery} presetKey="student-search" />
 
+      {table.error && (
+        <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+          {table.error}
+        </div>
+      )}
+
       <DataTable
         columns={COLUMNS}
-        rows={rows}
-        rowKey={(r) => r.id}
+        rows={table.rows}
+        rowKey={(r) => String(r.enrollmentId)}
         selectable
         selected={selected}
         onSelectedChange={setSelected}
-        masked={masked}
-        pageSize={15}
-        countLabel={
-          <>
-            검색결과 <b>{rows.length}</b>건 / 전체 {MOCK_STUDENTS.length}건
-          </>
-        }
+        masked={effectiveMasked}
+        loading={table.loading}
+        serverPaging={table.serverPaging}
+        countLabel={<>검색결과 <b>{table.totalElements}</b>건</>}
         toolbar={
           <>
             {selected.length > 0 && (
@@ -133,9 +166,17 @@ function Content() {
                 <Icon name="users" size={14} /> 선택 {selected.length}건 반 배정
               </button>
             )}
-            <MaskToggle masked={masked} onChange={setMasked} />
-            <CopyButton columns={COLUMNS} rows={rows} masked={masked} />
-            <ExcelButton filename="재원생_명부" columns={COLUMNS} rows={rows} masked={masked} />
+            {serverMasked ? (
+              <span className="dt-count" style={{ color: 'var(--muted)' }}>
+                권한상 마스킹됨
+              </span>
+            ) : (
+              <MaskToggle masked={masked} onChange={setMasked} />
+            )}
+            {/* ⚠️ 아래 내보내기는 현재 페이지(20건)만 담는다.
+                전체는 GET /api/v1/admin/students/export 로 바꿔야 한다 */}
+            <CopyButton columns={COLUMNS} rows={table.rows} masked={effectiveMasked} />
+            <ExcelButton filename="재원생_명부" columns={COLUMNS} rows={table.rows} masked={effectiveMasked} />
             <PrintButton />
           </>
         }
