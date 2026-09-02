@@ -13,7 +13,7 @@
 | 0. 공통 뼈대 | 1 | ✅ 완료 (PR #1) |
 | A. 학생 명부 | 3 | ✅ 완료 |
 | B. 일별 운영 | 3 | ⬜ |
-| C. 학습·상담 | 4 | 🔶 3/4 (학습 계획만 남음) |
+| C. 학습·상담 | 4 | ✅ 완료 |
 | D. 수납·급식 | 3 | ⬜ |
 | E. 설정·마스터 | 4 | ⬜ |
 | F. 나머지 | 12 | ⬜ |
@@ -64,7 +64,7 @@
 
 - [x] F-4.11-4 상담 — `/consults/status`(좌측 목록) + `/consults/students/{id}`(이력) + `POST /consults`(작성)
 - [x] F-4.11-1 데일리 루틴 — `/routines` + `/routines/{id}/results`. 루틴 수만큼 호출해 매트릭스로 조립
-- [ ] F-4.11-2 주·일 학습 계획 — `GET /learning-plans` · **다음 PR** (1000줄 화면이라 따로 뗀다)
+- [x] F-4.11-2 주·일 학습 계획 — `/learning-plans`(현황) + `/students/{id}/weeks`(주간) + `/options`(마스터)
 - [x] F-C-4 독서실 좌석배치 — `/seats/areas` + `/seats/layout`. 시드에 좌석이 들어와 풀렸다
 
 ## 묶음 D — 수납·급식 · 담당: (미정)
