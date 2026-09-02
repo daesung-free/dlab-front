@@ -20,9 +20,9 @@ function Content() {
         <div>
           <div className="tt">학번 자동 채번 — 저장 시 확정</div>
           <div className="tx">
-            채번 규칙은 <code>year + %04d(nextSeq)</code>이며 <b>매년 초기화</b>됩니다. 다음 학번은{' '}
-            <b>{nextStudentNo}</b>입니다. 제약은 <code>UNIQUE(year, student_no)</code>이고{' '}
-            <b>학번을 PK로 사용하지 않습니다</b> — 연도 전환 시 같은 번호가 다시 나오기 때문입니다.
+            학번은 <b>저장할 때 자동으로</b> 매겨집니다. 다음 학번은 <b>{nextStudentNo}</b>이며,
+            연도가 바뀌면 번호가 다시 1번부터 시작합니다. 저장 전에는 확정되지 않으므로,
+            같은 학생을 두 번 등록하지 않도록 주의하세요.
           </div>
         </div>
       </div>

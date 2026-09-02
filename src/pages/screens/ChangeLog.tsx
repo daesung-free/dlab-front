@@ -218,11 +218,11 @@ function Content() {
           <Icon name="shield" size={17} />
         </div>
         <div>
-          <div className="tt">변경이력은 화면별로 쌓는 것이 아니라 공통 규약으로 적재합니다</div>
+          <div className="tt">모든 화면의 수정이 자동으로 기록됩니다</div>
           <div className="tx">
-            모든 도메인의 UPDATE / DELETE 를 <b>JPA EntityListener · AOP</b> 에서 가로채
-            <code>audit_logs</code> 에 <b>변경 전/후 JSON 스냅샷</b>으로 남깁니다. 화면마다 수기로 적재하면 반드시
-            누락되므로, 이 화면은 <b>적재 규약이 먼저 확정된 뒤</b> 연동합니다.
+            학생 정보·출결·수납 등 <b>어느 화면에서 무엇을 고쳤든</b> 변경 전후 값이 함께 남습니다.
+            담당자가 따로 기록할 필요는 없습니다. 다만 <b>기록 방식이 확정된 뒤에 열리는 화면</b>이라
+            지금은 표시만 준비돼 있습니다.
           </div>
         </div>
       </div>
