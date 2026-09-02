@@ -15,34 +15,36 @@ API 스펙: http://localhost:8080/swagger-ui.html
 
 ## 2. 데이터 넣기 (최초 1회)
 
-Flyway는 스키마만 만든다. **데이터는 하나도 없다** — 계정이 없어 로그인부터 막힌다.
+Flyway는 스키마만 만든다. **데이터는 하나도 없어서 계정이 없고, 로그인부터 막힌다.**
+백엔드 레포의 스크립트가 지점·교시·지점별 단가·계정·학생을 순서대로 넣어준다.
 
 ```bash
-# 지점·교시·지점별 단가 (dlab-api가 들고 있는 시드)
-#   ⚠️ local 프로필의 flyway locations는 db/migration 뿐이라 db/seed 는 자동 적용되지 않는다
 cd ../dlab-api
-for f in src/main/resources/db/seed/*.sql; do
-  docker exec -i dlab-postgres-local psql -U dlab -d dlab_local -v ON_ERROR_STOP=1 < "$f"
-done
-
-# 관리자 계정 + 샘플 학생 60명 (이 레포)
-cd ../dlab-front
-docker exec -i dlab-postgres-local psql -U dlab -d dlab_local -v ON_ERROR_STOP=1 < scripts/dev-seed.sql
+./scripts/seed-local.sh
 ```
 
-`scripts/dev-seed.sql`은 몇 번 돌려도 안전하다(이미 있으면 건너뛴다).
+- **앱을 한 번 띄운 뒤에 실행한다** — 테이블이 있어야 들어간다.
+- 여러 번 돌려도 된다(전부 멱등).
+- 호스트에 `psql`이 없으면 docker 컨테이너의 psql을 알아서 쓴다.
 
-| 항목 | 값 |
-|---|---|
 | 계정 1 | `admin` / `dlab1234!` — `SUPER_ADMIN` (전 지점) |
+|---|---|
 | 계정 2 | `branch` / `dlab1234!` — `BRANCH_ADMIN` (분당) |
 | 샘플 학생 | 60명 / 2026년 / 분당·이매·목동 20명씩 |
 
-> 계정이 둘인 이유: 출결·상벌점·상담 등 8개 엔드포인트는 **전 지점 권한으로는 호출이 막힌다**
-> ("지점을 지정해야 합니다"). 그 화면들은 `branch` 계정으로 확인해야 한다.
-> 자세한 것은 `docs/API_GAPS.md` 1-1.
+> 계정이 둘인 이유: 출결·상벌점·상담 등 8개 엔드포인트는 **전 지점 권한이면 `academyId`를
+> 함께 보내야 한다.** 안 보내고 확인하려면 `branch` 계정을 쓴다. 자세한 것은 `API_GAPS.md` 1-1.
 
-> ⚠️ 로컬 전용이다. 이 비밀번호와 SQL을 운영에 쓰지 않는다.
+> ⚠️ 로컬 전용이다. 이 비밀번호와 시드를 운영에 쓰지 않는다.
+
+### 시드가 Flyway에 없는 이유
+
+`db/seed`는 **의도적으로** Flyway 밖에 있다. `locations`에 넣으면
+· 시드를 고칠 때마다 체크섬 불일치로 **다른 사람 로컬이 안 뜬다** — 시드는 자주 바뀐다
+· `flyway_schema_history`에 기록이 남아, 개발 서버를 그대로 운영으로 전환할 때
+  prod 프로필에서 `applied but not resolved`로 validate가 실패한다
+
+스키마는 Flyway, 데이터는 스크립트로 나눠 둔 것이다.
 
 ## 3. 프론트
 
@@ -72,8 +74,9 @@ npm run api:types      # → src/api/schema.d.ts
 
 ## 5. 지금 붙어 있는 것
 
-- `src/api/` — 공통 클라이언트(401 재발급·에러 정규화·페이징 두 형태 흡수), 인증, 학생 검색
-- `src/auth/` — 로그인 화면과 인증 컨텍스트
+- `src/api/` — 공통 클라이언트(401 재발급·에러 정규화·페이징 두 형태 흡수), 인증, 지점, 학생
+- `src/auth/` — 로그인 화면·인증 컨텍스트, 지점 스코프(`AcademyContext`)
+- `src/components/common/useServerTable.ts` — 목록 화면 공통 훅
 
-**아직 화면에는 연결하지 않았다.** 목업 화면과 실제 API 응답이 어긋나는 부분이 있어
-(`docs/API_GAPS.md`) 백엔드 보완 후 한 번에 붙인다.
+**실연동된 화면은 학원생 검색(F-4.1-1) 하나뿐이다.** 나머지 35개는 목업이다.
+화면별 진행 상황과 담당은 `docs/CONNECT_PLAN.md`를 본다.
