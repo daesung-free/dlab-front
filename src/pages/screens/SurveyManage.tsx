@@ -1,7 +1,22 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { DataTable, ExcelButton, type Column } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
+import { ApiError } from '../../api/client'
+import { useAcademy } from '../../auth/AcademyContext'
+import {
+  QUESTION_TYPE_LABEL,
+  SCOPE_LABEL,
+  SURVEY_TYPE_LABEL,
+  closeSurvey,
+  createSurvey as createSurveyApi,
+  getSurveyResult,
+  listSurveys,
+  type QuestionType,
+  type SurveyCreate,
+  type SurveyResult,
+  type SurveySummary,
+} from '../../api/surveys'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
 
@@ -128,13 +143,6 @@ const SURVEYS: Survey[] = [
   { id: 's5', title: '2026 9월 평가원 가채점', kind: '가채점', status: '작성중', target: '-', targetCount: 0, responses: 0, openedAt: '-', closesAt: '-', questions: GRADING_QUESTIONS },
 ]
 
-const STATUS_TONE: Record<SurveyStatus, string> = {
-  작성중: 'supplement',
-  배포중: 'verified',
-  마감: 'brandnew',
-  집계완료: 'verified',
-}
-
 /* ══ 템플릿 ══ */
 
 interface Template {
@@ -209,15 +217,6 @@ function emptyDraft(mode: 'survey' | 'template'): Draft {
 }
 
 /* ── 가채점 결과 집계 예시 ── */
-const SUBJECT_RESULT = [
-  { subject: '국어', avg: 82.4, grade: '2.8', n: 289 },
-  { subject: '수학', avg: 76.1, grade: '3.1', n: 289 },
-  { subject: '영어', avg: 84.7, grade: '2.4', n: 289 },
-  { subject: '한국사', avg: 61.2, grade: '3.4', n: 289 },
-  { subject: '탐구1', avg: 79.5, grade: '2.9', n: 271 },
-  { subject: '탐구2', avg: 74.8, grade: '3.2', n: 268 },
-]
-
 function Content() {
   const [tab, setTab] = useState('list')
   const [draft, setDraft] = useState<Draft | null>(null)
@@ -227,20 +226,6 @@ function Content() {
   const createSurvey = useCallback(() => setDraft(emptyDraft('survey')), [])
   const createTemplate = useCallback(() => setDraft(emptyDraft('template')), [])
 
-  const editSurvey = useCallback((s: Survey) => {
-    setDraft({
-      mode: 'survey',
-      sourceId: s.id,
-      title: s.title,
-      kind: s.kind,
-      target: s.target === '-' ? '전체 재원생' : s.target,
-      opensAt: s.openedAt === '-' ? '' : s.openedAt,
-      closesAt: s.closesAt === '-' ? '' : s.closesAt,
-      questions: s.questions.map((x) => ({ ...x })),
-      // 응답이 하나라도 쌓였으면 문항 편집 금지
-      locked: s.status !== '작성중',
-    })
-  }, [])
 
   const editTemplate = useCallback((t: Template) => {
     setDraft({
@@ -337,81 +322,183 @@ function Content() {
     )
   }
 
+  /* ── 실연동 ── */
+  const { academyId } = useAcademy()
+  const [surveys, setSurveys] = useState<SurveySummary[]>([])
+  const [result, setResult] = useState<SurveyResult | null>(null)
+  const [resultId, setResultId] = useState<number | null>(null)
+  const [apiLoading, setApiLoading] = useState(true)
+  const [apiError, setApiError] = useState<string | null>(null)
+  const [apiNotice, setApiNotice] = useState<string | null>(null)
+
+  const loadSurveys = useCallback(async () => {
+    setApiLoading(true)
+    try {
+      const list = await listSurveys(new Date().getFullYear())
+      setSurveys(list)
+      setResultId((prev) => (list.some((x) => x.id === prev) ? prev : (list[0]?.id ?? null)))
+      setApiError(null)
+    } catch (err) {
+      setApiError(err instanceof ApiError ? err.message : '설문 목록을 불러오지 못했습니다.')
+      setSurveys([])
+    } finally {
+      setApiLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadSurveys()
+  }, [loadSurveys])
+
+  // 결과 탭에서 고른 설문의 집계
+  useEffect(() => {
+    if (resultId === null) {
+      setResult(null)
+      return
+    }
+    let cancelled = false
+    getSurveyResult(resultId)
+      .then((r) => !cancelled && setResult(r))
+      .catch(() => !cancelled && setResult(null))
+    return () => {
+      cancelled = true
+    }
+  }, [resultId])
+
+  /** 화면의 문항 유형 → 서버 유형. 척도·과목별은 서버에 대응 유형이 없어 선택형으로 내려간다 */
+  function toServerQuestion(q: Question): { type: QuestionType; options?: string[] } {
+    if (q.type === 'multi') return { type: 'MULTI_CHOICE', options: q.options }
+    if (q.type === 'single' || q.type === 'scale' || q.type === 'subject')
+      return { type: 'SINGLE_CHOICE', options: q.options }
+    if (q.type === 'score') return { type: 'NUMBER' }
+    return { type: 'TEXT' }
+  }
+
+  /** 설문 저장. 문항 순서는 배열 순서가 곧 순서라 번호를 보내지 않는다 */
+  async function saveSurvey(d: Draft) {
+    if (academyId === null) {
+      setApiError('지점을 먼저 선택하세요.')
+      return
+    }
+    const body: SurveyCreate = {
+      surveyType: d.kind === '가채점' ? 'GRADE_INPUT' : 'GENERAL',
+      scope: 'BRANCH',
+      academyId,
+      title: d.title.trim(),
+      anonymous: true,
+      opensAt: `${d.opensAt}T00:00:00Z`,
+      closesAt: `${d.closesAt}T14:59:59Z`,
+      questions: d.questions.map((q) => ({
+        ...toServerQuestion(q),
+        title: q.title.trim(),
+        required: q.required,
+      })),
+    }
+    try {
+      await createSurveyApi(body)
+      setApiNotice('설문을 개설했습니다.')
+      setDraft(null)
+      await loadSurveys()
+    } catch (err) {
+      setApiError(err instanceof ApiError ? err.message : '설문을 개설하지 못했습니다.')
+    }
+  }
+
+  async function closeOne(surveyId: number) {
+    try {
+      await closeSurvey(surveyId)
+      setApiNotice('설문을 마감했습니다.')
+      await loadSurveys()
+    } catch (err) {
+      setApiError(err instanceof ApiError ? err.message : '마감하지 못했습니다.')
+    }
+  }
+
   /* ── 컬럼 (편집 핸들러를 물고 있어야 해서 Content 안에서 만든다) ── */
 
-  const columns = useMemo<Column<Survey>[]>(
+  const columns = useMemo<Column<SurveySummary>[]>(
     () => [
       { key: 'title', header: '설문명', sortable: true, value: (r) => r.title },
       {
-        key: 'kind',
+        key: 'surveyType',
         header: '유형',
         width: '84px',
         align: 'center',
         sortable: true,
-        value: (r) => r.kind,
-        render: (r) => <span className="mk supplement">{r.kind}</span>,
+        value: (r) => SURVEY_TYPE_LABEL[r.surveyType] ?? r.surveyType,
+        render: (r) => <span className="mk supplement">{SURVEY_TYPE_LABEL[r.surveyType] ?? r.surveyType}</span>,
       },
-      { key: 'questions', header: '문항', width: '68px', align: 'right', value: (r) => r.questions.length },
-      { key: 'target', header: '대상', width: '110px', value: (r) => r.target },
+      { key: 'questionCount', header: '문항', width: '68px', align: 'right', value: (r) => r.questionCount },
       {
-        key: 'responses',
-        header: '응답률',
-        width: '150px',
-        align: 'right',
-        sortable: true,
-        value: (r) => (r.targetCount ? r.responses / r.targetCount : 0),
-        render: (r) => {
-          if (!r.targetCount) return <span style={{ color: 'var(--muted)' }}>-</span>
-          const pct = Math.round((r.responses / r.targetCount) * 100)
-          return (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
-              <div style={{ width: 52, height: 6, background: 'var(--line-2)', borderRadius: 4, overflow: 'hidden' }}>
-                <div style={{ width: `${pct}%`, height: '100%', background: pct >= 80 ? 'var(--mint)' : 'var(--amber)' }} />
-              </div>
-              <span style={{ fontSize: 11, color: 'var(--muted)' }}>
-                {r.responses}/{r.targetCount}
-              </span>
-            </div>
-          )
-        },
+        key: 'scope',
+        header: '대상',
+        width: '110px',
+        value: (r) => SCOPE_LABEL[r.scope] ?? r.scope,
       },
-      { key: 'closesAt', header: '마감', width: '140px', sortable: true, value: (r) => r.closesAt },
+      {
+        key: 'anonymous',
+        header: '익명',
+        width: '68px',
+        align: 'center',
+        value: (r) => (r.anonymous ? '익명' : '기명'),
+        render: (r) => (
+          <span style={{ color: r.anonymous ? 'var(--violet)' : 'var(--muted)', fontWeight: 700, fontSize: 11.5 }}>
+            {r.anonymous ? '익명' : '기명'}
+          </span>
+        ),
+      },
+      {
+        key: 'period',
+        header: '기간',
+        width: '180px',
+        sortable: true,
+        value: (r) => r.opensAt,
+        render: (r) => `${r.opensAt.slice(0, 10)} ~ ${r.closesAt.slice(0, 10)}`,
+      },
       {
         key: 'status',
         header: '상태',
         width: '92px',
         align: 'center',
-        sortable: true,
-        value: (r) => r.status,
-        render: (r) => <span className={`mk ${STATUS_TONE[r.status]}`}>{r.status}</span>,
+        // 서버가 상태 필드를 주지 않아 기간으로 판단한다
+        value: (r) => (new Date(r.closesAt) < new Date() ? '마감' : '진행중'),
+        render: (r) => {
+          const closed = new Date(r.closesAt) < new Date()
+          return <span className={`mk ${closed ? 'brandnew' : 'verified'}`}>{closed ? '마감' : '진행중'}</span>
+        },
       },
       {
         key: 'act',
         header: '',
-        width: '160px',
+        width: '150px',
         align: 'center',
         value: () => '',
         render: (r) => (
           <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-            <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled={r.status === '작성중'}>
+            <button
+              className="btn"
+              style={{ padding: '4px 9px', fontSize: 11.5 }}
+              onClick={() => {
+                setResultId(r.id)
+                setTab('result')
+              }}
+            >
               결과
             </button>
             <button
               className="btn"
               style={{ padding: '4px 9px', fontSize: 11.5 }}
-              onClick={() => editSurvey(r)}
-              title={r.status === '작성중' ? '문항까지 편집' : '응답이 있어 문항은 잠깁니다'}
+              disabled={new Date(r.closesAt) < new Date()}
+              onClick={() => void closeOne(r.id)}
+              title="기간이 남아도 즉시 마감합니다"
             >
-              수정
-            </button>
-            <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }}>
-              복제
+              마감
             </button>
           </div>
         ),
       },
     ],
-    [editSurvey],
+    [],
   )
 
   const templateColumns = useMemo<Column<Template>[]>(
@@ -476,7 +563,12 @@ function Content() {
               <button className="btn" onClick={() => setDraft(null)}>
                 취소
               </button>
-              <button className="btn pri" disabled={!draft.title.trim() || draft.questions.length === 0}>
+              <button
+                className="btn pri"
+                disabled={!draft.title.trim() || draft.questions.length === 0 || isTemplate}
+                title={isTemplate ? '템플릿 저장 API가 아직 없습니다' : undefined}
+                onClick={() => void saveSurvey(draft)}
+              >
                 <Icon name="save" size={14} /> {isTemplate ? '템플릿 저장' : '저장'}
               </button>
               {!isTemplate && (
@@ -812,22 +904,38 @@ function Content() {
         />
 
         <div style={{ padding: 14 }}>
+          {apiError && (
+            <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+              {apiError}
+            </div>
+          )}
+          {apiNotice && (
+            <div className="note-box" role="status">
+              <div className="ic">
+                <Icon name="check" size={17} />
+              </div>
+              <div>
+                <div className="tt">{apiNotice}</div>
+              </div>
+            </div>
+          )}
           {tab === 'list' && (
             <DataTable
               columns={columns}
-              rows={SURVEYS}
-              rowKey={(r) => r.id}
+              rows={surveys}
+              rowKey={(r) => String(r.id)}
               masked={false}
+              loading={apiLoading}
               pageSize={10}
+              emptyText="등록된 설문이 없습니다."
               countLabel={
                 <>
-                  설문 <b>{SURVEYS.length}</b>건 · <code style={{ fontSize: 11 }}>surveys</code> ·{' '}
-                  <code style={{ fontSize: 11 }}>survey_questions</code>
+                  설문 <b>{surveys.length}</b>건
                 </>
               }
               toolbar={
                 <>
-                  <ExcelButton filename="설문_목록" columns={columns} rows={SURVEYS} masked={false} />
+                  <ExcelButton filename="설문_목록" columns={columns} rows={surveys} masked={false} />
                   <button className="btn pri" onClick={createSurvey}>
                     <Icon name="plus" size={14} /> 설문 생성
                   </button>
@@ -878,27 +986,87 @@ function Content() {
                   <span className="ico">
                     <Icon name="bar-chart-3" size={15} />
                   </span>
-                  2026 5월 THE PREMIUM 가채점 — 응답 289 / 296
+                  {result ? `${result.survey.title} — 응답 ${result.responseCount}건` : '설문을 선택하세요'}
                 </div>
                 <div className="r">
-                  <button className="btn" style={{ padding: '5px 11px', fontSize: 11.5 }}>
+                  <select
+                    className="sel"
+                    style={{ width: 220 }}
+                    value={resultId ?? ''}
+                    onChange={(e) => setResultId(Number(e.target.value))}
+                  >
+                    {surveys.length === 0 && <option value="">설문 없음</option>}
+                    {surveys.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.title}
+                      </option>
+                    ))}
+                  </select>
+                  <button className="btn" style={{ padding: '5px 11px', fontSize: 11.5 }} disabled title="원시 응답 다운로드 API가 없습니다">
                     <Icon name="file-spreadsheet" size={12} /> 원시 응답 다운로드
                   </button>
                 </div>
               </div>
               <div className="card-sec-b">
-                {SUBJECT_RESULT.map((s) => (
-                  <div
-                    key={s.subject}
-                    style={{ display: 'grid', gridTemplateColumns: '72px 1fr 150px', gap: 12, alignItems: 'center', marginBottom: 11 }}
-                  >
-                    <span style={{ fontSize: 12.5, fontWeight: 700 }}>{s.subject}</span>
-                    <div style={{ height: 14, background: 'var(--line-2)', borderRadius: 7, overflow: 'hidden' }}>
-                      <div style={{ width: `${s.avg}%`, height: '100%', background: 'var(--mint)', borderRadius: 7 }} />
+                {!result && <div className="dt-empty">결과를 불러올 설문이 없습니다.</div>}
+                {result?.responseCount === 0 && (
+                  <div className="dt-empty">아직 응답이 없습니다. 문항 구성만 확인할 수 있습니다.</div>
+                )}
+                {result?.questions.map((q) => (
+                  <div key={q.questionId} style={{ marginBottom: 18 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <span className="mk supplement">{QUESTION_TYPE_LABEL[q.type] ?? q.type}</span>
+                      <b style={{ fontSize: 13 }}>{q.title}</b>
+                      <span style={{ fontSize: 11.5, color: 'var(--muted)', marginLeft: 'auto' }}>
+                        응답 {q.answerCount}건
+                      </span>
                     </div>
-                    <span style={{ fontSize: 11.5, color: 'var(--muted)', textAlign: 'right' }}>
-                      평균 <b style={{ color: 'var(--ink)', fontSize: 13 }}>{s.avg}</b> · 등급 {s.grade} · n={s.n}
-                    </span>
+
+                    {/* 선택형 — 보기별 분포 */}
+                    {q.options && q.options.length > 0 && (
+                      <div>
+                        {q.options.map((o) => {
+                          const pct = q.answerCount > 0 ? Math.round((o.count / q.answerCount) * 100) : 0
+                          return (
+                            <div
+                              key={o.label}
+                              style={{
+                                display: 'grid',
+                                gridTemplateColumns: '120px 1fr 96px',
+                                gap: 12,
+                                alignItems: 'center',
+                                marginBottom: 6,
+                              }}
+                            >
+                              <span style={{ fontSize: 12 }}>{o.label}</span>
+                              <div style={{ height: 12, background: 'var(--line-2)', borderRadius: 6, overflow: 'hidden' }}>
+                                <div style={{ width: `${pct}%`, height: '100%', background: 'var(--mint)' }} />
+                              </div>
+                              <span style={{ fontSize: 11.5, color: 'var(--muted)', textAlign: 'right' }}>
+                                {o.count}건 · {pct}%
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {/* 숫자형 — 평균·최소·최대 */}
+                    {q.type === 'NUMBER' && (
+                      <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                        평균 <b style={{ color: 'var(--ink)' }}>{q.average ?? '-'}</b> · 최소 {q.min ?? '-'} · 최대{' '}
+                        {q.max ?? '-'}
+                      </div>
+                    )}
+
+                    {/* 주관식 — 서버가 원문을 주면 보여준다 */}
+                    {q.type === 'TEXT' && (
+                      <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                        {q.texts && q.texts.length > 0
+                          ? `${q.texts.length}건의 주관식 응답`
+                          : '주관식 응답은 집계에 포함되지 않습니다.'}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

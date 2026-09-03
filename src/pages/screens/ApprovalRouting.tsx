@@ -1,5 +1,15 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Icon } from '../../components/Icon'
+import { ApiError } from '../../api/client'
+import { useAcademy } from '../../auth/AcademyContext'
+import {
+  REQUEST_TYPE_CATEGORY,
+  REQUEST_TYPE_LABEL,
+  listApprovalItems,
+  saveApprovalItem,
+  type ApprovalItem,
+  type ApproverType,
+} from '../../api/approvals'
 import type { Mockup } from './types'
 import './matrix.css'
 import '../../styles/forms.css'
@@ -12,71 +22,133 @@ import '../../styles/forms.css'
  * ⚠ #32 / I-12 (높음) — 항목별 승인 주체 매트릭스 미확정. 방화벽 해제는 특히 미결.
  * ⚠ #40 / I-20 (중)  — 에스컬레이션 응답시간·입학 시 승인자 사전지정, 클라이언트 미확약. */
 
-type ApproverType = 'PARENT' | 'TEACHER' | 'AUTO'
-
 const APPROVERS: { key: ApproverType; label: string; cls: string; icon: string }[] = [
   { key: 'PARENT', label: '학부모', cls: 'p-read', icon: 'users' },
   { key: 'TEACHER', label: '담임', cls: 'p-own', icon: 'user-check' },
   { key: 'AUTO', label: '자동', cls: 'p-full', icon: 'zap' },
 ]
 
-interface ApprovalItem {
-  code: string
-  name: string
-  category: '출결' | '생활' | '학습' | '기타'
-  approver: ApproverType | null
-  /** 에스컬레이션 대상 */
-  escalateTo?: ApproverType
-  timeoutMin?: number
-  note?: string
-}
-
-/** approval_items 마스터 — 승인 주체가 null인 항목이 I-12 미결 대상 */
-const ITEMS: ApprovalItem[] = [
-  { code: 'ABS_FULL', name: '결석', category: '출결', approver: 'PARENT', escalateTo: 'TEACHER', timeoutMin: 120 },
-  { code: 'ABS_LATE', name: '지각', category: '출결', approver: 'TEACHER', timeoutMin: 60 },
-  { code: 'ABS_EARLY', name: '조퇴', category: '출결', approver: 'PARENT', escalateTo: 'TEACHER', timeoutMin: 60 },
-  { code: 'ABS_OUT', name: '외출', category: '출결', approver: 'TEACHER', timeoutMin: 30 },
-  { code: 'SCHED_REG', name: '정기일정 (병원·학원 등)', category: '출결', approver: 'PARENT', escalateTo: 'TEACHER', timeoutMin: 240 },
-  { code: 'SEAT_MOVE', name: '좌석 이탈/복귀', category: '생활', approver: 'AUTO', note: '즉시 승인 · 기록만' },
-  { code: 'MEAL_CANCEL', name: '급식 취소 (3일 전)', category: '생활', approver: 'AUTO', note: 'PG 자동환불' },
-  { code: 'QNA_BOOK', name: '대면 질의응답 예약', category: '학습', approver: 'AUTO', note: '슬롯 잔여 시 자동' },
-  {
-    code: 'FIREWALL',
-    name: '와이파이 방화벽 해제 (인강)',
-    category: '학습',
-    approver: null,
-    note: '승인 주체 미지정',
-  },
-  { code: 'DEVICE', name: '전자기기 반입', category: '생활', approver: null, note: '항목 존재 여부부터 확인 필요' },
-]
-
-const CAT_TONE: Record<ApprovalItem['category'], string> = {
+const CAT_TONE: Record<string, string> = {
   출결: 'verified',
   생활: 'supplement',
   학습: 'brandnew',
   기타: 'verified',
 }
 
+/** 응답 제한시간 후보 — I-20(응답시간) 미확약이라 화면에서 고르게 한다 */
+const TIMEOUT_CHOICES = [30, 60, 120, 240]
+
+interface ApprovalItemSaveInput {
+  approverType: ApproverType | null
+  timeoutMinutes: number | null
+  escalationApproverType: ApproverType | null
+}
+
 function Content() {
-  const [items, setItems] = useState(ITEMS)
+  const { academyId } = useAcademy()
+  const [items, setItems] = useState<ApprovalItem[]>([])
   const [escalation, setEscalation] = useState(true)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
-  const undecided = items.filter((i) => !i.approver).length
+  const year = new Date().getFullYear()
 
-  function setApprover(code: string, a: ApproverType) {
-    setItems((prev) => prev.map((it) => (it.code === code ? { ...it, approver: a } : it)))
+  const load = useCallback(async () => {
+    if (academyId === null) {
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    try {
+      setItems(await listApprovalItems(academyId, year))
+      setError(null)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '승인 항목을 불러오지 못했습니다.')
+      setItems([])
+    } finally {
+      setLoading(false)
+    }
+  }, [academyId, year])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  // configured=false 는 "안 정했다"가 아니라 "그 신청이 거절된다"는 뜻이다
+  const undecided = items.filter((i) => !i.configured).length
+
+  /** 셀을 누르면 그 자리에서 저장한다. 매트릭스라 '저장' 버튼을 따로 누르게 하면
+   *  무엇이 저장됐는지 알기 어렵다 */
+  async function apply(item: ApprovalItem, patch: Partial<ApprovalItemSaveInput>) {
+    if (academyId === null) return
+    const approverType = patch.approverType ?? item.approverType
+    if (!approverType) return // 승인 주체는 필수다
+
+    setBusy(true)
+    setNotice(null)
+    try {
+      await saveApprovalItem(item.requestType, {
+        academyId,
+        year,
+        approverType,
+        timeoutMinutes: patch.timeoutMinutes ?? item.timeoutMinutes ?? undefined,
+        escalationApproverType:
+          'escalationApproverType' in patch
+            ? (patch.escalationApproverType ?? undefined)
+            : (item.escalationApproverType ?? undefined),
+      })
+      await load()
+      setNotice(`${REQUEST_TYPE_LABEL[item.requestType]} 설정을 저장했습니다.`)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '저장하지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
     <div className="p-matrix">
+      {/* 서버가 다루는 신청 유형이 3종뿐이다. 목업은 10종이었다 — docs/API_GAPS.md */}
+      <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
+        <div className="ic">
+          <Icon name="triangle-alert" size={17} />
+        </div>
+        <div>
+          <div className="tt">서버가 다루는 신청 유형은 3종입니다</div>
+          <div className="tx">
+            사유 신청 · 정기일정 · 방화벽 해제만 승인 대상입니다. 목업에 있던 좌석 이탈·급식 취소·
+            질의응답 예약 등은 <b>승인 도메인에 들어와 있지 않습니다</b>(각자 다른 방식으로 처리).
+            <b> 진행 중인 승인 요청 목록은 담임 전용 API</b>라 관리자 화면에서 볼 수 없습니다.
+          </div>
+        </div>
+      </div>
+
+      {error && (
+        <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+          {error}
+        </div>
+      )}
+
+      {notice && (
+        <div className="note-box" role="status">
+          <div className="ic">
+            <Icon name="check" size={17} />
+          </div>
+          <div>
+            <div className="tt">{notice}</div>
+          </div>
+        </div>
+      )}
+
       <div className="stat-strip">
         {APPROVERS.map((a) => (
           <div className="stat" key={a.key}>
             <div className="l">
               <Icon name={a.icon} size={13} /> {a.label} 승인
             </div>
-            <div className="v">{items.filter((i) => i.approver === a.key).length}</div>
+            <div className="v">{items.filter((i) => i.approverType === a.key).length}</div>
             <div className="d" style={{ fontFamily: 'ui-monospace, monospace', fontSize: 10 }}>
               {a.key}
             </div>
@@ -89,13 +161,13 @@ function Content() {
           <div className="v" style={{ color: 'var(--red)' }}>
             {undecided}
           </div>
-          <div className="d down">주체 미지정</div>
+          <div className="d down">신청이 거절됨</div>
         </div>
         <div className="stat">
           <div className="l">
             <Icon name="arrow-right" size={13} /> 에스컬레이션
           </div>
-          <div className="v">{items.filter((i) => i.escalateTo).length}</div>
+          <div className="v">{items.filter((i) => i.escalationApproverType).length}</div>
           <div className="d warn">응답시간 미확약</div>
         </div>
       </div>
@@ -112,9 +184,11 @@ function Content() {
             <button className={`chip${escalation ? ' on' : ''}`} onClick={() => setEscalation(!escalation)}>
               에스컬레이션 열 보기
             </button>
-            <button className="btn pri" style={{ padding: '6px 12px', fontSize: 12 }}>
-              <Icon name="save" size={13} /> 저장
-            </button>
+            {/* 셀을 누르면 그 자리에서 저장된다. 매트릭스에서 '저장' 버튼을 따로 두면
+                무엇이 저장됐는지 알기 어렵다 */}
+            <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>
+              {busy ? '저장 중…' : loading ? '불러오는 중…' : '선택하면 바로 저장됩니다'}
+            </span>
           </div>
         </div>
         <div className="card-sec-b">
@@ -147,56 +221,80 @@ function Content() {
               </thead>
               <tbody>
                 {items.map((it) => (
-                  <tr key={it.code}>
+                  <tr key={it.requestType}>
                     <th className="area">
-                      {it.name}
+                      {REQUEST_TYPE_LABEL[it.requestType]}
                       <span className="an">
-                        <code style={{ fontSize: 10 }}>{it.code}</code>
+                        <code style={{ fontSize: 10 }}>{it.requestType}</code>
                       </span>
                     </th>
                     <td>
-                      <span className={`mk ${CAT_TONE[it.category]}`}>{it.category}</span>
+                      <span className={`mk ${CAT_TONE[REQUEST_TYPE_CATEGORY[it.requestType]] ?? ''}`}>
+                        {REQUEST_TYPE_CATEGORY[it.requestType]}
+                      </span>
                     </td>
                     {APPROVERS.map((a) => (
                       <td key={a.key}>
                         <button
                           type="button"
-                          onClick={() => setApprover(it.code, a.key)}
-                          className={`pm ${it.approver === a.key ? a.cls : 'p-none'}`}
-                          style={{ border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
-                          title={`${it.name} → ${a.label} 승인`}
+                          disabled={busy}
+                          onClick={() => void apply(it, { approverType: a.key })}
+                          className={`pm ${it.approverType === a.key ? a.cls : 'p-none'}`}
+                          style={{ border: 'none', cursor: busy ? 'default' : 'pointer', fontFamily: 'inherit' }}
+                          title={`${REQUEST_TYPE_LABEL[it.requestType]} → ${a.label} 승인`}
                         >
-                          {it.approver === a.key ? '지정' : '—'}
+                          {it.approverType === a.key ? '지정' : '—'}
                         </button>
                       </td>
                     ))}
                     {escalation && (
                       <>
                         <td>
-                          {it.escalateTo ? (
-                            <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--violet)' }}>
-                              → {APPROVERS.find((a) => a.key === it.escalateTo)?.label}
-                            </span>
-                          ) : (
-                            <span style={{ color: 'var(--muted)' }}>-</span>
-                          )}
+                          <select
+                            className="sel"
+                            style={{ width: 104, padding: '4px 8px', fontSize: 11.5 }}
+                            disabled={busy || !it.approverType}
+                            value={it.escalationApproverType ?? ''}
+                            onChange={(e) =>
+                              void apply(it, {
+                                escalationApproverType: e.target.value === '' ? null : (e.target.value as ApproverType),
+                              })
+                            }
+                          >
+                            <option value="">없음</option>
+                            {APPROVERS.map((a) => (
+                              <option key={a.key} value={a.key}>
+                                → {a.label}
+                              </option>
+                            ))}
+                          </select>
                         </td>
                         <td>
-                          {it.timeoutMin ? (
-                            <span
-                              style={{ fontSize: 11.5, color: 'var(--amber)', fontWeight: 700 }}
-                              title="클라이언트 미확약 — 임시값"
-                            >
-                              {it.timeoutMin}분 *
-                            </span>
-                          ) : (
-                            <span style={{ color: 'var(--muted)' }}>-</span>
-                          )}
+                          <select
+                            className="sel"
+                            style={{ width: 96, padding: '4px 8px', fontSize: 11.5 }}
+                            disabled={busy || !it.approverType}
+                            value={it.timeoutMinutes ?? ''}
+                            onChange={(e) =>
+                              void apply(it, { timeoutMinutes: e.target.value === '' ? null : Number(e.target.value) })
+                            }
+                          >
+                            <option value="">없음</option>
+                            {TIMEOUT_CHOICES.map((m) => (
+                              <option key={m} value={m}>
+                                {m}분
+                              </option>
+                            ))}
+                          </select>
                         </td>
                       </>
                     )}
-                    <td style={{ textAlign: 'left', fontSize: 11.5, color: it.approver ? 'var(--muted)' : 'var(--red)' }}>
-                      {it.note ?? '-'}
+                    <td style={{ textAlign: 'left', fontSize: 11.5, color: it.configured ? 'var(--muted)' : 'var(--red)' }}>
+                      {it.configured
+                        ? it.copiedFrom
+                          ? '전년도에서 복사됨'
+                          : '올해 설정'
+                        : '미설정 — 이 신청은 거절됩니다'}
                     </td>
                   </tr>
                 ))}
