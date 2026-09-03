@@ -1,7 +1,21 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { DataTable, ExcelButton, MaskToggle, type Column } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
+import { ApiError } from '../../api/client'
+import { useAcademy } from '../../auth/AcademyContext'
+import {
+  MEAL_STATUS_LABEL,
+  MEAL_STATUS_TONE,
+  createMealClosure,
+  deleteMealClosure,
+  listMealClosures,
+  listMealMonthly,
+  listMealOrders,
+  type MealClosure,
+  type MealDay,
+  type MealOrder,
+} from '../../api/meals'
 import { MOCK_STUDENTS } from './mockStudents'
 import type { Mockup } from './types'
 import './meal.css'
@@ -42,154 +56,56 @@ import './meal.css'
  *
  *   안면·지문 생체인식은 검토 대상이며 채택 시 개인정보/ISMS 검토 필수. */
 
-/* ── MealPolicy: 주말 + 공휴일 제외 ── */
-const MONTH = 5
-/** 2026-05-01은 금요일 */
-const FIRST_DOW = 5
-const DAYS_IN_MONTH = 31
-
-const HOLIDAYS: Record<number, string> = {
-  5: '어린이날',
-  24: '부처님오신날',
-  25: '대체공휴일',
-}
 
 /** 관리자가 등록하는 중단 사유 — 기초관리 마스터로 뺄 후보 */
 const CLOSURE_REASONS = ['학원 휴무', '급식업체 휴무', '단축수업', '모의고사', '자체 행사']
 
 /** 초기 등록분 — 실제로는 서버에서 내려온다 */
-const INITIAL_CLOSURES: Record<number, string> = {
-  15: '모의고사',
-  22: '급식업체 휴무',
-}
-
-interface Day {
-  day: number
-  dow: number
-  weekend: boolean
-  holiday?: string
-  /** 관리자가 등록한 급식 중단 사유 */
-  closure?: string
-  /** 급식 운영일 여부 — 신청 가능 여부와 같다 */
-  open: boolean
-  count: number
-}
-
-function buildDays(closures: Record<number, string>): Day[] {
-  return Array.from({ length: DAYS_IN_MONTH }, (_, i) => {
-    const day = i + 1
-    const dow = (FIRST_DOW + i) % 7
-    const weekend = dow === 0 || dow === 6
-    const holiday = HOLIDAYS[day]
-    const closure = closures[day]
-    const open = !weekend && !holiday && !closure
-    return {
-      day,
-      dow,
-      weekend,
-      holiday,
-      closure,
-      open,
-      count: open ? 190 + ((day * 17) % 70) : 0,
-    }
-  })
-}
-
 /* ── 주문/결제 내역 ── */
-type PayMethod = 'CARD' | 'VBANK'
-type OrderStatus = '확정' | '결제대기' | '취소완료' | '만료'
-type CancelPath = '앱' | '데스크' | '-'
 
-interface MealOrder {
-  id: string
-  orderNo: string
-  studentNo: string
-  name: string
-  classNo: string
-  period: string
-  days: number
-  method: PayMethod
-  amount: number
-  status: OrderStatus
-  cancelPath: CancelPath
-  /** 가상계좌 만료 예정 */
-  expireAt?: string
-}
+const won = (n: number) => `${n.toLocaleString()}원`
 
-const ORDERS: MealOrder[] = MOCK_STUDENTS.slice(0, 32).map((s, i) => {
-  const method: PayMethod = i % 3 === 2 ? 'VBANK' : 'CARD'
-  const status: OrderStatus =
-    i % 11 === 10 ? '만료' : i % 7 === 6 ? '취소완료' : method === 'VBANK' && i % 4 === 1 ? '결제대기' : '확정'
-  const days = 18 + (i % 4)
-  return {
-    id: `mo-${i + 1}`,
-    orderNo: `MO-2026${String(MONTH).padStart(2, '0')}-${String(i + 1).padStart(4, '0')}`,
-    studentNo: s.studentNo,
-    name: s.name,
-    classNo: s.classNo,
-    period: '2026-05',
-    days,
-    method,
-    amount: days * 6500,
-    status,
-    cancelPath: status === '취소완료' ? (i % 2 === 0 ? '앱' : '데스크') : '-',
-    expireAt: status === '결제대기' ? `2026-05-${String(20 + (i % 8)).padStart(2, '0')} 23:59` : undefined,
-  }
-})
-
-const METHOD_LABEL: Record<PayMethod, string> = { CARD: '카드', VBANK: '가상계좌' }
-const STATUS_TONE: Record<OrderStatus, string> = {
-  확정: 'verified',
-  결제대기: 'supplement',
-  취소완료: 'brandnew',
-  만료: 'brandnew',
-}
-
-const COLUMNS: Column<MealOrder>[] = [
+const ORDER_COLUMNS: Column<MealOrder>[] = [
   {
     key: 'orderNo',
     header: '주문번호',
     width: '148px',
-    sortable: true,
     value: (r) => r.orderNo,
+    // 뒤 6자리가 곧 id라, 학부모가 불러준 번호로 되짚을 수 있다
     render: (_r, v) => <code style={{ fontSize: 11 }}>{v}</code>,
   },
-  { key: 'studentNo', header: '학번', width: '100px', value: (r) => r.studentNo },
-  { key: 'name', header: '이름', width: '84px', mask: 'name', value: (r) => r.name },
-  { key: 'classNo', header: '반', width: '56px', align: 'center', value: (r) => r.classNo },
-  { key: 'days', header: '식수', width: '68px', align: 'right', sortable: true, value: (r) => r.days },
+  { key: 'studentNo', header: '학번', width: '100px', value: (r) => r.studentNo ?? '-' },
+  { key: 'studentName', header: '이름', width: '84px', mask: 'name', value: (r) => r.studentName },
+  { key: 'className', header: '반', width: '56px', align: 'center', value: (r) => r.className ?? '-' },
+  { key: 'targetMonth', header: '대상월', width: '84px', align: 'center', value: (r) => r.targetMonth },
+  { key: 'activeCount', header: '식수', width: '68px', align: 'right', sortable: true, value: (r) => r.activeCount },
   {
-    key: 'method',
+    key: 'paymentMethods',
     header: '결제수단',
-    width: '92px',
+    width: '96px',
     align: 'center',
-    value: (r) => METHOD_LABEL[r.method],
-    render: (r) => (
-      <span className={`mk ${r.method === 'CARD' ? 'verified' : 'supplement'}`} title={r.method}>
-        {METHOD_LABEL[r.method]}
-      </span>
-    ),
+    value: (r) => r.paymentMethods.join(', '),
+    render: (r) =>
+      r.paymentMethods.length > 0 ? r.paymentMethods.join(', ') : <span style={{ color: 'var(--muted)' }}>-</span>,
   },
   {
     key: 'amount',
     header: '금액',
-    width: '96px',
+    width: '104px',
     align: 'right',
     sortable: true,
     value: (r) => r.amount,
-    render: (r) => `${r.amount.toLocaleString()}원`,
+    render: (r) => won(r.amount),
   },
   {
     key: 'status',
     header: '상태',
-    width: '104px',
+    width: '90px',
     align: 'center',
     sortable: true,
-    value: (r) => r.status,
+    value: (r) => MEAL_STATUS_LABEL[r.status] ?? r.status,
     render: (r) => (
-      <span className={`mk ${STATUS_TONE[r.status]}`} title={r.expireAt ? `만료 ${r.expireAt}` : undefined}>
-        {r.status}
-      </span>
+      <span className={`mk ${MEAL_STATUS_TONE[r.status] ?? ''}`}>{MEAL_STATUS_LABEL[r.status] ?? r.status}</span>
     ),
   },
   {
@@ -197,27 +113,25 @@ const COLUMNS: Column<MealOrder>[] = [
     header: '취소 경로',
     width: '90px',
     align: 'center',
-    value: (r) => r.cancelPath,
-    render: (r) =>
-      r.cancelPath === '-' ? (
-        <span style={{ color: 'var(--muted)' }}>-</span>
-      ) : (
-        <span style={{ fontSize: 11.5, fontWeight: 700, color: r.cancelPath === '앱' ? 'var(--violet)' : 'var(--amber)' }}>
-          {r.cancelPath}
-        </span>
-      ),
+    // 취소는 항목(item) 단위라 주문 하나로 정해지지 않는다. 취소된 항목의 경로를 모아 보여준다
+    value: (r) => r.items.filter((i) => i.cancelPath).map((i) => i.cancelPath).join(', '),
+    render: (r) => {
+      const paths = [...new Set(r.items.filter((i) => i.cancelPath).map((i) => i.cancelPath))]
+      return paths.length > 0 ? paths.join(', ') : <span style={{ color: 'var(--muted)' }}>-</span>
+    },
   },
   {
-    key: 'act',
-    header: '',
-    width: '80px',
-    align: 'center',
-    value: () => '',
-    render: (r) => (
-      <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled={r.status !== '확정'}>
-        즉시 취소
-      </button>
-    ),
+    key: 'refundableAmount',
+    header: '환불 가능',
+    width: '104px',
+    align: 'right',
+    value: (r) => r.refundableAmount,
+    render: (r) =>
+      r.refundableAmount > 0 ? (
+        <b style={{ color: 'var(--amber)' }}>{won(r.refundableAmount)}</b>
+      ) : (
+        <span style={{ color: 'var(--muted)' }}>-</span>
+      ),
   },
 ]
 
@@ -360,28 +274,95 @@ const TAG_COLUMNS: Column<TagLog>[] = [
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
 
+function thisMonth(): string {
+  return new Date().toISOString().slice(0, 7)
+}
+
 function Content() {
+  const { academyId } = useAcademy()
   const [tab, setTab] = useState('cal')
   const [masked, setMasked] = useState(true)
-  const [closures, setClosures] = useState<Record<number, string>>(INITIAL_CLOSURES)
   const [reason, setReason] = useState(CLOSURE_REASONS[0])
   const [deadlineDays, setDeadlineDays] = useState(3)
+  const [month, setMonth] = useState(thisMonth())
 
-  const days = useMemo(() => buildDays(closures), [closures])
-  const available = days.filter((d) => d.open)
-  const totalOrders = available.reduce((a, d) => a + d.count, 0)
-  const closedCount = Object.keys(closures).length
+  const [dayList, setDayList] = useState<MealDay[]>([])
+  const [closureList, setClosureList] = useState<MealClosure[]>([])
+  const [orders, setOrders] = useState<MealOrder[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const load = useCallback(async () => {
+    if (academyId === null) {
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    setError(null)
+    try {
+      const [days, cls, ords] = await Promise.all([
+        listMealMonthly(academyId, month),
+        listMealClosures(academyId, month),
+        listMealOrders(academyId, month),
+      ])
+      setDayList(days)
+      setClosureList(cls)
+      setOrders(ords)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '급식 정보를 불러오지 못했습니다.')
+      setDayList([])
+      setClosureList([])
+      setOrders([])
+    } finally {
+      setLoading(false)
+    }
+  }, [academyId, month])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const available = dayList.filter((d) => d.available)
+  const totalOrders = dayList.reduce((a, d) => a + d.lunchCount + d.dinnerCount, 0)
+  const closedCount = closureList.length
 
   const stats = useMemo(() => {
-    const paid = ORDERS.filter((o) => o.status === '확정')
+    const paid = orders.filter((o) => o.status === 'PAID')
     return {
       paid: paid.length,
-      pending: ORDERS.filter((o) => o.status === '결제대기').length,
-      canceled: ORDERS.filter((o) => o.status === '취소완료').length,
-      expired: ORDERS.filter((o) => o.status === '만료').length,
+      pending: orders.filter((o) => o.status === 'PENDING' || o.status === 'ISSUED').length,
+      canceled: orders.filter((o) => o.status === 'CANCELLED' || o.status === 'REFUNDED').length,
+      expired: orders.filter((o) => o.status === 'EXPIRED').length,
       revenue: paid.reduce((a, o) => a + o.amount, 0),
     }
-  }, [])
+  }, [orders])
+
+  /** 중단일 등록·해제 — 서버가 결제건 확인 후 처리한다 */
+  async function addClosure(date: string) {
+    if (academyId === null) return
+    setBusy(true)
+    try {
+      await createMealClosure(academyId, date, reason)
+      await load()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '중단일을 등록하지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function removeClosure(closureId: number) {
+    setBusy(true)
+    try {
+      await deleteMealClosure(closureId)
+      await load()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '중단일을 해제하지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   /** 배식 체크 집계 — 금일 신청자 대비 */
   const check = useMemo(() => {
@@ -401,14 +382,11 @@ function Content() {
   }, [])
 
   /** 중단일 토글 — 주말·공휴일은 애초에 운영일이 아니라 손댈 수 없다 */
-  function toggleClosure(d: Day) {
-    if (d.weekend || d.holiday) return
-    setClosures((prev) => {
-      const next = { ...prev }
-      if (next[d.day]) delete next[d.day]
-      else next[d.day] = reason
-      return next
-    })
+  function toggleClosure(d: MealDay) {
+    if (d.closedReason === 'WEEKEND' || d.closedReason === 'HOLIDAY') return
+    const existing = closureList.find((c) => c.date === d.date)
+    if (existing) void removeClosure(existing.id)
+    else void addClosure(d.date)
   }
 
   return (
@@ -420,7 +398,7 @@ function Content() {
           </div>
           <div className="v">{available.length}</div>
           <div className="d">
-            {DAYS_IN_MONTH}일 중 · 중단 {closedCount}일 반영
+            {dayList.length}일 중 · 중단 {closedCount}일 반영
           </div>
         </div>
         <div className="stat">
@@ -468,13 +446,24 @@ function Content() {
         </div>
       </div>
 
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+        <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>대상 월</span>
+        <input className="inp" type="month" style={{ width: 150 }} value={month} onChange={(e) => setMonth(e.target.value)} />
+      </div>
+
+      {error && (
+        <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+          {error}
+        </div>
+      )}
+
       <div className="card-sec">
         <Tabs
           items={[
             { key: 'cal', label: '월별 신청 현황' },
             { key: 'schedule', label: '급식 일정 관리', count: closedCount },
             { key: 'check', label: '배식 체크', count: TAG_LOGS.length },
-            { key: 'orders', label: '결제 · 취소 내역', count: ORDERS.length },
+            { key: 'orders', label: '결제 · 취소 내역', count: orders.length },
             { key: 'policy', label: '결제 · 취소 정책' },
           ]}
           active={tab}
@@ -490,31 +479,48 @@ function Content() {
                   {d}
                 </div>
               ))}
-              {Array.from({ length: FIRST_DOW }, (_, i) => (
-                <div className="cal-cell pad" key={`pad-${i}`} />
-              ))}
-              {days.map((d) => (
-                <div
-                  className={`cal-cell${d.closure ? ' closed' : d.holiday ? ' holiday' : d.weekend ? ' off' : ' on'}`}
-                  key={d.day}
-                  title={d.closure ?? d.holiday ?? (d.weekend ? '주말' : `${d.count}식`)}
-                >
-                  <div className="dnum">{d.day}</div>
-                  {d.closure ? (
-                    <div className="closed-lbl">신청 차단
-                      <br />
-                      {d.closure}
-                    </div>
-                  ) : !d.open ? (
-                    <div className="off-lbl">{d.holiday ?? '주말'}</div>
-                  ) : (
-                    <>
-                      <div className="cnt">{d.count}</div>
-                      <div className="lbl">식</div>
-                    </>
-                  )}
-                </div>
-              ))}
+              {/* 달의 첫날 요일만큼 앞을 비운다. 서버가 준 날짜에서 계산한다 */}
+              {dayList.length > 0 &&
+                Array.from({ length: new Date(`${dayList[0].date}T00:00:00`).getDay() }, (_, i) => (
+                  <div className="cal-cell pad" key={`pad-${i}`} />
+                ))}
+              {dayList.map((d) => {
+                const dayNum = Number(d.date.slice(8))
+                const count = d.lunchCount + d.dinnerCount
+                const cls =
+                  d.closedReason === 'CLOSURE'
+                    ? ' closed'
+                    : d.closedReason === 'HOLIDAY'
+                      ? ' holiday'
+                      : d.closedReason === 'WEEKEND'
+                        ? ' off'
+                        : ' on'
+                return (
+                  <div
+                    className={`cal-cell${cls}`}
+                    key={d.date}
+                    title={d.closureReason ?? (d.available ? `${count}식` : (d.closedReason ?? ''))}
+                    onClick={() => toggleClosure(d)}
+                    style={{ cursor: d.closedReason === 'WEEKEND' || d.closedReason === 'HOLIDAY' ? 'default' : 'pointer' }}
+                  >
+                    <div className="dnum">{dayNum}</div>
+                    {d.closedReason === 'CLOSURE' ? (
+                      <div className="closed-lbl">
+                        신청 차단
+                        <br />
+                        {d.closureReason ?? ''}
+                      </div>
+                    ) : !d.available ? (
+                      <div className="off-lbl">{d.closedReason === 'HOLIDAY' ? '공휴일' : '주말'}</div>
+                    ) : (
+                      <>
+                        <div className="cnt">{count}</div>
+                        <div className="lbl">식</div>
+                      </>
+                    )}
+                  </div>
+                )
+              })}
             </div>
 
             <div className="cal-legend">
@@ -579,37 +585,41 @@ function Content() {
                   {d}
                 </div>
               ))}
-              {Array.from({ length: FIRST_DOW }, (_, i) => (
-                <div className="cal-cell pad" key={`pad-${i}`} />
-              ))}
-              {days.map((d) => {
-                const locked = d.weekend || Boolean(d.holiday)
+              {dayList.length > 0 &&
+                Array.from({ length: new Date(`${dayList[0].date}T00:00:00`).getDay() }, (_, i) => (
+                  <div className="cal-cell pad" key={`pad-${i}`} />
+                ))}
+              {dayList.map((d) => {
+                const locked = d.closedReason === 'WEEKEND' || d.closedReason === 'HOLIDAY'
+                const isClosure = d.closedReason === 'CLOSURE'
+                const dayNum = Number(d.date.slice(8))
                 return (
                   <button
                     type="button"
-                    className={`cal-cell editable${d.closure ? ' closed' : d.holiday ? ' holiday' : d.weekend ? ' off' : ' on'}`}
-                    key={d.day}
-                    disabled={locked}
+                    className={`cal-cell editable${isClosure ? ' closed' : d.closedReason === 'HOLIDAY' ? ' holiday' : d.closedReason === 'WEEKEND' ? ' off' : ' on'}`}
+                    key={d.date}
+                    disabled={locked || busy}
                     onClick={() => toggleClosure(d)}
                     title={
                       locked
                         ? '주말·공휴일은 정책상 자동 제외'
-                        : d.closure
-                          ? `중단 해제 (현재 사유: ${d.closure})`
+                        : isClosure
+                          ? `중단 해제 (현재 사유: ${d.closureReason ?? ''})`
                           : `${reason} 사유로 중단 등록`
                     }
                   >
-                    <div className="dnum">{d.day}</div>
-                    {d.closure ? (
-                      <div className="closed-lbl">중단
+                    <div className="dnum">{dayNum}</div>
+                    {isClosure ? (
+                      <div className="closed-lbl">
+                        중단
                         <br />
-                        {d.closure}
+                        {d.closureReason ?? ''}
                       </div>
                     ) : locked ? (
-                      <div className="off-lbl">{d.holiday ?? '주말'}</div>
+                      <div className="off-lbl">{d.closedReason === 'HOLIDAY' ? '공휴일' : '주말'}</div>
                     ) : (
                       <>
-                        <div className="cnt">{d.count}</div>
+                        <div className="cnt">{d.lunchCount + d.dinnerCount}</div>
                         <div className="lbl">신청 가능</div>
                       </>
                     )}
@@ -676,7 +686,27 @@ function Content() {
           </div>
         )}
 
-        {/* ═══ 배식 체크 ═══ */}
+        {/* ═══ 배식 체크 ═══
+            ⚠️ 관리자용 태깅 로그 조회 API가 없다. 키오스크 쪽 getMealApplyYN 만 있어
+               "누가 실제로 먹었는가"를 관리자가 되짚을 수 없다 — docs/API_GAPS.md 6-7.
+               아래는 목업 데이터다. */}
+        {tab === 'check' && (
+          <div style={{ padding: '14px 14px 0' }}>
+            <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
+              <div className="ic">
+                <Icon name="triangle-alert" size={17} />
+              </div>
+              <div>
+                <div className="tt">이 탭은 아직 목업입니다 — 배식 태깅 로그 조회 API가 없습니다</div>
+                <div className="tx">
+                  키오스크가 배식 여부를 확인하는 API는 있지만, <b>관리자가 "누가 실제로 먹었는가"를
+                  되짚는 조회</b>가 없습니다. 수기 확인 건의 사유·처리자도 같이 필요합니다.
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {tab === 'check' && (
           <div className="card-sec-b">
             <div className="note-box">
@@ -874,20 +904,22 @@ function Content() {
         {tab === 'orders' && (
           <div style={{ padding: 14 }}>
             <DataTable
-              columns={COLUMNS}
-              rows={ORDERS}
-              rowKey={(r) => r.id}
+              columns={ORDER_COLUMNS}
+              rows={orders}
+              rowKey={(r) => String(r.id)}
               masked={masked}
+              loading={loading}
               pageSize={12}
+              emptyText={academyId === null ? '지점을 먼저 선택하세요.' : '해당 월 주문이 없습니다.'}
               countLabel={
                 <>
-                  2026-05 주문 <b>{ORDERS.length}</b>건
+                  {month} 주문 <b>{orders.length}</b>건
                 </>
               }
               toolbar={
                 <>
                   <MaskToggle masked={masked} onChange={setMasked} />
-                  <ExcelButton filename="급식_결제내역" columns={COLUMNS} rows={ORDERS} masked={masked} />
+                  <ExcelButton filename="급식_결제내역" columns={ORDER_COLUMNS} rows={orders} masked={masked} />
                 </>
               }
             />
