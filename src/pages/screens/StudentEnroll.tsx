@@ -1,20 +1,133 @@
+import { useState } from 'react'
 import { Icon } from '../../components/Icon'
-import { MOCK_STUDENTS } from './mockStudents'
+import { Unfilled } from '../../components/common'
+import { ApiError } from '../../api/client'
+import { useAcademy } from '../../auth/AcademyContext'
+import {
+  GRADE_LABEL,
+  TRACK_LABEL,
+  admitStudent,
+  updateStudent,
+  type GradeType,
+  type Student,
+  type TrackType,
+} from '../../api/students'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
 
-/* F-4.1-3 신규 접수 등록(합격생 등록) — 신규개발-요구사항검증됨
- * 학번 채번 규칙: year + %04d(nextSeq), 매년 초기화.
+/* F-4.1-3 신규 접수 등록(합격생 등록) — POST /api/v1/admin/students
+ *
+ * ★ 학번은 서버가 채번한다. 저장 전에는 번호를 알 수 없다 —
+ *   미리보기 API가 없어서 "다음 학번" 표시는 뺐다(예전 목업은 지어낸 값이었다).
  *
  * ★ 유일성은 UNIQUE(academy_id, year, student_no) 다 — **지점 축이 있다**.
  *   같은 해에도 지점이 다르면 같은 학번이 존재하고(2026-0001 이 분당·이매·목동에 각각 있다),
  *   연도가 바뀌면 같은 지점에서도 번호가 재사용된다. 그래서 학번은 PK가 아니다.
- *   학생을 특정할 때는 enrollmentId(등록 건) 또는 studentId(사람)를 쓴다. */
+ *   학생을 특정할 때는 enrollmentId(등록 건) 또는 studentId(사람)를 쓴다.
+ *
+ * ★ 저장이 **두 번 나간다.**
+ *   ① POST /students        — academyId·year·name·grade·track·phone (Admit 이 받는 전부)
+ *   ② PATCH /students/{id}  — birthDate·gender·schoolName·address
+ *   Admit 이 얇아서 폼 값을 한 번에 못 보낸다. ①이 성공하고 ②가 실패하면 **학생은 이미 등록된 상태**라
+ *   그 사실을 화면에 그대로 알린다 — "저장 실패"로 뭉뚱그리면 중복 등록을 유발한다.
+ *
+ * ★ 서버에 넣을 곳이 없는 폼 값 — docs/API_GAPS.md
+ *   영문명 · 학부모 연락처 · 졸업연도 · 등원일 · 장학 · 좌석 · 사물함.
+ *   반 배정·좌석·사물함·장학은 각자 전용 API가 있으므로 해당 화면에서 처리한다. */
 
-const nextSeq = MOCK_STUDENTS.length + 1
-const nextStudentNo = `2026-${String(nextSeq).padStart(4, '0')}`
+const GRADES: GradeType[] = ['HIGH3', 'N_SU', 'HIGH2']
+const TRACKS: TrackType[] = ['SCIENCE', 'HUMANITIES', 'ART', 'COMMON']
+
+interface FormState {
+  name: string
+  phone: string
+  birthDate: string
+  gender: string
+  address: string
+  schoolName: string
+  year: string
+  grade: GradeType
+  track: TrackType
+}
+
+const EMPTY: FormState = {
+  name: '',
+  phone: '',
+  birthDate: '',
+  gender: '',
+  address: '',
+  schoolName: '',
+  year: String(new Date().getFullYear()),
+  grade: 'N_SU',
+  track: 'SCIENCE',
+}
+
+/** 저장 결과 — 두 단계로 나가므로 어디까지 됐는지 구분해서 알린다 */
+type Result =
+  | { kind: 'admitted'; student: Student }
+  | { kind: 'partial'; student: Student; message: string }
+  | { kind: 'failed'; message: string }
 
 function Content() {
+  const { academyId, academies } = useAcademy()
+  const [form, setForm] = useState<FormState>(EMPTY)
+  const [saving, setSaving] = useState(false)
+  const [result, setResult] = useState<Result | null>(null)
+
+  const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm((f) => ({ ...f, [k]: v }))
+
+  const academyName = academies.find((a) => a.id === academyId)?.acadNm ?? null
+  const canSave = academyId !== null && form.name.trim().length > 0 && !saving
+
+  async function save() {
+    if (academyId === null || form.name.trim() === '') return
+    setSaving(true)
+    setResult(null)
+
+    let student: Student
+    try {
+      student = await admitStudent({
+        academyId,
+        year: Number(form.year),
+        name: form.name.trim(),
+        grade: form.grade,
+        track: form.track,
+        phone: form.phone.trim() || undefined,
+      })
+    } catch (err) {
+      setResult({ kind: 'failed', message: err instanceof ApiError ? err.message : '등록하지 못했습니다.' })
+      setSaving(false)
+      return
+    }
+
+    // ②단계. 여기서 실패해도 학생은 이미 등록돼 있다 — 그 사실을 숨기지 않는다
+    const details = {
+      birthDate: form.birthDate || undefined,
+      gender: form.gender || undefined,
+      schoolName: form.schoolName.trim() || undefined,
+      address: form.address.trim() || undefined,
+    }
+    const hasDetails = Object.values(details).some((v) => v !== undefined)
+
+    if (hasDetails) {
+      try {
+        student = await updateStudent(student.enrollmentId, details)
+      } catch (err) {
+        setResult({
+          kind: 'partial',
+          student,
+          message: err instanceof ApiError ? err.message : '상세 정보를 저장하지 못했습니다.',
+        })
+        setSaving(false)
+        return
+      }
+    }
+
+    setResult({ kind: 'admitted', student })
+    setForm(EMPTY)
+    setSaving(false)
+  }
+
   return (
     <>
       <div className="note-box">
@@ -24,12 +137,60 @@ function Content() {
         <div>
           <div className="tt">학번 자동 채번 — 저장 시 확정</div>
           <div className="tx">
-            학번은 <b>저장할 때 자동으로</b> 매겨집니다. 다음 학번은 <b>{nextStudentNo}</b>입니다.
-            번호는 <b>지점별·연도별로 따로</b> 매겨지므로, 다른 지점에 같은 학번이 있을 수 있습니다.
+            학번은 <b>저장할 때 서버가 매깁니다.</b> 저장 전에는 번호를 알 수 없습니다.
+            번호는 <b>지점별·연도별로 따로</b> 매겨지므로 다른 지점에 같은 학번이 있을 수 있습니다 —
             학생을 특정할 때는 학번만으로 판단하지 마세요.
           </div>
         </div>
       </div>
+
+      {result && (
+        <div
+          className="note-box"
+          role="status"
+          style={
+            result.kind === 'admitted'
+              ? { borderColor: 'var(--mint-b)' }
+              : { borderColor: result.kind === 'partial' ? 'var(--amber)' : 'var(--red)' }
+          }
+        >
+          <div className="ic">
+            <Icon name={result.kind === 'admitted' ? 'check' : 'triangle-alert'} size={17} />
+          </div>
+          <div>
+            {result.kind === 'admitted' && (
+              <>
+                <div className="tt">
+                  등록 완료 — 학번 <b>{result.student.studentNo ?? '(미부여)'}</b>
+                </div>
+                <div className="tx">
+                  {result.student.name} · {GRADE_LABEL[result.student.grade]} ·{' '}
+                  {result.student.track ? TRACK_LABEL[result.student.track] : '계열 미지정'} ·{' '}
+                  {result.student.academyName ?? ''}
+                </div>
+              </>
+            )}
+            {result.kind === 'partial' && (
+              <>
+                <div className="tt">
+                  학생은 등록됐지만 상세 정보 저장이 실패했습니다 — 학번{' '}
+                  <b>{result.student.studentNo ?? '(미부여)'}</b>
+                </div>
+                <div className="tx">
+                  {result.message} <b>다시 등록하지 마세요.</b> 학원생 검색에서 해당 학생을 찾아
+                  생년월일·주소 등을 수정하면 됩니다.
+                </div>
+              </>
+            )}
+            {result.kind === 'failed' && (
+              <>
+                <div className="tt">등록하지 못했습니다</div>
+                <div className="tx">{result.message}</div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="split">
         <div className="card-sec">
@@ -45,31 +206,62 @@ function Content() {
             <div className="frow">
               <label className="req">이름</label>
               <div className="two">
-                <input className="inp" placeholder="홍길동" />
-                <input className="inp" placeholder="영문명 (선택)" />
+                <input
+                  className="inp"
+                  placeholder="홍길동"
+                  value={form.name}
+                  onChange={(e) => set('name', e.target.value)}
+                  maxLength={20}
+                />
+                <div className="link-box" style={{ alignItems: 'center' }}>
+                  <div>
+                    영문명 <Unfilled reason="등록 요청에 영문명 필드가 없다" />
+                  </div>
+                </div>
               </div>
             </div>
             <div className="frow">
-              <label className="req">생년월일</label>
+              <label>생년월일</label>
               <div className="two">
-                <input className="inp" type="date" />
-                <select className="sel">
-                  <option>성별 선택</option>
-                  <option>남</option>
-                  <option>여</option>
+                <input
+                  className="inp"
+                  type="date"
+                  value={form.birthDate}
+                  onChange={(e) => set('birthDate', e.target.value)}
+                />
+                <select className="sel" value={form.gender} onChange={(e) => set('gender', e.target.value)}>
+                  <option value="">성별 선택</option>
+                  <option value="M">남</option>
+                  <option value="F">여</option>
                 </select>
               </div>
             </div>
             <div className="frow">
-              <label className="req">연락처</label>
+              <label>연락처</label>
               <div className="two">
-                <input className="inp" placeholder="학생 010-0000-0000" />
-                <input className="inp" placeholder="학부모 010-0000-0000" />
+                <input
+                  className="inp"
+                  placeholder="학생 010-0000-0000"
+                  value={form.phone}
+                  onChange={(e) => set('phone', e.target.value)}
+                  maxLength={20}
+                />
+                <div className="link-box" style={{ alignItems: 'center' }}>
+                  <div>
+                    학부모 연락처 <Unfilled reason="보호자 연락처를 받는 필드가 없다" />
+                  </div>
+                </div>
               </div>
             </div>
             <div className="frow">
               <label>주소</label>
-              <input className="inp" placeholder="도로명 주소" />
+              <input
+                className="inp"
+                placeholder="도로명 주소"
+                value={form.address}
+                onChange={(e) => set('address', e.target.value)}
+                maxLength={200}
+              />
             </div>
             <div className="frow">
               <label>개인정보</label>
@@ -95,80 +287,89 @@ function Content() {
               학적 · 배정
             </div>
             <div className="r">
-              <span className="mk verified">학번 {nextStudentNo}</span>
+              <span className="mk supplement">학번은 저장 시 부여</span>
             </div>
           </div>
           <div className="card-sec-b">
             <div className="frow">
-              <label className="req">지점</label>
+              <label className="req">지점 · 연도</label>
               <div className="two">
-                <select className="sel">
-                  <option>분당</option>
-                  <option>대치</option>
-                  <option>평촌</option>
-                </select>
-                <select className="sel">
-                  <option>2026 시즌</option>
-                  <option>2025 시즌</option>
+                {/* 지점은 상단 지점 선택을 따른다. 여기서 또 고르게 하면 두 값이 어긋난다 */}
+                <input className="inp" value={academyName ?? '지점을 먼저 선택하세요'} readOnly />
+                <select className="sel" value={form.year} onChange={(e) => set('year', e.target.value)}>
+                  {[0, 1].map((d) => {
+                    const y = new Date().getFullYear() - d
+                    return (
+                      <option key={y} value={y}>
+                        {y} 시즌
+                      </option>
+                    )
+                  })}
                 </select>
               </div>
             </div>
             <div className="frow">
-              <label className="req">계열 · 구분</label>
+              <label className="req">계열 · 학년</label>
               <div className="two">
-                <select className="sel">
-                  <option>자연</option>
-                  <option>인문</option>
+                <select className="sel" value={form.track} onChange={(e) => set('track', e.target.value as TrackType)}>
+                  {TRACKS.map((t) => (
+                    <option key={t} value={t}>
+                      {TRACK_LABEL[t]}
+                    </option>
+                  ))}
                 </select>
-                <select className="sel">
-                  <option>재수</option>
-                  <option>삼수</option>
-                  <option>N수</option>
+                <select className="sel" value={form.grade} onChange={(e) => set('grade', e.target.value as GradeType)}>
+                  {GRADES.map((g) => (
+                    <option key={g} value={g}>
+                      {GRADE_LABEL[g]}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
             <div className="frow">
               <label>출신학교</label>
               <div className="two">
-                <input className="inp" placeholder="태원고" />
-                <input className="inp" placeholder="졸업연도" />
+                <input
+                  className="inp"
+                  placeholder="태원고"
+                  value={form.schoolName}
+                  onChange={(e) => set('schoolName', e.target.value)}
+                  maxLength={64}
+                />
+                <div className="link-box" style={{ alignItems: 'center' }}>
+                  <div>
+                    졸업연도 <Unfilled reason="졸업연도 필드가 없다" />
+                  </div>
+                </div>
               </div>
             </div>
             <div className="frow">
-              <label>반 · 담임</label>
+              <label>반 · 좌석 · 사물함</label>
+              <div className="link-box">
+                <div className="chk">
+                  <Icon name="arrow-right" size={12} />
+                </div>
+                <div>
+                  등록 요청에는 배정 값이 없습니다. 저장 후 <b>고정반 관리</b>·<b>배정 관리</b> 화면에서
+                  배정하세요 — 각각 전용 API가 있습니다.
+                </div>
+              </div>
+            </div>
+            <div className="frow">
+              <label>장학 · 등원일</label>
               <div className="two">
-                <select className="sel">
-                  <option>미배정</option>
-                  <option>1반</option>
-                  <option>2반</option>
-                  <option>3반</option>
-                  <option>4반</option>
-                </select>
-                <select className="sel">
-                  <option>미지정</option>
-                  <option>이장원</option>
-                  <option>김유진</option>
-                </select>
+                <div className="link-box" style={{ alignItems: 'center' }}>
+                  <div>
+                    장학 <Unfilled reason="등록 요청에 없다 (장학은 별도 API)" />
+                  </div>
+                </div>
+                <div className="link-box" style={{ alignItems: 'center' }}>
+                  <div>
+                    등원일 <Unfilled reason="등록·수정 요청 어디에도 admissionDate 가 없다" />
+                  </div>
+                </div>
               </div>
-            </div>
-            <div className="frow">
-              <label>좌석 · 사물함</label>
-              <div className="two">
-                <input className="inp" placeholder="A-24" />
-                <input className="inp" placeholder="L-108" />
-              </div>
-            </div>
-            <div className="frow">
-              <label>장학</label>
-              <select className="sel">
-                <option>해당 없음</option>
-                <option>수능100</option>
-                <option>평가원50</option>
-              </select>
-            </div>
-            <div className="frow">
-              <label className="req">등원일</label>
-              <input className="inp" type="date" defaultValue="2026-06-02" />
             </div>
           </div>
         </div>
@@ -177,15 +378,16 @@ function Content() {
       <div className="card-sec">
         <div className="card-sec-b" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6 }}>
-            저장하면 학번 <b style={{ color: 'var(--ink)' }}>{nextStudentNo}</b>가 확정되고, 학생·학부모에게{' '}
-            <b style={{ color: 'var(--ink)' }}>앱 초대 알림</b>이 발송됩니다. 회원가입 후{' '}
+            저장하면 <b style={{ color: 'var(--ink)' }}>학번이 확정</b>됩니다. 회원가입 후{' '}
             <b style={{ color: 'var(--ink)' }}>신상기록부(F-4.11-9) 작성이 필수 단계</b>로 강제되며, 미작성 시 등록
             미완 상태로 남습니다.
           </div>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-            <button className="btn">임시저장</button>
-            <button className="btn pri">
-              <Icon name="save" size={14} /> 합격생 등록
+            <button className="btn" disabled title="임시저장 API가 없습니다">
+              임시저장
+            </button>
+            <button className="btn pri" disabled={!canSave} onClick={() => void save()}>
+              <Icon name="save" size={14} /> {saving ? '등록 중…' : '합격생 등록'}
             </button>
           </div>
         </div>
@@ -198,7 +400,7 @@ export const enrollMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn">
+      <button className="btn" disabled title="일괄 등록은 /students/import 연동 후 활성화합니다">
         <Icon name="upload" size={14} /> 엑셀 일괄 등록
       </button>
     </>
