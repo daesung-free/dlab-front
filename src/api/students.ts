@@ -118,9 +118,8 @@ export function searchStudents(params: StudentSearchParams): Promise<Paged<Stude
 /**
  * 접수 시 받는 값. **학번은 서버가 채번한다** — 요청에 넣지 않는다.
  *
- * ⚠️ 등록 폼이 받는 값의 일부만 여기 들어간다. 생년월일·성별·출신학교·주소는
- *   `updateStudent`(PATCH)로 이어서 보내야 하고, 반·좌석·사물함·장학은 각자 다른 API다.
- *   docs/API_GAPS.md 참고.
+ * 상세까지 한 번에 받는다(2026-09-03 백엔드 반영). 예전에는 POST 후 PATCH 로
+ * 두 번 나가야 했고, 첫 단계만 성공하면 중복 등록을 유발했다.
  */
 export interface AdmitRequest {
   academyId: number
@@ -129,6 +128,13 @@ export interface AdmitRequest {
   grade: GradeType
   track?: TrackType
   phone?: string
+  birthDate?: string
+  /** 'M' | 'F' */
+  gender?: string
+  schoolName?: string
+  address?: string
+  /** 지정하지 않으면 서버가 등록일로 잡는다 */
+  admissionDate?: string
 }
 
 /** 접수 후 상세를 채운다. 넘긴 필드만 바뀐다 */
@@ -151,4 +157,9 @@ export function admitStudent(body: AdmitRequest): Promise<Student> {
 
 export function updateStudent(enrollmentId: number, body: StudentUpdateRequest): Promise<Student> {
   return request<Student>(`/api/v1/admin/students/${enrollmentId}`, { method: 'PATCH', body })
+}
+
+/** 저장하면 부여될 다음 학번. 미리보기용이고 예약은 아니다 */
+export function getNextStudentNo(academyId: number, year: number): Promise<string> {
+  return request<string>('/api/v1/admin/students/next-student-no', { query: { academyId, year } })
 }

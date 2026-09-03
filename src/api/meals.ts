@@ -109,3 +109,16 @@ export function createMealClosure(academyId: number, date: string, reason: strin
 export function deleteMealClosure(closureId: number): Promise<void> {
   return request<void>(`/api/v1/admin/meals/closures/${closureId}`, { method: 'DELETE' })
 }
+
+/** 급식 신청 마감 정책. `registered=false` 면 deadlineDays 는 서버 기본값이다 */
+export interface MealPolicy {
+  academyId: number | null
+  year: number
+  deadlineDays: number
+  /** 지점 정책이 실제로 등록됐는지 — "설정 안 함"과 구분해서 보여줄 수 있다 */
+  registered: boolean
+}
+
+export function getMealPolicy(academyId: number, year: number): Promise<MealPolicy> {
+  return request<MealPolicy>('/api/v1/admin/meals/policy', { query: { academyId, year } })
+}

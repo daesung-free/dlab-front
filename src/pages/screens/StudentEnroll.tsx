@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Icon } from '../../components/Icon'
 import { Unfilled } from '../../components/common'
 import { ApiError } from '../../api/client'
@@ -7,7 +7,7 @@ import {
   GRADE_LABEL,
   TRACK_LABEL,
   admitStudent,
-  updateStudent,
+  getNextStudentNo,
   type GradeType,
   type Student,
   type TrackType,
@@ -17,22 +17,20 @@ import '../../styles/forms.css'
 
 /* F-4.1-3 신규 접수 등록(합격생 등록) — POST /api/v1/admin/students
  *
- * ★ 학번은 서버가 채번한다. 저장 전에는 번호를 알 수 없다 —
- *   미리보기 API가 없어서 "다음 학번" 표시는 뺐다(예전 목업은 지어낸 값이었다).
+ * ★ 학번은 서버가 채번한다. 저장할 때 확정되고, 미리보기는 next-student-no 로 받는다.
+ *   **미리보기는 예약이 아니다** — 다른 사람이 먼저 저장하면 번호가 밀린다.
  *
  * ★ 유일성은 UNIQUE(academy_id, year, student_no) 다 — **지점 축이 있다**.
  *   같은 해에도 지점이 다르면 같은 학번이 존재하고(2026-0001 이 분당·이매·목동에 각각 있다),
  *   연도가 바뀌면 같은 지점에서도 번호가 재사용된다. 그래서 학번은 PK가 아니다.
  *   학생을 특정할 때는 enrollmentId(등록 건) 또는 studentId(사람)를 쓴다.
  *
- * ★ 저장이 **두 번 나간다.**
- *   ① POST /students        — academyId·year·name·grade·track·phone (Admit 이 받는 전부)
- *   ② PATCH /students/{id}  — birthDate·gender·schoolName·address
- *   Admit 이 얇아서 폼 값을 한 번에 못 보낸다. ①이 성공하고 ②가 실패하면 **학생은 이미 등록된 상태**라
- *   그 사실을 화면에 그대로 알린다 — "저장 실패"로 뭉뚱그리면 중복 등록을 유발한다.
+ * ★ 저장이 **한 번에 끝난다.** 예전에는 Admit 이 얇아 POST 후 PATCH 로 두 번 나갔고,
+ *   첫 단계만 성공하면 중복 등록을 유발했다 — 백엔드가 상세 필드를 등록에 넣어줘서(2026-09-03)
+ *   부분 실패 처리 자체가 없어졌다.
  *
  * ★ 서버에 넣을 곳이 없는 폼 값 — docs/API_GAPS.md
- *   영문명 · 학부모 연락처 · 졸업연도 · 등원일 · 장학 · 좌석 · 사물함.
+ *   영문명 · 학부모 연락처 · 졸업연도 · 장학 · 좌석 · 사물함.
  *   반 배정·좌석·사물함·장학은 각자 전용 API가 있으므로 해당 화면에서 처리한다. */
 
 const GRADES: GradeType[] = ['HIGH3', 'N_SU', 'HIGH2']
@@ -45,6 +43,7 @@ interface FormState {
   gender: string
   address: string
   schoolName: string
+  admissionDate: string
   year: string
   grade: GradeType
   track: TrackType
@@ -57,22 +56,37 @@ const EMPTY: FormState = {
   gender: '',
   address: '',
   schoolName: '',
+  admissionDate: '',
   year: String(new Date().getFullYear()),
   grade: 'N_SU',
   track: 'SCIENCE',
 }
 
-/** 저장 결과 — 두 단계로 나가므로 어디까지 됐는지 구분해서 알린다 */
-type Result =
-  | { kind: 'admitted'; student: Student }
-  | { kind: 'partial'; student: Student; message: string }
-  | { kind: 'failed'; message: string }
+type Result = { kind: 'admitted'; student: Student } | { kind: 'failed'; message: string }
 
 function Content() {
   const { academyId, academies } = useAcademy()
   const [form, setForm] = useState<FormState>(EMPTY)
   const [saving, setSaving] = useState(false)
   const [result, setResult] = useState<Result | null>(null)
+  const [nextNo, setNextNo] = useState<string | null>(null)
+
+  const refreshNextNo = useCallback(async () => {
+    if (academyId === null) {
+      setNextNo(null)
+      return
+    }
+    try {
+      setNextNo(await getNextStudentNo(academyId, Number(form.year)))
+    } catch {
+      // 미리보기가 없어도 등록은 된다 — 실패는 조용히 넘긴다
+      setNextNo(null)
+    }
+  }, [academyId, form.year])
+
+  useEffect(() => {
+    void refreshNextNo()
+  }, [refreshNextNo])
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm((f) => ({ ...f, [k]: v }))
 
@@ -83,49 +97,28 @@ function Content() {
     if (academyId === null || form.name.trim() === '') return
     setSaving(true)
     setResult(null)
-
-    let student: Student
     try {
-      student = await admitStudent({
+      const student = await admitStudent({
         academyId,
         year: Number(form.year),
         name: form.name.trim(),
         grade: form.grade,
         track: form.track,
         phone: form.phone.trim() || undefined,
+        birthDate: form.birthDate || undefined,
+        gender: form.gender || undefined,
+        schoolName: form.schoolName.trim() || undefined,
+        address: form.address.trim() || undefined,
+        admissionDate: form.admissionDate || undefined,
       })
+      setResult({ kind: 'admitted', student })
+      setForm(EMPTY)
+      void refreshNextNo()
     } catch (err) {
       setResult({ kind: 'failed', message: err instanceof ApiError ? err.message : '등록하지 못했습니다.' })
+    } finally {
       setSaving(false)
-      return
     }
-
-    // ②단계. 여기서 실패해도 학생은 이미 등록돼 있다 — 그 사실을 숨기지 않는다
-    const details = {
-      birthDate: form.birthDate || undefined,
-      gender: form.gender || undefined,
-      schoolName: form.schoolName.trim() || undefined,
-      address: form.address.trim() || undefined,
-    }
-    const hasDetails = Object.values(details).some((v) => v !== undefined)
-
-    if (hasDetails) {
-      try {
-        student = await updateStudent(student.enrollmentId, details)
-      } catch (err) {
-        setResult({
-          kind: 'partial',
-          student,
-          message: err instanceof ApiError ? err.message : '상세 정보를 저장하지 못했습니다.',
-        })
-        setSaving(false)
-        return
-      }
-    }
-
-    setResult({ kind: 'admitted', student })
-    setForm(EMPTY)
-    setSaving(false)
   }
 
   return (
@@ -137,7 +130,8 @@ function Content() {
         <div>
           <div className="tt">학번 자동 채번 — 저장 시 확정</div>
           <div className="tx">
-            학번은 <b>저장할 때 서버가 매깁니다.</b> 저장 전에는 번호를 알 수 없습니다.
+            학번은 <b>저장할 때 확정</b>됩니다. {nextNo ? <>다음 학번은 <b>{nextNo}</b>입니다 — </> : null}
+            <b>미리 잡아두는 번호는 아니라서</b> 다른 사람이 먼저 저장하면 밀립니다.
             번호는 <b>지점별·연도별로 따로</b> 매겨지므로 다른 지점에 같은 학번이 있을 수 있습니다 —
             학생을 특정할 때는 학번만으로 판단하지 마세요.
           </div>
@@ -148,11 +142,7 @@ function Content() {
         <div
           className="note-box"
           role="status"
-          style={
-            result.kind === 'admitted'
-              ? { borderColor: 'var(--mint-b)' }
-              : { borderColor: result.kind === 'partial' ? 'var(--amber)' : 'var(--red)' }
-          }
+          style={{ borderColor: result.kind === 'admitted' ? 'var(--mint-b)' : 'var(--red)' }}
         >
           <div className="ic">
             <Icon name={result.kind === 'admitted' ? 'check' : 'triangle-alert'} size={17} />
@@ -167,18 +157,6 @@ function Content() {
                   {result.student.name} · {GRADE_LABEL[result.student.grade]} ·{' '}
                   {result.student.track ? TRACK_LABEL[result.student.track] : '계열 미지정'} ·{' '}
                   {result.student.academyName ?? ''}
-                </div>
-              </>
-            )}
-            {result.kind === 'partial' && (
-              <>
-                <div className="tt">
-                  학생은 등록됐지만 상세 정보 저장이 실패했습니다 — 학번{' '}
-                  <b>{result.student.studentNo ?? '(미부여)'}</b>
-                </div>
-                <div className="tx">
-                  {result.message} <b>다시 등록하지 마세요.</b> 학원생 검색에서 해당 학생을 찾아
-                  생년월일·주소 등을 수정하면 됩니다.
                 </div>
               </>
             )}
@@ -287,7 +265,7 @@ function Content() {
               학적 · 배정
             </div>
             <div className="r">
-              <span className="mk supplement">학번은 저장 시 부여</span>
+              <span className="mk supplement">{nextNo ? `다음 학번 ${nextNo}` : '학번은 저장 시 부여'}</span>
             </div>
           </div>
           <div className="card-sec-b">
@@ -364,11 +342,13 @@ function Content() {
                     장학 <Unfilled reason="등록 요청에 없다 (장학은 별도 API)" />
                   </div>
                 </div>
-                <div className="link-box" style={{ alignItems: 'center' }}>
-                  <div>
-                    등원일 <Unfilled reason="등록·수정 요청 어디에도 admissionDate 가 없다" />
-                  </div>
-                </div>
+                <input
+                  className="inp"
+                  type="date"
+                  value={form.admissionDate}
+                  onChange={(e) => set('admissionDate', e.target.value)}
+                  title="비우면 등록일로 잡힙니다"
+                />
               </div>
             </div>
           </div>

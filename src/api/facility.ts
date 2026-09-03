@@ -61,19 +61,23 @@ export interface SeatCell {
   presence: Presence | null
   enrollmentId: number | null
   studentNo: string | null
-  /**
-   * ⚠️ **서버가 마스킹해서 보낸다**(`서*윤`). 원본을 받을 파라미터가 없어
-   * 이 화면에서는 마스킹 토글이 의미가 없다 — docs/API_GAPS.md 참고.
-   */
   studentName: string | null
+  classId: number | null
+  /** 고정반 이름. 미배정이면 null */
+  className: string | null
+  /**
+   * 서버가 이름을 가려서 보냈는지. 다른 목록과 같은 규칙이다 —
+   * `unmask` 를 주면 원본이 오고 `masked=false` 가 된다.
+   */
+  masked: boolean
 }
 
 export function listSeatAreas(academyId: number): Promise<SeatArea[]> {
   return request<SeatArea[]>('/api/v1/admin/seats/areas', { query: { academyId } })
 }
 
-export function getSeatLayout(studyAreaId: number): Promise<SeatCell[]> {
-  return request<SeatCell[]>('/api/v1/admin/seats/layout', { query: { studyAreaId } })
+export function getSeatLayout(studyAreaId: number, unmask = false): Promise<SeatCell[]> {
+  return request<SeatCell[]>('/api/v1/admin/seats/layout', { query: { studyAreaId, unmask: unmask || undefined } })
 }
 
 export function assignSeat(seatId: number, enrollmentId: number): Promise<void> {

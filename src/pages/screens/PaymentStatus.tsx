@@ -4,7 +4,6 @@ import {
   ExcelButton,
   MaskToggle,
   SearchForm,
-  Unfilled,
   type Column,
   type DateRangeValue,
   type Field,
@@ -17,6 +16,7 @@ import { useAcademy } from '../../auth/AcademyContext'
 import {
   BILLING_STATUS_LABEL,
   BILLING_TYPE_LABEL,
+  PAY_METHOD_LABEL,
   getReceiptSummary,
   listReceiptStatus,
   type BillingType,
@@ -35,10 +35,14 @@ import './payment.css'
  * ★ 청구 1건 = 한 달분이다. 한 학생이 여러 달 밀리면 행이 여러 개가 되므로
  *   '미납 건수'와 '미납 학생 수'가 다르다 — 서버 주석에도 그렇게 적혀 있다.
  *
- * ★ 서버가 안 주는 컬럼 — docs/API_GAPS.md
- *   결제일자 · 전표번호 · 결제수단 · 지점 · 청구기수.
- *   RowView 는 청구/수납 금액과 상태 축만 준다. 결제 '거래' 축(언제 무엇으로 냈는가)이 없다.
- *   목업 컬럼은 지우지 않고 <Unfilled/> 로 둔다.
+ * ★ 결제 '거래' 축이 payments[] 로 들어왔다(2026-09-03). 결제일자·전표번호·결제수단을
+ *   실제 값으로 그린다. **취소분은 빠져 있다** — 취소까지 세면 화면의 결제수단이
+ *   "지금 실제로 결제된 수단"과 어긋나기 때문이다(서버 주석).
+ *
+ * ★ 한 청구에 결제가 여러 건일 수 있다(부분납). 컬럼은 마지막 결제를 대표로 보여주고
+ *   여러 건이면 그 사실을 표시한다 — 합계는 receivedAmount 가 이미 갖고 있다.
+ *
+ * ★ 아직 없는 것: 지점(행에는 없다. 조회가 지점 단위라 헤더로 대신한다).
  *
  * ★ 지점은 행에 없지만 조회 자체가 지점 단위다(academyId). 선택한 지점을 헤더에 보여준다. */
 
@@ -69,15 +73,43 @@ const KIND_TO_TYPE: Record<Kind, BillingType> = {
   급식비: 'MEAL',
 }
 
-/** 결제 '거래' 축(언제·무엇으로 냈는가)이 응답에 없어 미제공으로 둔다 */
-const notProvided = (reason: string) => ({
-  value: () => '',
-  render: () => <Unfilled reason={reason} />,
-})
+/** 대표 결제 = 마지막 거래. 부분납이면 여러 건이라 개수를 함께 보여준다 */
+const lastPayment = (r: ReceiptRow) => (r.payments.length > 0 ? r.payments[r.payments.length - 1] : null)
 
 const COLUMNS: Column<ReceiptRow>[] = [
-  { key: 'paidAt', header: '결제일자', width: '100px', ...notProvided('수납 일자가 응답에 없다 (거래 축 없음)') },
-  { key: 'voucherNo', header: '전표번호', width: '150px', ...notProvided('전표번호가 응답에 없다') },
+  {
+    key: 'paidAt',
+    header: '결제일자',
+    width: '110px',
+    value: (r) => lastPayment(r)?.paidAt ?? '',
+    render: (r) => {
+      const p = lastPayment(r)
+      if (!p) return <span style={{ color: 'var(--muted)' }}>-</span>
+      return (
+        <>
+          {p.paidAt.slice(0, 10)}
+          {r.payments.length > 1 && (
+            <span style={{ color: 'var(--muted)', fontSize: 11 }} title={`결제 ${r.payments.length}건`}>
+              {' '}
+              +{r.payments.length - 1}
+            </span>
+          )}
+        </>
+      )
+    },
+  },
+  {
+    key: 'voucherNo',
+    header: '전표번호',
+    width: '150px',
+    value: (r) => lastPayment(r)?.pgTid ?? '',
+    render: (r) => {
+      const p = lastPayment(r)
+      // 가상계좌·현금은 PG 거래번호가 없다
+      if (!p?.pgTid) return <span style={{ color: 'var(--muted)' }}>-</span>
+      return <code style={{ fontSize: 11 }}>{p.pgTid}</code>
+    },
+  },
   { key: 'studentNo', header: '학번', width: '100px', value: (r) => r.studentNo ?? '-' },
   { key: 'studentName', header: '이름', width: '84px', mask: 'name', value: (r) => r.studentName },
   { key: 'serviceMonth', header: '대상월', width: '84px', align: 'center', value: (r) => r.serviceMonth ?? '-' },
@@ -89,7 +121,18 @@ const COLUMNS: Column<ReceiptRow>[] = [
     value: (r) => BILLING_TYPE_LABEL[r.billingType] ?? r.billingType,
     render: (r) => <span className="mk supplement">{BILLING_TYPE_LABEL[r.billingType] ?? r.billingType}</span>,
   },
-  { key: 'method', header: '결제수단', width: '84px', align: 'center', ...notProvided('결제수단이 응답에 없다') },
+  {
+    key: 'method',
+    header: '결제수단',
+    width: '96px',
+    align: 'center',
+    value: (r) => [...new Set(r.payments.map((p) => p.method))].join(', '),
+    render: (r) => {
+      const methods = [...new Set(r.payments.map((p) => PAY_METHOD_LABEL[p.method] ?? p.method))]
+      return methods.length > 0 ? methods.join(', ') : <span style={{ color: 'var(--muted)' }}>-</span>
+    },
+  },
+  { key: 'year', header: '기수', width: '68px', align: 'center', value: (r) => r.year ?? '-' },
   { key: 'billedAmount', header: '청구액', width: '106px', align: 'right', value: (r) => r.billedAmount, render: (r) => wonOf(r.billedAmount) },
   {
     key: 'receivedAmount',
@@ -368,16 +411,23 @@ function Content() {
   // 요청을 하나 아끼려고 여기서 거른다 — unpaid 는 서버가 계산해준 값이다.
   const unpaid = useMemo(() => rows.filter((r) => r.unpaid > 0), [rows])
 
-  const sum = useMemo(
-    () => ({
+  const sum = useMemo(() => {
+    // 결제수단별 집계는 서버 요약에 없다. 행의 payments[] 를 더해 만든다 —
+    // 조회 조건 안에서만 맞는 값이라 "조회 조건 기준"이라고 적어둔다
+    const byMethod = new Map<string, number>()
+    for (const r of rows) {
+      for (const p of r.payments) byMethod.set(p.method, (byMethod.get(p.method) ?? 0) + p.amount)
+    }
+    return {
       total: summary?.receivedAmount ?? 0,
       billed: summary?.billedAmount ?? 0,
       due: summary?.unpaidAmount ?? 0,
       unpaidCount: summary?.unpaidCount ?? 0,
       byType: summary?.unpaidByType ?? {},
-    }),
-    [summary],
-  )
+      card: byMethod.get('CARD') ?? 0,
+      vbank: byMethod.get('VBANK') ?? 0,
+    }
+  }, [summary, rows])
 
   return (
     <>
@@ -389,22 +439,19 @@ function Content() {
           <div className="v">{Math.round(sum.total / 10000).toLocaleString()}</div>
           <div className="d">만원 · 조회 조건 기준</div>
         </div>
-        {/* 결제수단별 집계는 서버가 주지 않는다(거래 축 없음) — 청구 총액으로 대신한다 */}
         <div className="stat">
           <div className="l">
-            <Icon name="receipt" size={13} /> 청구 총액
+            <Icon name="credit-card" size={13} /> 카드
           </div>
-          <div className="v">{Math.round(sum.billed / 10000).toLocaleString()}</div>
-          <div className="d">만원</div>
+          <div className="v">{Math.round(sum.card / 10000).toLocaleString()}</div>
+          <div className="d">만원 · 조회 조건 기준</div>
         </div>
         <div className="stat">
           <div className="l">
-            <Icon name="credit-card" size={13} /> 결제수단별
+            <Icon name="wallet" size={13} /> 가상계좌
           </div>
-          <div className="v" style={{ fontSize: 14, paddingTop: 8 }}>
-            <Unfilled reason="수납 거래(수단·일자) 축이 응답에 없다" />
-          </div>
-          <div className="d">API 보완 필요</div>
+          <div className="v">{Math.round(sum.vbank / 10000).toLocaleString()}</div>
+          <div className="d">만원 · 조회 조건 기준</div>
         </div>
         <div className="stat">
           <div className="l">

@@ -8,6 +8,7 @@ import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
 import {
   CONSULT_METHOD_LABEL,
+  PARENT_SHARE_LABEL,
   CONSULT_TYPE_CLASS,
   CONSULT_TYPE_LABEL,
   listConsultStatus,
@@ -17,6 +18,7 @@ import {
   type ConsultMethod,
   type ConsultStatusRow,
   type ConsultType,
+  type ParentShare,
 } from '../../api/consults'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
@@ -32,11 +34,9 @@ import './consult.css'
  * ★ 서버에 없어서 못 붙인 것 — docs/API_GAPS.md 참고
  *   · 성적 스트립(국어/수학/영어/탐구 등급) — 성적 도메인이라 묶음 F에서 붙인다
  *   · 상세 탭 3개(성적 추이 · 출결·상벌점 · 학부모 공유내역) — 각각 다른 도메인
- *   · 학부모 공유 설정 — WriteRequest 에 필드가 없다
- *   · 상담 소요시간 — placeNote 한 칸뿐이라 "20분 · 상담실 2"를 통째로 넣는다
  *
- * ★ 작성자(teacherId)를 안 보낸다. 토큰에 accountId 는 있어도 teacherId 가 없고
- *   매핑할 API도 없어서, 지금은 teacherName 이 빈 채로 저장된다. */
+ * ★ 작성자는 **서버가 로그인 주체로 채운다**(2026-09-03). 클라이언트가 안 보낸다 —
+ *   남의 id 를 보낼 수 없으니 이 편이 안전하다. */
 
 const CONSULT_TYPES: ConsultType[] = ['REGULAR', 'SCORE', 'LIFE', 'ADMISSION', 'PARENT']
 const METHODS: ConsultMethod[] = ['FACE', 'PHONE', 'ONLINE']
@@ -87,6 +87,8 @@ function Content() {
   const [type, setType] = useState<ConsultType>('REGULAR')
   const [method, setMethod] = useState<ConsultMethod>('FACE')
   const [placeNote, setPlaceNote] = useState('')
+  const [durationMinutes, setDurationMinutes] = useState('')
+  const [parentShare, setParentShare] = useState<ParentShare>('NONE')
   const [content, setContent] = useState('')
   const [actionPlan, setActionPlan] = useState('')
   const [nextDueDate, setNextDueDate] = useState('')
@@ -149,6 +151,8 @@ function Content() {
         method,
         consultedAt: today(),
         placeNote: placeNote.trim() || undefined,
+        durationMinutes: durationMinutes ? Number(durationMinutes) : undefined,
+        parentShare,
         content: content.trim(),
         actionPlan: actionPlan.trim() || undefined,
         nextDueDate: nextDueDate.trim() || undefined,
@@ -156,6 +160,8 @@ function Content() {
       setContent('')
       setActionPlan('')
       setPlaceNote('')
+      setDurationMinutes('')
+      setParentShare('NONE')
       setNextDueDate('')
       setSaveMsg('상담일지를 저장했습니다.')
       setLogs(await listStudentConsults(selected.enrollmentId))
@@ -275,12 +281,22 @@ function Content() {
                             </option>
                           ))}
                         </select>
-                        <input
-                          className="inp"
-                          value={placeNote}
-                          onChange={(e) => setPlaceNote(e.target.value)}
-                          placeholder="소요시간 · 장소 (예: 20분 · 상담실 2)"
-                        />
+                        <div className="two">
+                          <input
+                            className="inp"
+                            type="number"
+                            min={1}
+                            value={durationMinutes}
+                            onChange={(e) => setDurationMinutes(e.target.value)}
+                            placeholder="소요시간(분)"
+                          />
+                          <input
+                            className="inp"
+                            value={placeNote}
+                            onChange={(e) => setPlaceNote(e.target.value)}
+                            placeholder="장소 (예: 상담실 2)"
+                          />
+                        </div>
                       </div>
                     </div>
 
@@ -315,11 +331,17 @@ function Content() {
                           onChange={(e) => setNextDueDate(e.target.value)}
                           placeholder="다음 상담 예정일"
                         />
-                        <div className="link-box" style={{ alignItems: 'center' }}>
-                          <div>
-                            학부모 공유 설정 <Unfilled reason="저장 요청에 공유 설정 필드가 없다" />
-                          </div>
-                        </div>
+                        <select
+                          className="sel"
+                          value={parentShare}
+                          onChange={(e) => setParentShare(e.target.value as ParentShare)}
+                        >
+                          {(['NONE', 'SUMMARY', 'FULL'] as ParentShare[]).map((v) => (
+                            <option key={v} value={v}>
+                              학부모 공유: {PARENT_SHARE_LABEL[v]}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                     </div>
                   </div>
@@ -362,6 +384,7 @@ function Content() {
                           <span className="who">
                             {e.teacherName ?? '작성자 미기록'}
                             {e.method && ` · ${CONSULT_METHOD_LABEL[e.method]}`}
+                            {e.durationMinutes ? ` · ${e.durationMinutes}분` : ''}
                             {e.placeNote && ` · ${e.placeNote}`}
                           </span>
                         </div>

@@ -7,10 +7,11 @@ import { useAcademy } from '../../auth/AcademyContext'
 import {
   DONE_STATUSES,
   ROUTINE_STATUS_LABEL,
-  listRoutineResults,
+  getRoutineMatrix,
   listRoutines,
+  type MatrixRow,
   type Routine,
-  type RoutineResult,
+  type RoutineRef,
   type RoutineStatus,
 } from '../../api/routines'
 import type { Mockup } from './types'
@@ -22,9 +23,11 @@ import '../../styles/forms.css'
  * 상벌점 규칙 엔진 자동 연동은 I-5 확정 대기 →
  *   실행가이드: "I-5 미확정시 결과입력까지만, 자동상벌점연동 후행"
  *
- * ★ 화면과 API의 축이 다르다. 화면은 **학생 × 루틴 매트릭스**인데 API는 **루틴 하나당
- *   결과 목록**이라, 루틴 수만큼 호출해 조립한다(buildMatrix). 루틴이 많아지면
- *   호출 수가 그만큼 늘어난다 — 매트릭스 API를 요청해둘 것(docs/API_GAPS.md).
+ * ★ 매트릭스를 한 번에 받는다(2026-09-03 신설). 예전에는 루틴 수만큼 호출해 조립했다.
+ *   행의 `cells` 에는 **그 학생이 대상인 루틴만** 들어온다 — 반 지정 루틴이 섞이기 때문이라,
+ *   컬럼은 `routines` 순서로 그리고 없는 칸은 '-' 로 둔다.
+ *
+ * ★ `status=null` 은 **아직 입력하지 않은 칸**이다. 미제출(NOT_SUBMITTED)과 다르다.
  *
  * ★ 서버에 없는 것
  *   · 상벌점 트리거 — I-5 미확정이라 목업도 미정이었다. 응답에도 없다
@@ -33,41 +36,19 @@ import '../../styles/forms.css'
 
 const DONE = new Set<RoutineStatus>(DONE_STATUSES)
 
-/** 학생 한 명의 모든 루틴 결과 */
-interface MatrixRow {
-  enrollmentId: number
-  studentNo: string | null
-  studentName: string
-  /** routineId → 결과 */
-  byRoutine: Map<number, RoutineResult>
+/** 화면이 쓰는 행 — 서버 매트릭스 행에 이행률을 더한 것 */
+interface Row extends MatrixRow {
   rate: number
 }
 
-function buildMatrix(routines: Routine[], resultsByRoutine: Map<number, RoutineResult[]>): MatrixRow[] {
-  const students = new Map<number, MatrixRow>()
-
-  for (const r of routines) {
-    for (const res of resultsByRoutine.get(r.id) ?? []) {
-      const row =
-        students.get(res.enrollmentId) ??
-        ({
-          enrollmentId: res.enrollmentId,
-          studentNo: res.studentNo,
-          studentName: res.studentName,
-          byRoutine: new Map(),
-          rate: 0,
-        } satisfies MatrixRow)
-      row.byRoutine.set(r.id, res)
-      students.set(res.enrollmentId, row)
-    }
-  }
-
-  for (const row of students.values()) {
-    const all = [...row.byRoutine.values()]
-    row.rate = all.length === 0 ? 0 : Math.round((all.filter((x) => DONE.has(x.status)).length / all.length) * 100)
-  }
-
-  return [...students.values()].sort((a, b) => (a.studentNo ?? '').localeCompare(b.studentNo ?? '', 'ko'))
+function withRate(rows: MatrixRow[]): Row[] {
+  return rows.map((r) => {
+    // 아직 입력 안 한 칸(status=null)은 분모에서 뺀다 — 안 그러면
+    // 입력 전 학생이 전부 이행률 0%로 보인다
+    const answered = r.cells.filter((c) => c.status !== null)
+    const done = answered.filter((c) => DONE.has(c.status as RoutineStatus))
+    return { ...r, rate: answered.length === 0 ? 0 : Math.round((done.length / answered.length) * 100) }
+  })
 }
 
 function thisMonth(): string {
@@ -117,7 +98,8 @@ function Content() {
   const [date, setDate] = useState(todayStr())
 
   const [routines, setRoutines] = useState<Routine[]>([])
-  const [matrix, setMatrix] = useState<MatrixRow[]>([])
+  const [cols, setCols] = useState<RoutineRef[]>([])
+  const [matrix, setMatrix] = useState<Row[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -129,17 +111,15 @@ function Content() {
     setLoading(true)
     setError(null)
     try {
-      const list = await listRoutines(academyId, month)
+      // 설정 탭용 루틴 목록과 결과 매트릭스를 함께 받는다
+      const [list, day] = await Promise.all([listRoutines(academyId, month), getRoutineMatrix(academyId, date)])
       setRoutines(list)
-
-      // 루틴 하나당 한 번씩 부른다. API 축이 화면과 달라 어쩔 수 없다
-      const pairs = await Promise.all(
-        list.map(async (r) => [r.id, await listRoutineResults(r.id, date)] as const),
-      )
-      setMatrix(buildMatrix(list, new Map(pairs)))
+      setCols(day.routines)
+      setMatrix(withRate(day.rows))
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '루틴을 불러오지 못했습니다.')
       setRoutines([])
+      setCols([])
       setMatrix([])
     } finally {
       setLoading(false)
@@ -150,12 +130,13 @@ function Content() {
     void load()
   }, [load])
 
-  const columns = useMemo<Column<MatrixRow>[]>(
+  const columns = useMemo<Column<Row>[]>(
     () => [
       { key: 'studentNo', header: '학번', width: '100px', sortable: true, value: (r) => r.studentNo ?? '-' },
       { key: 'studentName', header: '이름', width: '84px', mask: 'name', sortable: true, value: (r) => r.studentName },
-      ...routines.map(
-        (rt): Column<MatrixRow> => ({
+      { key: 'className', header: '반', width: '58px', align: 'center', value: (r) => r.className ?? '-' },
+      ...cols.map(
+        (rt): Column<Row> => ({
           key: `rt-${rt.id}`,
           header: (
             <span title={`${rt.subject ?? '공통'}${rt.maxScore > 0 ? ` · ${rt.maxScore}점` : ' · 완료/미완료'}`}>
@@ -165,35 +146,36 @@ function Content() {
           width: '96px',
           align: 'center',
           value: (r) => {
-            const v = r.byRoutine.get(rt.id)
-            if (!v) return ''
-            if (rt.maxScore > 0) return v.reviewedScore ?? v.selfScore ?? 0
-            return DONE.has(v.status) ? 1 : 0
+            const c = r.cells.find((x) => x.routineId === rt.id)
+            if (!c || c.status === null) return ''
+            if (rt.maxScore > 0) return c.reviewedScore ?? c.selfScore ?? 0
+            return DONE.has(c.status) ? 1 : 0
           },
           render: (r) => {
-            const v = r.byRoutine.get(rt.id)
-            if (!v) return <span style={{ color: 'var(--muted)' }}>-</span>
+            const c = r.cells.find((x) => x.routineId === rt.id)
+            // 칸이 없으면 그 학생은 이 루틴 대상이 아니다. status=null 이면 아직 입력 전이다
+            if (!c) return <span style={{ color: 'var(--line-2)' }}>·</span>
+            if (c.status === null) return <span style={{ color: 'var(--muted)' }} title="아직 입력 전">-</span>
 
-            // 점수형 루틴은 점수를, 아니면 ○/✕ 를 그린다
             if (rt.maxScore > 0) {
-              const score = v.reviewedScore ?? v.selfScore
+              const score = c.reviewedScore ?? c.selfScore
               if (score === null) return <span style={{ color: 'var(--muted)' }}>-</span>
               const ratio = score / rt.maxScore
               return (
                 <b
                   style={{ color: ratio >= 0.8 ? 'var(--mint-d)' : ratio >= 0.6 ? 'var(--amber)' : 'var(--red)' }}
-                  title={v.reviewedScore !== null ? '교사 검수 점수' : '학생 가채점'}
+                  title={c.reviewedScore !== null ? '교사 검수 점수' : '학생 가채점'}
                 >
                   {score}점
                 </b>
               )
             }
-            return DONE.has(v.status) ? (
-              <span style={{ color: 'var(--mint-d)', fontWeight: 800 }} title={ROUTINE_STATUS_LABEL[v.status]}>
+            return DONE.has(c.status) ? (
+              <span style={{ color: 'var(--mint-d)', fontWeight: 800 }} title={ROUTINE_STATUS_LABEL[c.status]}>
                 ○
               </span>
             ) : (
-              <span style={{ color: 'var(--red)', fontWeight: 800 }} title={ROUTINE_STATUS_LABEL[v.status]}>
+              <span style={{ color: 'var(--red)', fontWeight: 800 }} title={ROUTINE_STATUS_LABEL[c.status]}>
                 ✕
               </span>
             )
@@ -222,7 +204,7 @@ function Content() {
         render: () => <Unfilled reason="I-5(상벌점 규칙) 확정 대기" />,
       },
     ],
-    [routines],
+    [cols],
   )
 
   const avgRate = matrix.length === 0 ? 0 : Math.round(matrix.reduce((a, r) => a + r.rate, 0) / matrix.length)

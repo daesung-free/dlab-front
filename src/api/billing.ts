@@ -32,6 +32,16 @@ export const BILLING_STATUS_LABEL: Record<string, string> = {
   REFUNDED: '환불',
 }
 
+/** 살아 있는 수납 거래. **취소분은 빠진다** — 취소까지 세면 결제수단이 실제와 어긋난다 */
+export interface PaymentView {
+  id: number
+  amount: number
+  method: PayMethod
+  paidAt: string
+  /** PG 거래번호(전표번호). 가상계좌·현금은 비어 있을 수 있다 */
+  pgTid: string | null
+}
+
 export interface ReceiptRow {
   billingId: number
   studentNo: string | null
@@ -41,12 +51,15 @@ export interface ReceiptRow {
   billingType: BillingType
   /** 서비스 대상 월 */
   serviceMonth: string | null
+  /** 청구기수(연도) */
+  year: number | null
   billedAmount: number
   receivedAmount: number
   /** 과납이어도 0에서 멈춘다 — 음수가 섞이면 미납 합계가 줄어든다 */
   unpaid: number
   dueDate: string | null
   status: string
+  payments: PaymentView[]
 }
 
 export interface ReceiptSummary {

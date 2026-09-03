@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { DataTable, ExcelButton, MaskToggle, Unfilled, useServerTable, type Column } from '../../components/common'
+import { DataTable, ExcelButton, MaskToggle, useServerTable, type Column } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { maskName } from '../../lib/mask'
@@ -263,14 +263,7 @@ function Content() {
       { key: 'studentNo', header: '학번', width: '104px', value: (r) => r.studentNo ?? '-' },
       { key: 'studentName', header: '이름', width: '84px', mask: 'name', value: (r) => r.studentName },
       { key: 'className', header: '반', width: '58px', align: 'center', value: (r) => r.className ?? '-' },
-      {
-        key: 'teacher',
-        header: '담임',
-        width: '78px',
-        align: 'center',
-        value: () => '',
-        render: () => <Unfilled reason="이행 현황 응답에 담임이 없다" />,
-      },
+      { key: 'homeroomTeacherName', header: '담임', width: '78px', align: 'center', value: (r) => r.homeroomTeacherName ?? '미지정' },
       { key: 'totalItems', header: '계획', width: '68px', align: 'right', value: (r) => r.totalItems },
       {
         key: 'plannedMinutes',
@@ -312,8 +305,15 @@ function Content() {
         width: '90px',
         align: 'center',
         value: (r) => r.missingDays,
+        // countedDays 와 함께 봐야 의미가 있다 — 분모가 며칠인지 모르면 3일이 많은 건지 모른다
         render: (r) =>
-          r.missingDays > 0 ? <span className="mk brandnew">{r.missingDays}일</span> : <span style={{ color: 'var(--muted)' }}>-</span>,
+          r.missingDays > 0 ? (
+            <span className="mk brandnew" title={`집계 대상 ${r.countedDays}일 중`}>
+              {r.missingDays} / {r.countedDays}일
+            </span>
+          ) : (
+            <span style={{ color: 'var(--muted)' }}>-</span>
+          ),
       },
     ],
     [],
@@ -334,11 +334,12 @@ function Content() {
           <Icon name="lock" size={17} />
         </div>
         <div>
-          <div className="tt">학습계획 입력 차단일은 서버에 아직 없습니다</div>
+          <div className="tt">미작성일은 집계 대상일 기준입니다</div>
           <div className="tx">
-            연간 행사 마스터에서 <b>&lsquo;학습계획 입력 차단&rsquo;</b>으로 등록한 날은{' '}
-            <b>미작성 집계에서 빠져야</b> 합니다. 그러지 않으면 휴원일마다 전교생이 미작성자로 잡힙니다.
-            지금 표시되는 <b>미작성일</b>은 서버가 센 값이며, 차단일을 빼고 세는지 확인이 필요합니다.
+            예전에는 달력일 기준이라 휴원일도 미작성으로 잡혔는데, 서버가 고쳤습니다.
+            제외할 날은 <b>연간 행사에서 &lsquo;학습계획 제외&rsquo;로 등록</b>하면 반영됩니다
+            (기본은 꺼져 있어, 등록 전까지는 기존과 같은 값입니다).
+            표에는 <b>미작성일 / 집계 대상일</b>을 함께 보여줍니다.
           </div>
         </div>
       </div>
