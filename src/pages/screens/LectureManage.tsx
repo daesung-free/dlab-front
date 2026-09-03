@@ -1,8 +1,21 @@
-import { useMemo, useState } from 'react'
-import { DataTable, ExcelButton, MaskToggle, type Column } from '../../components/common'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { DataTable, ExcelButton, MaskToggle, Unfilled, type Column } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
-import { MOCK_STUDENTS } from './mockStudents'
+import { ApiError } from '../../api/client'
+import { useAcademy } from '../../auth/AcademyContext'
+import {
+  LECTURE_STATUS_LABEL,
+  LECTURE_STATUS_TONE,
+  LECTURE_TYPE_LABEL,
+  listLectureApplicants,
+  listLectureSessions,
+  listLectures,
+  promoteApplicant,
+  type Lecture as ApiLecture,
+  type LectureApplicant,
+  type LectureSession,
+} from '../../api/lectures'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
 
@@ -20,66 +33,72 @@ import '../../styles/forms.css'
  *   이미 신청한 인원보다 적게 줄이면 누구를 대기자로 밀어낼지 결정할 수 없다.
  *   서버에서 capacity >= applied 제약을 걸고, 줄이려면 개별 취소를 먼저 하게 한다. */
 
-interface Lecture {
-  id: string
-  month: string
-  name: string
-  teacher: string
-  capacity: number
-  applied: number
-  waiting: number
-  status: '모집중' | '마감' | '진행중' | '종료'
-  fee: number
-}
+const won = (n: number) => `${n.toLocaleString()}원`
 
-const LECTURES: Lecture[] = [
-  { id: 'lc1', month: '2026-06', name: '수학 미적 킬러문항 특강', teacher: '김유진', capacity: 30, applied: 30, waiting: 7, status: '마감', fee: 320000 },
-  { id: 'lc2', month: '2026-06', name: '국어 언매 심화', teacher: '최지원', capacity: 25, applied: 18, waiting: 0, status: '모집중', fee: 280000 },
-  { id: 'lc3', month: '2026-06', name: '지구과학 신유형 대비', teacher: '이장원', capacity: 20, applied: 20, waiting: 3, status: '마감', fee: 240000 },
-  { id: 'lc4', month: '2026-05', name: '영어 빈칸추론 집중', teacher: '박서영', capacity: 25, applied: 22, waiting: 0, status: '진행중', fee: 260000 },
-  { id: 'lc5', month: '2026-05', name: '물리Ⅱ 실전 세트', teacher: '정하람', capacity: 15, applied: 15, waiting: 2, status: '진행중', fee: 300000 },
-  { id: 'lc6', month: '2026-04', name: '4월 학평 해설 특강', teacher: '김유진', capacity: 40, applied: 38, waiting: 0, status: '종료', fee: 90000 },
-]
-
-const STATUS_TONE: Record<Lecture['status'], string> = {
-  모집중: 'verified',
-  마감: 'supplement',
-  진행중: 'verified',
-  종료: 'brandnew',
-}
-
-const LECTURE_COLUMNS: Column<Lecture>[] = [
-  { key: 'month', header: '월', width: '84px', align: 'center', sortable: true, value: (r) => r.month },
-  { key: 'name', header: '특강명', sortable: true, value: (r) => r.name },
-  { key: 'teacher', header: '담당', width: '78px', value: (r) => r.teacher },
+const LECTURE_COLUMNS: Column<ApiLecture>[] = [
   {
-    key: 'applied',
+    key: 'period',
+    header: '기간',
+    width: '150px',
+    align: 'center',
+    value: (r) => r.startDate ?? '',
+    render: (r) => (r.startDate ? `${r.startDate.slice(5)} ~ ${(r.endDate ?? '').slice(5)}` : '-'),
+  },
+  { key: 'name', header: '특강명', sortable: true, value: (r) => r.name },
+  {
+    key: 'lectureType',
+    header: '유형',
+    width: '76px',
+    align: 'center',
+    value: (r) => LECTURE_TYPE_LABEL[r.lectureType] ?? r.lectureType,
+    render: (r) => <span className="mk supplement">{LECTURE_TYPE_LABEL[r.lectureType] ?? r.lectureType}</span>,
+  },
+  {
+    key: 'teacher',
+    header: '담당',
+    width: '78px',
+    align: 'center',
+    value: () => '',
+    render: () => <Unfilled reason="담당 강사가 특강 응답에 없다" />,
+  },
+  {
+    key: 'confirmedCount',
     header: '신청 / 정원',
     width: '110px',
     align: 'center',
     sortable: true,
-    value: (r) => r.applied,
+    value: (r) => r.confirmedCount,
     render: (r) => (
-      <span style={{ fontWeight: 700, color: r.applied >= r.capacity ? 'var(--red)' : 'var(--ink)' }}>
-        {r.applied} / {r.capacity}
+      <span
+        style={{
+          fontWeight: 700,
+          color: r.capacity !== null && r.confirmedCount >= r.capacity ? 'var(--red)' : 'var(--ink)',
+        }}
+      >
+        {r.confirmedCount} / {r.capacity ?? '-'}
       </span>
     ),
   },
   {
-    key: 'waiting',
+    key: 'waitlistedCount',
     header: '대기',
     width: '68px',
     align: 'center',
-    value: (r) => r.waiting,
-    render: (r) => (r.waiting > 0 ? <span className="mk brandnew">{r.waiting}</span> : <span style={{ color: 'var(--muted)' }}>-</span>),
+    value: (r) => r.waitlistedCount,
+    render: (r) =>
+      r.waitlistedCount > 0 ? (
+        <span className="mk brandnew">{r.waitlistedCount}</span>
+      ) : (
+        <span style={{ color: 'var(--muted)' }}>-</span>
+      ),
   },
   {
     key: 'fee',
     header: '특강비',
     width: '96px',
     align: 'right',
-    value: (r) => r.fee,
-    render: (r) => `${r.fee.toLocaleString()}원`,
+    value: (r) => r.fee ?? 0,
+    render: (r) => (r.fee ? won(r.fee) : '무료'),
   },
   {
     key: 'status',
@@ -87,55 +106,74 @@ const LECTURE_COLUMNS: Column<Lecture>[] = [
     width: '80px',
     align: 'center',
     sortable: true,
-    value: (r) => r.status,
-    render: (r) => <span className={`mk ${STATUS_TONE[r.status]}`}>{r.status}</span>,
+    value: (r) => LECTURE_STATUS_LABEL[r.status] ?? r.status,
+    render: (r) => (
+      <span className={`mk ${LECTURE_STATUS_TONE[r.status] ?? ''}`}>
+        {LECTURE_STATUS_LABEL[r.status] ?? r.status}
+      </span>
+    ),
+  },
+  {
+    key: 'visible',
+    header: '앱 노출',
+    width: '76px',
+    align: 'center',
+    // status 와 별개 축이다 — "마감됐지만 앱에는 보이는" 상태가 있다
+    value: (r) => (r.visible ? '노출' : '숨김'),
+    render: (r) => (
+      <span style={{ color: r.visible ? 'var(--mint-d)' : 'var(--muted)', fontWeight: 700 }}>
+        {r.visible ? '노출' : '숨김'}
+      </span>
+    ),
   },
 ]
 
 /* ── 신청 명단 / 대기자 ── */
-interface Applicant {
-  id: string
+
+/** 순번은 응답에 없다. 화면에서 조회 순서대로 매긴다 */
+interface ApplicantRow extends LectureApplicant {
   seq: number
-  studentNo: string
-  name: string
-  classNo: string
-  phone: string
-  appliedAt: string
-  paid: boolean
-  waiting: boolean
 }
 
-const APPLICANTS: Applicant[] = MOCK_STUDENTS.slice(0, 37).map((s, i) => ({
-  id: `ap-${i + 1}`,
-  seq: i + 1,
-  studentNo: s.studentNo,
-  name: s.name,
-  classNo: s.classNo,
-  phone: s.phone,
-  appliedAt: `2026-05-${String((i % 28) + 1).padStart(2, '0')}`,
-  paid: i % 8 !== 7,
-  waiting: i >= 30,
-}))
-
-const APPLICANT_COLUMNS: Column<Applicant>[] = [
+const APPLICANT_COLUMNS: Column<ApplicantRow>[] = [
   { key: 'seq', header: '순번', width: '64px', align: 'center', sortable: true, value: (r) => r.seq },
-  { key: 'studentNo', header: '학번', width: '100px', value: (r) => r.studentNo },
-  { key: 'name', header: '이름', width: '84px', mask: 'name', value: (r) => r.name },
-  { key: 'classNo', header: '반', width: '56px', align: 'center', value: (r) => r.classNo },
-  { key: 'phone', header: '연락처', width: '128px', mask: 'phone', value: (r) => r.phone },
-  { key: 'appliedAt', header: '신청일', width: '100px', sortable: true, value: (r) => r.appliedAt },
+  { key: 'studentNo', header: '학번', width: '100px', value: (r) => r.studentNo ?? '-' },
+  { key: 'studentName', header: '이름', width: '84px', mask: 'name', value: (r) => r.studentName },
+  {
+    key: 'classNo',
+    header: '반',
+    width: '56px',
+    align: 'center',
+    value: () => '',
+    render: () => <Unfilled reason="신청자 응답에 반이 없다" />,
+  },
+  {
+    key: 'phone',
+    header: '연락처',
+    width: '128px',
+    value: () => '',
+    render: () => <Unfilled reason="신청자 응답에 연락처가 없다" />,
+  },
+  {
+    key: 'appliedAt',
+    header: '신청일',
+    width: '120px',
+    sortable: true,
+    value: (r) => r.appliedAt ?? '',
+    render: (r) => (r.appliedAt ? r.appliedAt.slice(0, 10) : '-'),
+  },
   {
     key: 'paid',
     header: '수납',
     width: '80px',
     align: 'center',
-    value: (r) => (r.paid ? '완납' : '미납'),
-    render: (r) => <span className={`mk ${r.paid ? 'verified' : 'brandnew'}`}>{r.paid ? '완납' : '미납'}</span>,
+    // 특강비 수납 여부는 청구(F-4.8) 쪽 데이터다. 신청자 응답에는 없다
+    value: () => '',
+    render: () => <Unfilled reason="수납 여부는 청구 도메인이라 신청자 응답에 없다" />,
   },
 ]
 
 /* ── 출석부 ── */
-const SESSIONS = ['06/02', '06/04', '06/09', '06/11', '06/16', '06/18']
 
 /* ══ 특강 개설 ══ */
 
@@ -206,8 +244,82 @@ function Content() {
   const [selected, setSelected] = useState<string[]>([])
   const [draft, setDraft] = useState<LectureDraft | null>(null)
 
-  const applied = useMemo(() => APPLICANTS.filter((a) => !a.waiting), [])
-  const waiting = useMemo(() => APPLICANTS.filter((a) => a.waiting), [])
+  /* ── 실연동 ── */
+  const { academyId } = useAcademy()
+  const [lectures, setLectures] = useState<ApiLecture[]>([])
+  const [lectureId, setLectureId] = useState<number | null>(null)
+  const [applicants, setApplicants] = useState<LectureApplicant[]>([])
+  const [sessionList, setSessionList] = useState<LectureSession[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const loadLectures = useCallback(async () => {
+    if (academyId === null) {
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    try {
+      const list = await listLectures(academyId, new Date().getFullYear())
+      setLectures(list)
+      setLectureId((prev) => (list.some((l) => l.id === prev) ? prev : (list[0]?.id ?? null)))
+      setError(null)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '특강 목록을 불러오지 못했습니다.')
+      setLectures([])
+    } finally {
+      setLoading(false)
+    }
+  }, [academyId])
+
+  useEffect(() => {
+    void loadLectures()
+  }, [loadLectures])
+
+  // 선택한 특강의 신청자·회차. 목록에서 특강을 고르면 아래 탭이 그 특강 기준이 된다
+  useEffect(() => {
+    if (lectureId === null) {
+      setApplicants([])
+      setSessionList([])
+      return
+    }
+    let cancelled = false
+    void Promise.all([listLectureApplicants(lectureId), listLectureSessions(lectureId)])
+      .then(([apps, sess]) => {
+        if (cancelled) return
+        setApplicants(apps)
+        setSessionList(sess)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setApplicants([])
+        setSessionList([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [lectureId])
+
+  const applied: ApplicantRow[] = useMemo(
+    () => applicants.filter((a) => !a.waitlisted).map((a, i) => ({ ...a, seq: i + 1 })),
+    [applicants],
+  )
+  const waiting: ApplicantRow[] = useMemo(
+    () => applicants.filter((a) => a.waitlisted).map((a, i) => ({ ...a, seq: i + 1 })),
+    [applicants],
+  )
+
+  const selectedLecture = lectures.find((l) => l.id === lectureId) ?? null
+
+  async function promote(applicationId: number) {
+    try {
+      await promoteApplicant(applicationId)
+      if (lectureId !== null) setApplicants(await listLectureApplicants(lectureId))
+      await loadLectures()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '대기자를 확정하지 못했습니다.')
+    }
+  }
 
   const sessions = useMemo(() => (draft ? buildSessions(draft) : []), [draft])
 
@@ -491,14 +603,14 @@ function Content() {
           <div className="l">
             <Icon name="presentation" size={13} /> 개설 특강
           </div>
-          <div className="v">{LECTURES.length}</div>
-          <div className="d">2026-04 ~ 06</div>
+          <div className="v">{lectures.length}</div>
+          <div className="d">{new Date().getFullYear()}년</div>
         </div>
         <div className="stat">
           <div className="l">
             <Icon name="users" size={13} /> 총 신청
           </div>
-          <div className="v">{LECTURES.reduce((a, l) => a + l.applied, 0)}</div>
+          <div className="v">{lectures.reduce((a, l) => a + l.confirmedCount, 0)}</div>
           <div className="d">건</div>
         </div>
         <div className="stat">
@@ -506,7 +618,7 @@ function Content() {
             <Icon name="list-ordered" size={13} /> 대기자
           </div>
           <div className="v" style={{ color: 'var(--amber)' }}>
-            {LECTURES.reduce((a, l) => a + l.waiting, 0)}
+            {lectures.reduce((a, l) => a + l.waitlistedCount, 0)}
           </div>
           <div className="d warn">정원 초과분</div>
         </div>
@@ -514,8 +626,11 @@ function Content() {
           <div className="l">
             <Icon name="banknote" size={13} /> 특강비 수납
           </div>
-          <div className="v">{applied.filter((a) => a.paid).length}</div>
-          <div className="d">/ {applied.length}건</div>
+          {/* 수납 여부는 청구 도메인이라 특강 응답에 없다 */}
+          <div className="v" style={{ fontSize: 14, paddingTop: 8 }}>
+            <Unfilled reason="특강비 수납 현황은 청구 도메인이다" />
+          </div>
+          <div className="d">수납현황(F-4.8) 참조</div>
         </div>
         <div className="stat">
           <div className="l">
@@ -528,10 +643,16 @@ function Content() {
         </div>
       </div>
 
+      {error && (
+        <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+          {error}
+        </div>
+      )}
+
       <div className="card-sec">
         <Tabs
           items={[
-            { key: 'list', label: '특강 목록', count: LECTURES.length },
+            { key: 'list', label: '특강 목록', count: lectures.length },
             { key: 'apply', label: '신청 명단', count: applied.length },
             { key: 'wait', label: '대기자', count: waiting.length },
             { key: 'att', label: '출석부' },
@@ -544,18 +665,24 @@ function Content() {
           {tab === 'list' && (
             <DataTable
               columns={LECTURE_COLUMNS}
-              rows={LECTURES}
-              rowKey={(r) => r.id}
+              rows={lectures}
+              rowKey={(r) => String(r.id)}
               masked={false}
+              loading={loading}
               pageSize={10}
+              onRowClick={(r) => setLectureId(r.id)}
+              emptyText={academyId === null ? '지점을 먼저 선택하세요.' : '등록된 특강이 없습니다.'}
               countLabel={
                 <>
-                  특강 <b>{LECTURES.length}</b>건
+                  특강 <b>{lectures.length}</b>건
+                  {selectedLecture && (
+                    <span style={{ color: 'var(--muted)' }}> · 선택: {selectedLecture.name}</span>
+                  )}
                 </>
               }
               toolbar={
                 <>
-                  <ExcelButton filename="특강_목록" columns={LECTURE_COLUMNS} rows={LECTURES} masked={false} />
+                  <ExcelButton filename="특강_목록" columns={LECTURE_COLUMNS} rows={lectures} masked={false} />
                   <button className="btn pri" onClick={() => setDraft({ ...EMPTY_DRAFT })}>
                     <Icon name="plus" size={14} /> 특강 개설
                   </button>
@@ -568,21 +695,34 @@ function Content() {
             <DataTable
               columns={APPLICANT_COLUMNS}
               rows={tab === 'apply' ? applied : waiting}
-              rowKey={(r) => r.id}
+              rowKey={(r) => String(r.applicationId)}
               selectable
               selected={selected}
               onSelectedChange={setSelected}
               masked={masked}
               pageSize={12}
+              emptyText={selectedLecture ? '해당하는 인원이 없습니다.' : '특강 목록에서 특강을 먼저 선택하세요.'}
               countLabel={
                 <>
-                  {tab === 'apply' ? '신청자' : '대기자'} <b>{(tab === 'apply' ? applied : waiting).length}</b>명
+                  {selectedLecture?.name ?? '특강 미선택'} · {tab === 'apply' ? '신청자' : '대기자'}{' '}
+                  <b>{(tab === 'apply' ? applied : waiting).length}</b>명
                 </>
               }
               toolbar={
                 <>
-                  <button className="btn" disabled={selected.length === 0}>
-                    <Icon name="arrow-right" size={14} /> 선택 일괄이동
+                  {/* 대기자 → 확정. 서버가 한 건씩 받으므로 순차로 보낸다 */}
+                  <button
+                    className="btn"
+                    disabled={selected.length === 0 || tab !== 'wait'}
+                    title={tab === 'wait' ? '선택한 대기자를 확정으로 올립니다' : '대기자 탭에서 사용합니다'}
+                    onClick={() => {
+                      void (async () => {
+                        for (const id of selected) await promote(Number(id))
+                        setSelected([])
+                      })()
+                    }}
+                  >
+                    <Icon name="arrow-right" size={14} /> 선택 확정
                   </button>
                   <button className="btn" disabled={selected.length === 0}>
                     수납청구
@@ -603,7 +743,7 @@ function Content() {
             <div className="dt-wrap">
               <div className="dt-toolbar">
                 <span className="dt-count">
-                  수학 미적 킬러문항 특강 · <b>{SESSIONS.length}</b>회차
+                  {selectedLecture?.name ?? '특강 미선택'} · <b>{sessionList.length}</b>회차
                 </span>
                 <div className="dt-right">
                   <MaskToggle masked={masked} onChange={setMasked} />
@@ -621,9 +761,9 @@ function Content() {
                       <th style={{ width: 56 }} className="al-center">
                         반
                       </th>
-                      {SESSIONS.map((s) => (
-                        <th key={s} className="al-center" style={{ width: 68 }}>
-                          {s}
+                      {sessionList.map((se) => (
+                        <th key={se.id} className="al-center" style={{ width: 68 }} title={se.room ?? ''}>
+                          {se.sessionDate.slice(5)}
                         </th>
                       ))}
                       <th className="al-center" style={{ width: 80 }}>
@@ -632,29 +772,26 @@ function Content() {
                     </tr>
                   </thead>
                   <tbody>
-                    {applied.slice(0, 12).map((a, ri) => {
-                      const marks = SESSIONS.map((_, si) => (ri + si) % 7 !== 6)
-                      const rate = Math.round((marks.filter(Boolean).length / marks.length) * 100)
-                      return (
-                        <tr key={a.id}>
-                          <td>{a.studentNo}</td>
-                          <td className="masked">{masked ? `${a.name[0]}*${a.name.slice(2)}` : a.name}</td>
-                          <td className="al-center">{a.classNo}</td>
-                          {marks.map((m, si) => (
-                            <td key={si} className="al-center">
-                              {m ? (
-                                <span style={{ color: 'var(--mint-d)', fontWeight: 800 }}>○</span>
-                              ) : (
-                                <span style={{ color: 'var(--red)', fontWeight: 800 }}>✕</span>
-                              )}
-                            </td>
-                          ))}
-                          <td className="al-center">
-                            <b style={{ color: rate === 100 ? 'var(--green)' : 'var(--amber)' }}>{rate}%</b>
+                    {applied.map((a) => (
+                      <tr key={a.applicationId}>
+                        <td>{a.studentNo ?? '-'}</td>
+                        <td className="masked">
+                          {masked ? `${a.studentName[0]}*${a.studentName.slice(2)}` : a.studentName}
+                        </td>
+                        <td className="al-center">
+                          <Unfilled reason="신청자 응답에 반이 없다" />
+                        </td>
+                        {/* 출결 표시는 회차별 조회(sessions/{id}/attendances)를 붙여야 한다 */}
+                        {sessionList.map((se) => (
+                          <td key={se.id} className="al-center">
+                            <Unfilled reason="회차별 출결 조회 연동 전" />
                           </td>
-                        </tr>
-                      )
-                    })}
+                        ))}
+                        <td className="al-center">
+                          <Unfilled reason="출석률은 회차 출결이 있어야 계산된다" />
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>

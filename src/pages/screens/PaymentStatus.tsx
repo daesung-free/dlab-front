@@ -1,70 +1,52 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   DataTable,
   ExcelButton,
   MaskToggle,
   SearchForm,
+  Unfilled,
   type Column,
+  type DateRangeValue,
   type Field,
   type SearchValues,
 } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
-import { MOCK_STUDENTS } from './mockStudents'
+import { ApiError } from '../../api/client'
+import { useAcademy } from '../../auth/AcademyContext'
+import {
+  BILLING_STATUS_LABEL,
+  BILLING_TYPE_LABEL,
+  getReceiptSummary,
+  listReceiptStatus,
+  type BillingType,
+  type ReceiptRow,
+  type ReceiptSummary,
+} from '../../api/billing'
 import type { Mockup } from './types'
 import './payment.css'
 
-/* F-4.8 수납현황 — 신규개발-요구사항보완
+/* F-4.8 수납현황 — /api/v1/admin/receipt-status
  *
- * 실행가이드: "대성전산API 연동. ★수납API스펙(D-3)·등록비주체(D-9) 확정 후 착수 —
- *              우회 어려움, 지연 시 후순위 재배치 검토"
- *              "API 확정 전까지 목데이터 그리드로 레이아웃만 완성"
- * → 이 화면은 의도적으로 레이아웃만입니다. */
+ * 탭 3개 중 둘만 실연동이다.
+ *   · 통합 매출장 · 미납자 관리 → /receipt-status (+ summary)
+ *   · 할인 정책              → **API 없음.** 목업 그대로 둔다(아래 참고)
+ *
+ * ★ 청구 1건 = 한 달분이다. 한 학생이 여러 달 밀리면 행이 여러 개가 되므로
+ *   '미납 건수'와 '미납 학생 수'가 다르다 — 서버 주석에도 그렇게 적혀 있다.
+ *
+ * ★ 서버가 안 주는 컬럼 — docs/API_GAPS.md
+ *   결제일자 · 전표번호 · 결제수단 · 지점 · 청구기수.
+ *   RowView 는 청구/수납 금액과 상태 축만 준다. 결제 '거래' 축(언제 무엇으로 냈는가)이 없다.
+ *   목업 컬럼은 지우지 않고 <Unfilled/> 로 둔다.
+ *
+ * ★ 지점은 행에 없지만 조회 자체가 지점 단위다(academyId). 선택한 지점을 헤더에 보여준다. */
 
 type Method = '카드' | '가상계좌' | '현금'
-type PayStatus = '완납' | '부분납' | '미납'
 type Kind = '등록비' | '교습비' | '특강비' | '급식비'
-
-interface Payment {
-  id: string
-  paidAt: string
-  voucherNo: string
-  studentNo: string
-  name: string
-  classNo: string
-  kind: Kind
-  round: string
-  method: Method
-  amount: number
-  paid: number
-  status: PayStatus
-  branch: string
-}
 
 const KINDS: Kind[] = ['등록비', '교습비', '특강비', '급식비']
 const METHODS: Method[] = ['카드', '가상계좌', '현금']
-
-const PAYMENTS: Payment[] = MOCK_STUDENTS.slice(0, 40).map((s, i) => {
-  const kind = KINDS[i % KINDS.length]
-  const amount = kind === '등록비' ? 500000 : kind === '교습비' ? 1_450_000 : kind === '특강비' ? 320000 : 117000
-  const status: PayStatus = i % 9 === 8 ? '미납' : i % 13 === 12 ? '부분납' : '완납'
-  const paid = status === '완납' ? amount : status === '부분납' ? Math.round(amount * 0.5) : 0
-  return {
-    id: `pay-${i + 1}`,
-    paidAt: status === '미납' ? '-' : `2026-05-${String((i % 28) + 1).padStart(2, '0')}`,
-    voucherNo: `DS-2026-${String(10000 + i).padStart(6, '0')}`,
-    studentNo: s.studentNo,
-    name: s.name,
-    classNo: s.classNo,
-    kind,
-    round: `${(i % 3) + 1}기`,
-    method: METHODS[i % METHODS.length],
-    amount,
-    paid,
-    status,
-    branch: s.branch,
-  }
-})
 
 const FIELDS: Field[] = [
   { type: 'dateRange', name: 'period', label: '결제 기간', presets: true, span: 2 },
@@ -75,74 +57,74 @@ const FIELDS: Field[] = [
   { type: 'chips', name: 'method', label: '결제수단', options: METHODS, multiple: true },
 ]
 
-const STATUS_TONE: Record<PayStatus, string> = { 완납: 'verified', 부분납: 'supplement', 미납: 'brandnew' }
+const STATUS_TONE: Record<string, string> = { PAID: 'verified', PARTIAL: 'supplement', PENDING: 'brandnew' }
 
-const COLUMNS: Column<Payment>[] = [
-  { key: 'paidAt', header: '결제일자', width: '100px', sortable: true, value: (r) => r.paidAt },
+const wonOf = (n: number) => `${n.toLocaleString()}원`
+
+/** 목업의 항목 이름 → 서버 billingType. 등록비는 서버에 대응 값이 없어 기타로 간다 */
+const KIND_TO_TYPE: Record<Kind, BillingType> = {
+  등록비: 'ETC',
+  교습비: 'TUITION',
+  특강비: 'LECTURE',
+  급식비: 'MEAL',
+}
+
+/** 결제 '거래' 축(언제·무엇으로 냈는가)이 응답에 없어 미제공으로 둔다 */
+const notProvided = (reason: string) => ({
+  value: () => '',
+  render: () => <Unfilled reason={reason} />,
+})
+
+const COLUMNS: Column<ReceiptRow>[] = [
+  { key: 'paidAt', header: '결제일자', width: '100px', ...notProvided('수납 일자가 응답에 없다 (거래 축 없음)') },
+  { key: 'voucherNo', header: '전표번호', width: '150px', ...notProvided('전표번호가 응답에 없다') },
+  { key: 'studentNo', header: '학번', width: '100px', value: (r) => r.studentNo ?? '-' },
+  { key: 'studentName', header: '이름', width: '84px', mask: 'name', value: (r) => r.studentName },
+  { key: 'serviceMonth', header: '대상월', width: '84px', align: 'center', value: (r) => r.serviceMonth ?? '-' },
   {
-    key: 'voucherNo',
-    header: '전표번호',
-    width: '150px',
-    value: (r) => r.voucherNo,
-    render: (_r, v) => <code style={{ fontSize: 11 }}>{v}</code>,
-  },
-  { key: 'studentNo', header: '학번', width: '100px', value: (r) => r.studentNo },
-  { key: 'name', header: '이름', width: '84px', mask: 'name', value: (r) => r.name },
-  { key: 'branch', header: '지점', width: '64px', align: 'center', sortable: true, value: (r) => r.branch },
-  { key: 'round', header: '기수', width: '58px', align: 'center', value: (r) => r.round },
-  {
-    key: 'kind',
+    key: 'billingType',
     header: '항목',
     width: '82px',
     align: 'center',
-    sortable: true,
-    value: (r) => r.kind,
-    render: (r) => <span className="mk supplement">{r.kind}</span>,
+    value: (r) => BILLING_TYPE_LABEL[r.billingType] ?? r.billingType,
+    render: (r) => <span className="mk supplement">{BILLING_TYPE_LABEL[r.billingType] ?? r.billingType}</span>,
   },
-  { key: 'method', header: '결제수단', width: '84px', align: 'center', value: (r) => r.method },
+  { key: 'method', header: '결제수단', width: '84px', align: 'center', ...notProvided('결제수단이 응답에 없다') },
+  { key: 'billedAmount', header: '청구액', width: '106px', align: 'right', value: (r) => r.billedAmount, render: (r) => wonOf(r.billedAmount) },
   {
-    key: 'amount',
-    header: '청구액',
-    width: '106px',
-    align: 'right',
-    sortable: true,
-    value: (r) => r.amount,
-    render: (r) => `${r.amount.toLocaleString()}원`,
-  },
-  {
-    key: 'paid',
+    key: 'receivedAmount',
     header: '수납액',
     width: '106px',
     align: 'right',
-    value: (r) => r.paid,
+    value: (r) => r.receivedAmount,
     render: (r) => (
-      <span style={{ color: r.paid === r.amount ? 'var(--ink)' : 'var(--red)', fontWeight: 700 }}>
-        {r.paid.toLocaleString()}원
+      <span style={{ color: r.unpaid === 0 ? 'var(--ink)' : 'var(--red)', fontWeight: 700 }}>
+        {wonOf(r.receivedAmount)}
       </span>
     ),
   },
+  { key: 'dueDate', header: '납기일', width: '100px', align: 'center', value: (r) => r.dueDate ?? '-' },
   {
     key: 'status',
     header: '상태',
     width: '76px',
     align: 'center',
-    value: (r) => r.status,
-    render: (r) => <span className={`mk ${STATUS_TONE[r.status]}`}>{r.status}</span>,
+    value: (r) => BILLING_STATUS_LABEL[r.status] ?? r.status,
+    render: (r) => (
+      <span className={`mk ${STATUS_TONE[r.status] ?? ''}`}>{BILLING_STATUS_LABEL[r.status] ?? r.status}</span>
+    ),
   },
 ]
 
-const UNPAID_COLUMNS: Column<Payment>[] = [
-  ...COLUMNS.slice(2, 9),
+const UNPAID_COLUMNS: Column<ReceiptRow>[] = [
+  ...COLUMNS.slice(2, 10),
   {
-    key: 'due',
+    key: 'unpaid',
     header: '미납액',
     width: '110px',
     align: 'right',
-    sortable: true,
-    value: (r) => r.amount - r.paid,
-    render: (r) => (
-      <b style={{ color: 'var(--red)', fontWeight: 800 }}>{(r.amount - r.paid).toLocaleString()}원</b>
-    ),
+    value: (r) => r.unpaid,
+    render: (r) => <b style={{ color: 'var(--red)', fontWeight: 800 }}>{wonOf(r.unpaid)}</b>,
   },
   {
     key: 'act',
@@ -151,7 +133,7 @@ const UNPAID_COLUMNS: Column<Payment>[] = [
     align: 'center',
     value: () => '',
     render: () => (
-      <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }}>
+      <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled title="알림톡 발송 API 연동 전입니다">
         <Icon name="bell" size={12} /> 알림톡
       </button>
     ),
@@ -330,16 +312,6 @@ const DISCOUNT_COLUMNS: Column<Discount>[] = [
   },
 ]
 
-function matches(r: Payment, q: SearchValues): boolean {
-  const kw = String(q.keyword ?? '').trim()
-  if (kw && !`${r.name}${r.studentNo}${r.voucherNo}`.includes(kw)) return false
-  if (typeof q.branch === 'string' && q.branch && r.branch !== q.branch) return false
-  if (typeof q.round === 'string' && q.round && r.round !== q.round) return false
-  if (Array.isArray(q.kind) && q.kind.length > 0 && !q.kind.includes(r.kind)) return false
-  if (Array.isArray(q.method) && q.method.length > 0 && !q.method.includes(r.method)) return false
-  return true
-}
-
 function Content() {
   const [query, setQuery] = useState<SearchValues>({})
   const [masked, setMasked] = useState(true)
@@ -351,19 +323,61 @@ function Content() {
   const [picked, setPicked] = useState<string[]>(['d3', 'd4', 'd5'])
   const calc = useMemo(() => calcDiscount(calcBase, calcKind, picked), [calcBase, calcKind, picked])
 
-  const rows = useMemo(() => PAYMENTS.filter((r) => matches(r, query)), [query])
-  const unpaid = useMemo(() => rows.filter((r) => r.status !== '완납'), [rows])
+  /* ── 실연동: 수납현황 ── */
+  const { academyId } = useAcademy()
+  const [rows, setRows] = useState<ReceiptRow[]>([])
+  const [summary, setSummary] = useState<ReceiptSummary | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const sum = useMemo(() => {
-    const by = (k: Method) => rows.filter((r) => r.method === k).reduce((a, r) => a + r.paid, 0)
+  const period = query.period as DateRangeValue | undefined
+  const params = useMemo(() => {
+    const kind = query.kind
+    // chips 는 배열이다. 서버는 type 하나만 받으므로 첫 값만 보낸다
+    const type = Array.isArray(kind) && kind.length > 0 ? (KIND_TO_TYPE[kind[0] as Kind] ?? undefined) : undefined
     return {
-      total: rows.reduce((a, r) => a + r.paid, 0),
-      card: by('카드'),
-      vbank: by('가상계좌'),
-      tuition: rows.filter((r) => r.kind === '등록비').reduce((a, r) => a + r.paid, 0),
-      due: rows.reduce((a, r) => a + (r.amount - r.paid), 0),
+      year: 2026,
+      academyId: academyId ?? undefined,
+      from: period?.from || undefined,
+      to: period?.to || undefined,
+      type,
     }
-  }, [rows])
+  }, [academyId, period?.from, period?.to, query.kind])
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const [list, sum] = await Promise.all([listReceiptStatus(params), getReceiptSummary(params)])
+      setRows(list)
+      setSummary(sum)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '수납현황을 불러오지 못했습니다.')
+      setRows([])
+      setSummary(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [params])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  // 미납은 서버 조건(unpaidOnly)이 있지만, 같은 조회 결과에서 걸러도 값이 같다.
+  // 요청을 하나 아끼려고 여기서 거른다 — unpaid 는 서버가 계산해준 값이다.
+  const unpaid = useMemo(() => rows.filter((r) => r.unpaid > 0), [rows])
+
+  const sum = useMemo(
+    () => ({
+      total: summary?.receivedAmount ?? 0,
+      billed: summary?.billedAmount ?? 0,
+      due: summary?.unpaidAmount ?? 0,
+      unpaidCount: summary?.unpaidCount ?? 0,
+      byType: summary?.unpaidByType ?? {},
+    }),
+    [summary],
+  )
 
   return (
     <>
@@ -375,26 +389,29 @@ function Content() {
           <div className="v">{Math.round(sum.total / 10000).toLocaleString()}</div>
           <div className="d">만원 · 조회 조건 기준</div>
         </div>
+        {/* 결제수단별 집계는 서버가 주지 않는다(거래 축 없음) — 청구 총액으로 대신한다 */}
         <div className="stat">
           <div className="l">
-            <Icon name="credit-card" size={13} /> 카드
+            <Icon name="receipt" size={13} /> 청구 총액
           </div>
-          <div className="v">{Math.round(sum.card / 10000).toLocaleString()}</div>
+          <div className="v">{Math.round(sum.billed / 10000).toLocaleString()}</div>
           <div className="d">만원</div>
         </div>
         <div className="stat">
           <div className="l">
-            <Icon name="wallet" size={13} /> 가상계좌
+            <Icon name="credit-card" size={13} /> 결제수단별
           </div>
-          <div className="v">{Math.round(sum.vbank / 10000).toLocaleString()}</div>
-          <div className="d">만원</div>
+          <div className="v" style={{ fontSize: 14, paddingTop: 8 }}>
+            <Unfilled reason="수납 거래(수단·일자) 축이 응답에 없다" />
+          </div>
+          <div className="d">API 보완 필요</div>
         </div>
         <div className="stat">
           <div className="l">
-            <Icon name="receipt" size={13} /> 등록비
+            <Icon name="percent" size={13} /> 수납률
           </div>
-          <div className="v">{Math.round(sum.tuition / 10000).toLocaleString()}</div>
-          <div className="d">신규 등록분</div>
+          <div className="v">{sum.billed > 0 ? Math.round((sum.total / sum.billed) * 100) : 0}%</div>
+          <div className="d">수납 / 청구</div>
         </div>
         <div className="stat">
           <div className="l">
@@ -406,6 +423,12 @@ function Content() {
           <div className="d down">{unpaid.length}건</div>
         </div>
       </div>
+
+      {error && (
+        <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+          {error}
+        </div>
+      )}
 
       {tab !== 'discount' && (
         <SearchForm
@@ -434,6 +457,7 @@ function Content() {
           {/* ═══ 할인 정책 · 청구액 계산 ═══ */}
           {tab === 'discount' && (
             <>
+              {/* 할인 정책 API 가 아직 없다 — 이 탭만 목업 그대로다(docs/API_GAPS.md 6-3) */}
               <div className="blocked-note">
                 <div className="ic">
                   <Icon name="triangle-alert" size={17} />
@@ -614,12 +638,13 @@ function Content() {
             <DataTable
               columns={COLUMNS}
               rows={rows}
-              rowKey={(r) => r.id}
+              rowKey={(r) => String(r.billingId)}
               masked={masked}
+              loading={loading}
               pageSize={12}
               countLabel={
                 <>
-                  매출 <b>{rows.length}</b>건
+                  청구 <b>{rows.length}</b>건 · 수납 {sum.total.toLocaleString()}원
                 </>
               }
               toolbar={
@@ -635,13 +660,15 @@ function Content() {
             <DataTable
               columns={UNPAID_COLUMNS}
               rows={unpaid}
-              rowKey={(r) => r.id}
+              rowKey={(r) => String(r.billingId)}
               selectable
               masked={masked}
+              loading={loading}
               pageSize={12}
               countLabel={
                 <>
-                  미납 <b>{unpaid.length}</b>건 · {sum.due.toLocaleString()}원
+                  미납 <b>{sum.unpaidCount}</b>건 · {sum.due.toLocaleString()}원
+                  <span style={{ color: 'var(--muted)' }}> (학생 수가 아니라 건수)</span>
                 </>
               }
               toolbar={
