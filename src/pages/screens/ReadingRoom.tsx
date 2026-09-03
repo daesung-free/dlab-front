@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DataTable, ExcelButton, PrintButton, Unfilled, type Column } from '../../components/common'
+import { DataTable, ExcelButton, MaskToggle, PrintButton, Unfilled, type Column } from '../../components/common'
 import { Icon } from '../../components/Icon'
 import { Tabs } from '../../components/Tabs'
 import { ApiError } from '../../api/client'
@@ -31,10 +31,11 @@ import './reading-room.css'
  * ★ 재실 여부는 이 화면이 판단하지 않는다. 출결 등원 로그와 좌석 이탈/복귀 신청을
  *   서버가 합쳐 presence 로 준다. 화면에서 두 소스를 조합하면 새로고침마다 값이 흔들린다.
  *
- * ★ 학생 이름이 **서버에서 이미 마스킹되어** 온다(`서*윤`). 원본을 받을 파라미터가 없어
- *   마스킹 토글을 뒀던 자리를 안내로 바꿨다 — docs/API_GAPS.md 참고.
+ * ★ 마스킹이 다른 목록과 같은 규칙이 됐다(2026-09-03). `unmask` 를 주면 원본이 오고
+ *   응답의 `masked` 가 false 가 된다 — 화면은 그 값을 보고 토글 상태를 정한다.
  *
- * ★ 서버가 안 주는 것: 고정반 · 이석 위치. 목업 컬럼은 남기고 <Unfilled/> 로 표시한다. */
+ * ★ 이석 위치는 아직 없다. 좌석 이탈 로그 수집이 보류라 서버가 값을 못 준다 —
+ *   목업 컬럼은 남기고 <Unfilled/> 로 표시한다. */
 
 type SeatState = 'in' | 'out' | 'away' | 'free' | 'off'
 
@@ -66,6 +67,7 @@ interface AssignRow {
   code: string
   studentNo: string
   name: string
+  className: string | null
   state: string
 }
 
@@ -74,14 +76,7 @@ const ASSIGN_COLUMNS: Column<AssignRow>[] = [
   { key: 'studentNo', header: '학번', width: '104px', sortable: true, value: (r) => r.studentNo },
   // 서버가 이미 마스킹해서 보내므로 mask 를 걸지 않는다(이중 마스킹 방지)
   { key: 'name', header: '이름', width: '84px', value: (r) => r.name },
-  {
-    key: 'classNo',
-    header: '고정반',
-    width: '86px',
-    align: 'center',
-    value: () => '',
-    render: () => <Unfilled reason="좌석 응답에 고정반이 없다" />,
-  },
+  { key: 'className', header: '고정반', width: '86px', align: 'center', value: (r) => r.className ?? '-' },
   {
     key: 'state',
     header: '현재 상태',
@@ -113,6 +108,7 @@ function Content() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [masked, setMasked] = useState(true)
 
   // 구역 목록
   useEffect(() => {
@@ -141,7 +137,7 @@ function Content() {
     }
     setLoading(true)
     try {
-      setCells(await getSeatLayout(areaId))
+      setCells(await getSeatLayout(areaId, !masked))
       setError(null)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '배치도를 불러오지 못했습니다.')
@@ -149,7 +145,7 @@ function Content() {
     } finally {
       setLoading(false)
     }
-  }, [areaId])
+  }, [areaId, masked])
 
   useEffect(() => {
     void loadLayout()
@@ -190,6 +186,7 @@ function Content() {
           code: s.seatCd,
           studentNo: s.studentNo ?? '-',
           name: s.studentName ?? '-',
+          className: s.className,
           state: STATE_META[s.state].short,
         })),
     [seats],
@@ -368,7 +365,7 @@ function Content() {
                 좌석 상세
               </div>
               <div className="r">
-                <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>이름은 서버에서 마스킹됩니다</span>
+                <MaskToggle masked={masked} onChange={setMasked} />
               </div>
             </div>
             <div className="card-sec-b">
@@ -405,9 +402,7 @@ function Content() {
                     </div>
                     <div className="row">
                       <span className="k">고정반</span>
-                      <span className="v">
-                        <Unfilled reason="좌석 응답에 고정반이 없다" />
-                      </span>
+                      <span className="v">{sel.className ?? '미배정'}</span>
                     </div>
                     <div className="row">
                       <span className="k">이석 위치</span>

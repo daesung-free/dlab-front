@@ -53,14 +53,7 @@ const LECTURE_COLUMNS: Column<ApiLecture>[] = [
     value: (r) => LECTURE_TYPE_LABEL[r.lectureType] ?? r.lectureType,
     render: (r) => <span className="mk supplement">{LECTURE_TYPE_LABEL[r.lectureType] ?? r.lectureType}</span>,
   },
-  {
-    key: 'teacher',
-    header: '담당',
-    width: '78px',
-    align: 'center',
-    value: () => '',
-    render: () => <Unfilled reason="담당 강사가 특강 응답에 없다" />,
-  },
+  { key: 'teacherName', header: '담당', width: '86px', align: 'center', value: (r) => r.teacherName ?? '미지정' },
   {
     key: 'confirmedCount',
     header: '신청 / 정원',
@@ -139,21 +132,8 @@ const APPLICANT_COLUMNS: Column<ApplicantRow>[] = [
   { key: 'seq', header: '순번', width: '64px', align: 'center', sortable: true, value: (r) => r.seq },
   { key: 'studentNo', header: '학번', width: '100px', value: (r) => r.studentNo ?? '-' },
   { key: 'studentName', header: '이름', width: '84px', mask: 'name', value: (r) => r.studentName },
-  {
-    key: 'classNo',
-    header: '반',
-    width: '56px',
-    align: 'center',
-    value: () => '',
-    render: () => <Unfilled reason="신청자 응답에 반이 없다" />,
-  },
-  {
-    key: 'phone',
-    header: '연락처',
-    width: '128px',
-    value: () => '',
-    render: () => <Unfilled reason="신청자 응답에 연락처가 없다" />,
-  },
+  { key: 'className', header: '반', width: '56px', align: 'center', value: (r) => r.className ?? '-' },
+  { key: 'phone', header: '연락처', width: '128px', mask: 'phone', value: (r) => r.phone ?? '-' },
   {
     key: 'appliedAt',
     header: '신청일',
@@ -778,9 +758,7 @@ function Content() {
                         <td className="masked">
                           {masked ? `${a.studentName[0]}*${a.studentName.slice(2)}` : a.studentName}
                         </td>
-                        <td className="al-center">
-                          <Unfilled reason="신청자 응답에 반이 없다" />
-                        </td>
+                        <td className="al-center">{a.className ?? '-'}</td>
                         {/* 출결 표시는 회차별 조회(sessions/{id}/attendances)를 붙여야 한다 */}
                         {sessionList.map((se) => (
                           <td key={se.id} className="al-center">

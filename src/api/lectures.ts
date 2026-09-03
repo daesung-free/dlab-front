@@ -51,6 +51,8 @@ export interface Lecture {
   startDate: string | null
   endDate: string | null
   fee: number | null
+  teacherId: number | null
+  teacherName: string | null
   confirmedCount: number
   waitlistedCount: number
 }
@@ -70,10 +72,14 @@ export interface LectureApplicant {
   studentId: number
   studentNo: string | null
   studentName: string
+  className: string | null
+  phone: string | null
   status: string
   waitlisted: boolean
   appliedAt: string | null
   memo: string | null
+  /** 서버가 이름·연락처를 가려서 보냈는지 */
+  masked: boolean
 }
 
 export function listLectures(academyId: number, year: number, status?: LectureStatus): Promise<Lecture[]> {

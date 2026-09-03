@@ -11,10 +11,12 @@ import {
   deleteMealClosure,
   listMealClosures,
   listMealMonthly,
+  getMealPolicy,
   listMealOrders,
   type MealClosure,
   type MealDay,
   type MealOrder,
+  type MealPolicy,
 } from '../../api/meals'
 import { MOCK_STUDENTS } from './mockStudents'
 import type { Mockup } from './types'
@@ -289,6 +291,7 @@ function Content() {
   const [dayList, setDayList] = useState<MealDay[]>([])
   const [closureList, setClosureList] = useState<MealClosure[]>([])
   const [orders, setOrders] = useState<MealOrder[]>([])
+  const [policy, setPolicy] = useState<MealPolicy | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -301,14 +304,17 @@ function Content() {
     setLoading(true)
     setError(null)
     try {
-      const [days, cls, ords] = await Promise.all([
+      const [days, cls, ords, pol] = await Promise.all([
         listMealMonthly(academyId, month),
         listMealClosures(academyId, month),
         listMealOrders(academyId, month),
+        getMealPolicy(academyId, Number(month.slice(0, 4))),
       ])
       setDayList(days)
       setClosureList(cls)
       setOrders(ords)
+      setPolicy(pol)
+      setDeadlineDays(pol.deadlineDays)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '급식 정보를 불러오지 못했습니다.')
       setDayList([])
@@ -650,6 +656,12 @@ function Content() {
                       ))}
                     </select>
                     <span style={{ fontSize: 12.5 }}>23:59까지</span>
+                    {/* registered=false 면 지점 정책이 없어 서버 기본값을 쓰는 중이다 */}
+                    {policy && !policy.registered && (
+                      <span className="mk supplement" title="지점 정책이 등록되지 않아 서버 기본값을 사용 중입니다">
+                        기본값
+                      </span>
+                    )}
                   </div>
                 </div>
                 <ul>

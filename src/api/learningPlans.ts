@@ -10,6 +10,8 @@ export interface PlanBoardRow {
   studentName: string
   classId: number | null
   className: string | null
+  homeroomTeacherId: number | null
+  homeroomTeacherName: string | null
   plannedMinutes: number
   /**
    * 이행(O)으로 체크된 **계획** 시간이다.
@@ -20,8 +22,14 @@ export interface PlanBoardRow {
   totalItems: number
   doneItems: number
   plannedDays: number
-  /** 계획을 한 건도 안 쓴 날 */
+  /**
+   * 계획을 한 건도 안 쓴 날.
+   * 예전에는 달력일 기준이라 휴원일도 미작성으로 잡혔다 — 서버가 고쳤다(2026-09-03).
+   * `holiday.plan_excluded` 로 제외할 날을 지정한다(기본 꺼짐).
+   */
   missingDays: number
+  /** 미작성 판정의 분모가 된 날 수. missingDays 를 이 값과 함께 봐야 의미가 있다 */
+  countedDays: number
 }
 
 export interface PlanItem {

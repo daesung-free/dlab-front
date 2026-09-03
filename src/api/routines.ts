@@ -83,3 +83,44 @@ export function saveRoutineResults(
     body: { results },
   })
 }
+
+/* ── 날짜 기준 매트릭스 (2026-09-03 신설) ────────────────────
+ * 예전에는 루틴 수만큼 /routines/{id}/results 를 불러 조립했다.
+ * 이제 한 번에 온다 — 루틴이 월 20개여도 호출이 1회다. */
+
+export interface RoutineRef {
+  id: number
+  name: string
+  subject: string | null
+  maxScore: number
+}
+
+export interface MatrixCell {
+  routineId: number
+  resultId: number | null
+  /** null이면 **아직 입력하지 않은 칸**이다. 행이 아예 없는 것과 다르다 */
+  status: RoutineStatus | null
+  selfScore: number | null
+  reviewedScore: number | null
+  memo: string | null
+}
+
+export interface MatrixRow {
+  enrollmentId: number
+  studentNo: string | null
+  studentName: string
+  className: string | null
+  /** 그 학생이 **대상인 루틴만** 들어온다 — 반 지정 루틴이 섞이기 때문이다 */
+  cells: MatrixCell[]
+}
+
+export interface RoutineDayMatrix {
+  /** 컬럼 순서. 화면이 이 순서대로 헤더를 그린다 */
+  routines: RoutineRef[]
+  rows: MatrixRow[]
+}
+
+/** @param date `yyyy-MM-dd` */
+export function getRoutineMatrix(academyId: number, date: string): Promise<RoutineDayMatrix> {
+  return request<RoutineDayMatrix>('/api/v1/admin/routines/results', { query: { academyId, date } })
+}

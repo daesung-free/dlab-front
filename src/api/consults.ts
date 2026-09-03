@@ -43,6 +43,8 @@ export interface ConsultLog {
   actionDone: boolean
   nextDueDate: string | null
   tags: string[]
+  durationMinutes: number | null
+  parentShare: ParentShare | null
 }
 
 /** 좌측 목록용. "누가 상담이 밀렸는가"가 이 응답의 목적이다 */
@@ -71,8 +73,18 @@ export interface ConsultWrite {
   actionPlan?: string
   nextDueDate?: string
   tagIds?: number[]
-  /** 작성자. 지금은 안 보내도 저장된다(teacherName 이 null 로 남는다) */
-  teacherId?: number
+  /** 학부모 공유 범위. 기본 NONE */
+  parentShare?: ParentShare
+  /** 상담 소요시간(분). placeNote 에 섞어 적던 것을 숫자로 분리했다 */
+  durationMinutes?: number
+}
+
+export type ParentShare = 'NONE' | 'SUMMARY' | 'FULL'
+
+export const PARENT_SHARE_LABEL: Record<ParentShare, string> = {
+  NONE: '공유 안 함',
+  SUMMARY: '요약본 전송',
+  FULL: '전체 공유',
 }
 
 export function listConsultStatus(academyId: number, teacherId?: number): Promise<ConsultStatusRow[]> {
