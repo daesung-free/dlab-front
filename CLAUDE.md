@@ -52,9 +52,10 @@ schema.d.ts npm run api:types 로 생성. 직접 수정 금지
 
 ## 4. 화면 연동 현황
 
-**실연동된 화면 8개** — 학원생 검색(F-4.1-1), 교무업무 명단(F-4.9), 반 배정(F-4.1-4),
+**실연동된 화면 11개** — 학원생 검색(F-4.1-1), 교무업무 명단(F-4.9), 반 배정(F-4.1-4),
 배정 관리(F-4.10-3), 상담(F-4.11-4), 데일리 루틴(F-4.11-1), 독서실 좌석배치(F-C-4),
-주·일 학습 계획(F-4.11-2). 나머지 28개는 아직 목업이다.
+주·일 학습 계획(F-4.11-2), 출결 관리(F-4.3), 사유 신청(F-4.1-5), 상벌점(F-4.1-2).
+나머지 25개는 아직 목업이다.
 
 목록이 아닌 화면(좌우 분할 master-detail 등)은 `ConsultLog.tsx`를 본뜬다.
 
@@ -77,6 +78,20 @@ const table = useServerTable({ fetcher: searchStudents, params, sortable: SORTAB
 
 직접 `useEffect`로 짜지 않는다. 취소 처리(느린 응답이 최신 결과를 덮어쓰는 것)와
 조건 변경 시 1페이지 복귀를 빠뜨리게 된다.
+
+**★ 훅이 두 개다. 엔드포인트를 보고 고른다.**
+
+| 서버가 | 쓰는 것 | `DataTable`에 |
+|---|---|---|
+| `page`·`size`·`sort`를 받는다 (`/students`) | `useServerTable` | `serverPaging={table.serverPaging}` |
+| 결과를 통째로 준다 (출결·사유신청·상벌점·상담·루틴) | `useServerData` | **`serverPaging`을 안 넘긴다** |
+
+비페이징 응답에 `useServerTable`을 쓰면 `serverPaging.totalPages`가 1로 고정된다. 그러면
+`DataTable`이 "서버가 이미 잘라줬다"고 믿어 rows를 안 자르고, **페이저와 정렬 헤더가 통째로
+사라진다** — 200명짜리 지점이면 한 화면에 200줄이 쏟아진다. 반대로 `useServerData`를 쓰는
+화면은 전량이 손에 있어 클라이언트 정렬이 틀리지 않으므로, 정렬 UI를 서버 허용키로 제한할
+필요가 없다. **다만 그 엔드포인트에 서버 페이징이 생기면 그날로 전제가 깨진다** —
+`src/components/common/useServerData.ts` 첫 주석에 그 이유를 적어뒀다.
 
 **서버가 값을 안 주는 컬럼은 지우지 말고 `<Unfilled reason="..."/>`로 둔다.** 컬럼을 없애면
 "원래 없던 항목"처럼 보여서 백엔드에 요청해야 할 것이 조용히 사라진다.

@@ -9,6 +9,11 @@ export type { Column, ServerPaging } from './DataTable'
  * 목록 화면은 이걸 쓴다. 직접 useEffect로 짜면 취소 처리·페이지 초기화를 빠뜨린다. */
 export { useServerTable } from './useServerTable'
 
+/* 서버 페이징이 없는 조회(출결·사유신청·상벌점·상담·루틴)는 이쪽.
+ * page·size·sort 를 안 받는 엔드포인트에 useServerTable 을 쓰면 페이저와 정렬이
+ * 통째로 죽는다 — 어느 쪽을 쓸지는 useServerData.ts 첫 주석에 적어뒀다. */
+export { useServerData } from './useServerData'
+
 export { SearchForm } from './SearchForm'
 export type { Field, SearchValues, SearchValue } from './SearchForm'
 
