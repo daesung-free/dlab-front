@@ -1,4 +1,4 @@
-import { requestPaged } from './client'
+import { request, requestPaged } from './client'
 import type { Paged } from './types'
 
 /* 학생 검색 (F-4.1-1) — GET /api/v1/admin/students
@@ -111,4 +111,44 @@ export interface StudentSearchParams {
 export function searchStudents(params: StudentSearchParams): Promise<Paged<Student>> {
   const { sort, ...rest } = params
   return requestPaged<Student>('/api/v1/admin/students', { query: { ...rest }, repeatable: { sort } })
+}
+
+/* ── 신규 접수 등록 (F-4.1-3) ─────────────────────────────── */
+
+/**
+ * 접수 시 받는 값. **학번은 서버가 채번한다** — 요청에 넣지 않는다.
+ *
+ * ⚠️ 등록 폼이 받는 값의 일부만 여기 들어간다. 생년월일·성별·출신학교·주소는
+ *   `updateStudent`(PATCH)로 이어서 보내야 하고, 반·좌석·사물함·장학은 각자 다른 API다.
+ *   docs/API_GAPS.md 참고.
+ */
+export interface AdmitRequest {
+  academyId: number
+  year: number
+  name: string
+  grade: GradeType
+  track?: TrackType
+  phone?: string
+}
+
+/** 접수 후 상세를 채운다. 넘긴 필드만 바뀐다 */
+export interface StudentUpdateRequest {
+  name?: string
+  phone?: string
+  birthDate?: string
+  /** 'M' | 'F' */
+  gender?: string
+  schoolName?: string
+  address?: string
+  grade?: GradeType
+  track?: TrackType
+  status?: EnrollmentStatus
+}
+
+export function admitStudent(body: AdmitRequest): Promise<Student> {
+  return request<Student>('/api/v1/admin/students', { method: 'POST', body })
+}
+
+export function updateStudent(enrollmentId: number, body: StudentUpdateRequest): Promise<Student> {
+  return request<Student>(`/api/v1/admin/students/${enrollmentId}`, { method: 'PATCH', body })
 }
