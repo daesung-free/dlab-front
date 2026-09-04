@@ -1,9 +1,17 @@
-import { useMemo, useState } from 'react'
-import { DataTable, ExcelButton, MaskToggle, type Column } from '../../components/common'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { DataTable, ExcelButton, MaskToggle, Unfilled, type Column } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
+import { ApiError } from '../../api/client'
+import { useAcademy } from '../../auth/AcademyContext'
+import {
+  cancelQnaReservation,
+  listQnaSlots,
+  openQnaSlots,
+  setQnaSlotClosed,
+  type QnaSlot,
+} from '../../api/qna'
 import { maskName } from '../../lib/mask'
-import { MOCK_STUDENTS } from './mockStudents'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
 
@@ -35,178 +43,221 @@ const TYPE_META: Record<QnaType, { label: string; icon: string; cls: string }> =
   ONLINE: { label: '온라인', icon: 'monitor', cls: 'supplement' },
 }
 
-const TEACHERS = ['이장원', '김유진', '최지원', '박서영']
-const ROOMS = ['상담실 1', '상담실 2']
-
-const SLOT_DAYS = [
-  { d: '06/01', dow: '월' },
-  { d: '06/02', dow: '화' },
-  { d: '06/03', dow: '수' },
-  { d: '06/05', dow: '금' },
-]
-
-/** 운영 시간 — 시작·종료도 설정값이다 */
-const OPEN_MIN = 13 * 60
-const CLOSE_MIN = 16 * 60 + 30
 
 const INTERVAL_CHOICES = [10, 15, 20, 30]
 
+/** 개설 기본 운영시간. 슬롯 개설 요청에만 쓰고, 표는 서버가 만든 슬롯을 따른다 */
+const OPEN_MIN = 18 * 60
+const CLOSE_MIN = 20 * 60
+
 const fmt = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
-
-/** 간격 설정에 따라 슬롯 시각을 만든다 — 15분은 현재값일 뿐 고정이 아니다 */
-function buildTimes(interval: number): string[] {
-  const out: string[] = []
-  for (let m = OPEN_MIN; m + interval <= CLOSE_MIN; m += interval) out.push(fmt(m))
-  return out
-}
-
-interface Slot {
-  key: string
-  open: boolean
-  student?: string
-  /** 신청 시 입력한 질문 내용 */
-  question?: string
-  /** 사진 첨부 개수 */
-  photos?: number
-  teacher: string
-  room: string
-}
-
-const QUESTIONS = [
-  '미적분 극한 단원에서 치환 기준이 헷갈립니다',
-  '문학 서술상 특징 문제 접근법을 모르겠어요',
-  '빈칸추론에서 선지 소거가 잘 안 됩니다',
-  '역학적 에너지 보존 문제 풀이 확인 부탁드립니다',
-  '수1 삼각함수 그래프 개형을 못 그리겠습니다',
-  '화작 문법 문제 오답 정리 봐주세요',
-]
-
-function buildSlots(times: string[]): Record<string, Slot> {
-  const map: Record<string, Slot> = {}
-  SLOT_DAYS.forEach((day, di) => {
-    times.forEach((t, ti) => {
-      const n = di * times.length + ti
-      const open = n % 7 !== 6
-      const booked = open && n % 3 === 0
-      map[`${day.d}-${t}`] = {
-        key: `${day.d}-${t}`,
-        open,
-        student: booked ? MOCK_STUDENTS[n % MOCK_STUDENTS.length].name : undefined,
-        question: booked ? QUESTIONS[n % QUESTIONS.length] : undefined,
-        photos: booked ? n % 3 : undefined,
-        teacher: TEACHERS[di % TEACHERS.length],
-        room: ROOMS[di % ROOMS.length],
-      }
-    })
-  })
-  return map
-}
 
 /* ── 신청 내역 ── */
 
-type ReqStatus = '예약' | '완료' | '취소'
 
-interface QnaRequest {
-  id: string
+
+/** 신청 내역 한 줄 — 슬롯의 예약자를 펼친 것 */
+interface ReqRow {
+  id: number
   at: string
-  type: QnaType
   studentNo: string
   name: string
-  classNo: string
-  subject: string
   question: string
-  photos: number
   teacher: string
   slot: string
-  status: ReqStatus
+  canceled: boolean
 }
 
-const SUBJECTS = ['국어', '수학', '영어', '탐구1', '탐구2']
-
-const REQUESTS: QnaRequest[] = MOCK_STUDENTS.filter((s) => s.status === '재원')
-  .slice(0, 24)
-  .map((s, i) => {
-    const day = SLOT_DAYS[i % SLOT_DAYS.length]
-    return {
-      id: `q-${i + 1}`,
-      at: `2026-06-0${(i % 3) + 1} ${String(9 + (i % 8)).padStart(2, '0')}:${String((i * 17) % 60).padStart(2, '0')}`,
-      // 온라인은 현재 미노출이라 신청이 들어오지 않는다 — 전부 대면
-      type: 'OFFLINE',
-      studentNo: s.studentNo,
-      name: s.name,
-      classNo: s.classNo,
-      subject: SUBJECTS[i % SUBJECTS.length],
-      question: QUESTIONS[i % QUESTIONS.length],
-      photos: i % 3,
-      teacher: TEACHERS[i % TEACHERS.length],
-      slot: `${day.d} ${fmt(OPEN_MIN + (i % 12) * 15)}`,
-      status: i % 11 === 10 ? '취소' : i % 4 === 3 ? '완료' : '예약',
-    }
-  })
-
-const REQ_COLUMNS: Column<QnaRequest>[] = [
-  { key: 'at', header: '신청일시', width: '136px', sortable: true, value: (r) => r.at },
+const REQ_COLUMNS: Column<ReqRow>[] = [
+  {
+    key: 'at',
+    header: '신청일시',
+    width: '150px',
+    sortable: true,
+    value: (r) => r.at,
+    render: (r) => (r.at ? r.at.slice(0, 16).replace('T', ' ') : '-'),
+  },
   {
     key: 'type',
     header: '유형',
     width: '76px',
     align: 'center',
-    sortable: true,
-    value: (r) => TYPE_META[r.type].label,
-    render: (r) => <span className={`mk ${TYPE_META[r.type].cls}`}>{TYPE_META[r.type].label}</span>,
+    // 온라인 질의응답은 서버에 도메인이 없다 — 대면만 들어온다
+    value: () => '대면',
+    render: () => <span className="mk verified">대면</span>,
   },
   { key: 'studentNo', header: '학번', width: '100px', value: (r) => r.studentNo },
   { key: 'name', header: '이름', width: '82px', mask: 'name', value: (r) => r.name },
-  { key: 'classNo', header: '반', width: '56px', align: 'center', value: (r) => r.classNo },
-  { key: 'subject', header: '과목', width: '72px', align: 'center', sortable: true, value: (r) => r.subject },
+  {
+    key: 'classNo',
+    header: '반',
+    width: '56px',
+    align: 'center',
+    value: () => '',
+    render: () => <Unfilled reason="예약자 응답에 반이 없다" />,
+  },
+  {
+    key: 'subject',
+    header: '과목',
+    width: '72px',
+    align: 'center',
+    value: () => '',
+    render: () => <Unfilled reason="예약에 과목 항목이 없다" />,
+  },
   {
     key: 'question',
     header: '질문 내용',
     value: (r) => r.question,
-    render: (r) => (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-        {r.photos > 0 && (
-          <span className="mk supplement" title={`사진 ${r.photos}장 첨부`}>
-            <Icon name="upload" size={10} /> {r.photos}
-          </span>
-        )}
-        <span style={{ fontSize: 12 }}>{r.question}</span>
-      </span>
-    ),
+    render: (r) => (r.question ? r.question : <span style={{ color: 'var(--muted)' }}>-</span>),
   },
-  { key: 'teacher', header: '담당', width: '76px', align: 'center', value: (r) => r.teacher },
-  { key: 'slot', header: '예약 타임', width: '116px', align: 'center', sortable: true, value: (r) => r.slot },
+  { key: 'teacher', header: '담당', width: '86px', align: 'center', value: (r) => r.teacher },
+  { key: 'slot', header: '예약 타임', width: '150px', align: 'center', sortable: true, value: (r) => r.slot },
   {
     key: 'status',
     header: '상태',
-    width: '76px',
+    width: '80px',
     align: 'center',
-    sortable: true,
-    value: (r) => r.status,
-    render: (r) => (
-      <span className={`mk ${r.status === '완료' ? 'verified' : r.status === '예약' ? 'supplement' : 'brandnew'}`}>
-        {r.status}
-      </span>
-    ),
+    value: (r) => (r.canceled ? '취소' : '예약'),
+    render: (r) => <span className={`mk ${r.canceled ? 'brandnew' : 'verified'}`}>{r.canceled ? '취소' : '예약'}</span>,
   },
 ]
 
+/** 그 주(월~금) 날짜 5개. 슬롯 조회가 날짜 단위라 화면이 주를 만든다 */
+function weekDates(anchor: string): string[] {
+  const d = new Date(`${anchor}T00:00:00`)
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7))
+  return Array.from({ length: 5 }, (_, i) => {
+    const x = new Date(d)
+    x.setDate(d.getDate() + i)
+    return x.toISOString().slice(0, 10)
+  })
+}
+
+const DOW = ['일', '월', '화', '수', '목', '금', '토']
+
 function Content() {
+  const { academyId } = useAcademy()
   const [tab, setTab] = useState('slot')
   const [masked, setMasked] = useState(true)
 
   /* 관리자 설정 — 노출 여부와 간격은 화면에서 바꾼다 */
   const [visible, setVisible] = useState<Record<QnaType, boolean>>({ OFFLINE: true, ONLINE: false })
-  const [interval, setIntervalMin] = useState(15)
+  const [interval, setIntervalMin] = useState(30)
 
-  const times = useMemo(() => buildTimes(interval), [interval])
-  const slots = useMemo(() => buildSlots(times), [times])
-  const slotList = Object.values(slots)
-  const openCount = slotList.filter((s) => s.open).length
-  const bookedCount = slotList.filter((s) => s.student).length
+  const [anchor, setAnchor] = useState(() => new Date().toISOString().slice(0, 10))
+  const [byDate, setByDate] = useState<Map<string, QnaSlot[]>>(new Map())
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
-  const activeReq = REQUESTS.filter((r) => r.status === '예약')
-  const withPhoto = REQUESTS.filter((r) => r.photos > 0).length
+  const dates = useMemo(() => weekDates(anchor), [anchor])
+
+  /**
+   * 슬롯 조회가 날짜 하나씩이라 주간 그리드를 그리려면 5번 부른다.
+   * 기간 조회가 생기면 1회로 줄어든다 — docs/API_GAPS.md 에 적어뒀다.
+   */
+  const load = useCallback(async () => {
+    if (academyId === null) {
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    try {
+      const pairs = await Promise.all(dates.map(async (d) => [d, await listQnaSlots(academyId, d)] as const))
+      setByDate(new Map(pairs))
+      setError(null)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '예약 현황을 불러오지 못했습니다.')
+      setByDate(new Map())
+    } finally {
+      setLoading(false)
+    }
+  }, [academyId, dates])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const allSlots = useMemo(() => [...byDate.values()].flat(), [byDate])
+
+  /** 행(시각)은 서버가 만든 슬롯에서 뽑는다 — 화면이 운영시간을 정하지 않는다 */
+  const times = useMemo(
+    () => [...new Set(allSlots.map((s) => s.startTime.slice(0, 5)))].sort(),
+    [allSlots],
+  )
+
+  const slotAt = useCallback(
+    (date: string, time: string) => (byDate.get(date) ?? []).find((s) => s.startTime.slice(0, 5) === time) ?? null,
+    [byDate],
+  )
+
+  const openCount = allSlots.filter((s) => !s.closed).length
+  const bookedCount = allSlots.reduce((a, s) => a + s.reserved, 0)
+
+  async function toggleClosed(slot: QnaSlot) {
+    setBusy(true)
+    try {
+      await setQnaSlotClosed(slot.id, !slot.closed)
+      await load()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '슬롯 상태를 바꾸지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function cancelReservation(reservationId: number) {
+    setBusy(true)
+    try {
+      await cancelQnaReservation(reservationId)
+      await load()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '예약을 취소하지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** 그날 운영 시간을 통째로 개설한다. 서버가 간격대로 쪼개 만든다 */
+  async function openDay(date: string) {
+    if (academyId === null) return
+    setBusy(true)
+    try {
+      await openQnaSlots({
+        academyId,
+        year: Number(date.slice(0, 4)),
+        date,
+        from: '18:00',
+        to: '20:00',
+        intervalMinutes: interval,
+        capacity: 1,
+      })
+      await load()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '슬롯을 개설하지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** 슬롯의 예약자를 펼쳐 신청 내역으로 만든다 */
+  const reqRows: ReqRow[] = useMemo(
+    () =>
+      allSlots.flatMap((s) =>
+        s.reservations.map((r) => ({
+          id: r.id,
+          at: r.reservedAt ?? '',
+          studentNo: r.studentNo ?? '-',
+          name: r.studentName,
+          question: r.question ?? '',
+          teacher: s.teacherName ?? '미지정',
+          slot: `${s.date.slice(5)} ${s.startTime.slice(0, 5)}`,
+          canceled: r.canceledAt !== null,
+        })),
+      ),
+    [allSlots],
+  )
+  const activeReq = reqRows.filter((r) => !r.canceled)
 
   return (
     <>
@@ -238,8 +289,11 @@ function Content() {
           <div className="l">
             <Icon name="upload" size={13} /> 사진 첨부
           </div>
-          <div className="v">{withPhoto}</div>
-          <div className="d">건 · 문제 사진 포함</div>
+          {/* 사진 첨부는 예약 응답에 없다 — 앱에서 올린다면 서버가 개수를 실어줘야 한다 */}
+          <div className="v" style={{ fontSize: 14, paddingTop: 8 }}>
+            <Unfilled reason="예약에 사진 첨부 정보가 없다" />
+          </div>
+          <div className="d">문제 사진</div>
         </div>
         <div className="stat">
           <div className="l">
@@ -272,7 +326,7 @@ function Content() {
         <Tabs
           items={[
             { key: 'slot', label: '예약 현황', count: bookedCount },
-            { key: 'req', label: '신청 내역', count: REQUESTS.length },
+            { key: 'req', label: '신청 내역', count: reqRows.length },
             { key: 'setting', label: '노출 · 시간 설정' },
           ]}
           active={tab}
@@ -280,43 +334,94 @@ function Content() {
         />
 
         <div style={{ padding: 14 }}>
+          {error && (
+            <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+              {error}
+            </div>
+          )}
+
           {/* ═══ 예약 현황 ═══ */}
           {tab === 'slot' && (
             <>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
+                <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>주 선택</span>
+                <input className="inp" type="date" style={{ width: 150 }} value={anchor} onChange={(e) => setAnchor(e.target.value)} />
+                <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>
+                  {dates[0]} ~ {dates[dates.length - 1]}
+                </span>
+              </div>
               <div style={{ overflowX: 'auto' }}>
                 <table className="dt" style={{ minWidth: 620 }}>
                   <thead>
                     <tr>
                       <th style={{ width: 92 }}>시간</th>
-                      {SLOT_DAYS.map((d, di) => (
-                        <th key={d.d} className="al-center">
-                          {d.d} ({d.dow})
-                          <span style={{ display: 'block', fontSize: 10, fontWeight: 500, color: 'var(--muted)' }}>
-                            {TEACHERS[di % TEACHERS.length]} · {ROOMS[di % ROOMS.length]}
-                          </span>
-                        </th>
-                      ))}
+                      {dates.map((d) => {
+                        const day = byDate.get(d) ?? []
+                        return (
+                          <th key={d} className="al-center">
+                            {d.slice(5)} ({DOW[new Date(`${d}T00:00:00`).getDay()]})
+                            <span style={{ display: 'block', fontSize: 10, fontWeight: 500, color: 'var(--muted)' }}>
+                              {day.length > 0 ? (
+                                `${day[0].teacherName ?? '담당 미지정'} · ${day[0].room ?? '장소 미지정'}`
+                              ) : (
+                                <button
+                                  className="btn"
+                                  style={{ padding: '2px 7px', fontSize: 10 }}
+                                  disabled={busy || academyId === null}
+                                  onClick={() => void openDay(d)}
+                                  title={`${interval}분 간격으로 18:00~20:00 개설`}
+                                >
+                                  개설
+                                </button>
+                              )}
+                            </span>
+                          </th>
+                        )
+                      })}
                     </tr>
                   </thead>
                   <tbody>
+                    {times.length === 0 && (
+                      <tr>
+                        <td colSpan={dates.length + 1} style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 12 }}>
+                          {loading ? '불러오는 중…' : '이 주에 개설된 타임이 없습니다.'}
+                        </td>
+                      </tr>
+                    )}
                     {times.map((t) => (
                       <tr key={t}>
                         <th style={{ textAlign: 'left', paddingLeft: 12, fontSize: 11.5, fontWeight: 700 }}>{t}</th>
-                        {SLOT_DAYS.map((d) => {
-                          const s = slots[`${d.d}-${t}`]
-                          return (
-                            <td key={d.d} className="al-center" style={{ padding: 5 }}>
-                              {!s.open ? (
+                        {dates.map((d) => {
+                          const slot = slotAt(d, t)
+                          if (!slot)
+                            return (
+                              <td key={d} className="al-center" style={{ padding: 5 }}>
                                 <span style={{ fontSize: 11, color: 'var(--muted)' }}>미개설</span>
-                              ) : s.student ? (
+                              </td>
+                            )
+                          const booked = slot.reservations.filter((r) => !r.canceledAt)
+                          return (
+                            <td key={d} className="al-center" style={{ padding: 5 }}>
+                              {booked.length > 0 ? (
                                 <span
                                   className="mk verified"
-                                  title={`${s.student} · ${s.teacher} · ${s.room}\n${s.question ?? ''}${s.photos ? `\n사진 ${s.photos}장` : ''}`}
-                                  style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                                  title={`${booked[0].studentName} · ${slot.teacherName ?? ''} · ${slot.room ?? ''}\n${booked[0].question ?? ''}`}
+                                  style={{ cursor: 'pointer' }}
+                                  onClick={() => void cancelReservation(booked[0].id)}
                                 >
-                                  {masked ? maskName(s.student) : s.student}
-                                  {(s.photos ?? 0) > 0 && <Icon name="upload" size={9} />}
+                                  {masked ? maskName(booked[0].studentName) : booked[0].studentName}
                                 </span>
+                              ) : slot.closed ? (
+                                // closed(운영자가 닫음)와 full(정원 참)은 원인이 달라 구분해서 보여준다
+                                <button
+                                  className="btn"
+                                  style={{ padding: '3px 9px', fontSize: 10.5 }}
+                                  disabled={busy}
+                                  onClick={() => void toggleClosed(slot)}
+                                  title="운영자가 닫은 타임 — 눌러서 다시 연다"
+                                >
+                                  닫힘
+                                </button>
                               ) : (
                                 <span
                                   style={{
@@ -329,6 +434,8 @@ function Content() {
                                     cursor: 'pointer',
                                     display: 'inline-block',
                                   }}
+                                  onClick={() => void toggleClosed(slot)}
+                                  title="예약 가능 — 눌러서 닫는다"
                                 >
                                   예약 가능
                                 </span>
@@ -373,22 +480,24 @@ function Content() {
 
               <DataTable
                 columns={REQ_COLUMNS}
-                rows={REQUESTS}
-                rowKey={(r) => r.id}
+                rows={reqRows}
+                rowKey={(r) => String(r.id)}
                 masked={masked}
+                loading={loading}
                 pageSize={12}
+                emptyText="예약 신청이 없습니다."
                 countLabel={
                   <>
-                    신청 <b>{REQUESTS.length}</b>건 · 대기 <b>{activeReq.length}</b>건
+                    신청 <b>{reqRows.length}</b>건 · 예약 <b>{activeReq.length}</b>건
                   </>
                 }
                 toolbar={
                   <>
-                    <button className="btn">
+                    <button className="btn" disabled title="담당별 준비 목록 출력은 아직 없습니다">
                       <Icon name="printer" size={14} /> 담당별 준비 목록
                     </button>
                     <MaskToggle masked={masked} onChange={setMasked} />
-                    <ExcelButton filename="질의응답_신청내역" columns={REQ_COLUMNS} rows={REQUESTS} masked={masked} />
+                    <ExcelButton filename="질의응답_신청내역" columns={REQ_COLUMNS} rows={reqRows} masked={masked} />
                   </>
                 }
               />
