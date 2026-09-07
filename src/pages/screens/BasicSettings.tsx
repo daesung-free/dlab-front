@@ -1,6 +1,32 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { DataTable, ExcelButton, type Column } from '../../components/common'
+import { DataTable, ExcelButton, Unfilled, type Column } from '../../components/common'
 import { Icon } from '../../components/Icon'
+import { ApiError } from '../../api/client'
+import { useAcademy } from '../../auth/AcademyContext'
+import { listClasses } from '../../api/classes'
+import { fetchPenaltyItems } from '../../api/penalties'
+import {
+  copyMastersToYear,
+  createCourseType,
+  createCurriculum,
+  createDepartment,
+  createTrack,
+  createTuitionMaster,
+  deleteCourseType,
+  deleteCurriculum,
+  deleteDepartment,
+  deleteTuitionMaster,
+  listCourseTypes,
+  listCurriculums,
+  listDepartments,
+  listTracks,
+  listTuitionMasters,
+  renameCourseType,
+  renameCurriculum,
+  renameDepartment,
+  updateTuitionMaster,
+} from '../../api/masters'
 import type { Mockup } from './types'
 
 /* F-4.10-1 기초 관리 — 신규개발-요구사항검증됨
@@ -10,194 +36,176 @@ import type { Mockup } from './types'
  * 클라이언트 메뉴표는 '과정 관리 / 학과 관리 / 학과계열 관리'를 각각 별도 메뉴로 둔다.
  * 마스터마다 화면을 복제하면 전년도 복사 의존 그래프가 화면에 흩어져 버리므로,
  * 화면은 하나로 두고 `?tab=` 으로 진입 마스터만 달리한다.
- * (사이드바의 세 메뉴는 각각 track / department / course_type 탭으로 들어온다) */
+ * (사이드바의 세 메뉴는 각각 track / department / course_type 탭으로 들어온다)
+ *
+ * ── 연동 범위 ──────────────────────────────────────────────
+ * 마스터 10종 중 **7종이 실연동**이다. 강의실·장학은 서버에 목록이 없다
+ * (장학은 학생별로만 조회된다 — 축이 다르다). API_GAPS 18-2.
+ *
+ * ★ **마스터마다 되는 조작이 다르다.** 학과계열은 등록만 되고 수정·삭제가 없으며,
+ *   교습비는 이름과 금액을 함께 고친다. 하나로 추상화하면 그 차이가 화면에서 사라져
+ *   "왜 이건 수정이 안 되지"가 된다 — 표에 되는 것만 버튼을 낸다.
+ *
+ * ★ 목업의 **코드·비고·사용여부는 어느 마스터에도 없다.** 지우지 않고 <Unfilled/> 로 둔다.
+ *
+ * ⚠ 전년도 복사는 **되돌릴 수 없다.** 대상 연도에 데이터가 있으면 409 로 거부되므로
+ *   덮어쓰지는 않는다. 복사 결과가 표별 건수로 오므로 그대로 보여준다. */
 
+/** 화면이 다루는 한 줄. 마스터마다 실리는 값이 달라 선택 필드로 둔다 */
 interface MasterRow {
-  id: string
-  code: string
+  id: number
   name: string
-  memo: string
-  order: number
-  active: boolean
+  sortOrder?: number
+  amount?: number
+  className?: string | null
+  point?: number
+  memberCount?: number
 }
 
-interface Master {
+interface MasterDef {
   key: string
   label: string
   icon: string
-  table: string
   /** 전년도 복사 의존 순서 (1부터). 없으면 복사 대상 아님 */
   copyOrder?: number
-  rows: MasterRow[]
+  /** 지점·연도 없이도 부를 수 있는가 */
+  global?: boolean
+  load: (academyId: number, year: number) => Promise<MasterRow[]>
+  create?: (academyId: number, year: number, name: string) => Promise<unknown>
+  rename?: (id: number, name: string) => Promise<unknown>
+  remove?: (id: number) => Promise<unknown>
+  /** 이 마스터에만 있는 추가 컬럼 */
+  extra?: Column<MasterRow>
+  /** 왜 등록·수정이 없는지 */
+  note?: string
 }
 
-function rows(items: [string, string, string][]): MasterRow[] {
-  return items.map(([code, name, memo], i) => ({
-    id: `${code}-${i}`,
-    code,
-    name,
-    memo,
-    order: i + 1,
-    active: true,
-  }))
-}
-
-const MASTERS: Master[] = [
+const MASTERS: MasterDef[] = [
   {
     key: 'track',
     label: '학과계열',
     icon: 'git-compare',
-    table: 'department_tracks',
     copyOrder: 1,
-    rows: rows([
-      ['TR-NA', '자연계열', '수학 미적/기하 · 과탐 2과목'],
-      ['TR-IN', '인문계열', '수학 확통 · 사탐 2과목'],
-      ['TR-AR', '예체능계열', '실기 병행 · 수능 최저 관리'],
-    ]),
+    global: true,
+    load: () => listTracks(),
+    create: (_a, _y, name) => createTrack(name),
+    note: '학과계열은 전 지점·전 연도 공통입니다. 등록만 되고 수정·삭제는 지원되지 않습니다.',
   },
   {
     key: 'department',
     label: '학과',
     icon: 'graduation-cap',
-    table: 'departments',
     copyOrder: 2,
-    rows: rows([
-      ['DEP-ME', '메디컬', '자연계열 · 의·치·한·수 목표반'],
-      ['DEP-NA1', '자연 상위', '자연계열 · 서울 최상위 목표'],
-      ['DEP-NA2', '자연 일반', '자연계열 · 수도권~지방 4년제'],
-      ['DEP-IN1', '인문 상위', '인문계열 · 서울 최상위 목표'],
-      ['DEP-IN2', '인문 일반', '인문계열 · 수도권~지방 4년제'],
-    ]),
+    load: (a, y) => listDepartments(a, y),
+    create: (academyId, year, name) => createDepartment({ academyId, year, name }),
+    rename: renameDepartment,
+    remove: deleteDepartment,
   },
   {
     key: 'course_type',
     label: '과정(전형)',
-    icon: 'award',
-    table: 'course_types',
+    icon: 'layers',
     copyOrder: 3,
-    rows: rows([
-      ['CT-RE', '재수 정규', '3월 개강 정규과정'],
-      ['CT-SA', '삼수 이상', 'N수 포함'],
-      ['CT-SP', '특별전형', '장학 연계'],
-    ]),
+    load: (a, y) => listCourseTypes(a, y),
+    create: (academyId, year, name) => createCourseType({ academyId, year, name }),
+    rename: renameCourseType,
+    remove: deleteCourseType,
   },
   {
     key: 'class_group',
     label: '반',
     icon: 'layout-grid',
-    table: 'class_groups',
     copyOrder: 4,
-    rows: rows([
-      ['CG-1', '1반', '인문 · 담임 최지원 · 정원 14'],
-      ['CG-2', '2반', '자연 · 담임 김유진 · 정원 14'],
-      ['CG-3', '3반', '자연 · 담임 이장원 · 정원 14'],
-      ['CG-4', '4반', '자연 · 담임 박서영 · 정원 14'],
-    ]),
+    load: async (a, y) => {
+      const list = await listClasses(y, a)
+      return list.map((c) => ({ id: c.id, name: c.name, memberCount: c.memberCount }))
+    },
+    extra: {
+      key: 'memberCount',
+      header: '인원',
+      width: '76px',
+      align: 'center',
+      sortable: true,
+      value: (r) => r.memberCount ?? '',
+    },
+    note: '반은 반 배정 화면에서 관리합니다. 여기서는 목록만 봅니다.',
   },
   {
     key: 'curriculum',
     label: '교육과정',
-    icon: 'clipboard-list',
-    table: 'curriculums',
+    icon: 'book-open',
     copyOrder: 5,
-    rows: rows([
-      ['CU-KOR', '국어', '언매 / 화작'],
-      ['CU-MAT', '수학', '미적 / 기하 / 확통'],
-      ['CU-ENG', '영어', '공통'],
-      ['CU-SCI', '과학탐구', '물리Ⅱ · 지구과학 등'],
-    ]),
+    load: (a, y) => listCurriculums(a, y),
+    create: (academyId, year, name) => createCurriculum({ academyId, year, name }),
+    rename: renameCurriculum,
+    remove: deleteCurriculum,
+    extra: {
+      key: 'className',
+      header: '소속 반',
+      width: '96px',
+      align: 'center',
+      value: (r) => r.className ?? '전체 공통',
+    },
   },
   {
     key: 'penalty_item',
     label: '상벌점 항목',
-    icon: 'star',
-    table: 'penalty_items',
+    icon: 'scale',
     copyOrder: 6,
-    rows: rows([
-      ['PI-LATE', '지각', '-2점 · 트리거 ATTENDANCE_LATE'],
-      ['PI-ABS', '무단결석', '-5점 · 트리거 ATTENDANCE_ABSENT'],
-      ['PI-FULL', '개근', '+5점'],
-    ]),
+    load: async (a, y) => {
+      const list = await fetchPenaltyItems({ academyId: a, year: y })
+      return list.map((i) => ({ id: i.id, name: i.itemName, point: i.point }))
+    },
+    extra: {
+      key: 'point',
+      header: '점수',
+      width: '76px',
+      align: 'right',
+      sortable: true,
+      value: (r) => r.point ?? 0,
+      render: (r) => (r.point == null ? '-' : `${r.point > 0 ? '+' : ''}${r.point}`),
+    },
+    note: '상벌점 항목은 상벌점 관리 화면에서 부여에 쓰입니다. 여기서는 목록만 봅니다.',
   },
   {
     key: 'tuition',
     label: '교습비',
-    icon: 'badge-dollar-sign',
-    table: 'tuitions',
+    icon: 'credit-card',
     copyOrder: 7,
-    rows: rows([
-      ['TU-REG', '정규 교습비', '월 단위 청구'],
-      ['TU-SPC', '특강비', '특강별 별도'],
-    ]),
+    load: (a, y) => listTuitionMasters(a, y),
+    create: (academyId, year, name) => createTuitionMaster({ academyId, year, name, amount: 0 }),
+    rename: (id, name) => updateTuitionMaster(id, { name }),
+    remove: deleteTuitionMaster,
+    extra: {
+      key: 'amount',
+      header: '금액',
+      width: '120px',
+      align: 'right',
+      sortable: true,
+      value: (r) => r.amount ?? 0,
+      render: (r) => (r.amount == null ? '-' : `${r.amount.toLocaleString()}원`),
+    },
   },
   {
     key: 'room',
     label: '강의실',
-    icon: 'building-2',
-    table: 'rooms',
-    rows: rows([
-      ['RM-201', '201호', '수용 20 · 2층'],
-      ['RM-202', '202호', '수용 20 · 2층'],
-      ['RM-301', '301호', '수용 24 · 3층'],
-    ]),
+    icon: 'door-open',
+    load: async () => [],
+    note: '강의실 마스터가 서버에 없습니다. 시간표 편성과 함께 신설되어야 합니다.',
   },
   {
     key: 'locker',
     label: '사물함',
-    icon: 'lock',
-    table: 'lockers',
-    rows: rows([
-      ['LK-A', 'A블록', 'L-001 ~ L-120'],
-      ['LK-B', 'B블록', 'L-121 ~ L-240'],
-    ]),
+    icon: 'archive',
+    load: async () => [],
+    note: '사물함은 배정 관리 화면에서 다룹니다 — 목록이 학생 배정과 함께 옵니다.',
   },
   {
     key: 'scholarship',
     label: '장학',
-    icon: 'trophy',
-    table: 'scholarships',
-    rows: rows([
-      ['SC-100', '수능100', '수능 성적 기준 100% 환급'],
-      ['SC-50', '평가원50', '평가원 모의고사 기준 50%'],
-    ]),
-  },
-]
-
-const COLUMNS: Column<MasterRow>[] = [
-  { key: 'order', header: '순서', width: '64px', align: 'center', sortable: true, value: (r) => r.order },
-  {
-    key: 'code',
-    header: '코드',
-    width: '110px',
-    value: (r) => r.code,
-    render: (_r, v) => <code style={{ fontSize: 11 }}>{v}</code>,
-  },
-  { key: 'name', header: '명칭', width: '160px', sortable: true, value: (r) => r.name },
-  { key: 'memo', header: '비고', value: (r) => r.memo },
-  {
-    key: 'active',
-    header: '사용',
-    width: '72px',
-    align: 'center',
-    value: (r) => (r.active ? '사용' : '중지'),
-    render: (r) => <span className={`mk ${r.active ? 'verified' : 'brandnew'}`}>{r.active ? '사용' : '중지'}</span>,
-  },
-  {
-    key: 'act',
-    header: '',
-    width: '92px',
-    align: 'center',
-    value: () => '',
-    render: () => (
-      <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }}>
-          수정
-        </button>
-        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5, color: 'var(--red)' }}>
-          삭제
-        </button>
-      </div>
-    ),
+    icon: 'award',
+    load: async () => [],
+    note: '장학은 학생 한 명씩만 조회됩니다. 종류 목록을 주는 경로가 없습니다.',
   },
 ]
 
@@ -205,11 +213,197 @@ function Content() {
   /* 진입 마스터는 URL이 결정한다 — 사이드바의 '과정/학과/학과계열 관리'가
    * 각각 다른 탭으로 들어오고, 새로고침·뒤로가기에도 그 상태가 유지된다. */
   const [params, setParams] = useSearchParams()
+  const { academyId } = useAcademy()
   const active = MASTERS.find((m) => m.key === params.get('tab')) ?? MASTERS[0]
 
-  function setActive(m: Master) {
+  const [year, setYear] = useState(new Date().getFullYear())
+  const [rows, setRows] = useState<MasterRow[]>([])
+  const [counts, setCounts] = useState<Record<string, number>>({})
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  function setActive(m: MasterDef) {
     setParams({ tab: m.key }, { replace: true })
   }
+
+  const load = useCallback(async () => {
+    // 학과계열만 지점 없이 부를 수 있다. 나머지는 지점을 고르기 전엔 호출하지 않는다
+    if (academyId === null && !active.global) {
+      setRows([])
+      setLoading(false)
+      setLoadError(null)
+      return
+    }
+    setLoading(true)
+    try {
+      setRows(await active.load(academyId ?? 0, year))
+      setLoadError(null)
+    } catch (err) {
+      setLoadError(err instanceof ApiError ? err.message : `${active.label}을(를) 불러오지 못했습니다.`)
+      setRows([])
+    } finally {
+      setLoading(false)
+    }
+  }, [active, academyId, year])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  /* 왼쪽 목록의 건수. 실패한 마스터는 세지 않는다 — 0과 '못 불러옴'은 다르다 */
+  useEffect(() => {
+    if (academyId === null) return
+    let alive = true
+    void (async () => {
+      const entries = await Promise.all(
+        MASTERS.map(async (m) => {
+          try {
+            return [m.key, (await m.load(academyId, year)).length] as const
+          } catch {
+            return null
+          }
+        }),
+      )
+      if (alive) setCounts(Object.fromEntries(entries.filter((e) => e !== null)))
+    })()
+    return () => {
+      alive = false
+    }
+  }, [academyId, year])
+
+  async function run(what: string, fn: () => Promise<unknown>) {
+    setBusy(true)
+    try {
+      await fn()
+      setNotice(`${what} 했습니다.`)
+      await load()
+    } catch (err) {
+      setNotice(err instanceof ApiError ? `${what} 실패 — ${err.message}` : `${what}에 실패했습니다.`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function add() {
+    if (!active.create) return
+    if (academyId === null && !active.global) {
+      setNotice('먼저 지점을 고르세요.')
+      return
+    }
+    const name = window.prompt(`${active.label} 이름`)
+    if (name === null || name.trim() === '') return
+    void run(`${active.label}을(를) 등록`, () => active.create!(academyId ?? 0, year, name.trim()))
+  }
+
+  /**
+   * 전년도 복사.
+   * ⚠️ 되돌릴 수 없다. 대상 연도에 데이터가 있으면 서버가 409 로 막으므로 덮어쓰진 않는다.
+   */
+  function copyYear() {
+    if (academyId === null) {
+      setNotice('먼저 지점을 고르세요.')
+      return
+    }
+    const from = year - 1
+    if (
+      !window.confirm(
+        `${from}년 기초 데이터를 ${year}년으로 복사합니다.\n되돌릴 수 없습니다. ${year}년에 이미 데이터가 있으면 복사되지 않습니다.\n\n진행할까요?`,
+      )
+    )
+      return
+    setBusy(true)
+    void (async () => {
+      try {
+        const res = await copyMastersToYear({ academyId, fromYear: from, toYear: year })
+        const summary = Object.entries(res.copied ?? {})
+          .filter(([, n]) => n > 0)
+          .map(([k, n]) => `${k} ${n}건`)
+          .join(' · ')
+        setNotice(summary === '' ? `${from} → ${year} 복사했지만 넘어온 것이 없습니다.` : `${from} → ${year} 복사 — ${summary}`)
+        await load()
+      } catch (err) {
+        setNotice(err instanceof ApiError ? `복사 실패 — ${err.message}` : '복사하지 못했습니다.')
+      } finally {
+        setBusy(false)
+      }
+    })()
+  }
+
+  const COLUMNS: Column<MasterRow>[] = useMemo(() => {
+    const base: Column<MasterRow>[] = [
+      { key: 'order', header: '순서', width: '64px', align: 'center', sortable: true, value: (r) => r.sortOrder ?? '' },
+      {
+        key: 'code',
+        header: '코드',
+        width: '96px',
+        align: 'center',
+        value: () => '',
+        render: () => <Unfilled reason="마스터에 코드가 없다" />,
+      },
+      { key: 'name', header: '명칭', width: '180px', sortable: true, value: (r) => r.name },
+    ]
+    if (active.extra) base.push(active.extra)
+    base.push(
+      {
+        key: 'memo',
+        header: '비고',
+        value: () => '',
+        render: () => <Unfilled reason="마스터에 비고가 없다" />,
+      },
+      {
+        key: 'active',
+        header: '사용',
+        width: '72px',
+        align: 'center',
+        value: () => '',
+        render: () => <Unfilled reason="사용여부 축이 없다" />,
+      },
+    )
+    if (active.rename || active.remove) {
+      base.push({
+        key: 'act',
+        header: '',
+        width: '92px',
+        align: 'center',
+        value: () => '',
+        render: (r) => (
+          <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+            {active.rename && (
+              <button
+                className="btn"
+                style={{ padding: '4px 9px', fontSize: 11.5 }}
+                disabled={busy}
+                onClick={() => {
+                  const name = window.prompt('새 이름', r.name)
+                  if (name === null || name.trim() === '' || name === r.name) return
+                  void run('이름을 바꾸', () => active.rename!(r.id, name.trim()))
+                }}
+              >
+                수정
+              </button>
+            )}
+            {active.remove && (
+              <button
+                className="btn"
+                style={{ padding: '4px 9px', fontSize: 11.5, color: 'var(--red)' }}
+                disabled={busy}
+                onClick={() => {
+                  if (!window.confirm(`${r.name} 을(를) 지울까요?`)) return
+                  void run('지우', () => active.remove!(r.id))
+                }}
+              >
+                삭제
+              </button>
+            )}
+          </div>
+        ),
+      })
+    }
+    return base
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, busy])
 
   return (
     <>
@@ -218,43 +412,80 @@ function Content() {
           <Icon name="history" size={17} />
         </div>
         <div>
-          <div className="tt">전년도 복사 의존 순서 — 이 순서를 지켜 순회해야 합니다</div>
+          <div className="tt">전년도 복사는 이 순서를 지켜 넘어갑니다</div>
           <div className="tx">
             {MASTERS.filter((m) => m.copyOrder)
               .sort((a, b) => a.copyOrder! - b.copyOrder!)
               .map((m, i, arr) => (
                 <span key={m.key}>
-                  <code>{m.key}</code>
+                  <b>{m.label}</b>
                   {i < arr.length - 1 && ' → '}
                 </span>
               ))}
             <br />
-            <b>단순 INSERT SELECT는 금지</b>입니다. 앞 단계가 만든 새 연도 ID를 뒤 단계가 참조하기 때문에,
-            <b> YearlySnapshotService</b>가 의존 그래프를 순회하며 ID를 다시 매핑해야 합니다.
+            앞 단계가 만든 새 연도 항목을 뒤 단계가 참조하므로 순서가 바뀌면 연결이 끊깁니다.
+            <b> 복사는 되돌릴 수 없습니다</b> — 다만 그 해에 이미 데이터가 있으면 복사되지 않습니다.
           </div>
         </div>
       </div>
+
+      {academyId === null && !active.global && (
+        <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
+          위에서 지점을 먼저 고르세요. 기초 데이터는 지점마다 따로 관리합니다.
+        </div>
+      )}
+      {active.note && (
+        <div className="note-box">
+          <div className="ic">
+            <Icon name="info" size={17} />
+          </div>
+          <div>{active.note}</div>
+        </div>
+      )}
+      {loadError && (
+        <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+          {loadError}
+        </div>
+      )}
+      {notice && (
+        <div className="note-box" role="status" style={{ borderColor: 'var(--violet)' }}>
+          {notice}
+        </div>
+      )}
 
       <div className="split-3-2">
         <div>
           <DataTable
             columns={COLUMNS}
-            rows={active.rows}
-            rowKey={(r) => r.id}
+            rows={rows}
+            rowKey={(r) => String(r.id)}
             masked={false}
+            loading={loading}
             pageSize={10}
             countLabel={
               <>
-                {active.label} <b>{active.rows.length}</b>건 · <code style={{ fontSize: 11 }}>{active.table}</code>
+                {active.label} <b>{rows.length}</b>건{active.global ? ' · 전 지점 공통' : ` · ${year}년`}
               </>
             }
             toolbar={
               <>
-                <button className="btn">
+                <select className="sel" value={year} onChange={(e) => setYear(Number(e.target.value))} style={{ width: 106 }}>
+                  {[year - 1, year, year + 1].map((y) => (
+                    <option key={y} value={y}>
+                      {y} 시즌
+                    </option>
+                  ))}
+                </select>
+                <button className="btn" disabled={busy || academyId === null} onClick={copyYear}>
                   <Icon name="history" size={14} /> 전년도 복사
                 </button>
-                <ExcelButton filename={`기초_${active.label}`} columns={COLUMNS} rows={active.rows} masked={false} />
-                <button className="btn pri">
+                <ExcelButton filename={`기초_${active.label}`} columns={COLUMNS} rows={rows} masked={false} />
+                <button
+                  className="btn pri"
+                  disabled={busy || !active.create}
+                  title={active.create ? undefined : '이 마스터는 여기서 등록할 수 없습니다'}
+                  onClick={add}
+                >
                   <Icon name="plus" size={14} /> 등록
                 </button>
               </>
@@ -300,7 +531,7 @@ function Content() {
                     복사 {m.copyOrder}
                   </span>
                 )}
-                <span style={{ fontSize: 11, color: 'var(--muted)' }}>{m.rows.length}</span>
+                <span style={{ fontSize: 11, color: 'var(--muted)' }}>{counts[m.key] ?? '-'}</span>
               </button>
             ))}
           </div>
