@@ -6,7 +6,6 @@ import {
   MaskToggle,
   PrintButton,
   SearchForm,
-  Unfilled,
   useServerTable,
   type Column,
   type DateRangeValue,
@@ -14,11 +13,13 @@ import {
   type SearchValues,
 } from '../../components/common'
 import { Icon } from '../../components/Icon'
+import { useAcademy } from '../../auth/AcademyContext'
 import {
   GRADE_LABEL,
   SORTABLE,
   STATUS_LABEL,
   TRACK_LABEL,
+  retakeLabel,
   searchStudents,
   type EnrollmentStatus,
   type GradeType,
@@ -32,13 +33,10 @@ import type { Mockup } from './types'
  * ★ 다른 화면을 붙일 때 이 파일을 본뜬다. 목록 화면이 필요로 하는 것이 전부 들어 있다:
  *   검색조건 → 서버 파라미터 변환 → useServerTable → DataTable(서버 페이징·정렬) → 마스킹.
  *
- * ★ 이 화면만 지점 선택을 쓰지 않는다. /students 는 academyId 를 받지 않고,
- *   전 지점 권한 계정에는 전 지점이 한 번에 온다(응답의 academyName 으로 구분).
- *   TopNav 에서 지점을 골라도 이 목록은 안 좁혀진다 — docs/API_GAPS.md 에 적어둔 미해결 건이다.
- *   다른 화면(출결·상벌점 등)은 useAcademy()의 academyId 를 파라미터로 넘겨야 한다.
+ * ★ 지점은 **안 고르면 전 지점**이다. 다른 화면과 달리 본사 계정이 안 보내도 400 이 아니라,
+ *   TopNav 에서 고른 지점이 있을 때만 좁힌다. 지점 컬럼은 그래서 계속 띄운다.
  *
- * ★ 서버가 안 주는 컬럼은 지우지 않고 <Unfilled/> 로 둔다(CLAUDE.md 1).
- *   재수 구분이 그렇다 — grade 가 N_SU 까지라 N수 안에서 재수/삼수가 안 갈린다(API_GAPS 2-2). */
+ * ★ 서버가 안 주는 컬럼은 지우지 않고 <Unfilled/> 로 둔다(CLAUDE.md 1). */
 
 const PAGE_SIZE = 20
 
@@ -81,14 +79,7 @@ const COLUMNS: Column<Student>[] = [
   { key: 'academyName', header: '지점', width: '64px', align: 'center', value: (r) => r.academyName ?? '-' },
   { key: 'grade', header: '학년', width: '64px', align: 'center', sortable: sortableKey('grade'), value: (r) => GRADE_LABEL[r.grade] ?? r.grade },
   { key: 'track', header: '계열', width: '64px', align: 'center', sortable: sortableKey('track'), value: (r) => (r.track ? TRACK_LABEL[r.track] : '-') },
-  {
-    key: 'repeat',
-    header: '재수',
-    width: '64px',
-    align: 'center',
-    value: () => '',
-    render: (r) => <Unfilled reason={`재수 구분이 없다 (현재 학년: ${GRADE_LABEL[r.grade] ?? r.grade})`} />,
-  },
+  { key: 'repeat', header: '재수', width: '64px', align: 'center', value: (r) => retakeLabel(r.retakeCount) },
   { key: 'className', header: '반', width: '58px', align: 'center', value: (r) => r.className ?? '-' },
   { key: 'seatCd', header: '좌석', width: '68px', align: 'center', value: (r) => r.seatCd ?? '-' },
   { key: 'schoolName', header: '출신학교', width: '90px', value: (r) => r.schoolName ?? '-' },
@@ -115,6 +106,7 @@ function one(v: unknown): string | undefined {
 }
 
 function Content() {
+  const { academyId } = useAcademy()
   const [query, setQuery] = useState<SearchValues>({})
   const [selected, setSelected] = useState<string[]>([])
   const [masked, setMasked] = useState(true)
@@ -132,8 +124,9 @@ function Content() {
       schoolName: one(query.schoolName),
       admittedFrom: admitted?.from || undefined,
       admittedTo: admitted?.to || undefined,
+      academyId: academyId ?? undefined,
     }
-  }, [query])
+  }, [query, academyId])
 
   const table = useServerTable({
     fetcher: searchStudents,

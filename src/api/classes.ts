@@ -34,8 +34,9 @@ export interface ClassMember {
   academyName: string | null
 }
 
-export function listClasses(year?: number): Promise<ClassGroup[]> {
-  return request<ClassGroup[]>('/api/v1/admin/classes', { query: { year } })
+/** `academyId` 는 좁히는 용도다. 안 보내면 계정 스코프 그대로다 */
+export function listClasses(year?: number, academyId?: number): Promise<ClassGroup[]> {
+  return request<ClassGroup[]>('/api/v1/admin/classes', { query: { year, academyId } })
 }
 
 export function listClassMembers(classId: number): Promise<ClassMember[]> {

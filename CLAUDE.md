@@ -54,7 +54,8 @@ schema.d.ts npm run api:types 로 생성. 직접 수정 금지
 
 1. **지점 스코프** — 대부분의 목록은 `academyId`를 받고, **전 지점 권한(SUPER_ADMIN) 계정은
    안 보내면 400**이다. 지점 관리자는 안 보내면 자기 지점이고, 남의 지점을 보내면 403이다.
-   단 `/students`만은 `academyId`를 안 받고 응답의 `academyName`으로 구분한다.
+   단 `/students`·`/classes`는 **좁히는 것만 된다** — 안 보내면 계정 스코프 그대로라
+   본사 계정도 400이 아니다. 지점 관리자가 남의 지점을 보내면 여전히 403이다.
 2. **마스킹** — 응답의 `masked: true`면 `phone`·`birthDate`가 **서버에서 이미 가려져 온다**
    (`2007-**-**`). 프론트에서 또 가리면 이중 마스킹이다. `MaskToggle`은 이 값을 보고 동작해야 한다.
 3. **정렬** — 허용 키만 먹고 **그 밖의 값은 400이 아니라 조용히 무시**된다. 학생 검색은
@@ -124,7 +125,7 @@ const table = useServerTable({ fetcher: searchStudents, params, sortable: SORTAB
 
 **지점은 `useAcademy()`의 `academyId`를 파라미터로 넘긴다.** 안 넘기면 전 지점 권한 계정이
 400을 받아 화면이 빈 것처럼 보인다. 아직 못 고른 상태(`null`)면 `enabled: false`로 호출을 막는다.
-단 `/students`만은 `academyId`를 받지 않는다(3-1 참고).
+단 `/students`·`/classes`는 안 넘겨도 400이 아니다 — 대신 전 지점이 섞여 온다(3-1 참고).
 
 **API가 아예 없어 목업으로 두는 화면 6개** — 붙일 엔드포인트를 찾지 말 것:
 대기자 관리(F-4.2) · 신상기록부(F-4.11-9) · 실적 관리(F-4.10-6) ·

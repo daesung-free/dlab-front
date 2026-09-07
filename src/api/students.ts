@@ -3,9 +3,10 @@ import type { Paged } from './types'
 
 /* 학생 검색 (F-4.1-1) — GET /api/v1/admin/students
  *
- * ★ 지점(academyId)은 파라미터로 보낼 수 없다. 서버가 토큰의 지점 스코프로 강제한다
- *   (SearchScope). SUPER_ADMIN만 전 지점이 보이고, 이때 지점 구분은 응답의 academyName으로 한다.
- *   (출결·상벌점 등 다른 엔드포인트는 academyId를 받는다 — 이 엔드포인트만 안 받는다)
+ * ★ 지점(academyId)은 **좁히는 것만 된다.** 안 보내면 계정 스코프 그대로고(본사는 전 지점,
+ *   지점 관리자는 자기 지점), 보내면 그 안에서 더 좁힌다. 지점 관리자가 남의 지점을 보내면
+ *   403 OTHER_BRANCH_ACCESS_DENIED — 넓히지는 못한다.
+ *   다른 목록과 달리 **본사 계정이 안 보내도 400이 아니다.**
  *
  * ★ 정렬은 아래 SORTABLE 6개만 먹는다. 그 밖의 값은 400이 아니라 **조용히 무시**되고
  *   기본 정렬(학번)로 떨어지므로, 화면은 이 목록에 있는 컬럼에만 정렬 UI를 붙일 것.
@@ -68,16 +69,34 @@ export interface Student {
   homeroomTeacher: string | null
   seatCd: string | null
   scholarshipTypes: string[]
+  /**
+   * N수 횟수. 1=재수, 2=삼수, 3=사수. **N수가 아니면 null**이다.
+   *
+   * ★ `grade` 의 `N_SU` 와 별개 축이다 — 학년 enum 에 재수·삼수를 더하지 않고
+   *   횟수를 따로 뒀다. enum 에 넣었으면 시험 양식이 학년 수만큼 곱해져 늘고
+   *   매년 값을 더해야 했다.
+   */
+  retakeCount: number | null
   /** 서버가 개인정보를 가려서 보냈는지. true면 phone·birthDate가 이미 마스킹된 값이다 */
   masked: boolean
 }
 
 /** 서버가 받아주는 정렬 키. 이 밖의 값은 무시된다(400이 아니다) — 위 주석 참고. */
+/** 재수 표기. 서버는 횟수만 주고 화면은 사람이 쓰는 말로 바꾼다 */
+export function retakeLabel(retakeCount: number | null): string {
+  if (retakeCount == null) return '-'
+  return ['재수', '삼수', '사수'][retakeCount - 1] ?? `${retakeCount + 1}수`
+}
+
 export const SORTABLE = ['studentNo', 'name', 'grade', 'track', 'enrollmentStatus', 'admissionDate'] as const
 export type SortKey = (typeof SORTABLE)[number]
 
 export interface StudentSearchParams {
   year?: number
+  /** 지점을 좁힌다. 안 보내면 계정 스코프 그대로 — 위 주석 참고 */
+  academyId?: number
+  /** 1=재수, 2=삼수, 3=사수 */
+  retakeCount?: number
   keyword?: string
   grade?: GradeType
   track?: TrackType
