@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { DataTable, Unfilled, type Column } from '../../components/common'
+import { DataTable, type Column } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
@@ -97,8 +97,8 @@ const NOTICE_COLUMNS: Column<ApiNotice>[] = [
     header: '열람',
     width: '110px',
     align: 'center',
-    value: () => '',
-    render: () => <Unfilled reason="공지 열람 수가 응답에 없다" />,
+    value: (r) => r.readCount ?? '',
+    render: (r) => (r.readCount == null ? '-' : `${r.readCount}명`),
   },
   {
     key: 'expiresAt',
@@ -216,13 +216,10 @@ function Content() {
     }
   }
 
-  /**
-   * 상단 고정·배너는 발송 후 수정으로 켠다.
-   * 서버 PUT 이 부분 수정을 안 받아 기존 제목·내용을 함께 보낸다(patchNotice).
-   */
+  /** 상단 고정·배너는 발송 후 수정으로 켠다. 바뀐 축 하나만 보낸다 */
   async function toggle(n: ApiNotice, field: 'pinned' | 'banner') {
     try {
-      await patchNotice(n, { [field]: !n[field] })
+      await patchNotice(n.id, { [field]: !n[field] })
       await load()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '수정하지 못했습니다.')

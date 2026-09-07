@@ -14,12 +14,13 @@ import {
 } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
+import { useAcademy } from '../../auth/AcademyContext'
 import { listClasses, type ClassGroup } from '../../api/classes'
 import {
-  GRADE_LABEL,
   SORTABLE,
   STATUS_LABEL,
   TRACK_LABEL,
+  retakeLabel,
   searchStudents,
   type EnrollmentStatus,
   type Student,
@@ -119,15 +120,7 @@ const CLASS_COLUMNS: Column<Student>[] = [
   ...BASE,
   { key: 'homeroomTeacher', header: '담임', width: '78px', value: (r) => r.homeroomTeacher ?? '-' },
   { key: 'seatCd', header: '좌석', width: '68px', align: 'center', value: (r) => r.seatCd ?? '-' },
-  {
-    key: 'repeat',
-    header: '재수 구분',
-    width: '80px',
-    align: 'center',
-    value: () => '',
-    // grade 가 N_SU 까지라 재수/삼수/N수가 안 갈린다 — 모델 결정 사항
-    render: (r) => <Unfilled reason={`재수 구분이 없다 (현재 학년: ${GRADE_LABEL[r.grade] ?? r.grade})`} />,
-  },
+  { key: 'repeat', header: '재수 구분', width: '80px', align: 'center', value: (r) => retakeLabel(r.retakeCount) },
   { key: 'admissionDate', header: '등원일', width: '100px', sortable: sortableKey('admissionDate'), value: (r) => r.admissionDate ?? '-' },
 ]
 
@@ -158,6 +151,7 @@ const TABS = [
 ]
 
 function Content() {
+  const { academyId } = useAcademy()
   const [tab, setTab] = useState('roster')
   const [query, setQuery] = useState<SearchValues>({})
   const [masked, setMasked] = useState(true)
@@ -214,8 +208,9 @@ function Content() {
       status: one(query.status) as EnrollmentStatus | undefined,
       schoolName: one(query.schoolName),
       hasScholarship: scholarOnly ? true : undefined,
+      academyId: academyId ?? undefined,
     }
-  }, [query, scholarOnly])
+  }, [query, scholarOnly, academyId])
 
   const table = useServerTable({
     fetcher: searchStudents,

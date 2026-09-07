@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DataTable, Unfilled, useServerTable, type Column } from '../../components/common'
+import { DataTable, useServerTable, type Column } from '../../components/common'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
 import {
@@ -10,7 +10,7 @@ import {
   type ClassGroup,
 } from '../../api/classes'
 import { useAcademy } from '../../auth/AcademyContext'
-import { SORTABLE, TRACK_LABEL, searchStudents, type Student } from '../../api/students'
+import { SORTABLE, TRACK_LABEL, retakeLabel, searchStudents, type Student } from '../../api/students'
 import type { Mockup } from './types'
 
 /* F-4.1-4 반 배정(고정반 관리) — /api/v1/admin/classes
@@ -29,10 +29,10 @@ import type { Mockup } from './types'
  *
  * ★ 아직 없는 것: 강의실(roomName). 반에 고정된 홈룸인지 시간표에 딸린 것인지 확인 후 추가 예정
  *
- * ⚠️ **전 지점 권한 계정에서는 목록에 다른 지점 학생이 섞인다.** /students 만 academyId 를
- *   안 받아서 전 지점이 한 번에 오는데, 반은 지점에 속해 있다. 다른 지점 학생을 배정하면
- *   서버가 건별로 "다른 지점의 반에는 배정할 수 없습니다"로 돌려준다.
- *   그래서 지점 컬럼을 띄우고, 전 지점 계정에는 안내를 보여준다(API_GAPS 2-2). */
+ * ★ 학생·반 목록 **양쪽에 같은 지점을 건다.** 한쪽만 걸면 다른 지점 학생이 목록에 남고,
+ *   그걸 배정하면 서버가 건별로 "다른 지점의 반에는 배정할 수 없습니다"로 거부한다 —
+ *   사용자는 왜 일부만 실패했는지 모른다.
+ *   지점을 아직 안 고른 전 지점 계정은 그대로 섞여 오므로 안내를 띄운다. */
 
 const COPY_ORDER = ['department', 'course_type', 'class_group', 'curriculum', 'penalty_item', 'tuition']
 
@@ -44,14 +44,7 @@ const COLUMNS: Column<Student>[] = [
   { key: 'studentNo', header: '학번', width: '100px', sortable: sortableKey('studentNo'), value: (r) => r.studentNo ?? '-' },
   { key: 'name', header: '이름', width: '84px', sortable: sortableKey('name'), mask: 'name', value: (r) => r.name },
   { key: 'track', header: '계열', width: '64px', align: 'center', sortable: sortableKey('track'), value: (r) => (r.track ? TRACK_LABEL[r.track] : '-') },
-  {
-    key: 'repeat',
-    header: '재수',
-    width: '64px',
-    align: 'center',
-    value: () => '',
-    render: () => <Unfilled reason="재수 구분이 없다" />,
-  },
+  { key: 'repeat', header: '재수', width: '64px', align: 'center', value: (r) => retakeLabel(r.retakeCount) },
   { key: 'schoolName', header: '출신학교', width: '92px', value: (r) => r.schoolName ?? '-' },
   { key: 'seatCd', header: '좌석', width: '68px', align: 'center', value: (r) => r.seatCd ?? '-' },
   // 전 지점 계정에서는 다른 지점 학생이 섞여 오므로 반드시 보여준다
@@ -59,7 +52,7 @@ const COLUMNS: Column<Student>[] = [
 ]
 
 function Content() {
-  const { academies } = useAcademy()
+  const { academies, academyId } = useAcademy()
   const [classes, setClasses] = useState<ClassGroup[]>([])
   const [selected, setSelected] = useState<string[]>([])
   const [target, setTarget] = useState<number | null>(null)
@@ -70,21 +63,24 @@ function Content() {
   const loadClasses = useCallback(async () => {
     try {
       // memberCount 가 목록에 실려 와서 반마다 명단을 부르지 않아도 된다
-      const list = await listClasses()
+      const list = await listClasses(undefined, academyId ?? undefined)
       setClasses(list)
       setTarget((prev) => prev ?? list[0]?.id ?? null)
       setLoadError(null)
     } catch (err) {
       setLoadError(err instanceof ApiError ? err.message : '반 목록을 불러오지 못했습니다.')
     }
-  }, [])
+  }, [academyId])
 
   useEffect(() => {
     void loadClasses()
   }, [loadClasses])
 
   // 재원생 중 반이 없는 학생만. 서버가 걸러주므로 전체 명단이 맞다
-  const params = useMemo(() => ({ status: 'ENROLLED' as const, unassignedClass: true }), [])
+  const params = useMemo(
+    () => ({ status: 'ENROLLED' as const, unassignedClass: true, academyId: academyId ?? undefined }),
+    [academyId],
+  )
   const table = useServerTable({ fetcher: searchStudents, params, pageSize: PAGE_SIZE, sortable: SORTABLE })
 
   async function assign() {
@@ -142,17 +138,17 @@ function Content() {
         </div>
       </div>
 
-      {/* 전 지점 권한이면(지점이 2개 이상 보이면) 목록에 다른 지점 학생이 섞인다 */}
-      {academies.length > 1 && (
+      {/* 지점을 안 고른 전 지점 계정만 섞여 온다 — 고르면 학생·반 양쪽이 그 지점으로 좁혀진다 */}
+      {academies.length > 1 && academyId === null && (
         <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
           <div className="ic">
             <Icon name="triangle-alert" size={17} />
           </div>
           <div>
-            <div className="tt">전 지점 권한 계정입니다 — 목록에 다른 지점 학생이 섞여 있습니다</div>
+            <div className="tt">지점을 고르지 않아 전 지점 학생이 함께 보입니다</div>
             <div className="tx">
-              학생 검색만 <b>지점 조건을 받지 않아</b> 전 지점이 한 번에 옵니다. 반은 지점에 속하므로
-              <b> 다른 지점 학생은 배정되지 않습니다</b>(서버가 건별로 거부합니다). 지점 컬럼을 확인하세요.
+              반은 지점에 속해 있어 <b>다른 지점 학생은 배정되지 않습니다</b>. 위에서 지점을 고르면
+              학생과 반이 함께 그 지점으로 좁혀집니다.
             </div>
           </div>
         </div>

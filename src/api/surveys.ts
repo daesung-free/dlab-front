@@ -43,6 +43,25 @@ export interface SurveySummary {
   opensAt: string
   closesAt: string
   questionCount: number
+  /**
+   * 서버가 판정한 진행 상태.
+   *
+   * ★ **화면이 시각을 비교하지 않는다.** 클라이언트 시계가 어긋나 있으면
+   *   같은 설문이 사람마다 열려 보이고 닫혀 보인다.
+   *
+   * ⚠️ 조기 마감은 `closesAt` 을 지금으로 당기는 방식이라 원래 마감 시각이
+   *   덮어써진다 — "예정 마감이 언제였나"는 남지 않는다.
+   */
+  status: SurveyRunState
+}
+
+/** SCHEDULED = 아직 안 열림 */
+export type SurveyRunState = 'SCHEDULED' | 'OPEN' | 'CLOSED'
+
+export const SURVEY_RUN_STATE_LABEL: Record<SurveyRunState, string> = {
+  SCHEDULED: '예정',
+  OPEN: '진행중',
+  CLOSED: '마감',
 }
 
 export interface SurveyParticipant {

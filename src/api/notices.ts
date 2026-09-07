@@ -33,6 +33,8 @@ export interface Notice {
   publishedAt: string | null
   expiresAt: string | null
   createdAt: string | null
+  /** 읽은 사람 수. 학생/학부모가 앱에서 연 횟수가 아니라 **사람 수**다 */
+  readCount: number | null
 }
 
 export function listNotices(year?: number): Promise<Notice[]> {
@@ -64,9 +66,10 @@ export function postNoticeToStudent(enrollmentId: number, title: string, content
 }
 
 /**
- * ⚠️ **부분 수정이 안 된다.** `title`·`content` 가 필수라, 상단 고정만 켜려 해도
- * 기존 제목·내용을 함께 보내야 한다 — 안 보내면 "제목은 필수입니다"로 거부된다.
- * 호출부는 `updateNotice` 대신 `patchNotice` 를 쓴다.
+ * 전체 교체. `title`·`content` 가 필수다.
+ *
+ * ★ **예약·만료 시각을 지울 때만** 이걸 쓴다. PATCH 는 `null` 을 "그대로"로 읽어서
+ *   지우지 못한다. 그 외에는 `patchNotice` 를 쓴다 — 아래 참조.
  */
 export interface NoticeUpdate {
   title: string
@@ -81,18 +84,18 @@ export function updateNotice(id: number, body: NoticeUpdate): Promise<Notice> {
   return request<Notice>(`/api/v1/admin/notices/${id}`, { method: 'PUT', body })
 }
 
-/** 일부만 바꾼다. 서버가 전체 본문을 요구해서 기존 값을 채워 보낸다 */
+/**
+ * 보낸 필드만 바꾼다.
+ *
+ * ★ 예전엔 PUT 밖에 없어서 상단 고정만 켜려 해도 목록에 있던 제목·내용을 함께
+ *   보내야 했다 — 그 사이 남이 본문을 고쳤으면 되돌려 놓는 셈이었다.
+ *   목록을 오래 열어둘수록 확률이 올라간다. PATCH 가 생겨 그 위험이 없어졌다.
+ */
 export function patchNotice(
-  notice: Notice,
-  changes: Partial<Pick<NoticeUpdate, 'pinned' | 'banner' | 'publishedAt' | 'expiresAt'>>,
+  id: number,
+  changes: Partial<NoticeUpdate>,
 ): Promise<Notice> {
-  return updateNotice(notice.id, {
-    title: notice.title,
-    content: notice.content,
-    pinned: notice.pinned,
-    banner: notice.banner,
-    ...changes,
-  })
+  return request<Notice>(`/api/v1/admin/notices/${id}`, { method: 'PATCH', body: changes })
 }
 
 export function deleteNotice(id: number): Promise<void> {
