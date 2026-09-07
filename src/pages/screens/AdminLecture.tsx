@@ -1,280 +1,296 @@
-import { useMemo, useState } from 'react'
-import {
-  DataTable,
-  ExcelButton,
-  Unfilled,
-  useServerData,
-  type Column,
-} from '../../components/common'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { DataTable, ExcelButton, Unfilled, type Column } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
-import { useAcademy } from '../../auth/AcademyContext'
 import { ApiError } from '../../api/client'
+import { useAcademy } from '../../auth/AcademyContext'
 import {
   LECTURE_STATUS_LABEL,
   LECTURE_STATUS_TONE,
+  changeLectureStatus,
   createLecture,
   listLectures,
-  updateLecture,
+  setLectureVisible,
   type Lecture,
-  type LectureType,
+  type LectureStatus,
 } from '../../api/lectures'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
 
-/* F-4.10-4 특강 관리(특강 기초 설정) — GET /api/v1/admin/lectures
+/* F-4.10-4 특강 관리(특강 기초 설정) — 신규개발-요구사항검증됨
+ * DSA '관리자>특강관리>특강 관리'에서 상태별 필터·특강목록·등록/배정/수정/삭제 확인.
+ * '설명회 신청 항목'은 별도 추가 개발이 필요할 수 있어 확인 대상.
  *
  * ⚠ 특강관리(F-4.7)와 역할이 다르다 — 화면을 합치면 안 된다.
- *   · 여기(기초 설정) = 마스터. 무엇을 열 수 있는가
- *   · 특강관리(F-4.7) = 운영. 회차 생성·신청명단·대기자·출석부
- *   ★ 다만 **엔드포인트는 같다.** 서버에 마스터/운영 구분이 따로 없다.
+ *   · 여기(기초 설정) = 마스터. 특강 유형·설명회 항목·기본 정원/특강비 템플릿
+ *   · 특강관리(F-4.7) = 운영. 실제 특강 개설(회차 생성)·신청명단·대기자·출석부
+ *   개설 폼은 F-4.7에 있고, 여기서는 개설할 때 고를 수 있는 선택지를 관리한다.
  *
- * ★ 탭(특강/설명회)이 서버 lectureType(LECTURE·BRIEFING)과 1:1로 맞는다. 목업의 유형
- *   컬럼(단과·실전·해설)은 그 아래 세분류인데 **서버에 없다** — API_GAPS 7부.
+ * ── 연동 범위 ──────────────────────────────────────────────
+ * ⚠ **서버에는 '특강 유형 마스터'가 없다.** 종류가 `LECTURE`·`BRIEFING` 두 개짜리
+ *   enum 으로 고정돼 있어, 목업이 말하는 단과·실전·해설 구분과 기본 정원/특강비
+ *   템플릿은 둘 곳이 없다(API_GAPS 19-1).
+ *   그래서 이 화면은 **실제로 개설된 특강·설명회를 종류별로 보여주고 접수·노출을
+ *   여닫는** 역할을 한다. 명단·회차·출석부는 F-4.7 이 맡는다 — 겹치지 않는다.
  *
- * ★ 등록이 2콜이다. POST 는 이름·종류만 받고 정원·비용·기간은 PATCH 로 이어 붙인다.
- *   중간에 실패하면 이름만 있는 특강이 남으므로 화면이 그것을 알려야 한다.
- *
- * ★ 삭제 API가 없다. 상태를 CANCELED 로 바꾸는 것이 서버가 주는 유일한 취소 수단이다.
- */
+ * ★ **접수 상태와 앱 노출은 별개 축이다.** 접수를 열어도(OPEN) 노출을 안 켜면
+ *   앱에 안 보인다 — "왜 신청이 안 들어오지"의 흔한 원인이라 두 축을 따로 보여준다. */
 
-const PAGE_SIZE = 10
-
-/* 특강 목록 조회.
- * ★ 모듈 최상위에 둔다 — 인라인으로 넘기면 매 렌더 새 참조가 된다.
- *   listLectures 가 위치 인자라 useServerData 가 쓰는 객체 형태로 감싼다. */
-const fetchLectures = ({ academyId, year }: { academyId: number; year: number }) =>
-  listLectures(academyId, year)
-
-function pad(n: number): string {
-  return String(n).padStart(2, '0')
-}
-
-function thisMonth(): string {
-  const d = new Date()
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`
-}
-
-/** 화면의 '월'은 특강 시작일에서 뽑는다. 서버에 월 필드가 따로 없다 */
-function monthOf(startDate: string | null): string {
-  return startDate === null ? '-' : startDate.slice(0, 7)
-}
+const MONTH_OF = (l: Lecture): string => (l.startDate ? l.startDate.slice(0, 7) : '-')
 
 function Content() {
   const { academyId } = useAcademy()
-  const [tab, setTab] = useState<LectureType>('LECTURE')
-  const [saving, setSaving] = useState(false)
-  const [msg, setMsg] = useState<string | null>(null)
-
-  // 등록 폼
+  const [tab, setTab] = useState('lecture')
+  const [year, setYear] = useState(new Date().getFullYear())
+  const [all, setAll] = useState<Lecture[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
   const [name, setName] = useState('')
-  const [month, setMonth] = useState(thisMonth)
-  const [capacity, setCapacity] = useState('30')
-  const [instructor, setInstructor] = useState('')
-  const [fee, setFee] = useState('')
 
-  const year = new Date().getFullYear()
+  const load = useCallback(async () => {
+    if (academyId === null) {
+      setAll([])
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    try {
+      setAll(await listLectures(academyId, year))
+      setLoadError(null)
+    } catch (err) {
+      setLoadError(err instanceof ApiError ? err.message : '목록을 불러오지 못했습니다.')
+      setAll([])
+    } finally {
+      setLoading(false)
+    }
+  }, [academyId, year])
 
-  // ★ useMemo 필수 — 매 렌더 새 객체면 무한 요청이 된다
-  const params = useMemo(() => ({ academyId: academyId ?? 0, year }), [academyId, year])
+  useEffect(() => {
+    void load()
+  }, [load])
 
-  const list = useServerData({
-    fetcher: fetchLectures,
-    params,
-    // academyId·year 가 없으면 서버가 400이 아니라 500을 낸다 — 아예 부르지 않는다
-    enabled: academyId !== null,
-    errorMessage: '특강 목록을 불러오지 못했습니다.',
-  })
+  const wantType = tab === 'lecture' ? 'LECTURE' : 'BRIEFING'
+  const rows = useMemo(() => all.filter((l) => l.lectureType === wantType), [all, wantType])
+  const hidden = rows.filter((l) => !l.visible && l.status === 'OPEN')
 
-  const all = list.data ?? []
-  const rows = useMemo(() => all.filter((l) => l.lectureType === tab), [all, tab])
-  const countOf = (t: LectureType) => all.filter((l) => l.lectureType === t).length
+  async function run(what: string, fn: () => Promise<unknown>) {
+    setBusy(true)
+    try {
+      await fn()
+      setNotice(`${what} 했습니다.`)
+      await load()
+    } catch (err) {
+      setNotice(err instanceof ApiError ? `${what} 실패 — ${err.message}` : `${what}에 실패했습니다.`)
+    } finally {
+      setBusy(false)
+    }
+  }
 
-  const columns: Column<Lecture>[] = useMemo(
+  function add() {
+    if (academyId === null) {
+      setNotice('먼저 지점을 고르세요.')
+      return
+    }
+    if (name.trim() === '') return
+    // 만들 때 정하는 건 이름과 종류뿐이다. 정원·기간·비용은 F-4.7 개설 폼에서 채운다
+    void run(`${tab === 'lecture' ? '특강' : '설명회'}을(를) 등록`, async () => {
+      await createLecture({ academyId, year, lectureType: wantType, name: name.trim() })
+      setName('')
+    })
+  }
+
+  const COLUMNS: Column<Lecture>[] = useMemo(
     () => [
       {
         key: 'code',
         header: '코드',
-        width: '128px',
-        sortable: true,
-        value: (r) => r.code ?? '-',
-        render: (_r, v) => <code style={{ fontSize: 11 }}>{v}</code>,
-      },
-      { key: 'month', header: '월', width: '84px', align: 'center', sortable: true, value: (r) => monthOf(r.startDate) },
-      { key: 'name', header: '명칭', sortable: true, value: (r) => r.name },
-      {
-        key: 'category',
-        header: '유형',
-        width: '86px',
+        width: '96px',
         align: 'center',
         value: () => '',
-        // 서버 유형은 특강/설명회 2종뿐이고 그건 이미 탭이 나눈다.
-        // 목업의 단과·실전·해설 세분류는 서버에 없다
-        render: () => <Unfilled reason="단과·실전·해설 구분이 서버에 없음" />,
+        render: () => <Unfilled reason="특강 코드가 응답에 없다" />,
       },
-      // 교사 마스터 참조가 아니라 이름 문자열이다 — 드롭다운이 아니라 입력으로 받는다
-      { key: 'instructorName', header: '담당', width: '90px', value: (r) => r.instructorName ?? '-' },
+      { key: 'month', header: '개설 월', width: '92px', align: 'center', sortable: true, value: MONTH_OF },
+      { key: 'name', header: '명칭', sortable: true, value: (r) => r.name },
+      {
+        key: 'teacher',
+        header: '담당',
+        width: '90px',
+        value: (r) => r.instructorName ?? '',
+        render: (r) => r.instructorName ?? '미지정',
+      },
       {
         key: 'capacity',
         header: '정원',
-        width: '96px',
-        align: 'right',
+        width: '92px',
+        align: 'center',
         sortable: true,
         value: (r) => r.capacity ?? 0,
-        // 정원만 보여주면 "얼마나 찼는지"를 알 수 없다. 확정 인원이 같이 오므로 함께 찍는다
-        render: (r) =>
-          r.capacity === null ? (
-            <span style={{ color: 'var(--muted)' }}>-</span>
-          ) : (
-            <span>
-              {r.confirmedCount}/{r.capacity}
-              {r.waitlistedCount > 0 && (
-                <span style={{ color: 'var(--amber)', fontSize: 11 }} title="대기자">
-                  {' '}
-                  +{r.waitlistedCount}
-                </span>
-              )}
-            </span>
-          ),
+        render: (r) => (r.capacity == null ? '-' : `${r.confirmedCount}/${r.capacity}`),
       },
       {
         key: 'fee',
         header: '비용',
-        width: '96px',
+        width: '110px',
         align: 'right',
+        sortable: true,
         value: (r) => r.fee ?? 0,
-        render: (r) =>
-          r.fee ? `${r.fee.toLocaleString()}원` : <span style={{ color: 'var(--muted)' }}>무료</span>,
+        render: (r) => (r.fee == null ? '-' : r.fee === 0 ? '무료' : `${r.fee.toLocaleString()}원`),
       },
       {
         key: 'status',
-        header: '상태',
-        width: '96px',
+        header: '접수',
+        width: '86px',
         align: 'center',
         sortable: true,
         value: (r) => LECTURE_STATUS_LABEL[r.status] ?? r.status,
-        render: (r, shown) => (
-          <span style={{ display: 'inline-flex', gap: 3, justifyContent: 'center' }}>
-            <span className={`mk ${LECTURE_STATUS_TONE[r.status] ?? ''}`} title={r.status}>
-              {shown}
-            </span>
-            {/* 노출은 상태와 별개 축이다 — 모집중인데 앱에서 안 보일 수 있다 */}
-            {!r.visible && (
-              <span className="mk" title="학생 앱에 노출되지 않음">
-                숨김
-              </span>
-            )}
+        render: (r) => (
+          <span className={`mk ${LECTURE_STATUS_TONE[r.status] ?? 'supplement'}`}>
+            {LECTURE_STATUS_LABEL[r.status] ?? r.status}
           </span>
         ),
       },
       {
+        key: 'visible',
+        header: '앱 노출',
+        width: '86px',
+        align: 'center',
+        sortable: true,
+        // 접수 상태와 별개 축이다. 열려 있어도 노출을 안 켜면 앱에 안 보인다
+        value: (r) => (r.visible ? '노출' : '숨김'),
+        render: (r) =>
+          r.visible ? (
+            <span className="mk verified">노출</span>
+          ) : (
+            <span className="mk brandnew" title="앱에서 보이지 않습니다">
+              숨김
+            </span>
+          ),
+      },
+      {
         key: 'act',
         header: '',
-        width: '130px',
+        width: '160px',
         align: 'center',
         value: () => '',
-        render: () => (
+        render: (r) => (
           <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-            <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled title="배정은 특강 관리(F-4.7)에서 합니다">
-              배정
-            </button>
-            <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled title="수정 폼은 아직 없습니다">
-              수정
+            <button
+              className="btn"
+              style={{ padding: '4px 9px', fontSize: 11.5 }}
+              disabled={busy}
+              onClick={() => void run(r.visible ? '앱에서 숨기' : '앱에 노출하', () => setLectureVisible(r.id, !r.visible))}
+            >
+              {r.visible ? '숨기기' : '노출'}
             </button>
             <button
               className="btn"
-              style={{ padding: '4px 9px', fontSize: 11.5, color: 'var(--red)' }}
-              disabled
-              title="삭제 API가 없습니다. 상태를 '취소'로 바꾸는 것이 유일한 방법입니다"
+              style={{ padding: '4px 9px', fontSize: 11.5 }}
+              disabled={busy}
+              onClick={() => {
+                const next: LectureStatus = r.status === 'OPEN' ? 'CLOSED' : 'OPEN'
+                // 닫아도 이미 신청한 건은 그대로 남는다 — 상태는 "지금 받는가"다
+                void run(next === 'OPEN' ? '접수를 열' : '접수를 닫', () => changeLectureStatus(r.id, next))
+              }}
             >
-              삭제
+              {r.status === 'OPEN' ? '접수 닫기' : '접수 열기'}
             </button>
           </div>
         ),
       },
     ],
-    [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [busy],
   )
-
-  async function submit() {
-    if (academyId === null || name.trim() === '') return
-    setSaving(true)
-    setMsg(null)
-
-    let created: Lecture | null = null
-    try {
-      created = await createLecture({ academyId, year, lectureType: tab, name: name.trim() })
-
-      // 2콜째 — POST 가 이름·종류만 받는다
-      const patch: Record<string, unknown> = {}
-      if (capacity.trim() !== '') patch.capacity = Number(capacity)
-      if (fee.trim() !== '') patch.fee = Number(fee)
-      if (month) patch.startDate = `${month}-01`
-      if (instructor.trim() !== '') patch.instructorName = instructor.trim()
-      if (Object.keys(patch).length > 0) await updateLecture(created.id, patch)
-
-      setMsg(`'${name.trim()}' 을(를) 등록했습니다.`)
-      setName('')
-      setFee('')
-      setInstructor('')
-      list.reload()
-    } catch (err) {
-      const reason = err instanceof ApiError ? err.message : '등록에 실패했습니다.'
-      // 1콜째가 성공하고 2콜째가 실패하면 이름만 있는 특강이 남는다. 그걸 숨기면 안 된다
-      setMsg(
-        created === null
-          ? reason
-          : `${reason} — 이름만 등록된 특강이 목록에 남았습니다. 정원·비용은 다시 설정해야 합니다.`,
-      )
-      if (created !== null) list.reload()
-    } finally {
-      setSaving(false)
-    }
-  }
 
   return (
     <>
-      {academyId === null && (
-        <div className="note-box">지점을 먼저 선택하세요. 특강은 지점 단위로 관리합니다.</div>
-      )}
-
-      {list.error && (
-        <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
-          {list.error}
+      {/* 접수만 열고 노출을 안 켜면 앱에 안 뜬다. 신청이 안 들어오는 흔한 원인이다 */}
+      {hidden.length > 0 && (
+        <div className="note-box" role="alert" style={{ borderColor: 'var(--amber)' }}>
+          <div className="ic">
+            <Icon name="triangle-alert" size={17} />
+          </div>
+          <div>
+            <div className="tt">접수는 열려 있는데 앱에 안 보이는 것이 {hidden.length}건 있습니다</div>
+            <div className="tx">
+              접수를 여는 것과 앱에 띄우는 것은 별개입니다. <b>노출</b>을 켜야 학생 앱에서 보이고 신청이 들어옵니다.
+              — {hidden.map((l) => l.name).join(' · ')}
+            </div>
+          </div>
         </div>
       )}
 
-      {msg && <div className="note-box">{msg}</div>}
+      {academyId === null && (
+        <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
+          위에서 지점을 먼저 고르세요.
+        </div>
+      )}
+      {loadError && (
+        <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+          {loadError}
+        </div>
+      )}
+      {notice && (
+        <div className="note-box" role="status" style={{ borderColor: 'var(--violet)' }}>
+          {notice}
+        </div>
+      )}
 
       <div className="card-sec">
         <Tabs
           items={[
-            { key: 'LECTURE', label: '특강 기초 설정', count: countOf('LECTURE') },
-            { key: 'BRIEFING', label: '설명회', count: countOf('BRIEFING') },
+            { key: 'lecture', label: '특강 기초 설정', count: all.filter((l) => l.lectureType === 'LECTURE').length },
+            { key: 'briefing', label: '설명회', count: all.filter((l) => l.lectureType === 'BRIEFING').length },
           ]}
           active={tab}
-          onChange={(k) => setTab(k as LectureType)}
+          onChange={setTab}
         />
         <div style={{ padding: 14 }}>
+          {/* 단과·실전·해설 구분이 서버에 없다는 걸 먼저 밝힌다 */}
+          <div className="note-box">
+            <div className="ic">
+              <Icon name="info" size={17} />
+            </div>
+            <div>
+              <div className="tt">종류는 특강과 설명회 두 가지입니다</div>
+              <div className="tx">
+                단과·실전·해설 같은 세부 구분은 아직 나누어 저장되지 않습니다. 여기서는 이름과 종류만 정하고,
+                정원·기간·비용·회차는 <b>특강 관리</b> 화면에서 채웁니다. <b>회차를 만들지 않으면 출석부가
+                비어 있고 신청도 받을 수 없습니다.</b>
+              </div>
+            </div>
+          </div>
+
           <DataTable
-            columns={columns}
+            columns={COLUMNS}
             rows={rows}
             rowKey={(r) => String(r.id)}
             masked={false}
-            loading={list.loading}
-            pageSize={PAGE_SIZE}
+            loading={loading}
+            pageSize={10}
             countLabel={
               <>
-                {year}년 {tab === 'LECTURE' ? '특강' : '설명회'} <b>{rows.length}</b>건
+                {tab === 'lecture' ? '특강' : '설명회'} <b>{rows.length}</b>건 · {year}년
               </>
             }
             toolbar={
-              <ExcelButton
-                filename={tab === 'LECTURE' ? '특강_기초설정' : '설명회_목록'}
-                columns={columns}
-                rows={rows}
-                masked={false}
-              />
+              <>
+                <ExcelButton
+                  filename={tab === 'lecture' ? '특강_기초설정' : '설명회_목록'}
+                  columns={COLUMNS}
+                  rows={rows}
+                  masked={false}
+                />
+                <select className="sel" value={year} onChange={(e) => setYear(Number(e.target.value))} style={{ width: 106 }}>
+                  {[year - 1, year, year + 1].map((y) => (
+                    <option key={y} value={y}>
+                      {y} 시즌
+                    </option>
+                  ))}
+                </select>
+              </>
             }
           />
         </div>
@@ -286,86 +302,28 @@ function Content() {
             <span className="ico">
               <Icon name="plus" size={15} />
             </span>
-            {tab === 'LECTURE' ? '특강' : '설명회'} 등록
+            {tab === 'lecture' ? '특강' : '설명회'} 등록
           </div>
         </div>
         <div className="card-sec-b">
-          <div className="split">
-            <div>
-              <div className="frow">
-                <label className="req">명칭</label>
-                <input
-                  className="inp"
-                  placeholder={tab === 'LECTURE' ? '수학 미적 킬러문항 특강' : '2027학년도 입학 설명회'}
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                />
-              </div>
-              <div className="frow">
-                <label className="req">개설 월</label>
-                <input className="inp" type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
-              </div>
-              <div className="frow">
-                <label>담당</label>
-                <input
-                  className="inp"
-                  placeholder="강사 이름"
-                  value={instructor}
-                  onChange={(e) => setInstructor(e.target.value)}
-                />
-              </div>
-            </div>
-            <div>
-              <div className="frow">
-                <label>정원</label>
-                <input
-                  className="inp"
-                  type="number"
-                  value={capacity}
-                  onChange={(e) => setCapacity(e.target.value)}
-                />
-              </div>
-              <div className="frow">
-                <label>비용</label>
-                <input
-                  className="inp"
-                  type="number"
-                  placeholder="비우면 무료"
-                  value={fee}
-                  onChange={(e) => setFee(e.target.value)}
-                />
-              </div>
-              <div className="frow">
-                <label>강의실</label>
-                <Unfilled reason="강의실 마스터가 아직 없음" />
-              </div>
-              <div className="frow">
-                <label>&nbsp;</label>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <button
-                    className="btn pri"
-                    disabled={saving || academyId === null || name.trim() === ''}
-                    onClick={() => void submit()}
-                  >
-                    <Icon name="save" size={14} /> {saving ? '등록 중…' : '등록'}
-                  </button>
-                  <button
-                    className="btn"
-                    onClick={() => {
-                      setName('')
-                      setFee('')
-                      setInstructor('')
-                      setCapacity('30')
-                      setMonth(thisMonth())
-                    }}
-                  >
-                    초기화
-                  </button>
-                  <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>
-                    등록 직후 상태는 <b>준비</b>입니다. 모집은 목록에서 상태를 바꿔 시작합니다.
-                  </span>
-                </div>
-              </div>
+          <div className="frow">
+            <label className="req">명칭</label>
+            <input
+              className="inp"
+              placeholder={tab === 'lecture' ? '수학 미적 킬러문항 특강' : '2027학년도 입학 설명회'}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+          <div className="frow">
+            <label>&nbsp;</label>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button className="btn pri" disabled={busy || academyId === null || name.trim() === ''} onClick={add}>
+                <Icon name="save" size={14} /> 등록
+              </button>
+              <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>
+                등록하면 접수는 닫힌 상태로 만들어집니다. 정원·기간·비용·회차는 특강 관리에서 채우세요.
+              </span>
             </div>
           </div>
         </div>
@@ -376,7 +334,9 @@ function Content() {
 
 export const adminLectureMockup: Mockup = {
   Content,
-  // 목업의 시즌 표시를 유지한다. actions 는 상태를 못 가져 고를 수는 없고,
-  // 하드코딩이 굳지 않도록 연도만 실제 값으로 찍는다 — 조회도 같은 연도를 쓴다
-  actions: <button className="btn" disabled>{new Date().getFullYear()} 시즌</button>,
+  actions: (
+    <>
+      <button className="btn">2026 시즌 ▾</button>
+    </>
+  ),
 }
