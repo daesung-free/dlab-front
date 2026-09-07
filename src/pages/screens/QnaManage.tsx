@@ -6,7 +6,7 @@ import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
 import {
   cancelQnaReservation,
-  listQnaSlots,
+  listQnaSlotsBetween,
   openQnaSlots,
   setQnaSlotClosed,
   type QnaSlot,
@@ -62,6 +62,7 @@ interface ReqRow {
   at: string
   studentNo: string
   name: string
+  className: string
   question: string
   teacher: string
   slot: string
@@ -93,8 +94,7 @@ const REQ_COLUMNS: Column<ReqRow>[] = [
     header: '반',
     width: '56px',
     align: 'center',
-    value: () => '',
-    render: () => <Unfilled reason="예약자 응답에 반이 없다" />,
+    value: (r) => r.className,
   },
   {
     key: 'subject',
@@ -152,10 +152,7 @@ function Content() {
 
   const dates = useMemo(() => weekDates(anchor), [anchor])
 
-  /**
-   * 슬롯 조회가 날짜 하나씩이라 주간 그리드를 그리려면 5번 부른다.
-   * 기간 조회가 생기면 1회로 줄어든다 — docs/API_GAPS.md 에 적어뒀다.
-   */
+  /** 주간 슬롯을 한 번에 가져와 날짜별로 나눈다 */
   const load = useCallback(async () => {
     if (academyId === null) {
       setLoading(false)
@@ -163,8 +160,10 @@ function Content() {
     }
     setLoading(true)
     try {
-      const pairs = await Promise.all(dates.map(async (d) => [d, await listQnaSlots(academyId, d)] as const))
-      setByDate(new Map(pairs))
+      const slots = await listQnaSlotsBetween(academyId, dates[0], dates[dates.length - 1])
+      const next = new Map(dates.map((d) => [d, [] as QnaSlot[]]))
+      for (const s of slots) next.get(s.date)?.push(s)
+      setByDate(next)
       setError(null)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '예약 현황을 불러오지 못했습니다.')
@@ -249,6 +248,7 @@ function Content() {
           at: r.reservedAt ?? '',
           studentNo: r.studentNo ?? '-',
           name: r.studentName,
+          className: r.className ?? '-',
           question: r.question ?? '',
           teacher: s.teacherName ?? '미지정',
           slot: `${s.date.slice(5)} ${s.startTime.slice(0, 5)}`,

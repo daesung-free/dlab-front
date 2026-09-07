@@ -16,6 +16,7 @@ export interface QnaReservation {
   studentId: number
   studentNo: string | null
   studentName: string
+  className: string | null
   question: string | null
   reservedAt: string | null
   canceledAt: string | null
@@ -53,6 +54,15 @@ export interface QnaOpenSlots {
 
 export function listQnaSlots(academyId: number, date: string): Promise<QnaSlot[]> {
   return request<QnaSlot[]>('/api/v1/admin/qna/offline/slots', { query: { academyId, date } })
+}
+
+/**
+ * 기간으로 한 번에 가져온다. 주간 표는 이걸 쓴다 —
+ * 날짜별로 5번 부르면 그 중 하나만 늦어도 표가 어긋난 채로 그려진다.
+ * 양끝 날짜를 포함한다.
+ */
+export function listQnaSlotsBetween(academyId: number, from: string, to: string): Promise<QnaSlot[]> {
+  return request<QnaSlot[]>('/api/v1/admin/qna/offline/slots', { query: { academyId, from, to } })
 }
 
 export function openQnaSlots(body: QnaOpenSlots): Promise<QnaSlot[]> {

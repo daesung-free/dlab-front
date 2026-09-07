@@ -7,6 +7,7 @@ import { useAcademy } from '../../auth/AcademyContext'
 import {
   QUESTION_TYPE_LABEL,
   SCOPE_LABEL,
+  SURVEY_RUN_STATE_LABEL,
   SURVEY_TYPE_LABEL,
   closeSurvey,
   createSurvey as createSurveyApi,
@@ -460,12 +461,13 @@ function Content() {
         header: '상태',
         width: '92px',
         align: 'center',
-        // 서버가 상태 필드를 주지 않아 기간으로 판단한다
-        value: (r) => (new Date(r.closesAt) < new Date() ? '마감' : '진행중'),
-        render: (r) => {
-          const closed = new Date(r.closesAt) < new Date()
-          return <span className={`mk ${closed ? 'brandnew' : 'verified'}`}>{closed ? '마감' : '진행중'}</span>
-        },
+        // 서버가 판정한다 — 브라우저 시계로 기간을 비교하지 않는다
+        value: (r) => SURVEY_RUN_STATE_LABEL[r.status],
+        render: (r) => (
+          <span className={`mk ${r.status === 'OPEN' ? 'verified' : 'brandnew'}`}>
+            {SURVEY_RUN_STATE_LABEL[r.status]}
+          </span>
+        ),
       },
       {
         key: 'act',
@@ -488,7 +490,7 @@ function Content() {
             <button
               className="btn"
               style={{ padding: '4px 9px', fontSize: 11.5 }}
-              disabled={new Date(r.closesAt) < new Date()}
+              disabled={r.status === 'CLOSED'}
               onClick={() => void closeOne(r.id)}
               title="기간이 남아도 즉시 마감합니다"
             >
