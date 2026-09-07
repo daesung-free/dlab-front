@@ -51,8 +51,13 @@ export interface Lecture {
   startDate: string | null
   endDate: string | null
   fee: number | null
-  teacherId: number | null
-  teacherName: string | null
+  /** 특강 코드. 화면이 그대로 보여준다 */
+  code: string | null
+  /**
+   * 담당 강사 **이름 문자열**이다 — 교사 마스터 참조가 아니다.
+   * (teacherId/teacherName 으로 선언돼 있었는데 서버가 보내는 이름은 이것 하나다)
+   */
+  instructorName: string | null
   confirmedCount: number
   waitlistedCount: number
 }
@@ -101,4 +106,43 @@ export function changeLectureStatus(lectureId: number, status: LectureStatus): P
 /** 대기자를 확정으로 올린다 */
 export function promoteApplicant(applicationId: number): Promise<void> {
   return request<void>(`/api/v1/admin/lectures/applications/${applicationId}/promote`, { method: 'POST' })
+}
+
+/* ── 특강 기초 설정(F-4.10-4)이 쓰는 쓰기 ──
+ *
+ * ★ 개설이 2콜이다. POST 는 이름·종류만 받고 정원·비용·기간은 PATCH 로 이어 붙인다.
+ *   중간에 실패하면 **이름만 있는 특강이 남으므로** 호출부가 그것을 알려야 한다. */
+
+/** ★ 응답이 id 하나가 아니라 만들어진 특강 전체다 — 이어서 부를 PATCH 에 `.id` 를 넘길 것 */
+export function createLecture(body: {
+  academyId: number
+  year: number
+  lectureType?: LectureType
+  name: string
+}): Promise<Lecture> {
+  return request<Lecture>('/api/v1/admin/lectures', { method: 'POST', body })
+}
+
+/** 부분 수정. 보낸 필드만 바뀐다 */
+export function updateLecture(
+  lectureId: number,
+  body: Partial<{
+    name: string
+    code: string
+    instructorName: string
+    description: string
+    capacity: number
+    applyFrom: string
+    applyTo: string
+    startDate: string
+    endDate: string
+    fee: number
+  }>,
+): Promise<void> {
+  return request<void>(`/api/v1/admin/lectures/${lectureId}`, { method: 'PATCH', body })
+}
+
+/** 앱 노출 토글. status 와 별개 축이다 */
+export function changeLectureVisible(lectureId: number, visible: boolean): Promise<void> {
+  return request<void>(`/api/v1/admin/lectures/${lectureId}/visible`, { method: 'PUT', body: { visible } })
 }
