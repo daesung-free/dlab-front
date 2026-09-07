@@ -94,6 +94,31 @@ export function listLectureApplicants(lectureId: number): Promise<LectureApplica
   return request<LectureApplicant[]>(`/api/v1/admin/lectures/${lectureId}/applications`)
 }
 
+/**
+ * 특강 등록. **회차는 따로 추가한다** — 회차 없는 특강은 출석부를 못 만들고
+ * 신청도 받을 수 없다(F-4.7 주석 참고).
+ *
+ * 만들 때 정하는 건 이름과 종류뿐이다. 정원·기간·특강비는 `PATCH` 로 채운다.
+ */
+export function createLecture(body: {
+  academyId: number
+  year: number
+  lectureType: LectureType
+  name: string
+}): Promise<Lecture> {
+  return request<Lecture>('/api/v1/admin/lectures', { method: 'POST', body })
+}
+
+/**
+ * 앱 노출 전환 (0803 "개설 시에만 노출").
+ *
+ * ★ `status` 와 **별개 축이다.** 접수를 열어도(`OPEN`) 노출을 안 켜면 앱에 안 보인다 —
+ *   "왜 신청이 안 들어오지"의 흔한 원인이라 화면에서 두 축을 따로 보여준다.
+ */
+export function setLectureVisible(lectureId: number, visible: boolean): Promise<void> {
+  return request<void>(`/api/v1/admin/lectures/${lectureId}/visible`, { method: 'PUT', body: { visible } })
+}
+
 export function changeLectureStatus(lectureId: number, status: LectureStatus): Promise<void> {
   return request<void>(`/api/v1/admin/lectures/${lectureId}/status`, { method: 'PUT', body: { status } })
 }
