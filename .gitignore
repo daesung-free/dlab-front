@@ -13,3 +13,9 @@ tsconfig.tsbuildinfo
 # 개인 로컬 설정 (.claude/settings.json 은 팀 공유용이라 커밋)
 .claude/settings.local.json
 
+
+# 로컬 전용 메모 (notes/)
+# 데모 체크리스트처럼 **레포에 남기면 안 되는 진행 상황·시연 대본**을 여기 둔다.
+# README 의 "공개 호스팅 금지"와 같은 이유다 — 거래처 협상 상태·인력 구성이 섞이기 쉽다.
+# 팀이 함께 봐야 하는 문서는 docs/ 에 둔다.
+notes/

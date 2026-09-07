@@ -35,6 +35,7 @@ DSA/D.Lab 통합관리 **웹 관리자 프론트엔드**. 백엔드(`dlab-api`, 
 |---|---|
 | `docs/BACKEND_HANDOFF.md` · `ASKS.md` · `ASSUMPTIONS.md` | `src/data/menu.ts`·`issues.ts`·`assumptions.ts` → `npm run docs` |
 | `docs/API_GAPS.md` · `LOCAL_DEV.md` · `CONNECT_PLAN.md` | **수기 작성.** 여기에 적는다 |
+| `notes/` | **깃에 안 올라간다**(.gitignore). 데모 체크리스트·시연 대본처럼 레포에 남기면 안 되는 것 |
 
 생성물에 적으면 다음 `npm run docs`에서 날아간다.
 
