@@ -117,8 +117,8 @@ function Content() {
         key: 'teacher',
         header: '담당',
         width: '90px',
-        value: (r) => r.instructorName ?? '',
-        render: (r) => r.instructorName ?? '미지정',
+        value: (r) => r.teacherName ?? '',
+        render: (r) => r.teacherName ?? '미지정',
       },
       {
         key: 'capacity',

@@ -54,11 +54,14 @@ export interface Lecture {
   /** 특강 코드 */
   code: string | null
   /**
-   * 담당 강사 **이름 문자열**이다 — 교사 마스터 참조가 아니다.
-   * (teacherId/teacherName 으로 선언돼 있었는데 서버가 보내는 것은 이 하나다.
-   *  선언만 있고 응답에 없는 필드라 런타임에 undefined 가 되어 '미지정'으로 보였다)
+   * 담당 강사. **시드 특강 4건은 전부 `null` 이라 화면이 '미지정'으로 채워진다** —
+   * 필드가 안 오는 게 아니라 값이 안 들어가 있는 것이다. `instructorName` 으로
+   * 고쳤다가 되돌린 적이 있는데, 서버 응답·`/v3/api-docs` 의 `LectureDetail`
+   * 어디에도 그런 이름은 없다. 필드명을 바꾸면 컴파일은 통과하고 화면만 영구히
+   * '미지정'이 된다 — 담당을 넣어도 안 보이게 된다.
    */
-  instructorName: string | null
+  teacherId: number | null
+  teacherName: string | null
   confirmedCount: number
   waitlistedCount: number
 }
