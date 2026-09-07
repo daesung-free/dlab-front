@@ -133,7 +133,7 @@
 - [x] F-4.11-3 메시지 관리 — `/notices`. 공지 탭만. 행정요청·1:1채팅은 API 없음
 - [x] F-4.11-5 승인 라우팅 — `/approval-items`. 진행 중 요청은 담임 전용 API라 미포함
 - [x] F-4.11-7 질의응답 — `/qna/offline/slots`. 대면만(온라인은 서버 도메인 없음)
-- [ ] F-4.11-10 연간 행사 — `/schedules` · 기간·대상 없음
+- [x] F-4.11-10 연간 행사 — `/holidays` (휴일만) · **행사 유형 5종 중 1종만**(API_GAPS 16부)
 - [ ] F-4.11-8 좌석 이탈/복귀 — `/seats/layout` · 키오스크 단말 관리 없음
 - [ ] F-C-2 학원생 현황 — `/statistics` · 반별 집계 아님
 - [ ] F-C-3 시간표 — `/periods`, `/masters/curriculums` · 이동수업 없음
