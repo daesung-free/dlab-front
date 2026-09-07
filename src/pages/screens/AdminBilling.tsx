@@ -6,6 +6,14 @@ import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
 import { GRADE_LABEL } from '../../api/students'
 import {
+  PAYMENT_METHOD_LABEL,
+  listBillingStandards,
+  listRefundRules,
+  setBillingStandardActive,
+  type BillingStandard,
+  type RefundRule,
+} from '../../api/billingStandards'
+import {
   SEAT_TYPE_LABEL,
   listTuitionMonths,
   listTuitionPrices,
@@ -27,15 +35,102 @@ import '../../styles/forms.css'
  *   지금 문제는 ②가 빠져서 ①의 정가가 그대로 ③으로 넘어가는 것이다.
  *
  * ── 연동 범위 ──────────────────────────────────────────────
- * **'청구 기준' 탭이 실연동.** 다만 서버의 축은 목업과 다르다 —
- * 목업은 항목별(교습비·특강비·등록비·급식비)인데 **서버는 (학년 × 좌석유형) 정가**뿐이다.
- * 특강비·등록비·급식비와 결제채널·납기일은 둘 곳이 없다(API_GAPS 18-1).
- * '환불 기준' 탭은 API가 없어 목업이다.
+ * 두 탭 모두 실연동이다. /billing-standards 가 신설되면서 목업의 축(코드·항목·기수·
+ * 결제경로·청구일)이 그대로 들어왔고, 환불 기준도 /billing-standards/refund-rules 로 온다.
+ *
+ * ★ 교습비 행만 예외다. amountSource=PRICE_MATRIX 면 금액이 학년 × 좌석유형으로 갈려
+ *   한 칸에 못 넣는다 — amountMin~amountMax 만 오고, 실제 값은 아래 단가표에서 본다.
+ *
+ * ★ 환불 기준은 **읽기 전용이 의도다.** 값이 학원법 시행령 반환기준이라 학원이 정하는
+ *   것이 아니고, 편집을 열면 임의 비율로 환불이 나간다.
  *
  * ★ **월별 교습일수가 비어 있으면 그 해 청구가 계산되지 않는다.** 목업에 없던 축인데,
  *   비어 있는 걸 모르고 넘어가면 청구 시점에야 알게 된다 — 상단에 드러낸다. */
 
 const MONTHS_IN_YEAR = Array.from({ length: 12 }, (_, i) => i + 1)
+
+/** 청구 기준 — 목업의 코드·항목·기수·금액·결제경로·청구일이 그대로 대응한다 */
+function standardColumns(
+  onToggle: (r: BillingStandard) => void,
+  busy: boolean,
+): Column<BillingStandard>[] {
+  return [
+    {
+      key: 'code',
+      header: '코드',
+      width: '104px',
+      sortable: true,
+      value: (r) => r.code,
+      render: (_r, v) => <code style={{ fontSize: 11 }}>{v}</code>,
+    },
+    {
+      key: 'itemLabel',
+      header: '항목',
+      width: '82px',
+      align: 'center',
+      sortable: true,
+      value: (r) => r.itemLabel,
+      render: (_r, v) => <span className="mk supplement">{v}</span>,
+    },
+    { key: 'name', header: '청구 기준명', sortable: true, value: (r) => r.name },
+    { key: 'roundName', header: '기수', width: '62px', align: 'center', value: (r) => r.roundName ?? '-' },
+    {
+      key: 'amount',
+      header: '금액',
+      width: '160px',
+      align: 'right',
+      sortable: true,
+      // 정렬은 대표값으로 — 단가표 행은 하한을 쓴다
+      value: (r) => r.amount ?? r.amountMin ?? 0,
+      render: (r) =>
+        r.amountSource === 'FIXED' ? (
+          r.amount === null ? <span style={{ color: 'var(--muted)' }}>-</span> : `${r.amount.toLocaleString()}원`
+        ) : (
+          // 학년 × 좌석유형으로 갈려 한 칸에 못 넣는다 — 아래 단가표가 실제 값이다
+          <span title="학년 · 좌석유형에 따라 갈립니다. 아래 단가표에서 확인하세요">
+            {r.amountMin !== null && r.amountMax !== null
+              ? `${r.amountMin.toLocaleString()} ~ ${r.amountMax.toLocaleString()}원`
+              : '—'}
+            <span className="mk" style={{ marginLeft: 6, fontSize: 10 }}>단가표</span>
+          </span>
+        ),
+    },
+    {
+      key: 'paymentMethod',
+      header: '결제 경로',
+      width: '104px',
+      align: 'center',
+      sortable: true,
+      value: (r) => (r.paymentMethod ? PAYMENT_METHOD_LABEL[r.paymentMethod] : '-'),
+      render: (r, shown) =>
+        r.paymentMethod === null ? (
+          <span style={{ color: 'var(--muted)' }}>-</span>
+        ) : (
+          <span className="mk verified" title={r.paymentMethod}>{shown}</span>
+        ),
+    },
+    { key: 'dueDesc', header: '청구일', width: '100px', align: 'center', value: (r) => r.dueDesc ?? '-' },
+    {
+      key: 'active',
+      header: '사용',
+      width: '72px',
+      align: 'center',
+      sortable: true,
+      value: (r) => (r.active ? '사용' : '중지'),
+      render: (r, shown) => (
+        <button
+          className={`mk ${r.active ? 'verified' : 'brandnew'}`}
+          style={{ border: 'none', cursor: 'pointer', font: 'inherit' }}
+          disabled={busy}
+          title="눌러서 전환"
+          onClick={() => onToggle(r)}
+        >
+          {shown}
+        </button>
+      ),
+    },
+  ]
+}
 
 const PRICE_COLUMNS: Column<TuitionPrice>[] = [
   {
@@ -101,24 +196,29 @@ const PRICE_COLUMNS: Column<TuitionPrice>[] = [
   },
 ]
 
-interface Refund {
-  id: string
-  period: string
-  rate: string
-  note: string
+/** 환불 기준의 항목 배지. 청구기준은 itemLabel 을 주는데 이쪽은 코드만 온다 */
+const REFUND_ITEM_LABEL: Record<string, string> = {
+  TUITION: '교습비',
+  STUDY_ROOM: '독서실',
+  MEAL: '급식비',
+  LECTURE: '특강비',
+  REGISTRATION: '등록비',
+  ETC: '기타',
 }
 
-const REFUNDS: Refund[] = [
-  { id: 'r1', period: '개강 전', rate: '100%', note: '전액 환불' },
-  { id: 'r2', period: '개강 후 1/3 경과 전', rate: '2/3', note: '학원법 시행령 기준' },
-  { id: 'r3', period: '개강 후 1/2 경과 전', rate: '1/2', note: '학원법 시행령 기준' },
-  { id: 'r4', period: '개강 후 1/2 경과 후', rate: '0%', note: '환불 없음' },
-  { id: 'r5', period: '급식 — 이용 3일 전', rate: '100%', note: '앱 취소 · PG 자동환불' },
-  { id: 'r6', period: '급식 — 데스크 취소', rate: '협의', note: '데스크 개별 처리' },
-]
-
-const REFUND_COLUMNS: Column<Refund>[] = [
-  { key: 'period', header: '경과 시점', width: '200px', value: (r) => r.period },
+const REFUND_COLUMNS: Column<RefundRule>[] = [
+  {
+    key: 'period',
+    header: '경과 시점',
+    width: '260px',
+    value: (r) => `${REFUND_ITEM_LABEL[r.itemType] ?? r.itemType} ${r.period}`,
+    render: (r) => (
+      <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+        <span className="mk supplement">{REFUND_ITEM_LABEL[r.itemType] ?? r.itemType}</span>
+        {r.period}
+      </span>
+    ),
+  },
   {
     key: 'rate',
     header: '환불 비율',
@@ -126,12 +226,12 @@ const REFUND_COLUMNS: Column<Refund>[] = [
     align: 'center',
     value: (r) => r.rate,
     render: (r) => (
-      <b style={{ color: r.rate === '0%' ? 'var(--red)' : r.rate === '협의' ? 'var(--amber)' : 'var(--mint-d)' }}>
+      <b style={{ color: r.rate.includes('없음') ? 'var(--red)' : 'var(--mint-d)' }}>
         {r.rate}
       </b>
     ),
   },
-  { key: 'note', header: '비고', value: (r) => r.note },
+  { key: 'note', header: '비고', value: (r) => r.note ?? '-' },
 ]
 
 function Content() {
@@ -140,6 +240,8 @@ function Content() {
   const [year, setYear] = useState(new Date().getFullYear())
   const [prices, setPrices] = useState<TuitionPrice[]>([])
   const [months, setMonths] = useState<TuitionMonth[]>([])
+  const [standards, setStandards] = useState<BillingStandard[]>([])
+  const [refunds, setRefunds] = useState<RefundRule[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -148,12 +250,16 @@ function Content() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [p, m] = await Promise.all([
+      const [p, m, st, rf] = await Promise.all([
         listTuitionPrices(year, academyId ?? undefined),
         listTuitionMonths(year, academyId ?? undefined),
+        listBillingStandards({ year, academyId: academyId ?? undefined }),
+        listRefundRules(),
       ])
       setPrices(p)
       setMonths(m)
+      setStandards(st)
+      setRefunds(rf)
       setLoadError(null)
     } catch (err) {
       setLoadError(err instanceof ApiError ? err.message : '청구 기준을 불러오지 못했습니다.')
@@ -173,6 +279,20 @@ function Content() {
   }, [months])
 
   const missingMonths = MONTHS_IN_YEAR.filter((mo) => !daysByMonth.has(mo))
+
+  async function toggleStandard(row: BillingStandard) {
+    setBusy(true)
+    setNotice(null)
+    try {
+      await setBillingStandardActive(row.id, !row.active)
+      setNotice(`'${row.name}' ${row.active ? '중지' : '사용'}으로 바꿨습니다.`)
+      await load()
+    } catch (err) {
+      setNotice(err instanceof ApiError ? err.message : '변경하지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   /**
    * 교습일수는 **달력 일수가 아니다.** 학원이 아는 값을 그대로 받는다 —
@@ -254,8 +374,8 @@ function Content() {
       <div className="card-sec">
         <Tabs
           items={[
-            { key: 'billing', label: '청구 기준', count: prices.length },
-            { key: 'refund', label: '환불 기준', count: REFUNDS.length },
+            { key: 'billing', label: '청구 기준', count: standards.length },
+            { key: 'refund', label: '환불 기준', count: refunds.length },
           ]}
           active={tab}
           onChange={setTab}
@@ -263,6 +383,28 @@ function Content() {
         <div style={{ padding: 14 }}>
           {tab === 'billing' ? (
             <>
+              <DataTable
+                columns={standardColumns(toggleStandard, busy)}
+                rows={standards}
+                rowKey={(r) => String(r.id)}
+                masked={false}
+                loading={loading}
+                pageSize={10}
+                countLabel={
+                  <>
+                    {year}년 청구 기준 <b>{standards.length}</b>건
+                  </>
+                }
+                toolbar={
+                  // 코드·항목·금액 방식이 필수라 이름만으로는 못 만든다 — 전용 폼이 필요하다
+                  <button className="btn pri" disabled title="코드·항목·금액 방식이 필수라 전용 등록 폼이 필요합니다">
+                    <Icon name="plus" size={14} /> 청구 기준 등록
+                  </button>
+                }
+              />
+
+              {/* 위 목록의 '단가표' 행이 여기서 갈린다 — 학년 × 좌석유형 */}
+              <div style={{ marginTop: 14 }} />
               <DataTable
                 columns={PRICE_COLUMNS}
                 rows={prices}
@@ -272,7 +414,7 @@ function Content() {
                 pageSize={10}
                 countLabel={
                   <>
-                    {year}년 정가 <b>{prices.length}</b>건 · 학년 × 좌석유형 기준
+                    교습비 단가표 <b>{prices.length}</b>건 · 학년 × 좌석유형 — 위 &lsquo;단가표&rsquo; 행의 실제 금액
                   </>
                 }
                 toolbar={
@@ -356,32 +498,33 @@ function Content() {
             </>
           ) : (
             <>
-              {/* 환불 기준은 서버에 없다. 학원법 시행령 기준이라 값 자체는 맞다 */}
-              <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
+              {/* 학원이 정하는 값이 아니다 — 편집을 열면 임의 비율로 환불이 나간다 */}
+              <div className="note-box plain">
                 <div className="ic">
-                  <Icon name="triangle-alert" size={17} />
+                  <Icon name="scale" size={17} />
                 </div>
                 <div>
-                  <div className="tt">아래 기준은 저장되지 않습니다 — 학원법 시행령 내용을 적어 둔 것입니다</div>
+                  <div className="tt">학원법 시행령 반환기준입니다 — 학원이 바꾸는 값이 아닙니다</div>
                   <div className="tx">
-                    환불 기준을 시스템에 등록하는 기능은 아직 준비되지 않았습니다. 환불은 지금 데스크에서
-                    개별 처리합니다.
+                    서버가 내려주는 값이고 <b>읽기 전용</b>입니다. 차감은 <b>정상가 기준</b>이라
+                    할인을 받은 학생은 환불액이 음수가 될 수 있습니다.
                   </div>
                 </div>
               </div>
               <DataTable
                 columns={REFUND_COLUMNS}
-                rows={REFUNDS}
-                rowKey={(r) => r.id}
+                rows={refunds}
+                rowKey={(r) => `${r.itemType}:${r.period}`}
                 masked={false}
+                loading={loading}
                 pageSize={10}
                 countLabel={
                   <>
-                    환불 기준 <b>{REFUNDS.length}</b>건
+                    환불 기준 <b>{refunds.length}</b>건 · 학원법 시행령
                   </>
                 }
                 toolbar={
-                  <button className="btn pri" disabled title="환불 기준 API가 없습니다">
+                  <button className="btn pri" disabled title="학원법 시행령 반환기준이라 학원이 바꿀 수 없습니다">
                     <Icon name="plus" size={14} /> 기준 추가
                   </button>
                 }

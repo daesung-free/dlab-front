@@ -11,20 +11,30 @@ import {
   createCourseType,
   createCurriculum,
   createDepartment,
+  createRoom,
+  createScholarshipMaster,
   createTrack,
   createTuitionMaster,
   deleteCourseType,
   deleteCurriculum,
   deleteDepartment,
+  deleteRoom,
+  deleteScholarshipMaster,
+  deleteTrack,
   deleteTuitionMaster,
   listCourseTypes,
   listCurriculums,
   listDepartments,
+  listRooms,
+  listScholarshipMasters,
   listTracks,
   listTuitionMasters,
   renameCourseType,
   renameCurriculum,
   renameDepartment,
+  renameTrack,
+  updateRoom,
+  updateScholarshipMaster,
   updateTuitionMaster,
 } from '../../api/masters'
 import type { Mockup } from './types'
@@ -39,14 +49,18 @@ import type { Mockup } from './types'
  * (사이드바의 세 메뉴는 각각 track / department / course_type 탭으로 들어온다)
  *
  * ── 연동 범위 ──────────────────────────────────────────────
- * 마스터 10종 중 **7종이 실연동**이다. 강의실·장학은 서버에 목록이 없다
- * (장학은 학생별로만 조회된다 — 축이 다르다). API_GAPS 18-2.
+ * 마스터 **10종 전부 실연동**이다. 강의실(/masters/rooms)과 장학 종류
+ * (/masters/scholarship-masters)가 신설되면서 마지막 둘이 풀렸다.
+ *
+ * ★ 장학은 셋이 다른 것이다 — **종류 마스터**(여기), 학생별 부여(/masters/scholarships),
+ *   취소 판정 규칙(/scholarship/rules). 셋을 잇는 것이 code 다.
  *
  * ★ **마스터마다 되는 조작이 다르다.** 학과계열은 등록만 되고 수정·삭제가 없으며,
  *   교습비는 이름과 금액을 함께 고친다. 하나로 추상화하면 그 차이가 화면에서 사라져
  *   "왜 이건 수정이 안 되지"가 된다 — 표에 되는 것만 버튼을 낸다.
  *
- * ★ 목업의 **코드·비고·사용여부는 어느 마스터에도 없다.** 지우지 않고 <Unfilled/> 로 둔다.
+ * ★ 목업의 **코드·비고·사용여부**는 마스터마다 갈린다. 없는 마스터(반·상벌점·사물함)는
+ *   <Unfilled/> 로 두고, 있는 마스터는 실제 값을 보여준다.
  *
  * ⚠ 전년도 복사는 **되돌릴 수 없다.** 대상 연도에 데이터가 있으면 409 로 거부되므로
  *   덮어쓰지는 않는다. 복사 결과가 표별 건수로 오므로 그대로 보여준다. */
@@ -60,6 +74,13 @@ interface MasterRow {
   className?: string | null
   point?: number
   memberCount?: number
+  /** 강의실 — 코드 자리를 대신하고, 수정할 때 PUT 에 함께 실어야 한다 */
+  roomNo?: string
+  code?: string
+  /** 장학 종류 — 수정할 때 PUT 에 함께 실어야 한다 */
+  discountRate?: number
+  memo?: string | null
+  active?: boolean | null
 }
 
 interface MasterDef {
@@ -72,10 +93,18 @@ interface MasterDef {
   global?: boolean
   load: (academyId: number, year: number) => Promise<MasterRow[]>
   create?: (academyId: number, year: number, name: string) => Promise<unknown>
-  rename?: (id: number, name: string) => Promise<unknown>
+  /** row 를 함께 받는다 — 강의실·장학 종류는 PUT 에 다른 필드가 필수라 지금 값이 필요하다 */
+  rename?: (id: number, name: string, row?: MasterRow) => Promise<unknown>
   remove?: (id: number) => Promise<unknown>
   /** 이 마스터에만 있는 추가 컬럼 */
   extra?: Column<MasterRow>
+  /**
+   * 이 마스터에 실제로 있는 공통 컬럼.
+   *
+   * ★ 없는 것을 <Unfilled/> 로 그리는 이유는 "서버가 아직 안 준다"를 드러내기 위해서다.
+   *   있는 마스터까지 미제공으로 두면 그게 거짓말이 된다.
+   */
+  has?: { code?: boolean; memo?: boolean; active?: boolean }
   /** 왜 등록·수정이 없는지 */
   note?: string
 }
@@ -89,7 +118,10 @@ const MASTERS: MasterDef[] = [
     global: true,
     load: () => listTracks(),
     create: (_a, _y, name) => createTrack(name),
-    note: '학과계열은 전 지점·전 연도 공통입니다. 등록만 되고 수정·삭제는 지원되지 않습니다.',
+    rename: renameTrack,
+    remove: deleteTrack,
+    has: { code: true, memo: true, active: true },
+    note: '학과계열은 전 지점·전 연도 공통입니다. 전년도 복사 대상이 아닙니다.',
   },
   {
     key: 'department',
@@ -100,6 +132,7 @@ const MASTERS: MasterDef[] = [
     create: (academyId, year, name) => createDepartment({ academyId, year, name }),
     rename: renameDepartment,
     remove: deleteDepartment,
+    has: { code: true, memo: true, active: true },
   },
   {
     key: 'course_type',
@@ -110,6 +143,7 @@ const MASTERS: MasterDef[] = [
     create: (academyId, year, name) => createCourseType({ academyId, year, name }),
     rename: renameCourseType,
     remove: deleteCourseType,
+    has: { code: true, memo: true, active: true },
   },
   {
     key: 'class_group',
@@ -139,6 +173,7 @@ const MASTERS: MasterDef[] = [
     create: (academyId, year, name) => createCurriculum({ academyId, year, name }),
     rename: renameCurriculum,
     remove: deleteCurriculum,
+    has: { code: true, memo: true, active: true },
     extra: {
       key: 'className',
       header: '소속 반',
@@ -176,6 +211,7 @@ const MASTERS: MasterDef[] = [
     create: (academyId, year, name) => createTuitionMaster({ academyId, year, name, amount: 0 }),
     rename: (id, name) => updateTuitionMaster(id, { name }),
     remove: deleteTuitionMaster,
+    has: { code: true, memo: true, active: true },
     extra: {
       key: 'amount',
       header: '금액',
@@ -190,8 +226,39 @@ const MASTERS: MasterDef[] = [
     key: 'room',
     label: '강의실',
     icon: 'door-open',
-    load: async () => [],
-    note: '강의실 마스터가 서버에 없습니다. 시간표 편성과 함께 신설되어야 합니다.',
+    // 물리 공간이라 연도가 없다 — 전년도 복사 대상이 아니다(copyOrder 없음)
+    load: async (a) => {
+      const list = await listRooms(a)
+      return list.map((r) => ({
+        id: r.id,
+        // 코드 자리를 방 번호가 대신한다. 이름이 비면 번호를 이름으로 쓴다
+        name: r.name ?? r.roomNo,
+        roomNo: r.roomNo,
+        capacity: r.capacity,
+        memo: r.memo,
+        active: r.active,
+      }))
+    },
+    // roomNo 가 필수라 이름만으로는 못 만든다 — 번호를 함께 묻는다
+    create: async (academyId, _y, name) => {
+      const roomNo = window.prompt(`'${name}' 의 호실 번호를 입력하세요. (예: 201)`)?.trim()
+      if (!roomNo) throw new Error('호실 번호가 필요합니다.')
+      return createRoom({ academyId, roomNo, name })
+    },
+    // ★ PUT 의 필수값이 roomNo 라 지금 번호를 함께 실어야 이름만 바꿀 수 있다
+    rename: (id, name, row) => updateRoom(id, { roomNo: row?.roomNo ?? name, name }),
+    remove: deleteRoom,
+    // 코드 자리는 roomNo 가 대신하므로 code 컬럼은 안 쓴다
+    has: { memo: true, active: true },
+    extra: {
+      key: 'roomNo',
+      header: '호실',
+      width: '84px',
+      align: 'center',
+      sortable: true,
+      value: (r) => r.roomNo ?? '',
+    },
+    note: '강의실은 연도와 무관합니다 — 물리 공간이라 기수가 바뀌어도 그대로입니다. 자습 구역(좌석이 속하는 단위)과는 다른 것입니다.',
   },
   {
     key: 'locker',
@@ -202,10 +269,43 @@ const MASTERS: MasterDef[] = [
   },
   {
     key: 'scholarship',
-    label: '장학',
+    label: '장학 종류',
     icon: 'award',
-    load: async () => [],
-    note: '장학은 학생 한 명씩만 조회됩니다. 종류 목록을 주는 경로가 없습니다.',
+    copyOrder: 8,
+    load: async (a, y) => {
+      const list = await listScholarshipMasters(y, a)
+      return list.map((m) => ({
+        id: m.id,
+        name: m.name,
+        code: m.code,
+        discountRate: m.discountRate,
+        memo: m.memo,
+        active: m.active,
+        sortOrder: m.sortOrder ?? undefined,
+      }))
+    },
+    // code·discountRate 가 필수라 이름만으로는 못 만든다
+    create: async (academyId, year, name) => {
+      const code = window.prompt(`'${name}' 의 코드를 입력하세요. (예: SC-100)`)?.trim()
+      if (!code) throw new Error('코드가 필요합니다.')
+      const rate = window.prompt(`'${name}' 의 할인율(%)을 입력하세요.`, '100')?.trim()
+      if (!rate || !Number.isFinite(Number(rate))) throw new Error('할인율이 필요합니다.')
+      return createScholarshipMaster({ academyId, year, code, name, discountRate: Number(rate) })
+    },
+    // ★ PUT 의 필수값이 name·discountRate 다 — 지금 할인율을 함께 실어야 한다
+    rename: (id, name, row) => updateScholarshipMaster(id, { name, discountRate: row?.discountRate ?? 0 }),
+    remove: deleteScholarshipMaster,
+    has: { code: true, memo: true, active: true },
+    extra: {
+      key: 'discountRate',
+      header: '할인율',
+      width: '84px',
+      align: 'right',
+      sortable: true,
+      value: (r) => r.discountRate ?? 0,
+      render: (r) => (r.discountRate == null ? '-' : `${r.discountRate}%`),
+    },
+    note: '장학 종류는 부여(학생별)·취소 규칙과 code 로 이어집니다. 여기 없는 코드로는 부여할 수 없습니다.',
   },
 ]
 
@@ -339,8 +439,13 @@ function Content() {
         header: '코드',
         width: '96px',
         align: 'center',
-        value: () => '',
-        render: () => <Unfilled reason="마스터에 코드가 없다" />,
+        value: (r) => r.code ?? '',
+        render: (_r, shown) =>
+          active.has?.code ? (
+            <code style={{ fontSize: 11 }}>{shown || '-'}</code>
+          ) : (
+            <Unfilled reason="마스터에 코드가 없다" />
+          ),
       },
       { key: 'name', header: '명칭', width: '180px', sortable: true, value: (r) => r.name },
     ]
@@ -349,16 +454,22 @@ function Content() {
       {
         key: 'memo',
         header: '비고',
-        value: () => '',
-        render: () => <Unfilled reason="마스터에 비고가 없다" />,
+        value: (r) => r.memo ?? '',
+        render: (_r, shown) =>
+          active.has?.memo ? shown || '-' : <Unfilled reason="마스터에 비고가 없다" />,
       },
       {
         key: 'active',
         header: '사용',
         width: '72px',
         align: 'center',
-        value: () => '',
-        render: () => <Unfilled reason="사용여부 축이 없다" />,
+        value: (r) => (r.active === true ? '사용' : r.active === false ? '중지' : ''),
+        render: (r, shown) =>
+          active.has?.active ? (
+            <span className={`mk ${r.active ? 'verified' : 'brandnew'}`}>{shown}</span>
+          ) : (
+            <Unfilled reason="사용여부 축이 없다" />
+          ),
       },
     )
     if (active.rename || active.remove) {
@@ -378,7 +489,7 @@ function Content() {
                 onClick={() => {
                   const name = window.prompt('새 이름', r.name)
                   if (name === null || name.trim() === '' || name === r.name) return
-                  void run('이름을 바꾸', () => active.rename!(r.id, name.trim()))
+                  void run('이름을 바꾸', () => active.rename!(r.id, name.trim(), r))
                 }}
               >
                 수정
