@@ -1,7 +1,21 @@
-import { useMemo, useState } from 'react'
-import { DataTable, type Column } from '../../components/common'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { DataTable, Unfilled, type Column } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
+import { ApiError } from '../../api/client'
+import {
+  CHANNEL_LABEL,
+  EVENT_LABEL,
+  RECIPIENT_LABEL,
+  REVIEW_STATUS_LABEL,
+  listNotificationTemplates,
+  recordTemplateReviewResult,
+  setTemplateActive,
+  submitTemplateReview,
+  templateVars,
+  updateTemplateContent,
+  type NotificationTemplate,
+} from '../../api/notifications'
 import { MOCK_STUDENTS } from './mockStudents'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
@@ -16,7 +30,20 @@ import '../../styles/forms.css'
  *   "앱 미설치 + 템플릿에 없는 내용" 조합은 발송 수단이 존재하지 않는다.
  *   → 공지성 자유 문안은 템플릿으로 사전 등록해 두는 운영이 전제된다.
  *
- * ⚠ #19 / E-5 (최우선) — 알림톡 발신프로필·템플릿 사전승인. 승인 전에는 실발송 불가. */
+ * ⚠ #19 / E-5 (최우선) — 알림톡 발신프로필·템플릿 사전승인. 승인 전에는 실발송 불가.
+ *
+ * ── 연동 범위 ──────────────────────────────────────────────
+ * **'템플릿 관리' 탭만 실연동이다.** 서버에 있는 건 템플릿뿐이고,
+ * **발송 자체와 발송 이력은 API가 없다**(API_GAPS 15부). 나머지 두 탭은 목업이다.
+ *
+ * ★ 템플릿은 **이벤트당 하나**다. 이벤트가 사실상 기본키라 같은 이벤트로 또 만들면 409 다.
+ *   그래서 수동 발송 전용 템플릿이라는 것이 서버에는 없다 — 전부 이벤트 트리거다.
+ *
+ * ★ **발송 여부는 세 축이 모두 통과해야 한다**(활성·문구확정·심사). 서버가 `sendable`
+ *   하나로 합쳐 주므로 화면은 그걸 쓴다. 심사 배지만 보면 "승인인데 왜 안 나가지"가 된다.
+ *
+ * ★ **승인된 알림톡 문구를 고치면 심사가 미제출로 되돌아간다**(실측 확인). 카카오가
+ *   승인받은 문안 그대로만 허용해서다. 저장 전에 사용자에게 알린다. */
 
 type Channel = 'ALIMTALK' | 'FCM'
 
@@ -33,13 +60,6 @@ const CHANNEL_META: Record<Channel, { label: string; desc: string; cls: string; 
 /* ── 템플릿 마스터 ── */
 
 type ReviewStatus = '승인' | '심사대기' | '반려' | '해당없음'
-
-const REVIEW_TONE: Record<ReviewStatus, string> = {
-  승인: 'verified',
-  심사대기: 'supplement',
-  반려: 'brandnew',
-  해당없음: 'supplement',
-}
 
 interface Template {
   id: string
@@ -168,58 +188,111 @@ function preview(body: string): string {
   return body.replace(/\{([^}]+)\}/g, (m, k: string) => SAMPLE[k] ?? m)
 }
 
-const TEMPLATE_COLUMNS: Column<Template>[] = [
+/* ── 실연동 템플릿 컬럼. 목업 컬럼 구성을 그대로 따르고 서버에 없는 둘만 <Unfilled/> 다 ── */
+
+const API_TEMPLATE_COLUMNS: Column<NotificationTemplate>[] = [
   {
-    key: 'code',
+    key: 'event',
     header: '코드',
-    width: '160px',
+    width: '190px',
     sortable: true,
-    value: (r) => r.code,
+    value: (r) => r.event,
     render: (_r, v) => <code style={{ fontSize: 10.5 }}>{v}</code>,
   },
-  { key: 'name', header: '템플릿명', width: '160px', sortable: true, value: (r) => r.name },
+  { key: 'name', header: '템플릿명', width: '140px', sortable: true, value: (r) => EVENT_LABEL[r.event] ?? r.event },
   {
     key: 'channel',
     header: '채널',
-    width: '120px',
+    width: '110px',
     align: 'center',
     sortable: true,
-    value: (r) => CHANNEL_META[r.channel].label,
+    value: (r) => CHANNEL_LABEL[r.channel] ?? r.channel,
     render: (r) => (
-      <span className={`mk ${CHANNEL_META[r.channel].cls}`} title={CHANNEL_META[r.channel].desc}>
-        {CHANNEL_META[r.channel].label}
+      <span className={`mk ${r.channel === 'KAKAO_ALIMTALK' ? 'verified' : 'supplement'}`}>
+        {CHANNEL_LABEL[r.channel] ?? r.channel}
       </span>
     ),
   },
   {
     key: 'trigger',
     header: '자동발송 트리거',
-    width: '176px',
-    value: (r) => r.trigger ?? '-',
-    render: (r) =>
-      r.trigger ? (
-        <code style={{ fontSize: 10.5, color: 'var(--violet)' }}>{r.trigger}</code>
-      ) : (
-        <span style={{ color: 'var(--muted)', fontSize: 11.5 }}>수동 발송</span>
-      ),
+    width: '150px',
+    // 서버 템플릿은 전부 이벤트에 묶여 있다 — 수동 발송 전용이라는 것이 없다
+    value: (r) => RECIPIENT_LABEL[r.recipientType] ?? r.recipientType,
+    render: (r) => (
+      <span style={{ fontSize: 11.5 }}>
+        수신 {RECIPIENT_LABEL[r.recipientType] ?? r.recipientType}
+      </span>
+    ),
   },
   {
     key: 'status',
     header: '알림톡 심사',
-    width: '100px',
+    width: '104px',
     align: 'center',
     sortable: true,
-    value: (r) => r.status,
+    value: (r) => REVIEW_STATUS_LABEL[r.reviewStatus] ?? r.reviewStatus,
     render: (r) =>
-      r.status === '해당없음' ? (
+      r.reviewStatus === 'NOT_REQUIRED' ? (
         <span style={{ color: 'var(--muted)', fontSize: 11.5 }}>-</span>
       ) : (
-        <span className={`mk ${REVIEW_TONE[r.status]}`}>{r.status}</span>
+        <span className={`mk ${REVIEW_TONE_BY_STATUS[r.reviewStatus] ?? 'supplement'}`}>
+          {REVIEW_STATUS_LABEL[r.reviewStatus] ?? r.reviewStatus}
+        </span>
       ),
   },
-  { key: 'updatedAt', header: '최종 수정', width: '100px', align: 'center', sortable: true, value: (r) => r.updatedAt },
-  { key: 'updatedBy', header: '수정자', width: '80px', value: (r) => r.updatedBy },
+  {
+    key: 'sendable',
+    header: '발송',
+    width: '92px',
+    align: 'center',
+    sortable: true,
+    // 심사만 보면 "승인인데 왜 안 나가지"가 된다 — 활성·문구확정까지 합친 값이다
+    value: (r) => (r.sendable ? '나감' : '안 나감'),
+    render: (r) =>
+      r.sendable ? (
+        <span className="mk verified">나감</span>
+      ) : (
+        <span className="mk brandnew" title={blockedReason(r)}>
+          안 나감
+        </span>
+      ),
+  },
+  {
+    key: 'updatedAt',
+    header: '최종 수정',
+    width: '100px',
+    align: 'center',
+    value: () => '',
+    render: () => <Unfilled reason="템플릿 수정 시각이 응답에 없다" />,
+  },
+  {
+    key: 'updatedBy',
+    header: '수정자',
+    width: '80px',
+    value: () => '',
+    render: () => <Unfilled reason="템플릿 수정자가 응답에 없다" />,
+  },
 ]
+
+const REVIEW_TONE_BY_STATUS: Record<string, string> = {
+  APPROVED: 'verified',
+  SUBMITTED: 'supplement',
+  REJECTED: 'brandnew',
+  DRAFT: 'supplement',
+  NOT_REQUIRED: 'supplement',
+}
+
+/** 왜 안 나가는지 — 세 축 중 막힌 것을 그대로 알려준다 */
+function blockedReason(t: NotificationTemplate): string {
+  const why: string[] = []
+  if (!t.active) why.push('사용 안 함')
+  if (!t.contentConfirmed) why.push('문구 미확정')
+  if (t.reviewStatus === 'DRAFT') why.push('심사 미제출')
+  if (t.reviewStatus === 'SUBMITTED') why.push('심사 대기')
+  if (t.reviewStatus === 'REJECTED') why.push('심사 반려')
+  return why.length > 0 ? why.join(' · ') : '발송 조건 미충족'
+}
 
 /* ── 발송 이력 ── */
 
@@ -287,9 +360,64 @@ function Content() {
   const [template, setTemplate] = useState<Template>(TEMPLATES[1])
   const [reserve, setReserve] = useState(false)
 
-  /* 템플릿 관리 탭 */
-  const [editing, setEditing] = useState<Template>(TEMPLATES[0])
-  const [draft, setDraft] = useState(TEMPLATES[0].body)
+  /* 템플릿 관리 탭 — 여기만 실연동이다 */
+  const [rows, setRows] = useState<NotificationTemplate[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [pickedId, setPickedId] = useState<number | null>(null)
+  const [title, setTitle] = useState('')
+  const [body, setBody] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const list = await listNotificationTemplates()
+      setRows(list)
+      setLoadError(null)
+    } catch (err) {
+      setLoadError(err instanceof ApiError ? err.message : '템플릿을 불러오지 못했습니다.')
+      setRows([])
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const picked = rows.find((r) => r.id === pickedId) ?? null
+
+  /* 목록을 다시 불러오면 편집 중이던 문구가 서버 값으로 덮이면 안 되므로,
+     행을 고를 때만 초안을 채운다 */
+  function pickApiTemplate(t: NotificationTemplate) {
+    setPickedId(t.id)
+    setTitle(t.titleTemplate ?? '')
+    setBody(t.bodyTemplate ?? '')
+    setNotice(null)
+  }
+
+  /** 저장·심사 조작을 한 곳에서 감싼다 — 결과 메시지를 빠뜨리지 않기 위해 */
+  async function run(what: string, fn: () => Promise<NotificationTemplate>) {
+    setBusy(true)
+    try {
+      const next = await fn()
+      setRows((prev) => prev.map((r) => (r.id === next.id ? next : r)))
+      setTitle(next.titleTemplate ?? '')
+      setBody(next.bodyTemplate ?? '')
+      setNotice(
+        next.sendable
+          ? `${what} 완료 — 지금 발송됩니다.`
+          : `${what} 완료 — 아직 발송되지 않습니다 (${blockedReason(next)}).`,
+      )
+    } catch (err) {
+      setNotice(err instanceof ApiError ? `${what} 실패 — ${err.message}` : `${what}에 실패했습니다.`)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const target = SCOPES.find((s) => s.key === scope)!
   const channel = template.channel
@@ -297,21 +425,18 @@ function Content() {
   /* 알림톡은 승인된 템플릿만 나간다 — 심사가 안 끝났으면 발송 버튼을 막는다 */
   const blocked = channel === 'ALIMTALK' && template.status !== '승인'
 
+  // 통계는 실제 템플릿 기준이다. 발송 탭이 목업이어도 이 숫자는 서버 값이어야 한다
   const counts = useMemo(
     () => ({
-      alimtalk: TEMPLATES.filter((t) => t.channel === 'ALIMTALK').length,
-      approved: TEMPLATES.filter((t) => t.status === '승인').length,
-      waiting: TEMPLATES.filter((t) => t.status === '심사대기').length,
-      rejected: TEMPLATES.filter((t) => t.status === '반려').length,
-      auto: TEMPLATES.filter((t) => t.trigger).length,
+      alimtalk: rows.filter((t) => t.channel === 'KAKAO_ALIMTALK').length,
+      approved: rows.filter((t) => t.reviewStatus === 'APPROVED').length,
+      waiting: rows.filter((t) => t.reviewStatus === 'SUBMITTED').length,
+      rejected: rows.filter((t) => t.reviewStatus === 'REJECTED').length,
+      sendable: rows.filter((t) => t.sendable).length,
     }),
-    [],
+    [rows],
   )
 
-  function pickTemplate(t: Template) {
-    setEditing(t)
-    setDraft(t.body)
-  }
 
   return (
     <>
@@ -320,8 +445,8 @@ function Content() {
           <div className="l">
             <Icon name="file-text" size={13} /> 등록 템플릿
           </div>
-          <div className="v">{TEMPLATES.length}</div>
-          <div className="d">알림톡 {counts.alimtalk} · 푸시 {TEMPLATES.length - counts.alimtalk}</div>
+          <div className="v">{rows.length}</div>
+          <div className="d">알림톡 {counts.alimtalk} · 푸시 {rows.length - counts.alimtalk}</div>
         </div>
         <div className="stat">
           <div className="l">
@@ -352,17 +477,20 @@ function Content() {
         </div>
         <div className="stat">
           <div className="l">
-            <Icon name="zap" size={13} /> 자동발송
+            <Icon name="zap" size={13} /> 발송 중
           </div>
-          <div className="v">{counts.auto}</div>
-          <div className="d">이벤트 트리거 연동</div>
+          {/* 심사만 보면 "승인인데 왜 안 나가지"가 된다 — 세 축을 합친 값이다 */}
+          <div className="v" style={{ color: counts.sendable > 0 ? 'var(--green)' : 'var(--red)' }}>
+            {counts.sendable}
+          </div>
+          <div className="d">활성 · 문구확정 · 심사 통과</div>
         </div>
       </div>
 
       <Tabs
         items={[
           { key: 'send', label: '메시지 발송' },
-          { key: 'tpl', label: '템플릿 관리', count: TEMPLATES.length },
+          { key: 'tpl', label: '템플릿 관리', count: rows.length },
           { key: 'log', label: '발송 이력', count: LOGS.length },
         ]}
         active={tab}
@@ -371,6 +499,22 @@ function Content() {
       />
 
       {/* ═══ 메시지 발송 ═══ */}
+      {/* 발송·이력은 서버에 대응 API가 없다. 화면은 그대로 두되 예시임을 밝힌다 */}
+      {(tab === 'send' || tab === 'log') && (
+        <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
+          <div className="ic">
+            <Icon name="triangle-alert" size={17} />
+          </div>
+          <div>
+            <div className="tt">아래 내용은 예시입니다 — 실제로 발송되거나 기록되지 않습니다</div>
+            <div className="tx">
+              지금 연결된 것은 <b>템플릿 관리</b>뿐입니다. 알림은 등원·승인·상담 같은 사건이 일어날 때
+              <b> 자동으로</b> 나가고, 사람이 직접 골라 보내는 기능과 발송 기록은 아직 준비되지 않았습니다.
+            </div>
+          </div>
+        </div>
+      )}
+
       {tab === 'send' && (
         <div className="split-3-2">
           <div className="card-sec">
@@ -556,28 +700,36 @@ function Content() {
         </div>
       )}
 
-      {/* ═══ 템플릿 관리 ═══ */}
+      {/* ═══ 템플릿 관리 — 이 탭만 실연동이다 ═══ */}
       {tab === 'tpl' && (
         <div className="split-3-2">
           <div>
+            {loadError && (
+              <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+                {loadError}
+              </div>
+            )}
             <DataTable
-              columns={TEMPLATE_COLUMNS}
-              rows={TEMPLATES}
-              rowKey={(r) => r.id}
+              columns={API_TEMPLATE_COLUMNS}
+              rows={rows}
+              rowKey={(r) => String(r.id)}
               masked={false}
+              loading={loading}
               pageSize={10}
-              onRowClick={pickTemplate}
+              onRowClick={pickApiTemplate}
               countLabel={
                 <>
-                  템플릿 <b>{TEMPLATES.length}</b>건 · 행을 누르면 편집합니다
+                  템플릿 <b>{rows.length}</b>건 · 발송 중 <b>{counts.sendable}</b>건 · 행을 누르면 편집합니다
                 </>
               }
               toolbar={
                 <>
-                  <button className="btn">
+                  {/* 서버는 템플릿을 이벤트당 하나만 둔다. 11개 이벤트가 이미 다 차 있어
+                      새로 만들 자리가 없다 — 목업 버튼은 두되 이유를 붙여 막는다 */}
+                  <button className="btn" disabled title="심사는 템플릿마다 카카오 템플릿 코드가 필요해 일괄로 낼 수 없습니다">
                     <Icon name="upload" size={14} /> 심사 일괄 제출
                   </button>
-                  <button className="btn pri">
+                  <button className="btn pri" disabled title="이벤트마다 템플릿이 하나씩 이미 있습니다">
                     <Icon name="plus" size={14} /> 템플릿 등록
                   </button>
                 </>
@@ -591,131 +743,229 @@ function Content() {
                 <span className="ico">
                   <Icon name="pencil" size={15} />
                 </span>
-                {editing.name}
+                {picked ? (EVENT_LABEL[picked.event] ?? picked.event) : '템플릿을 고르세요'}
               </div>
               <div className="r">
-                {editing.status !== '해당없음' && (
-                  <span className={`mk ${REVIEW_TONE[editing.status]}`}>{editing.status}</span>
+                {picked && picked.reviewStatus !== 'NOT_REQUIRED' && (
+                  <span className={`mk ${REVIEW_TONE_BY_STATUS[picked.reviewStatus] ?? 'supplement'}`}>
+                    {REVIEW_STATUS_LABEL[picked.reviewStatus] ?? picked.reviewStatus}
+                  </span>
                 )}
               </div>
             </div>
-            <div className="card-sec-b">
-              <div className="frow">
-                <label>코드</label>
-                <div style={{ paddingTop: 9 }}>
-                  <code style={{ fontSize: 11 }}>{editing.code}</code>
-                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
-                    발송 API가 참조하는 값입니다. 이름이 바뀌어도 코드는 고정합니다.
-                  </div>
+
+            {!picked && (
+              <div className="card-sec-b">
+                <div style={{ color: 'var(--muted)', fontSize: 12.5, padding: '18px 2px' }}>
+                  왼쪽 목록에서 템플릿을 고르면 문안을 편집할 수 있습니다.
                 </div>
               </div>
+            )}
 
-              <div className="frow">
-                <label className="req">템플릿명</label>
-                <input className="inp" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
-              </div>
-
-              <div className="frow">
-                <label className="req">채널</label>
-                <div className="type-picks">
-                  {(Object.keys(CHANNEL_META) as Channel[]).map((c) => (
-                    <button
-                      type="button"
-                      key={c}
-                      className={`type-pick${editing.channel === c ? ' on' : ''}`}
-                      onClick={() => setEditing({ ...editing, channel: c })}
-                      title={CHANNEL_META[c].desc}
-                    >
-                      {CHANNEL_META[c].label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="frow">
-                <label>자동발송</label>
-                <div style={{ paddingTop: 9, fontSize: 12 }}>
-                  {editing.trigger ? (
-                    <code style={{ fontSize: 11, color: 'var(--violet)' }}>{editing.trigger}</code>
-                  ) : (
-                    <span style={{ color: 'var(--muted)' }}>수동 발송 전용</span>
-                  )}
-                </div>
-              </div>
-
-              <div className="frow">
-                <label>치환 변수</label>
-                <div className="sf-chips" style={{ paddingTop: 5 }}>
-                  {editing.vars.map((v) => (
-                    <button
-                      type="button"
-                      key={v}
-                      className="chip"
-                      onClick={() => setDraft((d) => `${d}{${v}}`)}
-                      title={`예시값: ${SAMPLE[v] ?? '-'}`}
-                    >
-                      {'{'}
-                      {v}
-                      {'}'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="frow">
-                <label className="req">문안</label>
-                <textarea className="ta" value={draft} onChange={(e) => setDraft(e.target.value)} />
-              </div>
-
-              <div className="frow">
-                <label>미리보기</label>
+            {picked && (
+              <div className="card-sec-b">
+                {/* 왜 안 나가는지를 맨 위에 둔다. 심사 배지만 보면 원인을 못 짚는다 */}
                 <div
-                  style={{
-                    border: '1px solid var(--line)',
-                    borderRadius: 11,
-                    padding: '11px 13px',
-                    background: editing.channel === 'ALIMTALK' ? '#fef7d4' : 'var(--bg)',
-                    fontSize: 12.5,
-                    lineHeight: 1.6,
-                    whiteSpace: 'pre-wrap',
-                  }}
+                  className="note-box"
+                  style={{ borderColor: picked.sendable ? 'var(--green)' : 'var(--amber)', marginTop: 0 }}
                 >
-                  {preview(draft) || <span style={{ color: 'var(--muted)' }}>문안을 입력하세요.</span>}
-                </div>
-              </div>
-
-              <div className="frow">
-                <label>&nbsp;</label>
-                <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
-                  <button className="btn pri">
-                    <Icon name="save" size={14} /> 저장
-                  </button>
-                  {editing.channel === 'ALIMTALK' && (
-                    <button className="btn">
-                      <Icon name="upload" size={14} /> 심사 제출
-                    </button>
-                  )}
-                  <button className="btn" style={{ color: 'var(--red)' }}>
-                    삭제
-                  </button>
-                </div>
-              </div>
-
-              {editing.channel === 'ALIMTALK' && (
-                <div className="blocked-note" style={{ marginTop: 4, marginBottom: 0 }}>
                   <div className="ic">
-                    <Icon name="triangle-alert" size={16} />
+                    <Icon name={picked.sendable ? 'check-check' : 'triangle-alert'} size={17} />
                   </div>
                   <div>
-                    <div className="tt">문안을 고치면 심사를 다시 받아야 합니다</div>
+                    <div className="tt">
+                      {picked.sendable ? '지금 발송되는 템플릿입니다' : '지금은 발송되지 않습니다'}
+                    </div>
                     <div className="tx">
-                      알림톡은 <code>E-5</code> 사전 승인 대상이라, 저장만으로는 발송에 반영되지 않습니다. 승인 완료 전까지
-                      해당 템플릿의 자동발송은 <b>직전 승인 문안</b>으로 나갑니다.
+                      {picked.sendable
+                        ? '사용 중이고 문안이 확정됐으며 심사도 통과했습니다.'
+                        : `${blockedReason(picked)} — 세 가지(사용 여부 · 문안 확정 · 심사)가 모두 갖춰져야 발송됩니다.`}
                     </div>
                   </div>
                 </div>
-              )}
-            </div>
+
+                {notice && (
+                  <div className="note-box" role="status" style={{ borderColor: 'var(--violet)' }}>
+                    {notice}
+                  </div>
+                )}
+
+                <div className="frow">
+                  <label>코드</label>
+                  <div style={{ paddingTop: 9 }}>
+                    <code style={{ fontSize: 11 }}>{picked.event}</code>
+                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+                      이 사건이 일어나면 자동으로 나갑니다. 코드는 바뀌지 않습니다.
+                    </div>
+                  </div>
+                </div>
+
+                <div className="frow">
+                  <label>채널</label>
+                  <div style={{ paddingTop: 9, fontSize: 12.5 }}>
+                    {CHANNEL_LABEL[picked.channel] ?? picked.channel}
+                    <span style={{ color: 'var(--muted)' }}>
+                      {' · '}
+                      {RECIPIENT_LABEL[picked.recipientType] ?? picked.recipientType} 수신
+                    </span>
+                  </div>
+                </div>
+
+                <div className="frow">
+                  <label>치환 변수</label>
+                  <div className="sf-chips" style={{ paddingTop: 5 }}>
+                    {templateVars(picked).length === 0 && (
+                      <span style={{ color: 'var(--muted)', fontSize: 11.5, paddingTop: 4 }}>지정된 변수가 없습니다</span>
+                    )}
+                    {templateVars(picked).map((v) => (
+                      <button type="button" key={v} className="chip" onClick={() => setBody((d) => `${d}{${v}}`)}>
+                        {'{'}
+                        {v}
+                        {'}'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="frow">
+                  <label>제목</label>
+                  <input className="inp" value={title} onChange={(e) => setTitle(e.target.value)} />
+                </div>
+
+                <div className="frow">
+                  <label className="req">문안</label>
+                  <textarea className="ta" value={body} onChange={(e) => setBody(e.target.value)} />
+                </div>
+
+                <div className="frow">
+                  <label>미리보기</label>
+                  <div
+                    style={{
+                      border: '1px solid var(--line)',
+                      borderRadius: 11,
+                      padding: '11px 13px',
+                      background: picked.channel === 'KAKAO_ALIMTALK' ? '#fef7d4' : 'var(--bg)',
+                      fontSize: 12.5,
+                      lineHeight: 1.6,
+                      whiteSpace: 'pre-wrap',
+                    }}
+                  >
+                    {preview(body) || <span style={{ color: 'var(--muted)' }}>문안을 입력하세요.</span>}
+                  </div>
+                </div>
+
+                <div className="frow">
+                  <label>&nbsp;</label>
+                  <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+                    <button
+                      className="btn"
+                      disabled={busy}
+                      onClick={() =>
+                        void run('임시 저장', () =>
+                          updateTemplateContent(picked.id, {
+                            titleTemplate: title,
+                            bodyTemplate: body,
+                            contentConfirmed: false,
+                          }),
+                        )
+                      }
+                    >
+                      임시 저장
+                    </button>
+                    <button
+                      className="btn pri"
+                      disabled={busy || body.trim() === ''}
+                      // 승인된 알림톡 문안을 고치면 심사가 미제출로 되돌아간다 — 먼저 알린다
+                      onClick={() => {
+                        if (
+                          picked.channel === 'KAKAO_ALIMTALK' &&
+                          picked.reviewStatus === 'APPROVED' &&
+                          !window.confirm('승인받은 문안입니다. 고치면 심사를 다시 받아야 발송됩니다. 저장할까요?')
+                        )
+                          return
+                        void run('문안 확정', () =>
+                          updateTemplateContent(picked.id, {
+                            titleTemplate: title,
+                            bodyTemplate: body,
+                            contentConfirmed: true,
+                          }),
+                        )
+                      }}
+                    >
+                      <Icon name="save" size={14} /> 문안 확정
+                    </button>
+                    <button
+                      className="btn"
+                      disabled={busy}
+                      onClick={() => void run(picked.active ? '사용 중지' : '사용 시작', () => setTemplateActive(picked.id, !picked.active))}
+                    >
+                      {picked.active ? '사용 중지' : '사용 시작'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* 알림톡만 카카오 심사를 탄다. 자동 연동 창구가 없어 결과를 사람이 넣는다 */}
+                {picked.channel === 'KAKAO_ALIMTALK' && (
+                  <div className="frow">
+                    <label>카카오 심사</label>
+                    <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', paddingTop: 4 }}>
+                      <button
+                        className="btn"
+                        disabled={busy || !picked.contentConfirmed}
+                        title={picked.contentConfirmed ? undefined : '문안을 확정한 뒤 제출할 수 있습니다'}
+                        onClick={() => {
+                          const code = window.prompt('카카오에 등록한 템플릿 코드를 입력하세요.', picked.kakaoTemplateCode ?? '')
+                          if (code) void run('심사 제출', () => submitTemplateReview(picked.id, code))
+                        }}
+                      >
+                        <Icon name="upload" size={14} /> 심사 제출
+                      </button>
+                      <button
+                        className="btn"
+                        disabled={busy || picked.reviewStatus !== 'SUBMITTED'}
+                        title={picked.reviewStatus === 'SUBMITTED' ? undefined : '제출한 템플릿에만 결과를 넣을 수 있습니다'}
+                        onClick={() => void run('심사 승인 기록', () => recordTemplateReviewResult(picked.id, true))}
+                      >
+                        승인됨
+                      </button>
+                      <button
+                        className="btn"
+                        style={{ color: 'var(--red)' }}
+                        disabled={busy || picked.reviewStatus !== 'SUBMITTED'}
+                        onClick={() => {
+                          const note = window.prompt('반려 사유를 적어 두세요.') ?? undefined
+                          void run('심사 반려 기록', () => recordTemplateReviewResult(picked.id, false, note))
+                        }}
+                      >
+                        반려됨
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {picked.reviewNote && (
+                  <div className="frow">
+                    <label>심사 메모</label>
+                    <div style={{ paddingTop: 9, fontSize: 12.5 }}>{picked.reviewNote}</div>
+                  </div>
+                )}
+
+                {picked.channel === 'KAKAO_ALIMTALK' && (
+                  <div className="blocked-note" style={{ marginTop: 4, marginBottom: 0 }}>
+                    <div className="ic">
+                      <Icon name="triangle-alert" size={16} />
+                    </div>
+                    <div>
+                      <div className="tt">문안을 고치면 심사를 다시 받아야 합니다</div>
+                      <div className="tx">
+                        카카오는 <b>승인받은 문안 그대로만</b> 발송을 허용합니다. 오타 하나를 고쳐도 심사가
+                        미제출로 돌아가고, 다시 승인될 때까지 이 템플릿은 나가지 않습니다.
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

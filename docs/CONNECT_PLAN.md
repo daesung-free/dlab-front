@@ -129,7 +129,7 @@
 - [x] F-4.1-3 신규 접수 등록 — `POST /students`. **쓰기 패턴의 기준 화면**
 - [x] F-4.6 성적 관리 — `/exam-forms`(열) + `/students/{id}/grades`(행). 입력은 앱 전용
 - [x] F-4.6-부속 설문 관리 — `/surveys`. 템플릿 탭은 API 없어 목업 유지
-- [ ] F-4.4 문자 발송 — `/notification-templates` · **발송 이력 API 없음**
+- [x] F-4.4 문자 발송 — `/notification-templates` (템플릿 관리 탭만) · **발송·이력 API 없음**(API_GAPS 15부)
 - [x] F-4.11-3 메시지 관리 — `/notices`. 공지 탭만. 행정요청·1:1채팅은 API 없음
 - [x] F-4.11-5 승인 라우팅 — `/approval-items`. 진행 중 요청은 담임 전용 API라 미포함
 - [x] F-4.11-7 질의응답 — `/qna/offline/slots`. 대면만(온라인은 서버 도메인 없음)
