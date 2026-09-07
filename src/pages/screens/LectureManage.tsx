@@ -53,7 +53,9 @@ const LECTURE_COLUMNS: Column<ApiLecture>[] = [
     value: (r) => LECTURE_TYPE_LABEL[r.lectureType] ?? r.lectureType,
     render: (r) => <span className="mk supplement">{LECTURE_TYPE_LABEL[r.lectureType] ?? r.lectureType}</span>,
   },
-  { key: 'teacherName', header: '담당', width: '86px', align: 'center', value: (r) => r.teacherName ?? '미지정' },
+  // 서버가 보내는 이름은 instructorName 하나다. teacherName 으로 읽던 동안에는
+  // 값이 없어 전부 '미지정'으로 보였다(타입만 있고 응답에 없던 필드)
+  { key: 'instructorName', header: '담당', width: '86px', align: 'center', value: (r) => r.instructorName ?? '미지정' },
   {
     key: 'confirmedCount',
     header: '신청 / 정원',

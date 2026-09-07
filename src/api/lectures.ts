@@ -51,8 +51,13 @@ export interface Lecture {
   startDate: string | null
   endDate: string | null
   fee: number | null
-  teacherId: number | null
-  teacherName: string | null
+  /** 특강 코드. 화면이 그대로 보여준다 */
+  code: string | null
+  /**
+   * 담당 강사 **이름 문자열**이다 — 교사 마스터 참조가 아니다.
+   * (teacherId/teacherName 으로 선언돼 있었는데 서버가 보내는 이름은 이것 하나다)
+   */
+  instructorName: string | null
   confirmedCount: number
   waitlistedCount: number
 }
@@ -123,6 +128,8 @@ export function updateLecture(
   lectureId: number,
   body: Partial<{
     name: string
+    code: string
+    instructorName: string
     description: string
     capacity: number
     applyFrom: string

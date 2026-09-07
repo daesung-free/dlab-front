@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { DataTable, ExcelButton, MaskToggle, Unfilled, useServerData, type Column } from '../../components/common'
+import { DataTable, ExcelButton, MaskToggle, useServerData, type Column } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { useAcademy } from '../../auth/AcademyContext'
@@ -8,9 +8,12 @@ import {
   ACCOUNT_STATUS_LABEL,
   ROLES as ROLE_KEYS,
   ROLE_LABEL,
+  approveAccount,
+  listAccountHistory,
   listAccounts,
   replaceRoles,
   unlockAccount,
+  withdrawAccount,
   type AccountRow,
   type AccountStatus,
   type Role,
@@ -190,6 +193,56 @@ function Content() {
     }
   }
 
+  async function approve(row: AccountRow) {
+    setBusy(row.accountId)
+    setActionMsg(null)
+    try {
+      await approveAccount(row.accountId)
+      setActionMsg(`${row.loginId} 의 가입을 승인했습니다. 이제 로그인할 수 있습니다.`)
+      list.reload()
+    } catch (err) {
+      setActionMsg(err instanceof ApiError ? err.message : '승인에 실패했습니다.')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function withdraw(row: AccountRow) {
+    // 되돌리는 API 가 없다 — 한 번 더 묻는다
+    if (!window.confirm(`${row.loginId}(${row.name ?? '-'}) 를 탈퇴 처리합니다. 되돌릴 수 없습니다.`)) return
+    setBusy(row.accountId)
+    setActionMsg(null)
+    try {
+      await withdrawAccount(row.accountId)
+      setActionMsg(`${row.loginId} 를 탈퇴 처리했습니다.`)
+      list.reload()
+    } catch (err) {
+      setActionMsg(err instanceof ApiError ? err.message : '탈퇴 처리에 실패했습니다.')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function showHistory(row: AccountRow) {
+    setBusy(row.accountId)
+    setActionMsg(null)
+    try {
+      const rows = await listAccountHistory(row.accountId)
+      setActionMsg(
+        rows.length === 0
+          ? `${row.loginId} 의 권한 변경 이력이 없습니다.`
+          : `${row.loginId} 권한 변경 이력 — ` +
+            rows
+              .map((h) => `${localDateTime(h.changedAt)} ${h.action} ${h.beforeValue ?? '-'} → ${h.afterValue ?? '-'}`)
+              .join(' / '),
+      )
+    } catch (err) {
+      setActionMsg(err instanceof ApiError ? err.message : '이력을 불러오지 못했습니다.')
+    } finally {
+      setBusy(null)
+    }
+  }
+
   async function unlock(row: AccountRow) {
     setBusy(row.accountId)
     setActionMsg(null)
@@ -246,14 +299,7 @@ function Content() {
         ),
       },
       { key: 'academyName', header: '지점', width: '68px', align: 'center', sortable: true, value: (r) => r.academyName ?? '-' },
-      {
-        key: 'phone',
-        header: '연락처',
-        width: '128px',
-        value: () => '',
-        // 계정 응답에 연락처가 없다. 직원 목록(/staff/employees)에는 있다 (docs/API_GAPS.md 7부)
-        render: () => <Unfilled reason="/staff/accounts 응답에 phone 없음" />,
-      },
+      { key: 'phone', header: '연락처', width: '128px', mask: 'phone', value: (r) => r.phone ?? '-' },
       {
         key: 'status',
         header: '상태',
@@ -277,8 +323,18 @@ function Content() {
         key: 'lastRoleChange',
         header: '권한 수정시간',
         width: '146px',
+        // 목록 응답에는 안 실려 온다 — 계정별 이력 조회를 눌러서 본다
         value: () => '',
-        render: () => <Unfilled reason="권한 변경 이력이 서버에 없음" />,
+        render: (r) => (
+          <button
+            className="btn"
+            style={{ padding: '3px 8px', fontSize: 11 }}
+            disabled={busy === r.accountId}
+            onClick={() => void showHistory(r)}
+          >
+            이력 보기
+          </button>
+        ),
       },
       { key: 'lastLoginAt', header: '최근 로그인', width: '140px', sortable: true, value: (r) => localDateTime(r.lastLoginAt) },
       {
@@ -307,16 +363,21 @@ function Content() {
                 잠금해제
               </button>
             ) : (
-              // 승인·탈퇴·상세는 대응 API가 없다 (docs/API_GAPS.md 7부)
-              <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled title="계정 상태 변경 API 없음">
+              <button
+                className="btn pri"
+                style={{ padding: '4px 9px', fontSize: 11.5 }}
+                disabled={busy === r.accountId || r.status !== 'PENDING'}
+                title={r.status === 'PENDING' ? '가입을 승인해 로그인을 연다' : '승인 대기 상태에서만 누를 수 있습니다'}
+                onClick={() => void approve(r)}
+              >
                 승인
               </button>
             )}
             <button
               className="btn"
               style={{ padding: '4px 9px', fontSize: 11.5, color: 'var(--red)' }}
-              disabled
-              title="탈퇴 처리 API 없음"
+              disabled={busy === r.accountId || r.status === 'WITHDRAWN'}
+              onClick={() => void withdraw(r)}
             >
               탈퇴
             </button>
@@ -393,7 +454,9 @@ function Content() {
                   </select>
                   <MaskToggle masked={masked} onChange={setMasked} />
                   <ExcelButton filename="사용자_목록" columns={columns} rows={rows} masked={masked} />
-                  <button className="btn pri" disabled title="계정 생성 API 없음">
+                  {/* 계정만 따로 만들 수는 없다 — /staff/teachers·/staff/employees 가
+                      사람과 계정을 함께 만든다. 그 등록 폼은 이 화면에 없다 */}
+                  <button className="btn pri" disabled title="직원·선생님 등록 화면에서 사람과 계정을 함께 만듭니다">
                     <Icon name="user-plus" size={14} /> 계정 등록
                   </button>
                 </>

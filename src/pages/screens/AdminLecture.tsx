@@ -70,6 +70,7 @@ function Content() {
   const [name, setName] = useState('')
   const [month, setMonth] = useState(thisMonth)
   const [capacity, setCapacity] = useState('30')
+  const [instructor, setInstructor] = useState('')
   const [fee, setFee] = useState('')
 
   const year = new Date().getFullYear()
@@ -95,9 +96,9 @@ function Content() {
         key: 'code',
         header: '코드',
         width: '128px',
-        value: () => '',
-        // 특강 코드가 응답에 없다 (docs/API_GAPS.md 7부)
-        render: () => <Unfilled reason="/lectures 응답에 코드 없음" />,
+        sortable: true,
+        value: (r) => r.code ?? '-',
+        render: (_r, v) => <code style={{ fontSize: 11 }}>{v}</code>,
       },
       { key: 'month', header: '월', width: '84px', align: 'center', sortable: true, value: (r) => monthOf(r.startDate) },
       { key: 'name', header: '명칭', sortable: true, value: (r) => r.name },
@@ -111,13 +112,8 @@ function Content() {
         // 목업의 단과·실전·해설 세분류는 서버에 없다
         render: () => <Unfilled reason="단과·실전·해설 구분이 서버에 없음" />,
       },
-      {
-        key: 'teacher',
-        header: '담당',
-        width: '78px',
-        value: () => '',
-        render: () => <Unfilled reason="담당 강사 필드 없음" />,
-      },
+      // 교사 마스터 참조가 아니라 이름 문자열이다 — 드롭다운이 아니라 입력으로 받는다
+      { key: 'instructorName', header: '담당', width: '90px', value: (r) => r.instructorName ?? '-' },
       {
         key: 'capacity',
         header: '정원',
@@ -214,11 +210,13 @@ function Content() {
       if (capacity.trim() !== '') patch.capacity = Number(capacity)
       if (fee.trim() !== '') patch.fee = Number(fee)
       if (month) patch.startDate = `${month}-01`
+      if (instructor.trim() !== '') patch.instructorName = instructor.trim()
       if (Object.keys(patch).length > 0) await updateLecture(created.id, patch)
 
       setMsg(`'${name.trim()}' 을(를) 등록했습니다.`)
       setName('')
       setFee('')
+      setInstructor('')
       list.reload()
     } catch (err) {
       const reason = err instanceof ApiError ? err.message : '등록에 실패했습니다.'
@@ -309,7 +307,12 @@ function Content() {
               </div>
               <div className="frow">
                 <label>담당</label>
-                <Unfilled reason="담당 강사 필드가 서버에 없음" />
+                <input
+                  className="inp"
+                  placeholder="강사 이름"
+                  value={instructor}
+                  onChange={(e) => setInstructor(e.target.value)}
+                />
               </div>
             </div>
             <div>
@@ -351,6 +354,7 @@ function Content() {
                     onClick={() => {
                       setName('')
                       setFee('')
+                      setInstructor('')
                       setCapacity('30')
                       setMonth(thisMonth())
                     }}

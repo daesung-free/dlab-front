@@ -55,6 +55,7 @@ export interface AccountRow {
   /** 직원·선생님 id. 인적사항(/staff/employees)과 잇는 키 */
   personId: number | null
   name: string | null
+  phone: string | null
   deptName: string | null
   positionName: string | null
   academyId: number | null
@@ -87,6 +88,40 @@ export function replaceRoles(accountId: number, roles: Role[]): Promise<void> {
     method: 'PUT',
     body: { roles },
   })
+}
+
+/**
+ * 가입 승인 (PENDING → ACTIVE).
+ *
+ * ★ 승인해야 로그인이 열린다. 계정을 만드는 것과 다른 단계다 —
+ *   /staff/teachers·/staff/employees 가 사람 + 계정을 함께 만들고, 여기서 열어준다.
+ */
+export function approveAccount(accountId: number): Promise<void> {
+  return request<void>(`/api/v1/admin/staff/accounts/${accountId}/approve`, { method: 'POST' })
+}
+
+/** 탈퇴 처리. 되돌리는 API 가 없으므로 화면이 한 번 더 묻는다 */
+export function withdrawAccount(accountId: number): Promise<void> {
+  return request<void>(`/api/v1/admin/staff/accounts/${accountId}/withdraw`, { method: 'POST' })
+}
+
+/**
+ * 권한 변경 이력 한 줄.
+ *
+ * ★ replaceRoles 가 역할을 통째로 교체하므로 before/after 를 봐야 무엇이 빠졌는지 알 수 있다.
+ */
+export interface AccountHistory {
+  id: number
+  action: string
+  beforeValue: string | null
+  afterValue: string | null
+  changedBy: string | null
+  /** ISO instant */
+  changedAt: string
+}
+
+export function listAccountHistory(accountId: number): Promise<AccountHistory[]> {
+  return request<AccountHistory[]>(`/api/v1/admin/staff/accounts/${accountId}/history`)
 }
 
 /** 잠금 해제. 로그인 5회 실패로 잠긴 계정은 이걸 부르기 전까지 자동으로 안 풀린다 */

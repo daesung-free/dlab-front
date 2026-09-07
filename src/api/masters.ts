@@ -9,7 +9,7 @@ import { listClasses, type ClassGroup } from './classes'
  *
  * ★ 공통 컬럼이 마스터마다 **있기도 없기도 하다.** 없는 것을 `<Unfilled/>`로 그리면
  *   "서버가 아직 안 준다"는 뜻이 되는데, 실제로는 **의도적으로 없는 것**이다
- *   (강의실 코드는 roomNo 가 그 역할이라 안 두고, 학과계열은 참조하는 곳이 없다).
+ *   (강의실 코드는 roomNo 가, 사물함은 lockerNo 가 그 역할을 대신한다).
  *   그래서 컬럼 자체를 숨긴다 — `columns` 플래그가 그 판단이다.
  *
  * ★ 연도·지점 축이 셋으로 갈린다. 화면이 파라미터를 잘못 보내면 400이다.
@@ -170,11 +170,13 @@ export const MASTERS: MasterDef[] = [
     table: 'track_master',
     // 전 지점 공통 고정값이라 지점·연도 축이 없다. 복사 대상도 아니다
     copied: false,
-    // 코드가 없다 — 이 마스터를 참조하는 곳이 아직 없어 코드를 둘 이유가 없다.
-    // active·수정·삭제가 없는 것은 구멍이다(docs/API_GAPS.md)
-    columns: { code: false, sortOrder: false, active: false },
+    columns: { code: true, sortOrder: false, active: true },
     list: () => request<NamedMaster[]>('/api/v1/admin/masters/tracks').then((r) => r.map(fromNamed)),
     create: (_ctx, name) => request('/api/v1/admin/masters/tracks', { method: 'POST', body: { name } }),
+    rename: (row, name) => request(`/api/v1/admin/masters/tracks/${row.id}`, { method: 'PUT', body: { name } }),
+    remove: (id) => request(`/api/v1/admin/masters/tracks/${id}`, { method: 'DELETE' }),
+    setActive: (id, active) =>
+      request(`/api/v1/admin/masters/tracks/${id}/active`, { method: 'PATCH', body: { active } }),
   },
   {
     key: 'department',
@@ -249,7 +251,7 @@ export const MASTERS: MasterDef[] = [
         body: { academyId: ctx.academyId, year: ctx.year, name, classType: 'FIXED' },
       }),
     rename: (row, name) => request(`/api/v1/admin/classes/${row.id}`, { method: 'PUT', body: { name } }),
-    // 삭제 API 가 없다 (docs/API_GAPS.md)
+    remove: (id) => request(`/api/v1/admin/classes/${id}`, { method: 'DELETE' }),
   },
   {
     key: 'curriculum',
@@ -371,7 +373,11 @@ export const MASTERS: MasterDef[] = [
           active: null,
         })),
       ),
-    // 마스터 수정·삭제가 없다. PUT/DELETE /{id}/assignment 는 배정 전용이다
+    // ★ 사물함은 이름이 곧 번호다(PUT 의 필수값이 lockerNo 하나뿐).
+    //   /{id}/assignment 쪽은 배정 전용이라 여기서 쓰지 않는다
+    rename: (row, name) =>
+      request(`/api/v1/admin/masters/lockers/${row.id}`, { method: 'PUT', body: { lockerNo: name } }),
+    remove: (id) => request(`/api/v1/admin/masters/lockers/${id}`, { method: 'DELETE' }),
   },
   {
     key: 'scholarship',
