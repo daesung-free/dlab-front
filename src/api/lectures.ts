@@ -54,11 +54,15 @@ export interface Lecture {
   /** 특강 코드 */
   code: string | null
   /**
-   * 담당 강사 **이름 문자열**이다 — 교사 마스터 참조가 아니다.
-   * (teacherId/teacherName 으로 선언돼 있었는데 서버가 보내는 것은 이 하나다.
-   *  선언만 있고 응답에 없는 필드라 런타임에 undefined 가 되어 '미지정'으로 보였다)
+   * 담당 강사. **교사 마스터 참조다** — 이름 문자열이 아니다.
+   * 저장할 때는 teacherId 를 보내고(LectureUpdate), 표시는 teacherName 을 쓴다.
+   * 그래서 등록·수정 폼은 입력칸이 아니라 교사 드롭다운(/staff/teachers)이어야 한다.
    */
-  instructorName: string | null
+  teacherId: number | null
+  teacherName: string | null
+  /** 특강 세부 유형(단과·실전·해설). /lecture-categories 의 항목이다 */
+  categoryId: number | null
+  categoryName: string | null
   confirmedCount: number
   waitlistedCount: number
 }
@@ -132,4 +136,31 @@ export function changeLectureStatus(lectureId: number, status: LectureStatus): P
 /** 대기자를 확정으로 올린다 */
 export function promoteApplicant(applicationId: number): Promise<void> {
   return request<void>(`/api/v1/admin/lectures/applications/${applicationId}/promote`, { method: 'POST' })
+}
+
+/**
+ * 부분 수정. 보낸 항목만 바뀐다.
+ *
+ * ★ 개설(POST)은 이름·종류만 받는다. 유형·담당·정원·비용·기간은 전부 이쪽이라
+ *   등록 폼이 값을 채우려면 **2콜**이 된다 — 중간에 실패하면 이름만 있는 특강이 남는다.
+ */
+export function updateLecture(
+  lectureId: number,
+  body: Partial<{
+    name: string
+    code: string
+    /** 담당 강사는 id 로 보낸다 — 이름 문자열이 아니다 */
+    teacherId: number
+    /** 세부 유형도 id 로 보낸다 */
+    categoryId: number
+    description: string
+    capacity: number
+    applyFrom: string
+    applyTo: string
+    startDate: string
+    endDate: string
+    fee: number
+  }>,
+): Promise<Lecture> {
+  return request<Lecture>(`/api/v1/admin/lectures/${lectureId}`, { method: 'PATCH', body })
 }

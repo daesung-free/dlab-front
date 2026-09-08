@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DataTable, ExcelButton, Unfilled, type Column } from '../../components/common'
+import { DataTable, ExcelButton, type Column } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
+import { listLectureCategories, type LectureCategory } from '../../api/lectureCategories'
 import { useAcademy } from '../../auth/AcademyContext'
 import {
   LECTURE_STATUS_LABEL,
   LECTURE_STATUS_TONE,
   changeLectureStatus,
   createLecture,
+  updateLecture,
   listLectures,
   setLectureVisible,
   type Lecture,
@@ -27,11 +29,13 @@ import '../../styles/forms.css'
  *   개설 폼은 F-4.7에 있고, 여기서는 개설할 때 고를 수 있는 선택지를 관리한다.
  *
  * ── 연동 범위 ──────────────────────────────────────────────
- * ⚠ **서버에는 '특강 유형 마스터'가 없다.** 종류가 `LECTURE`·`BRIEFING` 두 개짜리
- *   enum 으로 고정돼 있어, 목업이 말하는 단과·실전·해설 구분과 기본 정원/특강비
- *   템플릿은 둘 곳이 없다(API_GAPS 19-1).
- *   그래서 이 화면은 **실제로 개설된 특강·설명회를 종류별로 보여주고 접수·노출을
- *   여닫는** 역할을 한다. 명단·회차·출석부는 F-4.7 이 맡는다 — 겹치지 않는다.
+ * ★ 축이 둘이다. `lectureType`(LECTURE·BRIEFING)은 특강이냐 설명회냐이고, 그 안의
+ *   **세부 유형(단과·실전·해설)은 /lecture-categories 마스터**다. 세부 유형은
+ *   **특강에만 붙는다** — 설명회 탭에서는 감춘다.
+ *   유형 목록 자체는 기초 관리(F-4.10-1)의 '특강 유형' 탭에서 관리한다.
+ *
+ * ★ 이 화면은 개설된 특강·설명회를 종류별로 보여주고 접수·노출을 여닫는 역할이다.
+ *   명단·회차·출석부는 F-4.7 이 맡는다 — 겹치지 않는다.
  *
  * ★ **접수 상태와 앱 노출은 별개 축이다.** 접수를 열어도(OPEN) 노출을 안 켜면
  *   앱에 안 보인다 — "왜 신청이 안 들어오지"의 흔한 원인이라 두 축을 따로 보여준다. */
@@ -43,6 +47,9 @@ function Content() {
   const [tab, setTab] = useState('lecture')
   const [year, setYear] = useState(new Date().getFullYear())
   const [all, setAll] = useState<Lecture[]>([])
+  const [categories, setCategories] = useState<LectureCategory[]>([])
+  /** 등록 폼에서 고른 세부 유형. 특강에만 쓴다 */
+  const [categoryId, setCategoryId] = useState('')
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -57,7 +64,13 @@ function Content() {
     }
     setLoading(true)
     try {
-      setAll(await listLectures(academyId, year))
+      const [lectures, cats] = await Promise.all([
+        listLectures(academyId, year),
+        // 드롭다운은 사용 중인 것만. academyId 를 같이 안 보내면 400이다
+        listLectureCategories({ academyId, year, activeOnly: true }),
+      ])
+      setAll(lectures)
+      setCategories(cats)
       setLoadError(null)
     } catch (err) {
       setLoadError(err instanceof ApiError ? err.message : '목록을 불러오지 못했습니다.')
@@ -96,8 +109,13 @@ function Content() {
     if (name.trim() === '') return
     // 만들 때 정하는 건 이름과 종류뿐이다. 정원·기간·비용은 F-4.7 개설 폼에서 채운다
     void run(`${tab === 'lecture' ? '특강' : '설명회'}을(를) 등록`, async () => {
-      await createLecture({ academyId, year, lectureType: wantType, name: name.trim() })
+      const created = await createLecture({ academyId, year, lectureType: wantType, name: name.trim() })
+      // ★ POST 는 이름·종류만 받는다. 유형은 PATCH 로 이어 붙여야 해서 등록이 2콜이다
+      if (wantType === 'LECTURE' && categoryId !== '') {
+        await updateLecture(created.id, { categoryId: Number(categoryId) })
+      }
       setName('')
+      setCategoryId('')
     })
   }
 
@@ -108,17 +126,39 @@ function Content() {
         header: '코드',
         width: '96px',
         align: 'center',
-        value: () => '',
-        render: () => <Unfilled reason="특강 코드가 응답에 없다" />,
+        sortable: true,
+        // 서버가 채번하지 않는다 — 수정에서 넣기 전까지 비어 있다
+        value: (r) => r.code ?? '',
+        render: (_r, shown) =>
+          shown ? <code style={{ fontSize: 11 }}>{shown}</code> : <span style={{ color: 'var(--muted)' }}>-</span>,
       },
       { key: 'month', header: '개설 월', width: '92px', align: 'center', sortable: true, value: MONTH_OF },
       { key: 'name', header: '명칭', sortable: true, value: (r) => r.name },
+      // 세부 유형은 특강에만 붙는다 — 설명회 탭에서는 컬럼 자체를 안 그린다
+      ...(wantType === 'LECTURE'
+        ? [
+            {
+              key: 'categoryName',
+              header: '유형',
+              width: '92px',
+              align: 'center' as const,
+              sortable: true,
+              value: (r: Lecture) => r.categoryName ?? '',
+              render: (r: Lecture) =>
+                r.categoryName ? (
+                  <span className="mk supplement">{r.categoryName}</span>
+                ) : (
+                  <span style={{ color: 'var(--muted)' }}>-</span>
+                ),
+            },
+          ]
+        : []),
       {
         key: 'teacher',
         header: '담당',
         width: '90px',
-        value: (r) => r.instructorName ?? '',
-        render: (r) => r.instructorName ?? '미지정',
+        value: (r) => r.teacherName ?? '',
+        render: (r) => r.teacherName ?? '미지정',
       },
       {
         key: 'capacity',
@@ -201,7 +241,7 @@ function Content() {
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [busy],
+    [busy, wantType],
   )
 
   return (
@@ -254,9 +294,11 @@ function Content() {
               <Icon name="info" size={17} />
             </div>
             <div>
-              <div className="tt">종류는 특강과 설명회 두 가지입니다</div>
+              <div className="tt">여기서 정하는 것은 이름 · 종류 · 유형까지입니다</div>
               <div className="tx">
-                단과·실전·해설 같은 세부 구분은 아직 나누어 저장되지 않습니다. 여기서는 이름과 종류만 정하고,
+                단과·실전·해설 같은 <b>세부 유형</b>은 <b>기초 관리 &gt; 특강 유형</b>에서 만들어 두면
+                위 드롭다운에 나옵니다. 설명회에는 붙지 않습니다.
+                <br />
                 정원·기간·비용·회차는 <b>특강 관리</b> 화면에서 채웁니다. <b>회차를 만들지 않으면 출석부가
                 비어 있고 신청도 받을 수 없습니다.</b>
               </div>
@@ -306,6 +348,28 @@ function Content() {
           </div>
         </div>
         <div className="card-sec-b">
+          {/* 세부 유형은 특강에만 붙는다. 설명회 탭에서는 아예 안 보여준다 */}
+          {tab === 'lecture' && (
+            <div className="frow">
+              <label>유형</label>
+              {categories.length === 0 ? (
+                <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>
+                  등록된 유형이 없습니다 — 기초 관리 &gt; 특강 유형에서 먼저 만드세요.
+                </span>
+              ) : (
+                <select className="sel" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+                  <option value="">선택 안 함</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={String(c.id)}>
+                      {c.name}
+                      {c.nationwide ? ' (전 지점)' : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
+
           <div className="frow">
             <label className="req">명칭</label>
             <input

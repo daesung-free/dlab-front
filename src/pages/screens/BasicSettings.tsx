@@ -37,6 +37,12 @@ import {
   updateScholarshipMaster,
   updateTuitionMaster,
 } from '../../api/masters'
+import {
+  createLectureCategory,
+  deleteLectureCategory,
+  listLectureCategories,
+  updateLectureCategory,
+} from '../../api/lectureCategories'
 import type { Mockup } from './types'
 
 /* F-4.10-1 기초 관리 — 신규개발-요구사항검증됨
@@ -306,6 +312,29 @@ const MASTERS: MasterDef[] = [
       render: (r) => (r.discountRate == null ? '-' : `${r.discountRate}%`),
     },
     note: '장학 종류는 부여(학생별)·취소 규칙과 code 로 이어집니다. 여기 없는 코드로는 부여할 수 없습니다.',
+  },
+  {
+    key: 'lecture_category',
+    label: '특강 유형',
+    icon: 'layers',
+    // 특강의 세분류(단과·실전·해설)다. lectureType(특강/설명회)과 다른 축이고
+    // **설명회에는 붙지 않는다**
+    load: async (a, y) => {
+      const list = await listLectureCategories({ academyId: a, year: y })
+      return list.map((c) => ({
+        id: c.id,
+        name: c.name,
+        sortOrder: c.sortOrder,
+        active: c.active,
+        // 전 지점 공통인지 — 지점 관리자는 이 항목을 못 고친다
+        memo: c.nationwide ? '전 지점 공통' : null,
+      }))
+    },
+    create: (academyId, year, name) => createLectureCategory({ academyId, year, name }),
+    rename: (id, name) => updateLectureCategory(id, { name }),
+    remove: deleteLectureCategory,
+    has: { memo: true, active: true },
+    note: '특강의 세부 유형입니다. 설명회에는 붙지 않습니다. 지점을 비우고 만들면 전 지점 공통이 되는데 본사만 가능합니다.',
   },
 ]
 
