@@ -22,6 +22,7 @@ import {
   type PenaltyCategory,
   type PenaltyRow,
   type PenaltySource,
+  revokePenalty,
 } from '../../api/penalties'
 import type { EnrollmentStatus } from '../../api/students'
 import type { Mockup } from './types'
@@ -188,6 +189,8 @@ function Content() {
 
   const rows = board.data?.rows ?? []
 
+  const [revoking, setRevoking] = useState<number | null>(null)
+
   const selectedEnrollments = useMemo(() => {
     const byId = new Map(rows.map((r) => [String(r.id), r.enrollmentId]))
     // 같은 학생의 이력을 여러 건 골랐을 수 있다 — 중복 부여를 막으려면 학생 단위로 접는다
@@ -243,9 +246,48 @@ function Content() {
             </span>
           ),
       },
+      {
+        /* 요구사항의 '학생별 내역 조회·수정'. 잘못 준 점수를 상점으로 상쇄하면
+           이력에 두 줄이 남아 무엇이 실수였는지 나중에 알 수 없다 — 그래서 취소로 지운다.
+           서버는 soft delete 라 "누가 왜 취소했나"가 남는다. */
+        key: 'revoke',
+        header: '',
+        width: '68px',
+        align: 'center',
+        value: () => '',
+        render: (r) => (
+          <button
+            className="btn"
+            type="button"
+            style={{ padding: '4px 9px', fontSize: 11.5 }}
+            disabled={revoking !== null}
+            onClick={() => revoke(r)}
+          >
+            {revoking === r.id ? '취소 중…' : '취소'}
+          </button>
+        ),
+      },
     ],
-    [],
+    [revoking],
   )
+
+  async function revoke(row: PenaltyRow) {
+    const label = `${row.name} · ${PENALTY_CATEGORY_LABEL[row.category]} ${row.point > 0 ? `+${row.point}` : row.point}점 (${row.itemName})`
+    // 되돌리는 API 가 없다 — 한 번 더 묻는다
+    if (!window.confirm(`${label}\n\n이 부여를 취소합니다. 되돌릴 수 없습니다.`)) return
+    setRevoking(row.id)
+    setGrantMsg(null)
+    try {
+      await revokePenalty(row.id)
+      setGrantMsg(`${label} 을 취소했습니다. 학생 앱 Daily Report 에도 즉시 반영됩니다.`)
+      // 합계가 상단 통계에 걸려 있어 목록만 지우면 숫자가 안 맞는다
+      board.reload()
+    } catch (err) {
+      setGrantMsg(err instanceof ApiError ? err.message : '취소하지 못했습니다.')
+    } finally {
+      setRevoking(null)
+    }
+  }
 
   async function grant() {
     if (selectedEnrollments.length === 0 || itemId === '') return

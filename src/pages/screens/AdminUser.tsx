@@ -524,13 +524,18 @@ function Content() {
                   className="inp"
                   readOnly
                   value={created.temporaryPassword}
-                  style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 800, fontSize: 15 }}
+                  style={{
+                    fontFamily: 'ui-monospace, monospace',
+                    fontWeight: 800,
+                    fontSize: 15,
+                    letterSpacing: 0.5,
+                  }}
                   onFocus={(e) => e.currentTarget.select()}
                 />
                 <div className="link-box" style={{ alignItems: 'center' }}>
                   <div>
-                    <b>이 화면을 닫으면 다시 볼 수 없습니다.</b> 지금 본인에게 전달하세요.
-                    놓쳤다면 목록에서 <b>임시 비밀번호 재발급</b>을 쓰면 됩니다.
+                    <b>닫으면 다시 볼 수 없습니다.</b> 지금 본인에게 전달하세요.
+                    놓쳤다면 목록에서 임시 비밀번호를 다시 발급하면 됩니다.
                   </div>
                 </div>
               </div>
@@ -620,9 +625,10 @@ function Content() {
 
             <div className="frow">
               <label className="req">로그인 아이디</label>
-              <div className="two">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input
                   className="inp"
+                  style={{ maxWidth: 220 }}
                   placeholder="영문·숫자"
                   value={form.loginId}
                   onChange={(e) => {
@@ -632,16 +638,26 @@ function Content() {
                   maxLength={30}
                   autoComplete="off"
                 />
-                <div className="link-box" style={{ alignItems: 'center', gap: 8 }}>
-                  <button className="btn" type="button" onClick={verifyLoginId} disabled={!form.loginId.trim()}>
-                    중복 확인
-                  </button>
-                  {idCheck && idCheck.loginId === form.loginId.trim() && (
-                    <div style={{ color: idCheck.available ? 'var(--mint-d)' : 'var(--red)', fontWeight: 700 }}>
-                      {idCheck.available ? '쓸 수 있습니다' : '이미 쓰는 아이디입니다'}
-                    </div>
-                  )}
-                </div>
+                <button
+                  className="btn"
+                  type="button"
+                  style={{ flexShrink: 0 }}
+                  onClick={verifyLoginId}
+                  disabled={!form.loginId.trim()}
+                >
+                  중복 확인
+                </button>
+                {idCheck && idCheck.loginId === form.loginId.trim() && (
+                  <span
+                    style={{
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      color: idCheck.available ? 'var(--mint-d)' : 'var(--red)',
+                    }}
+                  >
+                    {idCheck.available ? '사용 가능한 아이디입니다' : '이미 사용 중인 아이디입니다'}
+                  </span>
+                )}
               </div>
             </div>
 
