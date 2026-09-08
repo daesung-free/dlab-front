@@ -1800,3 +1800,99 @@ GET /lectures?academyId=8&year=2026
 
 > 요청: 시드 특강에 담당 강사를 넣어 달라. 지금은 이 컬럼이 비어 있는지 깨진 건지
 > 화면만 봐서는 구분할 수 없다.
+
+---
+
+# 21부. 직원 계정 등록 (F-4.10-2) — 2026-09-08
+
+목업의 '계정 등록' 버튼에 폼을 붙이면서 실호출로 확인한 것들이다.
+계정 생성 자체는 된다. **`POST /staff/employees` 하나가 사람과 계정을 함께 만든다** —
+신규 접수 등록(POST→PATCH)과 달리 부분 성공이 없다.
+
+```
+POST /staff/employees
+{"academyId":8,"loginId":"qa_test_1","name":"QA테스트","password":"…","roles":["STAFF"]}
+→ 200
+```
+
+## 21-1. 만든 뒤 인적사항을 고칠 수 없다 ★
+
+```
+PUT    /staff/employees/3 → 404
+PATCH  /staff/employees/3 → 404
+DELETE /staff/employees/3 → 404
+```
+
+`/staff/teachers/{id}` 도 같다. **이름·부서·직급·연락처·이메일은 저장하는 순간 고정된다.**
+바꿀 수 있는 것은 역할(`PUT .../roles`)과 상태(`approve`·`withdraw`)뿐이다.
+
+오타 하나에 탈퇴 처리하고 새로 만드는 수밖에 없어서 **`WITHDRAWN` 계정이 목록에 쌓인다.**
+(확인용으로 만든 3건이 지금 그렇게 남아 있다.) 화면에는 저장 전에 그 사실을 적어 뒀다.
+
+> 요청: `PUT`·`PATCH /staff/employees/{id}`·`/staff/teachers/{id}`.
+
+## 21-2. 아이디 중복 확인 경로가 없다
+
+사전 확인 API가 없어 목업의 '중복확인' 버튼을 만들 수 없다. 저장을 눌러야 알 수 있다.
+
+```
+POST /staff/employees  (같은 loginId 재사용)
+→ 400 {"code":"INVALID_REQUEST","message":"이미 사용 중인 로그인 아이디입니다."}
+```
+
+메시지가 명확해서 그대로 아이디 칸 옆에 띄웠다. 다만 **폼을 다 채운 뒤에 실패한다.**
+
+> 요청: `GET /staff/accounts/login-id-available?loginId=` 같은 확인 경로.
+
+## 21-3. 첫 로그인 비밀번호 변경을 강제할 수 없다 ★
+
+생성 요청에 `mustChangePassword` 가 없다. 만들어진 계정은 `mustChangePassword: false` 다.
+**관리자가 정해준 비밀번호를 그 사람이 계속 쓰고, 관리자는 그 비밀번호를 안다.**
+
+우회로는 있다 — `POST /app-accounts/{accountId}/temporary-password` 가 **직원 계정에도 먹는다**
+(스펙에는 앱 계정(F-4.12-1)으로 분류돼 있는데 실제로 200이다).
+
+```
+POST /app-accounts/3/temporary-password → 200 {"temporaryPassword":"wPLSw2fuW5"}
+```
+
+> 요청: 생성 요청에 `mustChangePassword` 를 받거나, 관리자가 만든 계정은 기본 `true` 로.
+
+## 21-4. 응답이 만들어진 계정을 안 돌려준다
+
+```
+→ 200 {"kind":"EMPLOYEE","id":3,"academyId":8,"name":"QA테스트",
+       "accountId":null,"loginId":null,"roles":[], …}
+```
+
+계정은 분명히 만들어졌는데(같은 `loginId` 재요청이 중복으로 막힌다) **`accountId`·`loginId` 가
+null, `roles` 가 빈 배열**로 온다. 응답으로 행을 그리면 빈 줄이 생겨서, 저장 후 목록을 다시 부른다.
+
+> 요청: 생성 응답에 `accountId`·`loginId`·`roles`·`status` 를 채워 달라.
+
+## 21-5. (확인만) 누가 만들었느냐로 즉시 사용 여부가 갈린다 ★
+
+| 만든 계정 | 결과 |
+|---|---|
+| `admin` (SUPER_ADMIN) | `ACTIVE` — 바로 로그인된다(실제 200 확인) |
+| `branch` (BRANCH_ADMIN) | `PENDING` — 로그인하면 `SIGNUP_PENDING` "가입 승인 대기 중입니다" |
+
+**역할이 아니라 만든 사람으로 갈린다.** 지점 관리자가 `STAFF` 를 만들어도 `PENDING` 이다.
+지점 담당자에게 이걸 안 알리면 계정을 만들어 주고 "왜 로그인이 안 되냐" 를 듣게 되므로
+폼에 적어 뒀다.
+
+## 21-6. 지점 관리자가 `SUPER_ADMIN` 을 요청할 수 있다 ⚠
+
+지점(`branch`) 계정으로 전 지점 권한을 달아 만드는 것이 **막히지 않는다.**
+
+```
+POST /staff/employees  (branch 토큰)
+{"academyId":8,"loginId":"qa_esc","roles":["SUPER_ADMIN"], …} → 200, status=PENDING
+```
+
+다른 지점에 만드는 것은 서버가 막는다(`OTHER_BRANCH_ACCESS_DENIED`). **역할만 안 막는다.**
+`PENDING` 이라 본사 승인 전에는 못 쓰지만, 승인 화면에서 요청된 역할을 못 보고 눌러주면
+전 지점 권한이 넘어간다. 화면에서는 자기 권한 위를 못 고르게 막았다.
+
+> 요청: 서버에서도 **자기 역할보다 높은 역할의 생성·요청을 거부**해 달라.
+> 그리고 승인 목록에 **요청된 역할**이 보여야 한다.

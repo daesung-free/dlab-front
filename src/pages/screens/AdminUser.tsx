@@ -1,14 +1,17 @@
 import { useMemo, useState } from 'react'
+import type { FormEvent } from 'react'
 import { DataTable, ExcelButton, MaskToggle, useServerData, type Column } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { useAcademy } from '../../auth/AcademyContext'
+import { useAuth } from '../../auth/AuthContext'
 import { ApiError } from '../../api/client'
 import {
   ACCOUNT_STATUS_LABEL,
   ROLES as ROLE_KEYS,
   ROLE_LABEL,
   approveAccount,
+  createStaff,
   listAccountHistory,
   listAccounts,
   replaceRoles,
@@ -17,6 +20,7 @@ import {
   type AccountRow,
   type AccountStatus,
   type Role,
+  type StaffKind,
 } from '../../api/accounts'
 import type { Mockup } from './types'
 import './matrix.css'
@@ -136,13 +140,37 @@ function localDateTime(iso: string | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+/** 등록 폼 초기값. 저장 후 되돌릴 때도 쓴다 */
+const EMPTY_FORM = {
+  kind: 'EMPLOYEE' as StaffKind,
+  academyId: '',
+  loginId: '',
+  name: '',
+  password: '',
+  role: 'STAFF' as Role,
+  phone: '',
+  email: '',
+  deptName: '',
+  positionName: '',
+}
+
 function Content() {
   const { academies } = useAcademy()
+  const { principal } = useAuth()
   const [tab, setTab] = useState('users')
   const [masked, setMasked] = useState(true)
   const [branch, setBranch] = useState('')
   const [busy, setBusy] = useState<number | null>(null)
   const [actionMsg, setActionMsg] = useState<string | null>(null)
+  const [openNew, setOpenNew] = useState(false)
+  const [form, setForm] = useState(EMPTY_FORM)
+  const [saving, setSaving] = useState(false)
+  const [formErr, setFormErr] = useState<string | null>(null)
+
+  /** 본사 계정이 만들면 바로 쓸 수 있고, 지점 계정이 만들면 승인 대기로 걸린다 */
+  const isHq = principal?.allAcademy === true
+  /** 자기 권한 위를 만들지 못하게 막는다 — 서버는 이걸 안 막는다(200) */
+  const assignableRoles = isHq ? ROLE_KEYS : ROLE_KEYS.filter((r) => r !== 'SUPER_ADMIN')
 
   // ★ useMemo 필수 — 매 렌더 새 객체면 무한 요청이 된다.
   //   지점을 안 고르면 파라미터를 빼서 전 지점을 받는다(이 엔드포인트는 400이 아니다)
@@ -190,6 +218,51 @@ function Content() {
       setActionMsg(err instanceof ApiError ? err.message : '역할 변경에 실패했습니다.')
     } finally {
       setBusy(null)
+    }
+  }
+
+  function setF<K extends keyof typeof EMPTY_FORM>(k: K, v: (typeof EMPTY_FORM)[K]) {
+    setForm((f) => ({ ...f, [k]: v }))
+  }
+
+  async function submitNew(e: FormEvent) {
+    e.preventDefault()
+    setFormErr(null)
+
+    const academyId = Number(form.academyId)
+    if (!academyId) return setFormErr('지점을 고르세요.')
+    if (!form.loginId.trim()) return setFormErr('로그인 아이디를 입력하세요.')
+    if (!form.name.trim()) return setFormErr('이름을 입력하세요.')
+    if (form.password.length < 8) return setFormErr('비밀번호는 8자 이상으로 정하세요.')
+
+    setSaving(true)
+    try {
+      await createStaff(form.kind, {
+        academyId,
+        loginId: form.loginId.trim(),
+        name: form.name.trim(),
+        password: form.password,
+        roles: [form.role],
+        phone: form.phone.trim() || undefined,
+        email: form.email.trim() || undefined,
+        // 선생님 경로는 이 둘을 안 받는다 — 보내면 무시되지만 보내지 않는다
+        deptName: form.kind === 'EMPLOYEE' ? form.deptName.trim() || undefined : undefined,
+        positionName: form.kind === 'EMPLOYEE' ? form.positionName.trim() || undefined : undefined,
+      })
+      setActionMsg(
+        isHq
+          ? `${form.loginId} 계정을 만들었습니다. 바로 로그인할 수 있습니다.`
+          : `${form.loginId} 계정을 만들었습니다. 본사 승인 후에 로그인할 수 있습니다.`,
+      )
+      setForm(EMPTY_FORM)
+      setOpenNew(false)
+      // 응답이 accountId·loginId 를 안 준다. 목록을 다시 불러야 새 계정이 보인다
+      list.reload()
+    } catch (err) {
+      // 아이디 중복은 저장해 봐야 안다 — 서버 메시지를 그대로 보여준다
+      setFormErr(err instanceof ApiError ? err.message : '계정을 만들지 못했습니다.')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -414,6 +487,175 @@ function Content() {
 
       {actionMsg && <div className="note-box">{actionMsg}</div>}
 
+      {openNew && (
+        <form className="card-sec" onSubmit={submitNew}>
+          <div className="card-sec-h">
+            <div className="t">
+              <span className="ico">
+                <Icon name="user-plus" size={15} />
+              </span>
+              계정 등록
+            </div>
+          </div>
+          <div className="card-sec-b">
+            {/* 저장 전에 반드시 읽어야 하는 것 두 가지 — 둘 다 되돌릴 수 없다 */}
+            <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
+              <b>저장하면 이름·부서·직급·연락처를 고칠 수 없습니다.</b> 고치는 경로가 없어,
+              잘못 넣으면 탈퇴 처리하고 새로 만들어야 합니다. 나중에 바꿀 수 있는 것은 권한뿐입니다.
+              {!isHq && (
+                <>
+                  <br />
+                  만든 계정은 <b>본사 승인 뒤에 로그인</b>할 수 있습니다.
+                </>
+              )}
+            </div>
+
+            <div className="frow">
+              <label className="req">구분</label>
+              <select
+                className="sel"
+                value={form.kind}
+                onChange={(e) => setF('kind', e.target.value as StaffKind)}
+              >
+                <option value="EMPLOYEE">직원 (부서·직급을 함께 넣습니다)</option>
+                <option value="TEACHER">선생님</option>
+              </select>
+            </div>
+
+            <div className="frow">
+              <label className="req">지점</label>
+              <select className="sel" value={form.academyId} onChange={(e) => setF('academyId', e.target.value)}>
+                <option value="">지점 선택</option>
+                {academies.map((a) => (
+                  <option key={a.id} value={String(a.id)}>
+                    {a.acadNm}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="frow">
+              <label className="req">이름</label>
+              <div className="two">
+                <input
+                  className="inp"
+                  placeholder="홍길동"
+                  value={form.name}
+                  onChange={(e) => setF('name', e.target.value)}
+                  maxLength={20}
+                />
+                <select className="sel" value={form.role} onChange={(e) => setF('role', e.target.value as Role)}>
+                  {assignableRoles.map((r) => (
+                    <option key={r} value={r}>
+                      {ROLE_LABEL[r]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="frow">
+              <label className="req">로그인 아이디</label>
+              <div className="two">
+                <input
+                  className="inp"
+                  placeholder="영문·숫자"
+                  value={form.loginId}
+                  onChange={(e) => setF('loginId', e.target.value)}
+                  maxLength={30}
+                  autoComplete="off"
+                />
+                {/* 중복 확인 경로가 없다. 저장을 눌러야 알 수 있어 미리 알려둔다 */}
+                <div className="link-box" style={{ alignItems: 'center' }}>
+                  <div>이미 쓰는 아이디인지는 저장할 때 알려드립니다</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="frow">
+              <label className="req">비밀번호</label>
+              <div className="two">
+                <input
+                  className="inp"
+                  type="password"
+                  placeholder="8자 이상"
+                  value={form.password}
+                  onChange={(e) => setF('password', e.target.value)}
+                  maxLength={64}
+                  autoComplete="new-password"
+                />
+                <div className="link-box" style={{ alignItems: 'center' }}>
+                  <div>
+                    첫 로그인 때 바꾸도록 강제하는 기능이 아직 없습니다.{' '}
+                    <b>본인에게 직접 바꾸도록 안내해 주세요.</b>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="frow">
+              <label>연락처</label>
+              <div className="two">
+                <input
+                  className="inp"
+                  placeholder="010-0000-0000"
+                  value={form.phone}
+                  onChange={(e) => setF('phone', e.target.value)}
+                  maxLength={20}
+                />
+                <input
+                  className="inp"
+                  placeholder="이메일"
+                  value={form.email}
+                  onChange={(e) => setF('email', e.target.value)}
+                  maxLength={100}
+                />
+              </div>
+            </div>
+
+            {form.kind === 'EMPLOYEE' && (
+              <div className="frow">
+                <label>부서 · 직급</label>
+                <div className="two">
+                  <input
+                    className="inp"
+                    placeholder="운영팀"
+                    value={form.deptName}
+                    onChange={(e) => setF('deptName', e.target.value)}
+                    maxLength={30}
+                  />
+                  <input
+                    className="inp"
+                    placeholder="팀장"
+                    value={form.positionName}
+                    onChange={(e) => setF('positionName', e.target.value)}
+                    maxLength={30}
+                  />
+                </div>
+              </div>
+            )}
+
+            {formErr && (
+              <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+                {formErr}
+              </div>
+            )}
+
+            <div className="frow">
+              <label />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn pri" type="submit" disabled={saving}>
+                  {saving ? '저장 중…' : '등록'}
+                </button>
+                <button className="btn" type="button" onClick={() => setOpenNew(false)} disabled={saving}>
+                  취소
+                </button>
+              </div>
+            </div>
+          </div>
+        </form>
+      )}
+
       <div className="card-sec">
         <Tabs
           items={[
@@ -454,10 +696,16 @@ function Content() {
                   </select>
                   <MaskToggle masked={masked} onChange={setMasked} />
                   <ExcelButton filename="사용자_목록" columns={columns} rows={rows} masked={masked} />
-                  {/* 계정만 따로 만들 수는 없다 — /staff/teachers·/staff/employees 가
-                      사람과 계정을 함께 만든다. 그 등록 폼은 이 화면에 없다 */}
-                  <button className="btn pri" disabled title="직원·선생님 등록 화면에서 사람과 계정을 함께 만듭니다">
-                    <Icon name="user-plus" size={14} /> 계정 등록
+                  <button
+                    className="btn pri"
+                    onClick={() => {
+                      setFormErr(null)
+                      // 지점을 골라놓고 열었으면 그 지점을 기본값으로 둔다
+                      setForm((f) => ({ ...f, academyId: branch || f.academyId }))
+                      setOpenNew((v) => !v)
+                    }}
+                  >
+                    <Icon name="user-plus" size={14} /> {openNew ? '등록 닫기' : '계정 등록'}
                   </button>
                 </>
               }

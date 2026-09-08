@@ -136,3 +136,53 @@ export function issueTemporaryPassword(accountId: number): Promise<{ temporaryPa
     { method: 'POST' },
   )
 }
+
+/* ── 계정 생성 ──────────────────────────────────────────────────────────────
+ *
+ * ★ 사람과 계정을 **한 번에** 만든다. 계정만 따로 만드는 경로는 없다.
+ *   그래서 신규 접수 등록(POST → PATCH)과 달리 부분 성공이 없다 — 되거나 안 되거나다.
+ *
+ * ★ 경로가 둘이고 **필드가 다르다.** 직원만 부서·직급을 받는다.
+ *
+ * ★ **만든 뒤에는 고칠 수 없다.** PUT·PATCH·DELETE /staff/employees/{id} 가 전부 404다.
+ *   이름·부서·직급·연락처는 저장하는 순간 고정된다. 바꿀 수 있는 것은 역할(replaceRoles)과
+ *   상태(approve·withdraw)뿐이라, 오타가 나면 탈퇴 처리하고 새로 만드는 수밖에 없다.
+ *   화면이 저장 전에 그 사실을 알려야 한다 — 탈퇴 계정이 목록에 계속 쌓인다.
+ *
+ * ★ **응답이 계정 정보를 안 준다.** 만들어졌는데도 accountId·loginId 는 null, roles 는 []
+ *   로 온다. 저장 후에는 목록을 다시 불러야 한다 — 응답으로 행을 그리면 빈 줄이 생긴다.
+ *
+ * ★ 아이디 중복은 **저장해 봐야 안다.** 사전 확인 경로가 없어 '중복확인' 버튼을 못 만든다.
+ *   저장 실패 메시지를 아이디 칸 옆에 그대로 띄운다.
+ */
+export type StaffKind = 'EMPLOYEE' | 'TEACHER'
+
+export interface CreateStaff {
+  academyId: number
+  loginId: string
+  name: string
+  password: string
+  roles: Role[]
+  phone?: string
+  email?: string
+  /** 직원만. 선생님 경로는 이 둘을 받지 않는다 */
+  deptName?: string
+  positionName?: string
+}
+
+/**
+ * 직원·선생님 등록.
+ *
+ * ★ 만든 계정이 **바로 쓸 수 있는지가 만든 사람에 따라 갈린다.**
+ *   본사(SUPER_ADMIN)가 만들면 `ACTIVE` 라 즉시 로그인되고,
+ *   지점 관리자가 만들면 `PENDING` 이라 승인 전까지 "가입 승인 대기 중입니다" 로 막힌다.
+ *   지점 담당자에게 이 말을 안 해주면 계정을 만들어 주고 "왜 로그인이 안 되냐" 를 듣는다.
+ *
+ * ★ 다른 지점 `academyId` 는 서버가 `OTHER_BRANCH_ACCESS_DENIED` 로 막는다.
+ *   다만 **역할은 안 막는다** — 지점 관리자가 `SUPER_ADMIN` 을 요청하는 것이 200 이다.
+ *   승인 단계에서 걸러지긴 하나, 화면에서 자기 권한 위를 못 고르게 하는 편이 안전하다.
+ */
+export function createStaff(kind: StaffKind, body: CreateStaff): Promise<void> {
+  const path = kind === 'TEACHER' ? 'teachers' : 'employees'
+  return request<void>(`/api/v1/admin/staff/${path}`, { method: 'POST', body })
+}
