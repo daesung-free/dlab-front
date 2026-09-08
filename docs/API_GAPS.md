@@ -1532,9 +1532,23 @@ PUT /app-config/ANDROID/maintenance {"maintenance":true,"message":"점검 중"} 
 개정은 `POST` 로 새 버전을 등록하는 것이다. 화면의 '새 버전 배포'는 본문 입력이
 필요해 별도 화면이 있어야 한다. 지금은 비활성화했다.
 
-## 17-7. 사용자 관리 — **쓰기는 있는데 읽기가 없다** ★ (F-4.10-2)
+## 17-7. ✅ 해결됨 — 사용자 관리, 읽는 경로가 생겼다 (F-4.10-2)
 
-전에는 "계정·권한 API가 아예 없다"였는데 지금은 절반이 생겼다. **그런데 방향이 반대다.**
+`GET /staff/accounts` 신설. `accountId`·`roles`·`status`·`lastLoginAt` 이 다 온다.
+
+```
+GET /staff/accounts?academyId=8
+→ 200 [{"accountId":2,"loginId":"branch","accountType":"EMPLOYEE","status":"ACTIVE",
+        "roles":["BRANCH_ADMIN"],"name":"분당관리자","deptName":"운영팀",
+        "positionName":"팀장","academyId":8,"academyName":"분당",
+        "locked":false,"mustChangePassword":false,"lastLoginAt":"2026-09-07T04:02:54Z"}, …]
+```
+
+역할 변경(`PUT .../roles`)의 대상 `accountId` 를 여기서 얻는다. 승인·탈퇴·이력 경로도 함께 열렸다.
+
+<details><summary>아래는 해결 전 기록</summary>
+
+
 
 | 있는 것 | 없는 것 |
 |---|---|
@@ -1542,6 +1556,8 @@ PUT /app-config/ANDROID/maintenance {"maintenance":true,"message":"점검 중"} 
 | `POST /app-accounts/{accountId}/temporary-password` | `StaffResponse` 에 `accountId` |
 | `POST /app-accounts/{accountId}/unlock` | `StaffResponse` 에 `roles` |
 | `GET /staff/employees`·`/teachers` (인적사항) | 계정 ID · 상태 · 최근 로그인 |
+
+</details>
 
 실측:
 
@@ -1613,11 +1629,13 @@ PUT /tuition/months {"academyId":8,"month":"2026-02","teachingDays":27}
 달력을 **상한으로만** 확인하는 설계가 맞다 — 교습일수는 달력 일수가 아니다.
 화면이 규칙을 추측해 자동 산출하지 않게 주석에 적었다.
 
-## 18-3. 환불 기준이 없다 (F-4.10-5)
+## 18-3. ✅ 해결됨 — 환불 기준 (F-4.10-5)
 
 목업 '환불 기준' 탭(개강 전 100% · 1/3 경과 전 2/3 …)에 대응하는 경로가 없다.
 학원법 시행령 기준이라 값 자체는 정해져 있는데 저장할 곳이 없다.
-화면에는 "저장되지 않습니다 — 시행령 내용을 적어 둔 것"이라고 밝혔다.
+`GET /billing-standards/refund-rules` 신설. **서버가 학원법 반환기준을 값으로 들고 있다** —
+시드와 무관하게 계정을 가리지 않고 나온다. `note` 에 "할인을 받았으면 환불액이 음수가 될 수
+있다" 같은 주의까지 들어 있어 그대로 화면에 쓴다.
 
 ## 18-4. 기초 마스터에 코드·비고·사용여부가 없다 (F-4.10-1)
 
@@ -1643,13 +1661,15 @@ PUT /tuition/months {"academyId":8,"month":"2026-02","teachingDays":27}
 | 반 classes | ✅ | (반 배정 화면) | | |
 | 상벌점 항목 | ✅ | (상벌점 화면) | | |
 
-**학과계열만 수정·삭제가 없다.** 오타를 고칠 수 없어 지우고 다시 넣지도 못한다.
+~~**학과계열만 수정·삭제가 없다.**~~ ✅ `PUT`·`DELETE /masters/tracks/{id}` 와
+`PATCH .../active` 가 열렸다. 셋 다 실호출 200 확인.
 
-> 요청: `PUT`·`DELETE /masters/tracks/{id}`.
+~~**강의실·장학은 목록 자체가 없다.**~~ ✅ `GET /masters/rooms`,
+`GET /masters/scholarship-masters`(+`/selectable`) 신설. 종류 목록을 주는 경로가 생겨
+화면이 선택지를 만들 수 있다.
 
-**강의실·장학은 목록 자체가 없다.** 장학은 `GET /masters/scholarships?enrollmentId=`
-라 학생별로만 나온다 — 종류 목록을 주는 경로가 없어 화면이 선택지를 만들 수 없다.
-강의실은 시간표 편성(16-1·CONNECT_PLAN)과 함께 신설되어야 한다.
+> ⚠️ **셋 다 시드가 0건이다** — `rooms`·`scholarship-masters`·`billing-standards` 모두
+> `data: []`. 경로가 열린 것과 화면에 값이 보이는 것은 다르다. **데모 전에 채워야 한다.**
 
 ## 18-6. (확인만) 전년도 복사가 표별 건수를 돌려준다
 
@@ -1718,10 +1738,13 @@ LectureCreate.lectureType : ["LECTURE", "BRIEFING"]
 > 2번이면 기본 정원·특강비도 함께 담을 수 있다. **우선순위 중간** —
 > 지금도 개설·운영은 되고, 분류가 안 될 뿐이다.
 
-## 19-2. 특강 코드가 없다
+## 19-2. 특강 코드 — 필드는 있고 값이 없다 (정정)
 
-목업의 `LEC-2606-01`·`BRF-2607-01` 같은 값이 응답에 없다. 운영 중 이름이 바뀌어도
-참조가 안 깨지게 하는 값이다. `<Unfilled/>` 로 뒀다. 기초 마스터 코드(18-4)와 같은 건이다.
+처음에 "응답에 없다"고 적었는데 **틀렸다.** `LectureDetail` 에 `code` 가 있고 응답에도 온다.
+다만 시드 4건이 전부 `null` 이라 화면에서 비어 보였던 것이다. 목업의 `LEC-2606-01` 형식으로
+채번하는 규칙이 있는지는 아직 모른다.
+
+> 요청: 채번 규칙 확인. 등록 시 서버가 매기는지, 화면이 입력받는지.
 
 ## 19-3. 특강 삭제가 없다
 
@@ -1755,3 +1778,25 @@ POST /lectures {"academyId":8,"year":2026,"lectureType":"LECTURE","name":"…"}
 정원·기간·비용·담당은 `PATCH` 로 따로 채운다. **회차는 또 따로 추가한다** —
 회차 없는 특강은 출석부를 못 만들고 신청도 받을 수 없다(F-4.7 주석).
 그래서 이 화면의 등록 버튼 옆에 "정원·기간·비용·회차는 특강 관리에서 채우세요"를 적었다.
+
+
+---
+
+# 20부. 특강 담당 강사 — 필드명을 바꾸면 조용히 깨진다 ★ (2026-09-07 오후)
+
+특강 목록의 '담당'이 전부 **'미지정'** 으로 보인다. 필드명이 틀린 것으로 오해하기 쉬운데
+**시드 4건의 `teacherName` 이 전부 `null`** 이기 때문이다.
+
+```
+GET /lectures?academyId=8&year=2026
+→ 필드: applyFrom applyTo capacity code confirmedCount description endDate fee id
+        lectureType name startDate status teacherId teacherName visible waitlistedCount
+→ 4건 모두 teacherId=null, teacherName=null
+```
+
+`/v3/api-docs` 의 `LectureDetail` 도 같다. **`instructorName` 이라는 이름은 응답에도
+스펙에도 없다.** 한 번 그 이름으로 바꿨다가 되돌렸는데, 인터페이스까지 같이 바꾸면
+`tsc` 가 통과해서 **화면만 영구히 '미지정'** 이 된다 — 담당을 넣어도 안 보인다.
+
+> 요청: 시드 특강에 담당 강사를 넣어 달라. 지금은 이 컬럼이 비어 있는지 깨진 건지
+> 화면만 봐서는 구분할 수 없다.
