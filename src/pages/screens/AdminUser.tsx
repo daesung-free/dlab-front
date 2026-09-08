@@ -1,17 +1,18 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { DataTable, ExcelButton, MaskToggle, useServerData, type Column } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { useAcademy } from '../../auth/AcademyContext'
-import { useAuth } from '../../auth/AuthContext'
 import { ApiError } from '../../api/client'
 import {
   ACCOUNT_STATUS_LABEL,
   ROLES as ROLE_KEYS,
   ROLE_LABEL,
   approveAccount,
+  checkLoginId,
   createStaff,
+  listGrantableRoles,
   listAccountHistory,
   listAccounts,
   replaceRoles,
@@ -20,6 +21,8 @@ import {
   type AccountRow,
   type AccountStatus,
   type Role,
+  type RoleOption,
+  type StaffCreated,
   type StaffKind,
 } from '../../api/accounts'
 import type { Mockup } from './types'
@@ -146,7 +149,6 @@ const EMPTY_FORM = {
   academyId: '',
   loginId: '',
   name: '',
-  password: '',
   role: 'STAFF' as Role,
   phone: '',
   email: '',
@@ -156,7 +158,6 @@ const EMPTY_FORM = {
 
 function Content() {
   const { academies } = useAcademy()
-  const { principal } = useAuth()
   const [tab, setTab] = useState('users')
   const [masked, setMasked] = useState(true)
   const [branch, setBranch] = useState('')
@@ -167,10 +168,19 @@ function Content() {
   const [saving, setSaving] = useState(false)
   const [formErr, setFormErr] = useState<string | null>(null)
 
-  /** 본사 계정이 만들면 바로 쓸 수 있고, 지점 계정이 만들면 승인 대기로 걸린다 */
-  const isHq = principal?.allAcademy === true
-  /** 자기 권한 위를 만들지 못하게 막는다 — 서버는 이걸 안 막는다(200) */
-  const assignableRoles = isHq ? ROLE_KEYS : ROLE_KEYS.filter((r) => r !== 'SUPER_ADMIN')
+  /** 저장 직후 한 번만 보여주는 것. 임시 비밀번호는 여기서 놓치면 재발급해야 한다 */
+  const [created, setCreated] = useState<StaffCreated | null>(null)
+  const [idCheck, setIdCheck] = useState<{ loginId: string; available: boolean } | null>(null)
+  /** 부여 가능한 역할은 **서버가 판정한다** — 화면이 "내가 본사인가"로 계산하지 않는다 */
+  const [roleOptions, setRoleOptions] = useState<RoleOption[]>([])
+
+  useEffect(() => {
+    // 폼을 열 때만 부른다. 목록만 보는 사람에게는 필요 없다
+    if (!openNew || roleOptions.length > 0) return
+    listGrantableRoles().then(setRoleOptions).catch(() => setRoleOptions([]))
+  }, [openNew, roleOptions.length])
+
+  const assignableRoles = roleOptions.filter((r) => r.grantable)
 
   // ★ useMemo 필수 — 매 렌더 새 객체면 무한 요청이 된다.
   //   지점을 안 고르면 파라미터를 빼서 전 지점을 받는다(이 엔드포인트는 400이 아니다)
@@ -233,36 +243,43 @@ function Content() {
     if (!academyId) return setFormErr('지점을 고르세요.')
     if (!form.loginId.trim()) return setFormErr('로그인 아이디를 입력하세요.')
     if (!form.name.trim()) return setFormErr('이름을 입력하세요.')
-    if (form.password.length < 8) return setFormErr('비밀번호는 8자 이상으로 정하세요.')
 
     setSaving(true)
     try {
-      await createStaff(form.kind, {
+      const res = await createStaff(form.kind, {
         academyId,
         loginId: form.loginId.trim(),
         name: form.name.trim(),
-        password: form.password,
         roles: [form.role],
         phone: form.phone.trim() || undefined,
         email: form.email.trim() || undefined,
-        // 선생님 경로는 이 둘을 안 받는다 — 보내면 무시되지만 보내지 않는다
+        // 선생님 경로는 이 둘을 안 받는다 — 보내지 않는다
         deptName: form.kind === 'EMPLOYEE' ? form.deptName.trim() || undefined : undefined,
         positionName: form.kind === 'EMPLOYEE' ? form.positionName.trim() || undefined : undefined,
       })
-      setActionMsg(
-        isHq
-          ? `${form.loginId} 계정을 만들었습니다. 바로 로그인할 수 있습니다.`
-          : `${form.loginId} 계정을 만들었습니다. 본사 승인 후에 로그인할 수 있습니다.`,
-      )
+      // 임시 비밀번호는 이 응답에만 있다. 폼을 닫아도 안 사라지게 따로 들고 있는다
+      setCreated(res)
       setForm(EMPTY_FORM)
+      setIdCheck(null)
       setOpenNew(false)
-      // 응답이 accountId·loginId 를 안 준다. 목록을 다시 불러야 새 계정이 보인다
       list.reload()
     } catch (err) {
-      // 아이디 중복은 저장해 봐야 안다 — 서버 메시지를 그대로 보여준다
+      // 미리 확인했어도 저장 시점에 남이 먼저 가져갔을 수 있다 — 여기 처리를 없애면 안 된다
       setFormErr(err instanceof ApiError ? err.message : '계정을 만들지 못했습니다.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function verifyLoginId() {
+    const loginId = form.loginId.trim()
+    if (!loginId) return
+    setIdCheck(null)
+    try {
+      setIdCheck(await checkLoginId(loginId))
+    } catch {
+      // 확인이 안 되면 그냥 저장해 보면 된다 — 저장 쪽이 최종 판정이다
+      setIdCheck(null)
     }
   }
 
@@ -487,6 +504,59 @@ function Content() {
 
       {actionMsg && <div className="note-box">{actionMsg}</div>}
 
+      {/* ★ 임시 비밀번호는 이 응답에만 실린다. 서버가 저장하지 않아 닫으면 다시 못 본다 —
+             그래서 목록 위에 크게 남겨두고, 닫는 것을 사용자가 직접 누르게 한다 */}
+      {created && (
+        <div className="card-sec" style={{ borderColor: 'var(--mint-d)' }}>
+          <div className="card-sec-h">
+            <div className="t">
+              <span className="ico">
+                <Icon name="shield-check" size={15} />
+              </span>
+              {created.loginId} 계정을 만들었습니다
+            </div>
+          </div>
+          <div className="card-sec-b">
+            <div className="frow">
+              <label>임시 비밀번호</label>
+              <div className="two">
+                <input
+                  className="inp"
+                  readOnly
+                  value={created.temporaryPassword}
+                  style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 800, fontSize: 15 }}
+                  onFocus={(e) => e.currentTarget.select()}
+                />
+                <div className="link-box" style={{ alignItems: 'center' }}>
+                  <div>
+                    <b>이 화면을 닫으면 다시 볼 수 없습니다.</b> 지금 본인에게 전달하세요.
+                    놓쳤다면 목록에서 <b>임시 비밀번호 재발급</b>을 쓰면 됩니다.
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="note-box" style={created.pendingApproval ? { borderColor: 'var(--amber)' } : undefined}>
+              {created.pendingApproval ? (
+                <>
+                  아직 <b>로그인할 수 없습니다.</b> 본사에서 승인해야 열립니다 — 그때까지는
+                  로그인하면 "가입 승인 대기 중입니다"가 뜹니다.
+                </>
+              ) : (
+                <>
+                  바로 로그인할 수 있습니다. <b>첫 로그인에서 비밀번호를 바꾸게 됩니다.</b>
+                </>
+              )}
+            </div>
+            <div className="frow">
+              <label />
+              <button className="btn" type="button" onClick={() => setCreated(null)}>
+                확인했습니다 (닫기)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {openNew && (
         <form className="card-sec" onSubmit={submitNew}>
           <div className="card-sec-h">
@@ -498,16 +568,10 @@ function Content() {
             </div>
           </div>
           <div className="card-sec-b">
-            {/* 저장 전에 반드시 읽어야 하는 것 두 가지 — 둘 다 되돌릴 수 없다 */}
-            <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
-              <b>저장하면 이름·부서·직급·연락처를 고칠 수 없습니다.</b> 고치는 경로가 없어,
-              잘못 넣으면 탈퇴 처리하고 새로 만들어야 합니다. 나중에 바꿀 수 있는 것은 권한뿐입니다.
-              {!isHq && (
-                <>
-                  <br />
-                  만든 계정은 <b>본사 승인 뒤에 로그인</b>할 수 있습니다.
-                </>
-              )}
+            {/* 로그인 아이디만 못 고친다 — 계정 식별자라 바꾸면 감사 로그의 주체가 끊긴다 */}
+            <div className="note-box">
+              비밀번호는 <b>저장할 때 자동으로 만들어집니다.</b> 등록이 끝나면 화면에 한 번 보여드리니
+              그때 본인에게 전달하세요. <b>로그인 아이디는 나중에 바꿀 수 없습니다.</b>
             </div>
 
             <div className="frow">
@@ -546,8 +610,8 @@ function Content() {
                 />
                 <select className="sel" value={form.role} onChange={(e) => setF('role', e.target.value as Role)}>
                   {assignableRoles.map((r) => (
-                    <option key={r} value={r}>
-                      {ROLE_LABEL[r]}
+                    <option key={r.code} value={r.code}>
+                      {r.displayName}
                     </option>
                   ))}
                 </select>
@@ -561,34 +625,22 @@ function Content() {
                   className="inp"
                   placeholder="영문·숫자"
                   value={form.loginId}
-                  onChange={(e) => setF('loginId', e.target.value)}
+                  onChange={(e) => {
+                    setF('loginId', e.target.value)
+                    setIdCheck(null) // 고치는 순간 이전 확인 결과는 무효다
+                  }}
                   maxLength={30}
                   autoComplete="off"
                 />
-                {/* 중복 확인 경로가 없다. 저장을 눌러야 알 수 있어 미리 알려둔다 */}
-                <div className="link-box" style={{ alignItems: 'center' }}>
-                  <div>이미 쓰는 아이디인지는 저장할 때 알려드립니다</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="frow">
-              <label className="req">비밀번호</label>
-              <div className="two">
-                <input
-                  className="inp"
-                  type="password"
-                  placeholder="8자 이상"
-                  value={form.password}
-                  onChange={(e) => setF('password', e.target.value)}
-                  maxLength={64}
-                  autoComplete="new-password"
-                />
-                <div className="link-box" style={{ alignItems: 'center' }}>
-                  <div>
-                    첫 로그인 때 바꾸도록 강제하는 기능이 아직 없습니다.{' '}
-                    <b>본인에게 직접 바꾸도록 안내해 주세요.</b>
-                  </div>
+                <div className="link-box" style={{ alignItems: 'center', gap: 8 }}>
+                  <button className="btn" type="button" onClick={verifyLoginId} disabled={!form.loginId.trim()}>
+                    중복 확인
+                  </button>
+                  {idCheck && idCheck.loginId === form.loginId.trim() && (
+                    <div style={{ color: idCheck.available ? 'var(--mint-d)' : 'var(--red)', fontWeight: 700 }}>
+                      {idCheck.available ? '쓸 수 있습니다' : '이미 쓰는 아이디입니다'}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

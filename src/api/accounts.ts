@@ -144,16 +144,8 @@ export function issueTemporaryPassword(accountId: number): Promise<{ temporaryPa
  *
  * ★ 경로가 둘이고 **필드가 다르다.** 직원만 부서·직급을 받는다.
  *
- * ★ **만든 뒤에는 고칠 수 없다.** PUT·PATCH·DELETE /staff/employees/{id} 가 전부 404다.
- *   이름·부서·직급·연락처는 저장하는 순간 고정된다. 바꿀 수 있는 것은 역할(replaceRoles)과
- *   상태(approve·withdraw)뿐이라, 오타가 나면 탈퇴 처리하고 새로 만드는 수밖에 없다.
- *   화면이 저장 전에 그 사실을 알려야 한다 — 탈퇴 계정이 목록에 계속 쌓인다.
- *
- * ★ **응답이 계정 정보를 안 준다.** 만들어졌는데도 accountId·loginId 는 null, roles 는 []
- *   로 온다. 저장 후에는 목록을 다시 불러야 한다 — 응답으로 행을 그리면 빈 줄이 생긴다.
- *
- * ★ 아이디 중복은 **저장해 봐야 안다.** 사전 확인 경로가 없어 '중복확인' 버튼을 못 만든다.
- *   저장 실패 메시지를 아이디 칸 옆에 그대로 띄운다.
+ * ★ **비밀번호를 화면이 정하지 않는다.** 서버가 임시 비밀번호를 만들어
+ *   응답에 **딱 한 번** 실어 보내고 저장하지 않는다. 놓치면 재발급해야 한다.
  */
 export type StaffKind = 'EMPLOYEE' | 'TEACHER'
 
@@ -161,7 +153,6 @@ export interface CreateStaff {
   academyId: number
   loginId: string
   name: string
-  password: string
   roles: Role[]
   phone?: string
   email?: string
@@ -170,19 +161,91 @@ export interface CreateStaff {
   positionName?: string
 }
 
+/** 만들어진 사람 쪽 정보. 목록의 행과 같은 모양이다 */
+export interface CreatedStaffPerson {
+  kind: StaffKind
+  id: number
+  academyId: number
+  name: string
+  deptName: string | null
+  positionName: string | null
+  phone: string | null
+  email: string | null
+  accountId: number | null
+  loginId: string | null
+  roles: Role[]
+  locked: boolean
+  mustChangePassword: boolean
+}
+
+export interface StaffCreated {
+  /** ★ 사람 정보는 여기 한 겹 안에 있다 — `data.name` 이 아니라 `data.staff.name` 이다 */
+  staff: CreatedStaffPerson
+  accountId: number
+  loginId: string
+  roles: Role[]
+  status: AccountStatus
+  /**
+   * ★ **여기서 딱 한 번만 나온다.** 서버가 저장하지 않으므로 화면이 놓치면
+   *   재발급(issueTemporaryPassword)해야 한다. 받는 사람은 첫 로그인에서 반드시 바꾸게 된다.
+   */
+  temporaryPassword: string
+  /**
+   * ★ `true` 면 본사 승인 전까지 로그인이 막힌다. 지점이 만든 계정이 여기 해당한다.
+   *   **서버가 판정해서 내려준다** — 화면이 "내가 본사인가"로 추측하지 않는다.
+   */
+  pendingApproval: boolean
+}
+
 /**
  * 직원·선생님 등록.
  *
- * ★ 만든 계정이 **바로 쓸 수 있는지가 만든 사람에 따라 갈린다.**
- *   본사(SUPER_ADMIN)가 만들면 `ACTIVE` 라 즉시 로그인되고,
- *   지점 관리자가 만들면 `PENDING` 이라 승인 전까지 "가입 승인 대기 중입니다" 로 막힌다.
- *   지점 담당자에게 이 말을 안 해주면 계정을 만들어 주고 "왜 로그인이 안 되냐" 를 듣는다.
- *
  * ★ 다른 지점 `academyId` 는 서버가 `OTHER_BRANCH_ACCESS_DENIED` 로 막는다.
- *   다만 **역할은 안 막는다** — 지점 관리자가 `SUPER_ADMIN` 을 요청하는 것이 200 이다.
- *   승인 단계에서 걸러지긴 하나, 화면에서 자기 권한 위를 못 고르게 하는 편이 안전하다.
+ *   부여할 수 있는 역할은 `listGrantableRoles()` 가 알려준다 — 화면이 계산하지 않는다.
  */
-export function createStaff(kind: StaffKind, body: CreateStaff): Promise<void> {
+export function createStaff(kind: StaffKind, body: CreateStaff): Promise<StaffCreated> {
   const path = kind === 'TEACHER' ? 'teachers' : 'employees'
-  return request<void>(`/api/v1/admin/staff/${path}`, { method: 'POST', body })
+  return request<StaffCreated>(`/api/v1/admin/staff/${path}`, { method: 'POST', body })
+}
+
+/**
+ * 로그인 아이디를 쓸 수 있는지 미리 본다.
+ *
+ * ★ 여기서 `true` 였어도 저장 시점에 남이 먼저 가져갔을 수 있다. **저장의 400 처리를
+ *   없애면 안 된다** — 이건 미리 알려주는 것이지 보장이 아니다.
+ */
+export function checkLoginId(loginId: string): Promise<{ loginId: string; available: boolean }> {
+  return request<{ loginId: string; available: boolean }>('/api/v1/admin/staff/login-id-available', {
+    query: { loginId },
+  })
+}
+
+export interface RoleOption {
+  code: Role
+  displayName: string
+  description: string
+  /** ★ 내 권한으로 **줄 수 있는가.** 지점 관리자에게 SUPER_ADMIN 은 false 로 온다 */
+  grantable: boolean
+}
+
+/** 부여 가능한 역할. 호출한 계정 기준으로 서버가 판정해서 내려준다 */
+export function listGrantableRoles(): Promise<RoleOption[]> {
+  return request<RoleOption[]>('/api/v1/admin/staff/roles')
+}
+
+/**
+ * 인적사항 수정. 보낸 필드만 바뀐다.
+ *
+ * ★ **로그인 아이디는 못 바꾼다.** 계정 식별자라 바꾸면 감사 로그의 주체가 끊긴다.
+ */
+export function updateStaff(
+  kind: StaffKind,
+  personId: number,
+  changes: { name?: string; phone?: string; email?: string; deptName?: string; positionName?: string },
+): Promise<CreatedStaffPerson> {
+  const path = kind === 'TEACHER' ? 'teachers' : 'employees'
+  return request<CreatedStaffPerson>(`/api/v1/admin/staff/${path}/${personId}`, {
+    method: 'PATCH',
+    body: changes,
+  })
 }

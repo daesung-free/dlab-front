@@ -1815,7 +1815,7 @@ POST /staff/employees
 → 200
 ```
 
-## 21-1. 만든 뒤 인적사항을 고칠 수 없다 ★
+## 21-1. ✅ 해결됨 — 인적사항 수정
 
 ```
 PUT    /staff/employees/3 → 404
@@ -1831,7 +1831,7 @@ DELETE /staff/employees/3 → 404
 
 > 요청: `PUT`·`PATCH /staff/employees/{id}`·`/staff/teachers/{id}`.
 
-## 21-2. 아이디 중복 확인 경로가 없다
+## 21-2. ✅ 해결됨 — 아이디 중복 확인
 
 사전 확인 API가 없어 목업의 '중복확인' 버튼을 만들 수 없다. 저장을 눌러야 알 수 있다.
 
@@ -1844,7 +1844,7 @@ POST /staff/employees  (같은 loginId 재사용)
 
 > 요청: `GET /staff/accounts/login-id-available?loginId=` 같은 확인 경로.
 
-## 21-3. 첫 로그인 비밀번호 변경을 강제할 수 없다 ★
+## 21-3. ✅ 해결됨 — 비밀번호를 서버가 만든다
 
 생성 요청에 `mustChangePassword` 가 없다. 만들어진 계정은 `mustChangePassword: false` 다.
 **관리자가 정해준 비밀번호를 그 사람이 계속 쓰고, 관리자는 그 비밀번호를 안다.**
@@ -1858,7 +1858,7 @@ POST /app-accounts/3/temporary-password → 200 {"temporaryPassword":"wPLSw2fuW5
 
 > 요청: 생성 요청에 `mustChangePassword` 를 받거나, 관리자가 만든 계정은 기본 `true` 로.
 
-## 21-4. 응답이 만들어진 계정을 안 돌려준다
+## 21-4. ✅ 해결됨 — 생성 응답
 
 ```
 → 200 {"kind":"EMPLOYEE","id":3,"academyId":8,"name":"QA테스트",
@@ -1881,7 +1881,7 @@ null, `roles` 가 빈 배열**로 온다. 응답으로 행을 그리면 빈 줄�
 지점 담당자에게 이걸 안 알리면 계정을 만들어 주고 "왜 로그인이 안 되냐" 를 듣게 되므로
 폼에 적어 뒀다.
 
-## 21-6. 지점 관리자가 `SUPER_ADMIN` 을 요청할 수 있다 ⚠
+## 21-6. ✅ 해결됨 — 부여 가능한 역할을 서버가 알려준다
 
 지점(`branch`) 계정으로 전 지점 권한을 달아 만드는 것이 **막히지 않는다.**
 
@@ -1896,3 +1896,55 @@ POST /staff/employees  (branch 토큰)
 
 > 요청: 서버에서도 **자기 역할보다 높은 역할의 생성·요청을 거부**해 달라.
 > 그리고 승인 목록에 **요청된 역할**이 보여야 한다.
+
+---
+
+## 21-7. 위 6건 반영 (2026-09-08 저녁)
+
+백엔드가 하루 만에 전부 냈다. **계약이 바뀐 곳이 두 군데라 프론트를 같이 고쳤다.**
+
+### 요청에서 `password` 가 빠졌다 ★
+
+화면이 비밀번호를 정하지 않는다. 서버가 임시 비밀번호를 만들어 **응답에 딱 한 번** 실어
+보내고 저장하지 않는다. 만들어진 계정은 `mustChangePassword: true` 라 첫 로그인에서 바꾸게 된다.
+
+→ 폼에서 비밀번호 칸을 뺐다. 대신 저장 직후 임시 비밀번호를 **목록 위에 크게 띄우고
+사용자가 직접 닫게** 했다. 자동으로 사라지면 놓친 사람이 재발급을 돌려야 한다.
+
+### 응답이 한 겹 깊어졌다 ★
+
+```
+POST /staff/employees
+→ 200 {"staff":{"kind":"EMPLOYEE","id":6,"name":"확인용A","accountId":6,
+                "loginId":"zz_qa_a","mustChangePassword":true, …},
+       "accountId":6,"loginId":"zz_qa_a","roles":["STAFF"],"status":"ACTIVE",
+       "temporaryPassword":"PPiv5j5Qej","pendingApproval":false}
+```
+
+**`data.name` 이 아니라 `data.staff.name` 이다.** 사람 정보가 `staff` 안으로 들어갔다.
+
+`pendingApproval` 은 **서버가 판정해서 내려준다.** 전에는 화면이 "내가 본사 계정인가"로
+추측했는데 그럴 필요가 없어졌다. 실호출로 확인:
+
+| 만든 계정 | `status` | `pendingApproval` |
+|---|---|---|
+| `admin` | `ACTIVE` | `false` |
+| `branch` | `PENDING` | `true` |
+
+### 새로 쓰는 경로 셋
+
+```
+GET   /staff/login-id-available?loginId=admin → {"loginId":"admin","available":false}
+GET   /staff/roles                            → code·displayName·description·grantable
+PATCH /staff/employees/{id} · /staff/teachers/{id}
+```
+
+`/staff/roles` 의 `grantable` 이 계정에 따라 갈린다 — `branch` 로 부르면 `SUPER_ADMIN` 만
+`false` 다. **화면이 역할을 걸러내던 코드를 지웠다.** 서버 판정을 그대로 쓴다.
+
+> ⚠️ 중복 확인은 **보장이 아니다.** `available: true` 였어도 저장 시점에 남이 먼저 가져갈 수
+> 있어서, 저장의 400 처리를 그대로 남겨 뒀다.
+
+> ⚠️ `PATCH` 에 **`loginId` 가 없다.** 계정 식별자라 바꾸면 감사 로그의 주체가 끊긴다 —
+> 폼에도 "로그인 아이디는 나중에 바꿀 수 없습니다"로 적었다. 인적사항 수정 UI 자체는
+> 아직 화면에 없다(목록에서 고치는 흐름을 붙일지는 미정).
