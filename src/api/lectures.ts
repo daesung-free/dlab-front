@@ -54,9 +54,14 @@ export interface Lecture {
   /** 특강 코드 */
   code: string | null
   /**
-   * 담당 강사. **교사 마스터 참조다** — 이름 문자열이 아니다.
-   * 저장할 때는 teacherId 를 보내고(LectureUpdate), 표시는 teacherName 을 쓴다.
-   * 그래서 등록·수정 폼은 입력칸이 아니라 교사 드롭다운(/staff/teachers)이어야 한다.
+   * 담당 강사. **시드 특강 4건은 전부 `null` 이라 화면이 '미지정'으로 채워진다** —
+   * 필드가 안 오는 게 아니라 값이 안 들어가 있는 것이다. `instructorName` 으로
+   * 고쳤다가 되돌린 적이 있는데, 서버 응답·`/v3/api-docs` 의 `LectureDetail`
+   * 어디에도 그런 이름은 없다. 필드명을 바꾸면 컴파일은 통과하고 화면만 영구히
+   * '미지정'이 된다 — 담당을 넣어도 안 보이게 된다.
+   *
+   * ★ **교사 마스터 참조다.** 저장은 teacherId 로 하므로(LectureUpdate) 등록·수정 폼은
+   *   입력칸이 아니라 교사 드롭다운(/staff/teachers)이어야 한다.
    */
   teacherId: number | null
   teacherName: string | null

@@ -53,7 +53,8 @@ const LECTURE_COLUMNS: Column<ApiLecture>[] = [
     value: (r) => LECTURE_TYPE_LABEL[r.lectureType] ?? r.lectureType,
     render: (r) => <span className="mk supplement">{LECTURE_TYPE_LABEL[r.lectureType] ?? r.lectureType}</span>,
   },
-  // 담당은 교사 마스터 참조다(teacherId + teacherName). 저장은 teacherId 로 한다
+  // 전부 '미지정'으로 보이는 것은 시드에 담당이 안 들어가 있어서다. 필드명 문제가 아니다
+  // (`instructorName` 은 서버 응답에도 스펙에도 없는 이름이다 — lectures.ts 주석 참고)
   { key: 'teacherName', header: '담당', width: '86px', align: 'center', value: (r) => r.teacherName ?? '미지정' },
   {
     key: 'confirmedCount',
