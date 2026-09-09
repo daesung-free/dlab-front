@@ -1,13 +1,27 @@
 import { NavLink } from 'react-router-dom'
 import { NAV, navItemCount } from '../data/nav'
-import { ME } from '../data/mockDashboard'
+import { useAuth } from '../auth/AuthContext'
+import { ROLE_LABEL, type Role } from '../api/accounts'
+import { getLoginId } from '../api/tokens'
 import { Icon } from '../components/Icon'
 import { useAcademy } from '../auth/AcademyContext'
-import { useAuth } from '../auth/AuthContext'
 
 export function TopNav() {
   const { academies, academyId, setAcademyId, selectable } = useAcademy()
-  const { logout } = useAuth()
+  const { principal, logout } = useAuth()
+
+  /* 로그인한 계정을 그대로 보여준다.
+     ★ 예전에는 mockDashboard 의 ME('강민서 / 분당 지점관리자')를 그렸다. 누구로 로그인하든
+       같은 이름이 떠서, 배포본을 열어본 사람이 "전부 목업"이라고 판단했다. 실제로 화면들은
+       연동돼 있었다 — **헤더 하나가 앱 전체의 인상을 정한다.**
+     ★ 서버가 이름을 안 주므로 로그인 아이디를 쓴다. JWT 에 들어 있는 것은
+       accountId·roles·allAcademy·academyId 뿐이다(api/auth.ts decodePrincipal). */
+  const roles = (principal?.roles ?? []) as Role[]
+  const roleLabel = roles.length > 0 ? ROLE_LABEL[roles[0]] ?? roles[0] : '\u2014'
+  const scopeLabel = principal?.allAcademy
+    ? '전 지점'
+    : (academies.find((a) => a.id === principal?.academyId)?.acadNm ?? '')
+  const who = getLoginId() ?? `#${principal?.accountId ?? '?'}`
 
   return (
     <header className="topnav">
@@ -64,10 +78,10 @@ export function TopNav() {
           <Icon name="bell" size={17} />
           <span className="badge" />
         </button>
-        <div className="av">{ME.initial}</div>
+        <div className="av">{who.slice(0, 1).toUpperCase()}</div>
         <div className="wt">
-          <b>{ME.name}</b>
-          <span>{ME.role}</span>
+          <b>{who}</b>
+          <span>{scopeLabel ? `${scopeLabel} · ${roleLabel}` : roleLabel}</span>
         </div>
         <button className="icon-btn" title="로그아웃" onClick={() => void logout()}>
           <Icon name="log-out" size={17} />

@@ -46,3 +46,22 @@ export function clearTokens(): void {
 window.addEventListener('storage', (e) => {
   if (e.key === ACCESS_KEY || e.key === REFRESH_KEY) notify()
 })
+
+/* ── 로그인 아이디 ────────────────────────────────────────────────────────────
+ *
+ * ★ 서버가 표시할 이름을 어디서도 주지 않는다. JWT 클레임은 sub·rol·all·aid·pcr 뿐이고
+ *   로그인 응답도 mustChangePassword 하나다. 그래서 **입력받은 아이디를 보관해 헤더에 쓴다.**
+ *
+ * ★ 이름을 쓰려면 GET /staff/accounts 를 따로 불러야 하는데, 권한이 낮은 계정
+ *   (TEACHER·STAFF)은 그 목록을 못 볼 수 있어 헤더가 통째로 비는 위험이 있다.
+ *   아이디는 항상 있다.
+ */
+const LOGIN_ID_KEY = 'dlab.loginId'
+
+export function setLoginId(loginId: string): void {
+  localStorage.setItem(LOGIN_ID_KEY, loginId)
+}
+
+export function getLoginId(): string | null {
+  return localStorage.getItem(LOGIN_ID_KEY)
+}
