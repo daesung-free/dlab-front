@@ -74,3 +74,29 @@ export function decodePrincipal(token: string | null): Principal | null {
     return null
   }
 }
+
+/**
+ * 로그인한 사람 — `GET /api/v1/admin/auth/me`
+ *
+ * ★ 이걸 부르기 전에는 헤더에 로그인 아이디를 그대로 띄웠다("안녕하세요, admin님").
+ *   이름을 주는 경로가 어디에도 없었기 때문이다 — JWT 클레임은 sub·rol·all·aid·pcr 뿐이고,
+ *   `GET /app/me` 는 "학생·학부모 계정만 이용할 수 있습니다"로 403,
+ *   `GET /staff/accounts` 는 **TEACHER·STAFF·READONLY 에 403**이라 자기 이름조차 못 읽었다.
+ *
+ * ★ **배포 서버에는 아직 없다(404).** 로컬 백엔드에만 들어와 있어서, 호출부는 실패를
+ *   정상 흐름으로 다뤄야 한다 — 실패하면 화면이 로그인 아이디로 되돌아간다.
+ */
+export interface Me {
+  accountId: number
+  loginId: string
+  name: string
+  accountType: string
+  roles: string[]
+  academyId: number | null
+  academyName: string | null
+  mustChangePassword: boolean
+}
+
+export function getMe(): Promise<Me> {
+  return request<Me>('/api/v1/admin/auth/me')
+}

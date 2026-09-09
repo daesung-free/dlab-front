@@ -8,7 +8,7 @@ import { useAcademy } from '../auth/AcademyContext'
 
 export function TopNav() {
   const { academies, academyId, setAcademyId, selectable } = useAcademy()
-  const { principal, logout } = useAuth()
+  const { principal, me, logout } = useAuth()
 
   /* 로그인한 계정을 그대로 보여준다.
      ★ 예전에는 mockDashboard 의 ME('강민서 / 분당 지점관리자')를 그렸다. 누구로 로그인하든
@@ -16,12 +16,14 @@ export function TopNav() {
        연동돼 있었다 — **헤더 하나가 앱 전체의 인상을 정한다.**
      ★ 서버가 이름을 안 주므로 로그인 아이디를 쓴다. JWT 에 들어 있는 것은
        accountId·roles·allAcademy·academyId 뿐이다(api/auth.ts decodePrincipal). */
-  const roles = (principal?.roles ?? []) as Role[]
+  const roles = (me?.roles ?? principal?.roles ?? []) as Role[]
   const roleLabel = roles.length > 0 ? ROLE_LABEL[roles[0]] ?? roles[0] : '\u2014'
   const scopeLabel = principal?.allAcademy
     ? '전 지점'
-    : (academies.find((a) => a.id === principal?.academyId)?.acadNm ?? '')
-  const who = getLoginId() ?? `#${principal?.accountId ?? '?'}`
+    : (me?.academyName ?? academies.find((a) => a.id === principal?.academyId)?.acadNm ?? '')
+  /* 이름 → 로그인 아이디 → 계정번호 순으로 물러선다.
+     배포 서버에 아직 /auth/me 가 없어서(404) 이름이 없는 구간이 실제로 있다. */
+  const who = me?.name ?? getLoginId() ?? `#${principal?.accountId ?? '?'}`
 
   return (
     <header className="topnav">
