@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AcademyProvider } from './auth/AcademyContext'
 import { AuthProvider, useAuth } from './auth/AuthContext'
 import { LoginPage } from './auth/LoginPage'
@@ -31,7 +31,15 @@ export default function App() {
  */
 function Gate() {
   const { signedIn } = useAuth()
-  if (!signedIn) return <LoginPage />
+  const { pathname } = useLocation()
+
+  if (!signedIn) {
+    /* ★ 로그인 화면을 **그 자리에 그리기만 하면** 주소가 그대로 남는다. 그러면
+     *   A 화면에서 로그아웃하고 다른 계정으로 들어왔을 때 그 A 화면이 다시 열린다.
+     *   앞사람이 보던 화면이 뒷사람에게 그대로 이어지는 셈이라, 권한이 다른 계정이면
+     *   보면 안 되는 화면부터 열린다. 주소를 먼저 되돌린다. */
+    return pathname === '/' ? <LoginPage /> : <Navigate to="/" replace />
+  }
 
   return (
     <Routes>
