@@ -1,0 +1,26 @@
+# AWS Amplify Hosting 빌드 설정
+#
+# ★ baseDirectory 가 dist 다 — Amplify 자동 감지는 build 로 잡는 경우가 있다(CRA 기준).
+#   그러면 "빌드는 성공했는데 배포된 사이트가 비어 있는" 상태가 된다.
+#
+# ★ 화면 주소가 전부 /s/<id> 라서 **SPA 리라이트가 없으면 새로고침이 전부 404** 다.
+#   빌드 설정으로는 안 되고 콘솔에서 넣어야 한다 — 아래 docs/DEPLOY.md 참고.
+#
+# ★ VITE_API_BASE_URL 은 Amplify 콘솔 환경변수로 넣는다. 여기 적지 않는다 —
+#   브라우저가 백엔드를 직접 호출하므로 이 값은 빌드 시점에 번들로 굳는다.
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - npm ci
+    build:
+      commands:
+        - npm run build
+  artifacts:
+    baseDirectory: dist
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - node_modules/**/*
