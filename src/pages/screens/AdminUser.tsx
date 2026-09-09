@@ -13,6 +13,7 @@ import {
   checkLoginId,
   createStaff,
   listGrantableRoles,
+  issueTemporaryPassword,
   listAccountHistory,
   listAccounts,
   replaceRoles,
@@ -170,6 +171,8 @@ function Content() {
 
   /** 저장 직후 한 번만 보여주는 것. 임시 비밀번호는 여기서 놓치면 재발급해야 한다 */
   const [created, setCreated] = useState<StaffCreated | null>(null)
+  /** 재발급한 임시 비밀번호. 한 번만 오는 값이라 사용자가 닫을 때까지 남긴다 */
+  const [reissued, setReissued] = useState<{ loginId: string; temporaryPassword: string } | null>(null)
   const [idCheck, setIdCheck] = useState<{ loginId: string; available: boolean } | null>(null)
   /** 부여 가능한 역할은 **서버가 판정한다** — 화면이 "내가 본사인가"로 계산하지 않는다 */
   const [roleOptions, setRoleOptions] = useState<RoleOption[]>([])
@@ -333,6 +336,28 @@ function Content() {
     }
   }
 
+  async function reissuePassword(row: AccountRow) {
+    /* ★ 평문이 응답에 **한 번만** 실리고 서버가 저장하지 않는다. 놓치면 또 발급해야 하므로
+     *   등록 직후와 같은 방식으로 화면에 남기고 사용자가 직접 닫게 한다. */
+    if (
+      !window.confirm(
+        `${row.loginId} 의 비밀번호를 새로 발급합니다.\n기존 비밀번호는 즉시 쓸 수 없게 됩니다.`,
+      )
+    )
+      return
+    setBusy(row.accountId)
+    setActionMsg(null)
+    try {
+      const res = await issueTemporaryPassword(row.accountId)
+      setReissued({ loginId: row.loginId, temporaryPassword: res.temporaryPassword })
+      list.reload()
+    } catch (err) {
+      setActionMsg(err instanceof ApiError ? err.message : '임시 비밀번호를 발급하지 못했습니다.')
+    } finally {
+      setBusy(null)
+    }
+  }
+
   async function unlock(row: AccountRow) {
     setBusy(row.accountId)
     setActionMsg(null)
@@ -443,6 +468,15 @@ function Content() {
             >
               권한
             </button>
+            <button
+              className="btn"
+              style={{ padding: '4px 9px', fontSize: 11.5 }}
+              disabled={busy === r.accountId || r.status === 'WITHDRAWN'}
+              title="새 임시 비밀번호를 발급합니다. 한 번만 보여집니다"
+              onClick={() => void reissuePassword(r)}
+            >
+              비밀번호
+            </button>
             {r.locked ? (
               <button
                 className="btn pri"
@@ -504,6 +538,52 @@ function Content() {
 
       {actionMsg && <div className="note-box">{actionMsg}</div>}
 
+      {/* 재발급분. 등록 직후와 같은 이유로 사용자가 닫을 때까지 남긴다 */}
+      {reissued && (
+        <div className="card-sec" style={{ borderColor: 'var(--amber)' }}>
+          <div className="card-sec-h">
+            <div className="t">
+              <span className="ico">
+                <Icon name="lock" size={15} />
+              </span>
+              {reissued.loginId} 의 임시 비밀번호를 새로 발급했습니다
+            </div>
+          </div>
+          <div className="card-sec-b">
+            <div className="frow">
+              <label>임시 비밀번호</label>
+              <div className="two">
+                <input
+                  className="inp"
+                  readOnly
+                  value={reissued.temporaryPassword}
+                  style={{
+                    fontFamily: 'ui-monospace, monospace',
+                    fontWeight: 800,
+                    fontSize: 15,
+                    letterSpacing: 0.5,
+                  }}
+                  onFocus={(e) => e.currentTarget.select()}
+                />
+                <div className="link-box" style={{ alignItems: 'center' }}>
+                  <div>
+                    <b>닫으면 다시 볼 수 없습니다.</b> 지금 본인에게 전달하세요.
+                    <br />
+                    기존 비밀번호는 더 이상 쓸 수 없습니다.
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="frow">
+              <label />
+              <button className="btn" type="button" onClick={() => setReissued(null)}>
+                확인했습니다 (닫기)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ★ 임시 비밀번호는 이 응답에만 실린다. 서버가 저장하지 않아 닫으면 다시 못 본다 —
              그래서 목록 위에 크게 남겨두고, 닫는 것을 사용자가 직접 누르게 한다 */}
       {created && (
@@ -535,7 +615,7 @@ function Content() {
                 <div className="link-box" style={{ alignItems: 'center' }}>
                   <div>
                     <b>닫으면 다시 볼 수 없습니다.</b> 지금 본인에게 전달하세요.
-                    놓쳤다면 목록에서 임시 비밀번호를 다시 발급하면 됩니다.
+                    놓쳤다면 목록의 <b>비밀번호</b> 버튼으로 다시 발급하면 됩니다.
                   </div>
                 </div>
               </div>
