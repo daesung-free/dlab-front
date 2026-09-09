@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import type { FormEvent } from 'react'
 import { DataTable, ExcelButton, MaskToggle, useServerData, type Column } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
@@ -9,6 +10,9 @@ import {
   ROLES as ROLE_KEYS,
   ROLE_LABEL,
   approveAccount,
+  checkLoginId,
+  createStaff,
+  listGrantableRoles,
   listAccountHistory,
   listAccounts,
   replaceRoles,
@@ -17,6 +21,9 @@ import {
   type AccountRow,
   type AccountStatus,
   type Role,
+  type RoleOption,
+  type StaffCreated,
+  type StaffKind,
 } from '../../api/accounts'
 import type { Mockup } from './types'
 import './matrix.css'
@@ -136,6 +143,19 @@ function localDateTime(iso: string | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+/** 등록 폼 초기값. 저장 후 되돌릴 때도 쓴다 */
+const EMPTY_FORM = {
+  kind: 'EMPLOYEE' as StaffKind,
+  academyId: '',
+  loginId: '',
+  name: '',
+  role: 'STAFF' as Role,
+  phone: '',
+  email: '',
+  deptName: '',
+  positionName: '',
+}
+
 function Content() {
   const { academies } = useAcademy()
   const [tab, setTab] = useState('users')
@@ -143,6 +163,24 @@ function Content() {
   const [branch, setBranch] = useState('')
   const [busy, setBusy] = useState<number | null>(null)
   const [actionMsg, setActionMsg] = useState<string | null>(null)
+  const [openNew, setOpenNew] = useState(false)
+  const [form, setForm] = useState(EMPTY_FORM)
+  const [saving, setSaving] = useState(false)
+  const [formErr, setFormErr] = useState<string | null>(null)
+
+  /** 저장 직후 한 번만 보여주는 것. 임시 비밀번호는 여기서 놓치면 재발급해야 한다 */
+  const [created, setCreated] = useState<StaffCreated | null>(null)
+  const [idCheck, setIdCheck] = useState<{ loginId: string; available: boolean } | null>(null)
+  /** 부여 가능한 역할은 **서버가 판정한다** — 화면이 "내가 본사인가"로 계산하지 않는다 */
+  const [roleOptions, setRoleOptions] = useState<RoleOption[]>([])
+
+  useEffect(() => {
+    // 폼을 열 때만 부른다. 목록만 보는 사람에게는 필요 없다
+    if (!openNew || roleOptions.length > 0) return
+    listGrantableRoles().then(setRoleOptions).catch(() => setRoleOptions([]))
+  }, [openNew, roleOptions.length])
+
+  const assignableRoles = roleOptions.filter((r) => r.grantable)
 
   // ★ useMemo 필수 — 매 렌더 새 객체면 무한 요청이 된다.
   //   지점을 안 고르면 파라미터를 빼서 전 지점을 받는다(이 엔드포인트는 400이 아니다)
@@ -190,6 +228,58 @@ function Content() {
       setActionMsg(err instanceof ApiError ? err.message : '역할 변경에 실패했습니다.')
     } finally {
       setBusy(null)
+    }
+  }
+
+  function setF<K extends keyof typeof EMPTY_FORM>(k: K, v: (typeof EMPTY_FORM)[K]) {
+    setForm((f) => ({ ...f, [k]: v }))
+  }
+
+  async function submitNew(e: FormEvent) {
+    e.preventDefault()
+    setFormErr(null)
+
+    const academyId = Number(form.academyId)
+    if (!academyId) return setFormErr('지점을 고르세요.')
+    if (!form.loginId.trim()) return setFormErr('로그인 아이디를 입력하세요.')
+    if (!form.name.trim()) return setFormErr('이름을 입력하세요.')
+
+    setSaving(true)
+    try {
+      const res = await createStaff(form.kind, {
+        academyId,
+        loginId: form.loginId.trim(),
+        name: form.name.trim(),
+        roles: [form.role],
+        phone: form.phone.trim() || undefined,
+        email: form.email.trim() || undefined,
+        // 선생님 경로는 이 둘을 안 받는다 — 보내지 않는다
+        deptName: form.kind === 'EMPLOYEE' ? form.deptName.trim() || undefined : undefined,
+        positionName: form.kind === 'EMPLOYEE' ? form.positionName.trim() || undefined : undefined,
+      })
+      // 임시 비밀번호는 이 응답에만 있다. 폼을 닫아도 안 사라지게 따로 들고 있는다
+      setCreated(res)
+      setForm(EMPTY_FORM)
+      setIdCheck(null)
+      setOpenNew(false)
+      list.reload()
+    } catch (err) {
+      // 미리 확인했어도 저장 시점에 남이 먼저 가져갔을 수 있다 — 여기 처리를 없애면 안 된다
+      setFormErr(err instanceof ApiError ? err.message : '계정을 만들지 못했습니다.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function verifyLoginId() {
+    const loginId = form.loginId.trim()
+    if (!loginId) return
+    setIdCheck(null)
+    try {
+      setIdCheck(await checkLoginId(loginId))
+    } catch {
+      // 확인이 안 되면 그냥 저장해 보면 된다 — 저장 쪽이 최종 판정이다
+      setIdCheck(null)
     }
   }
 
@@ -414,6 +504,226 @@ function Content() {
 
       {actionMsg && <div className="note-box">{actionMsg}</div>}
 
+      {/* ★ 임시 비밀번호는 이 응답에만 실린다. 서버가 저장하지 않아 닫으면 다시 못 본다 —
+             그래서 목록 위에 크게 남겨두고, 닫는 것을 사용자가 직접 누르게 한다 */}
+      {created && (
+        <div className="card-sec" style={{ borderColor: 'var(--mint-d)' }}>
+          <div className="card-sec-h">
+            <div className="t">
+              <span className="ico">
+                <Icon name="shield-check" size={15} />
+              </span>
+              {created.loginId} 계정을 만들었습니다
+            </div>
+          </div>
+          <div className="card-sec-b">
+            <div className="frow">
+              <label>임시 비밀번호</label>
+              <div className="two">
+                <input
+                  className="inp"
+                  readOnly
+                  value={created.temporaryPassword}
+                  style={{
+                    fontFamily: 'ui-monospace, monospace',
+                    fontWeight: 800,
+                    fontSize: 15,
+                    letterSpacing: 0.5,
+                  }}
+                  onFocus={(e) => e.currentTarget.select()}
+                />
+                <div className="link-box" style={{ alignItems: 'center' }}>
+                  <div>
+                    <b>닫으면 다시 볼 수 없습니다.</b> 지금 본인에게 전달하세요.
+                    놓쳤다면 목록에서 임시 비밀번호를 다시 발급하면 됩니다.
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="note-box" style={created.pendingApproval ? { borderColor: 'var(--amber)' } : undefined}>
+              {created.pendingApproval ? (
+                <>
+                  아직 <b>로그인할 수 없습니다.</b> 본사에서 승인해야 열립니다 — 그때까지는
+                  로그인하면 "가입 승인 대기 중입니다"가 뜹니다.
+                </>
+              ) : (
+                <>
+                  바로 로그인할 수 있습니다. <b>첫 로그인에서 비밀번호를 바꾸게 됩니다.</b>
+                </>
+              )}
+            </div>
+            <div className="frow">
+              <label />
+              <button className="btn" type="button" onClick={() => setCreated(null)}>
+                확인했습니다 (닫기)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {openNew && (
+        <form className="card-sec" onSubmit={submitNew}>
+          <div className="card-sec-h">
+            <div className="t">
+              <span className="ico">
+                <Icon name="user-plus" size={15} />
+              </span>
+              계정 등록
+            </div>
+          </div>
+          <div className="card-sec-b">
+            {/* 로그인 아이디만 못 고친다 — 계정 식별자라 바꾸면 감사 로그의 주체가 끊긴다 */}
+            <div className="note-box">
+              비밀번호는 <b>저장할 때 자동으로 만들어집니다.</b> 등록이 끝나면 화면에 한 번 보여드리니
+              그때 본인에게 전달하세요. <b>로그인 아이디는 나중에 바꿀 수 없습니다.</b>
+            </div>
+
+            <div className="frow">
+              <label className="req">구분</label>
+              <select
+                className="sel"
+                value={form.kind}
+                onChange={(e) => setF('kind', e.target.value as StaffKind)}
+              >
+                <option value="EMPLOYEE">직원 (부서·직급을 함께 넣습니다)</option>
+                <option value="TEACHER">선생님</option>
+              </select>
+            </div>
+
+            <div className="frow">
+              <label className="req">지점</label>
+              <select className="sel" value={form.academyId} onChange={(e) => setF('academyId', e.target.value)}>
+                <option value="">지점 선택</option>
+                {academies.map((a) => (
+                  <option key={a.id} value={String(a.id)}>
+                    {a.acadNm}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="frow">
+              <label className="req">이름</label>
+              <div className="two">
+                <input
+                  className="inp"
+                  placeholder="홍길동"
+                  value={form.name}
+                  onChange={(e) => setF('name', e.target.value)}
+                  maxLength={20}
+                />
+                <select className="sel" value={form.role} onChange={(e) => setF('role', e.target.value as Role)}>
+                  {assignableRoles.map((r) => (
+                    <option key={r.code} value={r.code}>
+                      {r.displayName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="frow">
+              <label className="req">로그인 아이디</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  className="inp"
+                  style={{ maxWidth: 220 }}
+                  placeholder="영문·숫자"
+                  value={form.loginId}
+                  onChange={(e) => {
+                    setF('loginId', e.target.value)
+                    setIdCheck(null) // 고치는 순간 이전 확인 결과는 무효다
+                  }}
+                  maxLength={30}
+                  autoComplete="off"
+                />
+                <button
+                  className="btn"
+                  type="button"
+                  style={{ flexShrink: 0 }}
+                  onClick={verifyLoginId}
+                  disabled={!form.loginId.trim()}
+                >
+                  중복 확인
+                </button>
+                {idCheck && idCheck.loginId === form.loginId.trim() && (
+                  <span
+                    style={{
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      color: idCheck.available ? 'var(--mint-d)' : 'var(--red)',
+                    }}
+                  >
+                    {idCheck.available ? '사용 가능한 아이디입니다' : '이미 사용 중인 아이디입니다'}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="frow">
+              <label>연락처</label>
+              <div className="two">
+                <input
+                  className="inp"
+                  placeholder="010-0000-0000"
+                  value={form.phone}
+                  onChange={(e) => setF('phone', e.target.value)}
+                  maxLength={20}
+                />
+                <input
+                  className="inp"
+                  placeholder="이메일"
+                  value={form.email}
+                  onChange={(e) => setF('email', e.target.value)}
+                  maxLength={100}
+                />
+              </div>
+            </div>
+
+            {form.kind === 'EMPLOYEE' && (
+              <div className="frow">
+                <label>부서 · 직급</label>
+                <div className="two">
+                  <input
+                    className="inp"
+                    placeholder="운영팀"
+                    value={form.deptName}
+                    onChange={(e) => setF('deptName', e.target.value)}
+                    maxLength={30}
+                  />
+                  <input
+                    className="inp"
+                    placeholder="팀장"
+                    value={form.positionName}
+                    onChange={(e) => setF('positionName', e.target.value)}
+                    maxLength={30}
+                  />
+                </div>
+              </div>
+            )}
+
+            {formErr && (
+              <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+                {formErr}
+              </div>
+            )}
+
+            <div className="frow">
+              <label />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn pri" type="submit" disabled={saving}>
+                  {saving ? '저장 중…' : '등록'}
+                </button>
+                <button className="btn" type="button" onClick={() => setOpenNew(false)} disabled={saving}>
+                  취소
+                </button>
+              </div>
+            </div>
+          </div>
+        </form>
+      )}
+
       <div className="card-sec">
         <Tabs
           items={[
@@ -454,10 +764,16 @@ function Content() {
                   </select>
                   <MaskToggle masked={masked} onChange={setMasked} />
                   <ExcelButton filename="사용자_목록" columns={columns} rows={rows} masked={masked} />
-                  {/* 계정만 따로 만들 수는 없다 — /staff/teachers·/staff/employees 가
-                      사람과 계정을 함께 만든다. 그 등록 폼은 이 화면에 없다 */}
-                  <button className="btn pri" disabled title="직원·선생님 등록 화면에서 사람과 계정을 함께 만듭니다">
-                    <Icon name="user-plus" size={14} /> 계정 등록
+                  <button
+                    className="btn pri"
+                    onClick={() => {
+                      setFormErr(null)
+                      // 지점을 골라놓고 열었으면 그 지점을 기본값으로 둔다
+                      setForm((f) => ({ ...f, academyId: branch || f.academyId }))
+                      setOpenNew((v) => !v)
+                    }}
+                  >
+                    <Icon name="user-plus" size={14} /> {openNew ? '등록 닫기' : '계정 등록'}
                   </button>
                 </>
               }

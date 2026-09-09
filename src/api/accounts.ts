@@ -136,3 +136,116 @@ export function issueTemporaryPassword(accountId: number): Promise<{ temporaryPa
     { method: 'POST' },
   )
 }
+
+/* ── 계정 생성 ──────────────────────────────────────────────────────────────
+ *
+ * ★ 사람과 계정을 **한 번에** 만든다. 계정만 따로 만드는 경로는 없다.
+ *   그래서 신규 접수 등록(POST → PATCH)과 달리 부분 성공이 없다 — 되거나 안 되거나다.
+ *
+ * ★ 경로가 둘이고 **필드가 다르다.** 직원만 부서·직급을 받는다.
+ *
+ * ★ **비밀번호를 화면이 정하지 않는다.** 서버가 임시 비밀번호를 만들어
+ *   응답에 **딱 한 번** 실어 보내고 저장하지 않는다. 놓치면 재발급해야 한다.
+ */
+export type StaffKind = 'EMPLOYEE' | 'TEACHER'
+
+export interface CreateStaff {
+  academyId: number
+  loginId: string
+  name: string
+  roles: Role[]
+  phone?: string
+  email?: string
+  /** 직원만. 선생님 경로는 이 둘을 받지 않는다 */
+  deptName?: string
+  positionName?: string
+}
+
+/** 만들어진 사람 쪽 정보. 목록의 행과 같은 모양이다 */
+export interface CreatedStaffPerson {
+  kind: StaffKind
+  id: number
+  academyId: number
+  name: string
+  deptName: string | null
+  positionName: string | null
+  phone: string | null
+  email: string | null
+  accountId: number | null
+  loginId: string | null
+  roles: Role[]
+  locked: boolean
+  mustChangePassword: boolean
+}
+
+export interface StaffCreated {
+  /** ★ 사람 정보는 여기 한 겹 안에 있다 — `data.name` 이 아니라 `data.staff.name` 이다 */
+  staff: CreatedStaffPerson
+  accountId: number
+  loginId: string
+  roles: Role[]
+  status: AccountStatus
+  /**
+   * ★ **여기서 딱 한 번만 나온다.** 서버가 저장하지 않으므로 화면이 놓치면
+   *   재발급(issueTemporaryPassword)해야 한다. 받는 사람은 첫 로그인에서 반드시 바꾸게 된다.
+   */
+  temporaryPassword: string
+  /**
+   * ★ `true` 면 본사 승인 전까지 로그인이 막힌다. 지점이 만든 계정이 여기 해당한다.
+   *   **서버가 판정해서 내려준다** — 화면이 "내가 본사인가"로 추측하지 않는다.
+   */
+  pendingApproval: boolean
+}
+
+/**
+ * 직원·선생님 등록.
+ *
+ * ★ 다른 지점 `academyId` 는 서버가 `OTHER_BRANCH_ACCESS_DENIED` 로 막는다.
+ *   부여할 수 있는 역할은 `listGrantableRoles()` 가 알려준다 — 화면이 계산하지 않는다.
+ */
+export function createStaff(kind: StaffKind, body: CreateStaff): Promise<StaffCreated> {
+  const path = kind === 'TEACHER' ? 'teachers' : 'employees'
+  return request<StaffCreated>(`/api/v1/admin/staff/${path}`, { method: 'POST', body })
+}
+
+/**
+ * 로그인 아이디를 쓸 수 있는지 미리 본다.
+ *
+ * ★ 여기서 `true` 였어도 저장 시점에 남이 먼저 가져갔을 수 있다. **저장의 400 처리를
+ *   없애면 안 된다** — 이건 미리 알려주는 것이지 보장이 아니다.
+ */
+export function checkLoginId(loginId: string): Promise<{ loginId: string; available: boolean }> {
+  return request<{ loginId: string; available: boolean }>('/api/v1/admin/staff/login-id-available', {
+    query: { loginId },
+  })
+}
+
+export interface RoleOption {
+  code: Role
+  displayName: string
+  description: string
+  /** ★ 내 권한으로 **줄 수 있는가.** 지점 관리자에게 SUPER_ADMIN 은 false 로 온다 */
+  grantable: boolean
+}
+
+/** 부여 가능한 역할. 호출한 계정 기준으로 서버가 판정해서 내려준다 */
+export function listGrantableRoles(): Promise<RoleOption[]> {
+  return request<RoleOption[]>('/api/v1/admin/staff/roles')
+}
+
+/**
+ * 인적사항 수정. 보낸 필드만 바뀐다.
+ *
+ * ★ **로그인 아이디는 못 바꾼다.** 계정 식별자라 바꾸면 감사 로그의 주체가 끊긴다.
+ */
+export function updateStaff(
+  kind: StaffKind,
+  personId: number,
+  changes: { name?: string; phone?: string; email?: string; deptName?: string; positionName?: string },
+): Promise<CreatedStaffPerson> {
+  const path = kind === 'TEACHER' ? 'teachers' : 'employees'
+  return request<CreatedStaffPerson>(`/api/v1/admin/staff/${path}/${personId}`, {
+    method: 'PATCH',
+    body: changes,
+  })
+}
