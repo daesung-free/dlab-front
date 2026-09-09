@@ -4,6 +4,7 @@ import { useAcademy } from '../auth/AcademyContext'
 import { useServerData } from '../components/common'
 import { getStatistics } from '../api/statistics'
 import { getLoginId } from '../api/tokens'
+import { useAuth } from '../auth/AuthContext'
 import { Unfilled } from '../components/common'
 import { Icon } from '../components/Icon'
 import {
@@ -76,6 +77,7 @@ const DATE_LABEL = new Intl.DateTimeFormat('ko-KR', {
 
 export function Dashboard() {
   const { academyId, academies } = useAcademy()
+  const { me } = useAuth()
 
   /* ★ useMemo 필수 — 매 렌더 새 객체면 무한 요청이 된다.
      from·to 를 같은 날로 줘서 **오늘 하루** 집계를 받는다(statistics.ts 주석). */
@@ -103,7 +105,7 @@ export function Dashboard() {
   const arrived = present + late
 
   const branchName = academies.find((x) => x.id === academyId)?.acadNm ?? ''
-  const who = getLoginId() ?? ''
+  const who = me?.name ?? getLoginId() ?? ''
 
   const maxWeekly = Math.max(...WEEKLY.map((w) => w.arrived + w.late + w.absent))
   /* 순공 랭킹은 집계가 준다. 이름·분만 오고 반은 없다 */
