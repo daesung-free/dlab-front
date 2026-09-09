@@ -1,5 +1,5 @@
 import { request } from './client'
-import { clearTokens, setTokens } from './tokens'
+import { clearTokens, setLoginId, setTokens } from './tokens'
 
 export interface AuthResponse {
   accessToken: string
@@ -29,6 +29,8 @@ export async function login(loginId: string, password: string): Promise<AuthResp
     anonymous: true,
   })
   setTokens(res.accessToken, res.refreshToken)
+  // 헤더에 쓸 표시용. 서버가 이름을 안 준다(tokens.ts 주석)
+  setLoginId(loginId)
   return res
 }
 
