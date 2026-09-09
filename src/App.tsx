@@ -6,8 +6,7 @@ import { AppLayout } from './layout/AppLayout'
 import { Dashboard } from './pages/Dashboard'
 import { GroupPage } from './pages/GroupPage'
 import { ScreenPage } from './pages/ScreenPage'
-import { SpecHub } from './pages/SpecHub'
-import { SpecPage } from './pages/SpecPage'
+import { InternalSpecRoutes } from './pages/internal/SpecRoutes'
 
 export default function App() {
   return (
@@ -42,9 +41,11 @@ function Gate() {
         <Route path="g/:groupId" element={<GroupPage />} />
         <Route path="s/:screenId" element={<ScreenPage />} />
 
-        {/* 내부용 — 요구사항 명세 뷰. 제품 내비게이션에는 노출하지 않는다 */}
-        <Route path="spec" element={<SpecHub />} />
-        <Route path="spec/:screenId" element={<SpecPage />} />
+        {/* 내부용 — 요구사항 명세 뷰. **개발 빌드에만 들어간다.**
+            오픈이슈 42건에 거래처 협상 상태·계약 종료 시점이 그대로 있어(README 경고)
+            프로덕션 번들에 실리면 로그인 게이트와 무관하게 노출된다 —
+            번들은 로그인 전에 이미 브라우저로 내려간다. */}
+        {InternalSpecRoutes()}
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
