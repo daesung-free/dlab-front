@@ -6,6 +6,7 @@
   "description": "DSA/D.Lab 통합관리프로그램 재구축 — 프론트엔드",
   "scripts": {
     "dev": "vite",
+    "check:bundle": "node scripts/check-bundle.mjs",
     "build": "tsc -b && vite build",
     "build:offline": "tsc -b && vite build --mode offline --outDir dist-offline",
     "preview": "vite preview",

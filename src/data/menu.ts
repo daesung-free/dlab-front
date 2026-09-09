@@ -62,7 +62,13 @@ export interface Screen {
   feOrder?: number
   /** 기능 개요 (F열) */
   summary: string
-  /** 기존 정적 HTML 시안 */
+  /**
+   * 기존 정적 HTML 시안의 **레포 내 경로**. 출처 기록용이고 화면이 링크로 쓰지 않는다.
+   *
+   * ★ 예전에는 `public/design/` 에 있어서 `/design/*.html` 로 **배포본에 그대로 실렸다.**
+   *   거기에 오픈이슈 코드(D-3 등)와 거래처 이름이 들어 있어 레포 안으로 옮겼다.
+   *   다시 `public/` 으로 옮기지 말 것 — public 은 통째로 배포된다.
+   */
   refHtml?: string
 }
 
@@ -150,7 +156,7 @@ export const SCREENS: Screen[] = [
     feOrder: 2,
     summary:
       'D.Lab 사이트(디멤버) 입학예약자 → 대기자 자동 등록, 순번 처리 알림 자동 발송, 대기자→원생 원클릭 전환 + 앱 초대 알림',
-    refHtml: '/design/02_admin_ipsi.html',
+    refHtml: 'design/02_admin_ipsi.html',
   },
 
   /* ─────────────── 4.3 출결 관리 ─────────────── */
@@ -205,7 +211,7 @@ export const SCREENS: Screen[] = [
     feOrder: 4,
     summary:
       '더프리미엄모의고사 API 자동 조회·저장, 성적표 PDF→D.Lab 사이트 업로드, 가채점 설문, 상세 엑셀 업로드 → 상담 리포트 결합',
-    refHtml: '/design/03_admin_seongjeok.html',
+    refHtml: 'design/03_admin_seongjeok.html',
   },
   {
     id: 'survey',
@@ -371,7 +377,7 @@ export const SCREENS: Screen[] = [
     feOrder: 6,
     summary:
       '담임/최근상담일 헤더 + 과목별 학습계획 이행률(별점)·상담 항목 태그·담임 스티커·코멘트. Weekly ABC test·수강진도 결합 노출',
-    refHtml: '/design/01_admin_sangdam.html',
+    refHtml: 'design/01_admin_sangdam.html',
   },
   {
     id: 'approval',

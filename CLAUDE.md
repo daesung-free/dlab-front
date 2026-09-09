@@ -37,6 +37,21 @@ DSA/D.Lab 통합관리 **웹 관리자 프론트엔드**. 백엔드(`dlab-api`, 
 | `docs/API_GAPS.md` · `LOCAL_DEV.md` · `CONNECT_PLAN.md` | **수기 작성.** 여기에 적는다 |
 | `notes/` | **깃에 안 올라간다**(.gitignore). 데모 체크리스트·시연 대본처럼 레포에 남기면 안 되는 것 |
 
+## 2-1. 내부 문서를 프로덕션 번들에 넣지 않는다 ★
+
+오픈이슈 42건(`src/data/issues.ts`)에 **거래처 협상 상태·계약 종료 시점·담당자**가 그대로
+들어 있다. 이게 번들에 실린 채 배포 직전까지 간 적이 있다(2026-09-09).
+
+**로그인 게이트는 소용이 없다. 번들은 로그인 전에 브라우저로 내려간다.** 화면에 안 그려도
+모듈이 남아 있으면 개발자도구에서 읽힌다.
+
+- 내부 메모는 `src/data/menu.internal.ts` 와 `issues.ts`·`assumptions.ts` 에 둔다.
+  **제품 화면(`src/pages/screens/*`)에서 import 하지 않는다** — 하나라도 하면 다시 실린다
+- `/spec` 은 개발 빌드에만 있다. `vite.config.ts` 의 alias 가 프로덕션에서 stub 으로 바꿔친다.
+  `import.meta.env.DEV` 분기만으로는 안 된다(CSS import 가 부작용이라 Rollup 이 못 지운다)
+- **`public/` 에 참고 자료를 두지 않는다.** 통째로 배포된다 — 시안 HTML을 그렇게 흘렸다
+- 확인: `npm run check:bundle` (CI 가 PR마다 돌린다)
+
 생성물에 적으면 다음 `npm run docs`에서 날아간다.
 
 ## 3. API 연동 규약
