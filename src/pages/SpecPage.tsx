@@ -1,6 +1,7 @@
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { KIND_DESC, KIND_LABEL, PHASE, findGroup, findScreen } from '../data/menu'
 import { resolveIssue } from '../data/issues'
+import { internalOf } from '../data/menu.internal'
 import { assumptionsOf } from '../data/assumptions'
 import { Icon } from '../components/Icon'
 import { PageHead } from '../components/PageHead'
@@ -17,6 +18,10 @@ export function SpecPage() {
 
   const group = findGroup(s.groupId)!
   const assumptions = assumptionsOf(s.id)
+  // 내부 메모는 menu.ts 가 아니라 여기 있다 — 프로덕션 번들에 안 실리게 떼어냈다
+  const raw = internalOf(s.id)
+  // 화면마다 있는 항목이 달라 기본값을 채워 둔다 — 없는 것은 빈 목록으로 그린다
+  const meta = { logic: [], tables: [], issues: [], ...raw }
 
   return (
     <>
@@ -41,7 +46,7 @@ export function SpecPage() {
 
       <div className="detail-grid">
         <div className="detail-body">
-          {s.logic.length > 0 && (
+          {meta.logic.length > 0 && (
             <div className="dsec">
               <h3>
                 <span className="ico">
@@ -50,7 +55,7 @@ export function SpecPage() {
                 핵심 요구사항 · 로직
               </h3>
               <ul className="sc-feats" style={{ marginBottom: 0 }}>
-                {s.logic.map((l) => (
+                {meta.logic.map((l) => (
                   <li key={l}>{l}</li>
                 ))}
               </ul>
@@ -94,11 +99,11 @@ export function SpecPage() {
               DSA 화면 실사 근거
             </h3>
             <div className="sc-dsa" style={{ marginBottom: 0 }}>
-              {s.dsaNote}
+              {meta.dsaNote}
             </div>
           </div>
 
-          {s.note0723 && (
+          {meta.note0723 && (
             <div className="dsec">
               <h3>
                 <span className="ico">
@@ -107,7 +112,7 @@ export function SpecPage() {
                 0723 미팅 반영분
               </h3>
               <div className="sc-0723" style={{ marginBottom: 0 }}>
-                {s.note0723}
+                {meta.note0723}
               </div>
             </div>
           )}
@@ -149,7 +154,7 @@ export function SpecPage() {
             </div>
           </div>
 
-          {s.tables.length > 0 && (
+          {meta.tables.length > 0 && (
             <div className="dsec">
               <h3>
                 <span className="ico">
@@ -158,7 +163,7 @@ export function SpecPage() {
                 주요 데이터 항목
               </h3>
               <div className="sc-tables" style={{ marginBottom: 0 }}>
-                {s.tables.map((t) => (
+                {meta.tables.map((t) => (
                   <code key={t}>{t}</code>
                 ))}
               </div>
@@ -170,13 +175,13 @@ export function SpecPage() {
               <span className="ico">
                 <Icon name="alert-circle" size={15} />
               </span>
-              관련 오픈이슈 {s.issues.length}건
+              관련 오픈이슈 {meta.issues.length}건
             </h3>
-            {s.issues.length === 0 ? (
+            {meta.issues.length === 0 ? (
               <div style={{ fontSize: 12, color: 'var(--muted)' }}>연결된 미해결 이슈 없음</div>
             ) : (
               <div className="kv">
-                {s.issues.map((ref) => {
+                {meta.issues.map((ref) => {
                   const issue = resolveIssue(ref)
                   if (!issue) return null
                   return (

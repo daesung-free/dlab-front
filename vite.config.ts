@@ -10,6 +10,31 @@ import react from '@vitejs/plugin-react'
 export default defineConfig(({ mode }) => ({
   base: mode === 'offline' ? './' : '/',
   plugins: [react()],
+  /**
+   * 내부 요구사항 명세 뷰(`/spec`)를 **개발 빌드에만** 남긴다.
+   *
+   * ★ 오픈이슈 42건(`data/issues.ts`)에 거래처 협상 상태·계약 종료 시점·담당자가
+   *   그대로 들어 있다(README 경고). 이 데이터가 번들에 실리면 로그인 게이트는
+   *   의미가 없다 — **번들은 로그인 전에 브라우저로 내려간다.**
+   *
+   * ★ 라우트를 `import.meta.env.DEV` 로 막는 것만으로는 안 된다. SpecPage 가
+   *   `screen.css` 를 import 하고 CSS import 는 부작용이라 Rollup 이 모듈을 못 지운다.
+   *   실제로 그렇게 해보고 번들에서 "계약 종료"가 그대로 검색됐다. 그래서 모듈
+   *   자체를 빈 것으로 바꿔쳐 **그래프에 안 들어오게** 한다.
+   *
+   * 배포 전 확인: `npm run build && grep -c "계약 종료" dist/assets/*.js` → 0
+   */
+  resolve:
+    mode === 'development'
+      ? undefined
+      : {
+          alias: [
+            {
+              find: /\/internal\/SpecRoutes$/,
+              replacement: '/internal/SpecRoutes.stub',
+            },
+          ],
+        },
   server: { port: 5173, open: true },
   build: {
     /**
