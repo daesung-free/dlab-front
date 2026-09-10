@@ -49,10 +49,13 @@ type QType = 'single' | 'multi' | 'text' | 'score' | 'scale' | 'subject'
  */
 function toInstant(v: string, endOfMinute = false): string | undefined {
   if (!v) return undefined
-  const [date, time] = v.split('T')
-  if (!date) return undefined
-  const hhmm = time || '00:00'
-  return `${date}T${hhmm}:${endOfMinute ? '59' : '00'}Z`
+  /* ★ `Z` 를 문자열로 붙이면 안 된다. `2026-09-10T09:00` 은 **한국 시간** 인데
+       `…09:00:00Z` 로 보내면 서버는 UTC 09:00 으로 받아 화면에 18:00 으로 돌아온다 —
+       정확히 9시간이 밀린다. 실제로 그렇게 나갔다(2026-09-10).
+       `new Date('2026-09-10T09:00')` 은 로컬로 해석하므로 toISOString 이 옳게 바꿔준다. */
+  const d = new Date(`${v}:${endOfMinute ? '59' : '00'}`)
+  if (Number.isNaN(d.getTime())) return undefined
+  return d.toISOString().replace(/\.\d{3}Z$/, 'Z')
 }
 
 const QTYPE_META: Record<QType, { label: string; icon: string; hasOptions: boolean; desc: string }> = {
