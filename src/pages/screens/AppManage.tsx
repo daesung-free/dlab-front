@@ -230,14 +230,15 @@ function Content() {
     void load()
   }, [load])
 
-  async function run(what: string, fn: () => Promise<unknown>) {
+  /** `done`·`failed` 를 완성된 문장으로 받는다 — AdminLecture 의 같은 함수 주석 참고 */
+  async function run(done: string, failed: string, fn: () => Promise<unknown>) {
     setBusy(true)
     try {
       await fn()
-      setNotice(`${what} 했습니다.`)
+      setNotice(done)
       await load()
     } catch (err) {
-      setNotice(err instanceof ApiError ? `${what} 실패 — ${err.message}` : `${what}에 실패했습니다.`)
+      setNotice(err instanceof ApiError ? `${failed} — ${err.message}` : failed)
     } finally {
       setBusy(false)
     }
@@ -247,7 +248,9 @@ function Content() {
     const label = field === 'minVersion' ? '최소 지원 버전' : '최신 버전'
     const next = window.prompt(`${PLATFORM_LABEL[c.platform]} ${label}`, c[field] ?? '')
     if (next === null || next.trim() === '') return
-    void run(`${label}을 바꾸`, () => updateAppVersions(c.platform, { [field]: next.trim() }))
+    void run(`${label}을 바꿨습니다.`, `${label}을 바꾸지 못했습니다.`, () =>
+      updateAppVersions(c.platform, { [field]: next.trim() }),
+    )
   }
 
   function toggleMaintenance(c: AppConfigDetail) {
@@ -258,10 +261,14 @@ function Content() {
         c.maintenanceMessage ?? '시스템 점검 중입니다.',
       )
       if (msg === null) return
-      void run('점검 모드를 켜', () => setMaintenance(c.platform, { maintenance: true, message: msg }))
+      void run('점검 모드를 켰습니다.', '점검 모드를 켜지 못했습니다.', () =>
+        setMaintenance(c.platform, { maintenance: true, message: msg }),
+      )
       return
     }
-    void run('점검 모드를 꺼', () => setMaintenance(c.platform, { maintenance: false }))
+    void run('점검 모드를 껐습니다.', '점검 모드를 끄지 못했습니다.', () =>
+      setMaintenance(c.platform, { maintenance: false }),
+    )
   }
 
   const inMaintenance = configs.filter((c) => c.maintenance)

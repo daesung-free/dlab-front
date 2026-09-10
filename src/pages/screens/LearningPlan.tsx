@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { DataTable, ExcelButton, MaskToggle, useServerTable, type Column } from '../../components/common'
+import { DataTable, ExcelButton, MaskToggle, useServerTable, type Column, toDateStr, todayStr } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { maskName } from '../../lib/mask'
@@ -65,19 +65,15 @@ function weekDates(weekStart: string): string[] {
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(base)
     d.setDate(base.getDate() + i)
-    return d.toISOString().slice(0, 10)
+    return toDateStr(d)
   })
-}
-
-function todayStr(): string {
-  return new Date().toISOString().slice(0, 10)
 }
 
 function mondayOf(dateStr: string): string {
   const d = new Date(`${dateStr}T00:00:00`)
   const shift = (d.getDay() + 6) % 7 // 월요일 기준
   d.setDate(d.getDate() - shift)
-  return d.toISOString().slice(0, 10)
+  return toDateStr(d)
 }
 
 interface Tally {
@@ -324,7 +320,7 @@ function Content() {
   function shiftWeek(delta: number): void {
     const d = new Date(`${weekStart}T00:00:00`)
     d.setDate(d.getDate() + delta * 7)
-    setWeekStart(d.toISOString().slice(0, 10))
+    setWeekStart(toDateStr(d))
   }
 
   return (

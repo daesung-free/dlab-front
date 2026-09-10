@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DataTable, ExcelButton, MaskToggle, Unfilled, type Column } from '../../components/common'
+import { DataTable, ExcelButton, MaskToggle, Unfilled, type Column, toDateStr, todayStr } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
@@ -129,7 +129,7 @@ function weekDates(anchor: string): string[] {
   return Array.from({ length: 5 }, (_, i) => {
     const x = new Date(d)
     x.setDate(d.getDate() + i)
-    return x.toISOString().slice(0, 10)
+    return toDateStr(x)
   })
 }
 
@@ -144,7 +144,7 @@ function Content() {
   const [visible, setVisible] = useState<Record<QnaType, boolean>>({ OFFLINE: true, ONLINE: false })
   const [interval, setIntervalMin] = useState(30)
 
-  const [anchor, setAnchor] = useState(() => new Date().toISOString().slice(0, 10))
+  const [anchor, setAnchor] = useState(() => todayStr())
   const [byDate, setByDate] = useState<Map<string, QnaSlot[]>>(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)

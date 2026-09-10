@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DataTable, ExcelButton, MaskToggle, Unfilled, type Column } from '../../components/common'
+import { DataTable, ExcelButton, MaskToggle, Unfilled, type Column, todayStr } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
@@ -53,10 +53,6 @@ function withRate(rows: MatrixRow[]): Row[] {
 
 function thisMonth(): string {
   return new Date().toISOString().slice(0, 7)
-}
-
-function todayStr(): string {
-  return new Date().toISOString().slice(0, 10)
 }
 
 const ROUTINE_COLUMNS: Column<Routine>[] = [

@@ -3,7 +3,7 @@ import { StudentList, type StudentRow } from '../../components/StudentList'
 import { StudentHeader } from '../../components/StudentHeader'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
-import { Unfilled } from '../../components/common'
+import { Unfilled, todayStr } from '../../components/common'
 import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
 import {
@@ -52,7 +52,7 @@ const DETAIL_TABS = [
 ]
 
 function today(): string {
-  return new Date().toISOString().slice(0, 10)
+  return todayStr()
 }
 
 /** 상담 현황 → 좌측 목록 행 */
