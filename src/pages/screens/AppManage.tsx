@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { DataTable, ExcelButton, Unfilled, type Column } from '../../components/common'
+import { DataTable, ExcelButton, Unfilled, type Column, Modal } from '../../components/common'
 import { Icon } from '../../components/Icon'
 import { Tabs } from '../../components/Tabs'
 import { ApiError } from '../../api/client'
@@ -205,6 +205,10 @@ function Content() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  /** 버전 입력 모달 */
+  const [verEdit, setVerEdit] = useState<{ c: AppConfigDetail; field: 'minVersion' | 'latestVersion'; value: string } | null>(null)
+  /** 점검 모드 안내 문구 모달. 켜면 그 플랫폼 사용자 전원이 앱을 못 쓴다 */
+  const [maintEdit, setMaintEdit] = useState<{ c: AppConfigDetail; message: string } | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -245,25 +249,13 @@ function Content() {
   }
 
   function changeVersion(c: AppConfigDetail, field: 'minVersion' | 'latestVersion') {
-    const label = field === 'minVersion' ? '최소 지원 버전' : '최신 버전'
-    const next = window.prompt(`${PLATFORM_LABEL[c.platform]} ${label}`, c[field] ?? '')
-    if (next === null || next.trim() === '') return
-    void run(`${label}을 바꿨습니다.`, `${label}을 바꾸지 못했습니다.`, () =>
-      updateAppVersions(c.platform, { [field]: next.trim() }),
-    )
+    setVerEdit({ c, field, value: c[field] ?? '' })
   }
 
   function toggleMaintenance(c: AppConfigDetail) {
     // 켜면 그 플랫폼 전 사용자가 앱을 못 쓴다 — 되묻지 않으면 사고가 된다
     if (!c.maintenance) {
-      const msg = window.prompt(
-        `${PLATFORM_LABEL[c.platform]} 점검 모드를 켭니다.\n켜는 즉시 이 플랫폼 사용자 전원이 앱을 쓸 수 없습니다.\n\n사용자에게 보일 안내 문구를 적으세요.`,
-        c.maintenanceMessage ?? '시스템 점검 중입니다.',
-      )
-      if (msg === null) return
-      void run('점검 모드를 켰습니다.', '점검 모드를 켜지 못했습니다.', () =>
-        setMaintenance(c.platform, { maintenance: true, message: msg }),
-      )
+      setMaintEdit({ c, message: c.maintenanceMessage ?? '시스템 점검 중입니다.' })
       return
     }
     void run('점검 모드를 껐습니다.', '점검 모드를 끄지 못했습니다.', () =>
@@ -275,6 +267,63 @@ function Content() {
 
   return (
     <>
+      {verEdit && (
+        <Modal
+          title={`${PLATFORM_LABEL[verEdit.c.platform]} ${verEdit.field === 'minVersion' ? '최소 지원 버전' : '최신 버전'}`}
+          sub={verEdit.field === 'minVersion' ? '이보다 낮은 버전은 앱이 열리지 않습니다.' : undefined}
+          confirmLabel="저장"
+          confirmDisabled={verEdit.value.trim() === ''}
+          onConfirm={() => {
+            const e = verEdit
+            setVerEdit(null)
+            const label = e.field === 'minVersion' ? '최소 지원 버전' : '최신 버전'
+            void run(`${label}을 바꿨습니다.`, `${label}을 바꾸지 못했습니다.`, () =>
+              updateAppVersions(e.c.platform, { [e.field]: e.value.trim() }),
+            )
+          }}
+          onClose={() => setVerEdit(null)}
+        >
+          <div className="frow">
+            <label className="req">버전</label>
+            <input
+              className="inp"
+              value={verEdit.value}
+              placeholder="1.0.0"
+              maxLength={20}
+              onChange={(e) => setVerEdit({ ...verEdit, value: e.target.value })}
+            />
+          </div>
+        </Modal>
+      )}
+
+      {maintEdit && (
+        <Modal
+          title={`${PLATFORM_LABEL[maintEdit.c.platform]} 점검 모드를 켤까요?`}
+          sub="켜는 즉시 이 플랫폼 사용자 전원이 앱을 쓸 수 없습니다."
+          confirmLabel="점검 모드 켜기"
+          danger
+          confirmDisabled={maintEdit.message.trim() === ''}
+          onConfirm={() => {
+            const e = maintEdit
+            setMaintEdit(null)
+            void run('점검 모드를 켰습니다.', '점검 모드를 켜지 못했습니다.', () =>
+              setMaintenance(e.c.platform, { maintenance: true, message: e.message.trim() }),
+            )
+          }}
+          onClose={() => setMaintEdit(null)}
+        >
+          <div className="frow">
+            <label className="req">안내 문구</label>
+            <textarea
+              className="ta"
+              value={maintEdit.message}
+              maxLength={100}
+              onChange={(e) => setMaintEdit({ ...maintEdit, message: e.target.value })}
+            />
+          </div>
+        </Modal>
+      )}
+
       {/* 점검 모드가 켜져 있으면 어느 탭에 있든 보여야 한다 */}
       {inMaintenance.length > 0 && (
         <div className="note-box" role="alert" style={{ borderColor: 'var(--red)' }}>

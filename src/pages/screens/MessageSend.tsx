@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DataTable, Unfilled, type Column } from '../../components/common'
+import { DataTable, Unfilled, type Column, Modal } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
@@ -369,6 +369,12 @@ function Content() {
   const [body, setBody] = useState('')
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  /** 승인된 문안을 고칠 때 한 번 더 묻는다 — 심사가 미제출로 되돌아간다 */
+  const [reconfirm, setReconfirm] = useState<number | null>(null)
+  /** 카카오 템플릿 코드 입력 */
+  const [codeInput, setCodeInput] = useState<{ id: number; code: string } | null>(null)
+  /** 심사 반려 사유 기록 */
+  const [rejectNote, setRejectNote] = useState<{ id: number; note: string } | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -440,6 +446,77 @@ function Content() {
 
   return (
     <>
+      {reconfirm !== null && (
+        <Modal
+          title="승인받은 문안입니다"
+          sub="고치면 심사를 다시 받아야 하고, 그때까지 이 알림은 나가지 않습니다."
+          confirmLabel="저장하고 재심사"
+          danger
+          busy={busy}
+          onConfirm={() => {
+            const id = reconfirm
+            setReconfirm(null)
+            void run('문안 확정', () =>
+              updateTemplateContent(id, { titleTemplate: title, bodyTemplate: body, contentConfirmed: true }),
+            )
+          }}
+          onClose={() => setReconfirm(null)}
+        />
+      )}
+
+      {codeInput && (
+        <Modal
+          title="카카오 템플릿 코드"
+          sub="카카오에 등록할 때 받은 코드를 그대로 넣으세요."
+          confirmLabel="심사 제출"
+          busy={busy}
+          confirmDisabled={codeInput.code.trim() === ''}
+          onConfirm={() => {
+            const c = codeInput
+            setCodeInput(null)
+            void run('심사 제출', () => submitTemplateReview(c.id, c.code.trim()))
+          }}
+          onClose={() => setCodeInput(null)}
+        >
+          <div className="frow">
+            <label className="req">코드</label>
+            <input
+              className="inp"
+              value={codeInput.code}
+              maxLength={40}
+              onChange={(e) => setCodeInput({ ...codeInput, code: e.target.value })}
+            />
+          </div>
+        </Modal>
+      )}
+
+      {rejectNote && (
+        <Modal
+          title="심사 반려 기록"
+          sub="카카오가 알려준 반려 사유를 적어 두면 다음에 고칠 때 참고할 수 있습니다."
+          confirmLabel="기록"
+          busy={busy}
+          onConfirm={() => {
+            const r = rejectNote
+            setRejectNote(null)
+            void run('심사 반려 기록', () =>
+              recordTemplateReviewResult(r.id, false, r.note.trim() || undefined),
+            )
+          }}
+          onClose={() => setRejectNote(null)}
+        >
+          <div className="frow">
+            <label>사유</label>
+            <textarea
+              className="ta"
+              value={rejectNote.note}
+              maxLength={200}
+              onChange={(e) => setRejectNote({ ...rejectNote, note: e.target.value })}
+            />
+          </div>
+        </Modal>
+      )}
+
       <div className="stat-strip">
         <div className="stat">
           <div className="l">
@@ -877,12 +954,10 @@ function Content() {
                       disabled={busy || body.trim() === ''}
                       // 승인된 알림톡 문안을 고치면 심사가 미제출로 되돌아간다 — 먼저 알린다
                       onClick={() => {
-                        if (
-                          picked.channel === 'KAKAO_ALIMTALK' &&
-                          picked.reviewStatus === 'APPROVED' &&
-                          !window.confirm('승인받은 문안입니다. 고치면 심사를 다시 받아야 발송됩니다. 저장할까요?')
-                        )
+                        if (picked.channel === 'KAKAO_ALIMTALK' && picked.reviewStatus === 'APPROVED') {
+                          setReconfirm(picked.id)
                           return
+                        }
                         void run('문안 확정', () =>
                           updateTemplateContent(picked.id, {
                             titleTemplate: title,
@@ -914,8 +989,7 @@ function Content() {
                         disabled={busy || !picked.contentConfirmed}
                         title={picked.contentConfirmed ? undefined : '문안을 확정한 뒤 제출할 수 있습니다'}
                         onClick={() => {
-                          const code = window.prompt('카카오에 등록한 템플릿 코드를 입력하세요.', picked.kakaoTemplateCode ?? '')
-                          if (code) void run('심사 제출', () => submitTemplateReview(picked.id, code))
+                          setCodeInput({ id: picked.id, code: picked.kakaoTemplateCode ?? '' })
                         }}
                       >
                         <Icon name="upload" size={14} /> 심사 제출
@@ -933,8 +1007,7 @@ function Content() {
                         style={{ color: 'var(--red)' }}
                         disabled={busy || picked.reviewStatus !== 'SUBMITTED'}
                         onClick={() => {
-                          const note = window.prompt('반려 사유를 적어 두세요.') ?? undefined
-                          void run('심사 반려 기록', () => recordTemplateReviewResult(picked.id, false, note))
+                          setRejectNote({ id: picked.id, note: '' })
                         }}
                       >
                         반려됨

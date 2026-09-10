@@ -1,15 +1,5 @@
 import { useMemo, useState } from 'react'
-import {
-  DataTable,
-  ExcelButton,
-  MaskToggle,
-  SearchForm,
-  useServerData,
-  type Column,
-  type DateRangeValue,
-  type Field,
-  type SearchValues,
-} from '../../components/common'
+import { DataTable, ExcelButton, MaskToggle, SearchForm, useServerData, type Column, type DateRangeValue, type Field, type SearchValues, Modal } from '../../components/common'
 import { Icon } from '../../components/Icon'
 import { useAcademy } from '../../auth/AcademyContext'
 import { ApiError } from '../../api/client'
@@ -190,6 +180,8 @@ function Content() {
   const rows = board.data?.rows ?? []
 
   const [revoking, setRevoking] = useState<number | null>(null)
+  /** 취소 확인 모달 */
+  const [confirming, setConfirming] = useState<PenaltyRow | null>(null)
 
   const selectedEnrollments = useMemo(() => {
     const byId = new Map(rows.map((r) => [String(r.id), r.enrollmentId]))
@@ -261,7 +253,7 @@ function Content() {
             type="button"
             style={{ padding: '4px 9px', fontSize: 11.5 }}
             disabled={revoking !== null}
-            onClick={() => revoke(r)}
+            onClick={() => setConfirming(r)}
           >
             {revoking === r.id ? '취소 중…' : '취소'}
           </button>
@@ -273,8 +265,6 @@ function Content() {
 
   async function revoke(row: PenaltyRow) {
     const label = `${row.name} · ${PENALTY_CATEGORY_LABEL[row.category]} ${row.point > 0 ? `+${row.point}` : row.point}점 (${row.itemName})`
-    // 되돌리는 API 가 없다 — 한 번 더 묻는다
-    if (!window.confirm(`${label}\n\n이 부여를 취소합니다. 되돌릴 수 없습니다.`)) return
     setRevoking(row.id)
     setGrantMsg(null)
     try {
@@ -314,6 +304,24 @@ function Content() {
 
   return (
     <>
+      {confirming && (
+        <Modal
+          title="이 부여를 취소할까요?"
+          sub={`${confirming.name} · ${PENALTY_CATEGORY_LABEL[confirming.category]} ${
+            confirming.point > 0 ? `+${confirming.point}` : confirming.point
+          }점 (${confirming.itemName}) · 되돌릴 수 없습니다.`}
+          confirmLabel="취소 처리"
+          danger
+          busy={revoking !== null}
+          onConfirm={() => {
+            const row = confirming
+            setConfirming(null)
+            void revoke(row)
+          }}
+          onClose={() => setConfirming(null)}
+        />
+      )}
+
       <div className="stat-strip">
         <div className="stat">
           <div className="l">

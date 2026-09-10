@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { DataTable, ExcelButton, Unfilled, type Column } from '../../components/common'
+import { DataTable, ExcelButton, Modal, Unfilled, type Column } from '../../components/common'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
@@ -98,7 +98,14 @@ interface MasterDef {
   /** 지점·연도 없이도 부를 수 있는가 */
   global?: boolean
   load: (academyId: number, year: number) => Promise<MasterRow[]>
-  create?: (academyId: number, year: number, name: string) => Promise<unknown>
+  /** `extra` 는 등록 모달이 이름과 함께 받은 값들. `createExtra` 를 선언한 마스터만 쓴다 */
+  create?: (academyId: number, year: number, name: string, extra?: Record<string, string>) => Promise<unknown>
+  /**
+   * 등록할 때 이름 외에 **더 받아야 하는 값들.**
+   * ★ 예전에는 이걸 `window.prompt` 로 되물었다 — 이름 묻고, 코드 묻고, 할인율 묻고.
+   *   대화상자가 뜨는 동안 탭이 멈추고, 마지막에서 취소하면 앞 입력이 통째로 날아갔다.
+   */
+  createExtra?: { key: string; label: string; placeholder?: string; required?: boolean; numeric?: boolean }[]
   /** row 를 함께 받는다 — 강의실·장학 종류는 PUT 에 다른 필드가 필수라 지금 값이 필요하다 */
   rename?: (id: number, name: string, row?: MasterRow) => Promise<unknown>
   remove?: (id: number) => Promise<unknown>
@@ -245,12 +252,13 @@ const MASTERS: MasterDef[] = [
         active: r.active,
       }))
     },
-    // roomNo 가 필수라 이름만으로는 못 만든다 — 번호를 함께 묻는다
-    create: async (academyId, _y, name) => {
-      const roomNo = window.prompt(`'${name}' 의 호실 번호를 입력하세요. (예: 201)`)?.trim()
-      if (!roomNo) throw new Error('호실 번호가 필요합니다.')
+    // roomNo 가 필수다. 등록 모달이 이름과 함께 받아 두 번째 인자로 넘긴다
+    create: async (academyId, _y, name, extra) => {
+      const roomNo = (extra?.roomNo ?? '').trim()
+      if (!roomNo) throw new Error('호실 번호를 입력하세요.')
       return createRoom({ academyId, roomNo, name })
     },
+    createExtra: [{ key: 'roomNo', label: '호실 번호', placeholder: '201', required: true }],
     // ★ PUT 의 필수값이 roomNo 라 지금 번호를 함께 실어야 이름만 바꿀 수 있다
     rename: (id, name, row) => updateRoom(id, { roomNo: row?.roomNo ?? name, name }),
     remove: deleteRoom,
@@ -291,13 +299,17 @@ const MASTERS: MasterDef[] = [
       }))
     },
     // code·discountRate 가 필수라 이름만으로는 못 만든다
-    create: async (academyId, year, name) => {
-      const code = window.prompt(`'${name}' 의 코드를 입력하세요. (예: SC-100)`)?.trim()
-      if (!code) throw new Error('코드가 필요합니다.')
-      const rate = window.prompt(`'${name}' 의 할인율(%)을 입력하세요.`, '100')?.trim()
-      if (!rate || !Number.isFinite(Number(rate))) throw new Error('할인율이 필요합니다.')
+    create: async (academyId, year, name, extra) => {
+      const code = (extra?.code ?? '').trim()
+      const rate = (extra?.discountRate ?? '').trim()
+      if (!code) throw new Error('코드를 입력하세요.')
+      if (!Number.isFinite(Number(rate))) throw new Error('할인율을 숫자로 입력하세요.')
       return createScholarshipMaster({ academyId, year, code, name, discountRate: Number(rate) })
     },
+    createExtra: [
+      { key: 'code', label: '코드', placeholder: 'SC-100', required: true },
+      { key: 'discountRate', label: '할인율(%)', placeholder: '100', required: true, numeric: true },
+    ],
     // ★ PUT 의 필수값이 name·discountRate 다 — 지금 할인율을 함께 실어야 한다
     rename: (id, name, row) => updateScholarshipMaster(id, { name, discountRate: row?.discountRate ?? 0 }),
     remove: deleteScholarshipMaster,
@@ -352,6 +364,14 @@ function Content() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  /** 등록 모달. null 이면 닫힌 상태 */
+  const [draft, setDraft] = useState<{ name: string; extra: Record<string, string> } | null>(null)
+  const [adding, setAdding] = useState(false)
+  const [addErr, setAddErr] = useState<string | null>(null)
+  const [renaming, setRenaming] = useState<{ row: MasterRow; name: string } | null>(null)
+  const [removing, setRemoving] = useState<MasterRow | null>(null)
+  /** 전년도 복사 확인 모달 */
+  const [copying, setCopying] = useState(false)
 
   function setActive(m: MasterDef) {
     setParams({ tab: m.key }, { replace: true })
@@ -370,7 +390,7 @@ function Content() {
       setRows(await active.load(academyId ?? 0, year))
       setLoadError(null)
     } catch (err) {
-      setLoadError(err instanceof ApiError ? err.message : `${active.label}을(를) 불러오지 못했습니다.`)
+      setLoadError(err instanceof ApiError ? err.message : `${active.label} 목록을 불러오지 못했습니다.`)
       setRows([])
     } finally {
       setLoading(false)
@@ -402,14 +422,21 @@ function Content() {
     }
   }, [academyId, year])
 
-  async function run(what: string, fn: () => Promise<unknown>) {
+  /**
+   * 동작 하나를 돌리고 결과를 알린다.
+   *
+   * ★ `done`·`failed` 를 **완성된 문장으로** 받는다. 예전에는 어간('지우')을 받아 뒤에
+   *   '했습니다'를 붙였는데, 한국어는 그렇게 이어지지 않는다 — "지우 했습니다"가 그대로
+   *   화면에 나갔다. 특강·앱 운영에서도 같은 버그가 있었다.
+   */
+  async function run(done: string, failed: string, fn: () => Promise<unknown>) {
     setBusy(true)
     try {
       await fn()
-      setNotice(`${what} 했습니다.`)
+      setNotice(done)
       await load()
     } catch (err) {
-      setNotice(err instanceof ApiError ? `${what} 실패 — ${err.message}` : `${what}에 실패했습니다.`)
+      setNotice(err instanceof ApiError ? `${failed} — ${err.message}` : failed)
     } finally {
       setBusy(false)
     }
@@ -421,9 +448,25 @@ function Content() {
       setNotice('먼저 지점을 고르세요.')
       return
     }
-    const name = window.prompt(`${active.label} 이름`)
-    if (name === null || name.trim() === '') return
-    void run(`${active.label}을(를) 등록`, () => active.create!(academyId ?? 0, year, name.trim()))
+    setAddErr(null)
+    setDraft({ name: '', extra: {} })
+  }
+
+  async function submitAdd() {
+    if (!draft || !active.create) return
+    setAdding(true)
+    setAddErr(null)
+    try {
+      await active.create(academyId ?? 0, year, draft.name.trim(), draft.extra)
+      setNotice(`${active.label}을 등록했습니다.`)
+      setDraft(null)
+      await load()
+    } catch (err) {
+      // ★ 모달 안에서 보여준다. 뒤에 깔린 화면의 배너는 모달에 가려 안 보인다
+      setAddErr(err instanceof ApiError ? err.message : `${active.label}을 등록하지 못했습니다.`)
+    } finally {
+      setAdding(false)
+    }
   }
 
   /**
@@ -436,12 +479,6 @@ function Content() {
       return
     }
     const from = year - 1
-    if (
-      !window.confirm(
-        `${from}년 기초 데이터를 ${year}년으로 복사합니다.\n되돌릴 수 없습니다. ${year}년에 이미 데이터가 있으면 복사되지 않습니다.\n\n진행할까요?`,
-      )
-    )
-      return
     setBusy(true)
     void (async () => {
       try {
@@ -516,9 +553,8 @@ function Content() {
                 style={{ padding: '4px 9px', fontSize: 11.5 }}
                 disabled={busy}
                 onClick={() => {
-                  const name = window.prompt('새 이름', r.name)
-                  if (name === null || name.trim() === '' || name === r.name) return
-                  void run('이름을 바꾸', () => active.rename!(r.id, name.trim(), r))
+                  setAddErr(null)
+                  setRenaming({ row: r, name: r.name })
                 }}
               >
                 수정
@@ -530,8 +566,8 @@ function Content() {
                 style={{ padding: '4px 9px', fontSize: 11.5, color: 'var(--red)' }}
                 disabled={busy}
                 onClick={() => {
-                  if (!window.confirm(`${r.name} 을(를) 지울까요?`)) return
-                  void run('지우', () => active.remove!(r.id))
+                  setAddErr(null)
+                  setRemoving(r)
                 }}
               >
                 삭제
@@ -547,6 +583,107 @@ function Content() {
 
   return (
     <>
+      {copying && (
+        <Modal
+          title={`${year - 1}년 기초 데이터를 ${year}년으로 복사할까요?`}
+          sub={`되돌릴 수 없습니다. ${year}년에 이미 자료가 있으면 복사되지 않습니다.`}
+          confirmLabel="복사"
+          danger
+          busy={busy}
+          onConfirm={() => {
+            setCopying(false)
+            copyYear()
+          }}
+          onClose={() => setCopying(false)}
+        />
+      )}
+
+      {renaming && (
+        <Modal
+          title={`${active.label} 이름 수정`}
+          confirmLabel="저장"
+          busy={busy}
+          error={addErr}
+          confirmDisabled={renaming.name.trim() === '' || renaming.name === renaming.row.name}
+          onConfirm={() => {
+            const next = renaming.name.trim()
+            const row = renaming.row
+            setRenaming(null)
+            void run('이름을 바꿨습니다.', '이름을 바꾸지 못했습니다.', () =>
+              active.rename!(row.id, next, row),
+            )
+          }}
+          onClose={() => setRenaming(null)}
+        >
+          <div className="frow">
+            <label className="req">이름</label>
+            <input
+              className="inp"
+              value={renaming.name}
+              maxLength={30}
+              onChange={(e) => setRenaming({ ...renaming, name: e.target.value })}
+            />
+          </div>
+        </Modal>
+      )}
+
+      {removing && (
+        <Modal
+          title={`${removing.name} 을 삭제할까요?`}
+          sub="삭제하면 되돌릴 수 없습니다. 이미 사용 중이면 삭제되지 않습니다."
+          confirmLabel="삭제"
+          danger
+          busy={busy}
+          error={addErr}
+          onConfirm={() => {
+            const row = removing
+            setRemoving(null)
+            void run('삭제했습니다.', '삭제하지 못했습니다.', () => active.remove!(row.id))
+          }}
+          onClose={() => setRemoving(null)}
+        />
+      )}
+
+      {draft && (
+        <Modal
+          title={`${active.label} 등록`}
+          sub={`${year}년 ${active.global ? '전 지점' : '이 지점'} 기준으로 등록됩니다.`}
+          confirmLabel="등록"
+          busy={adding}
+          error={addErr}
+          confirmDisabled={
+            draft.name.trim() === '' ||
+            (active.createExtra ?? []).some((f) => f.required && (draft.extra[f.key] ?? '').trim() === '')
+          }
+          onConfirm={() => void submitAdd()}
+          onClose={() => setDraft(null)}
+        >
+          <div className="frow">
+            <label className="req">이름</label>
+            <input
+              className="inp"
+              value={draft.name}
+              placeholder={`${active.label} 이름`}
+              maxLength={30}
+              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+            />
+          </div>
+          {(active.createExtra ?? []).map((f) => (
+            <div className="frow" key={f.key}>
+              <label className={f.required ? 'req' : undefined}>{f.label}</label>
+              <input
+                className="inp"
+                type={f.numeric ? 'number' : 'text'}
+                value={draft.extra[f.key] ?? ''}
+                placeholder={f.placeholder}
+                maxLength={30}
+                onChange={(e) => setDraft({ ...draft, extra: { ...draft.extra, [f.key]: e.target.value } })}
+              />
+            </div>
+          ))}
+        </Modal>
+      )}
+
       <div className="note-box plain">
         <div className="ic">
           <Icon name="history" size={17} />
@@ -616,7 +753,7 @@ function Content() {
                     </option>
                   ))}
                 </select>
-                <button className="btn" disabled={busy || academyId === null} onClick={copyYear}>
+                <button className="btn" disabled={busy || academyId === null} onClick={() => setCopying(true)}>
                   <Icon name="history" size={14} /> 전년도 복사
                 </button>
                 <ExcelButton filename={`기초_${active.label}`} columns={COLUMNS} rows={rows} masked={false} />

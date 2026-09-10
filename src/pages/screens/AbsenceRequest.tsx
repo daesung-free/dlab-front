@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { DataTable, Unfilled, useServerData, type Column } from '../../components/common'
+import { DataTable, Unfilled, useServerData, type Column, Modal } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { useAcademy } from '../../auth/AcademyContext'
@@ -66,6 +66,8 @@ function Content() {
   const { academyId } = useAcademy()
   const [tab, setTab] = useState<ApprovalStatus>('PENDING')
   const [acting, setActing] = useState<number | null>(null)
+  /** 반려 사유 입력 모달. 사유는 학생·학부모에게 그대로 전달된다 */
+  const [rejecting, setRejecting] = useState<{ row: AbsenceRequestRow; reason: string } | null>(null)
   const [actionMsg, setActionMsg] = useState<string | null>(null)
 
   // 서버 기본값과 같은 범위를 명시해서 보낸다 — 화면에 적은 기간과 실제 조회 범위를 맞추려는 것
@@ -95,14 +97,7 @@ function Content() {
   const canceled = countOf('CANCELED')
   const rows = useMemo(() => all.filter((r) => r.status === tab), [all, tab])
 
-  async function act(row: AbsenceRequestRow, kind: 'approve' | 'reject') {
-    let reason = ''
-    if (kind === 'reject') {
-      // 반려 사유는 학생·학부모에게 그대로 전달된다. 서버도 필수값이다
-      reason = window.prompt('반려 사유를 입력하세요. 학생·학부모에게 그대로 전달됩니다.')?.trim() ?? ''
-      if (reason === '') return
-    }
-
+  async function act(row: AbsenceRequestRow, kind: 'approve' | 'reject', reason = '') {
     setActing(row.approvalRequestId)
     setActionMsg(null)
     try {
@@ -174,7 +169,7 @@ function Content() {
                 className="btn"
                 style={{ padding: '4px 10px', fontSize: 11.5, color: 'var(--red)' }}
                 disabled={busy}
-                onClick={() => void act(r, 'reject')}
+                onClick={() => setRejecting({ row: r, reason: '' })}
               >
                 반려
               </button>
@@ -188,6 +183,34 @@ function Content() {
 
   return (
     <>
+      {rejecting && (
+        <Modal
+          title="반려 사유"
+          sub="적으신 내용이 학생·학부모에게 그대로 전달됩니다."
+          confirmLabel="반려"
+          danger
+          busy={acting === rejecting.row.approvalRequestId}
+          confirmDisabled={rejecting.reason.trim() === ''}
+          onConfirm={() => {
+            const r = rejecting
+            setRejecting(null)
+            void act(r.row, 'reject', r.reason.trim())
+          }}
+          onClose={() => setRejecting(null)}
+        >
+          <div className="frow">
+            <label className="req">사유</label>
+            <textarea
+              className="ta"
+              value={rejecting.reason}
+              maxLength={200}
+              placeholder="예: 제출한 증빙으로는 확인이 어렵습니다."
+              onChange={(e) => setRejecting({ ...rejecting, reason: e.target.value })}
+            />
+          </div>
+        </Modal>
+      )}
+
       <div className="stat-strip">
         <div className="stat">
           <div className="l">

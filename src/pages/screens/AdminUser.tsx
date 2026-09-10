@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
-import { DataTable, ExcelButton, MaskToggle, useServerData, type Column } from '../../components/common'
+import { DataTable, ExcelButton, MaskToggle, useServerData, type Column, Modal } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { useAcademy } from '../../auth/AcademyContext'
@@ -173,6 +173,10 @@ function Content() {
   const [created, setCreated] = useState<StaffCreated | null>(null)
   /** 재발급한 임시 비밀번호. 한 번만 오는 값이라 사용자가 닫을 때까지 남긴다 */
   const [reissued, setReissued] = useState<{ loginId: string; temporaryPassword: string } | null>(null)
+  /** 되돌릴 수 없는 동작의 확인 모달 */
+  const [confirm, setConfirm] = useState<{ kind: 'withdraw' | 'password'; row: AccountRow } | null>(null)
+  /** 역할 변경 모달. 선택 상태를 들고 있는다 */
+  const [roleEdit, setRoleEdit] = useState<{ row: AccountRow; picked: Role[] } | null>(null)
   const [idCheck, setIdCheck] = useState<{ loginId: string; available: boolean } | null>(null)
   /** 부여 가능한 역할은 **서버가 판정한다** — 화면이 "내가 본사인가"로 계산하지 않는다 */
   const [roleOptions, setRoleOptions] = useState<RoleOption[]>([])
@@ -202,37 +206,27 @@ function Content() {
   const roleCount = (role: Role) =>
     rows.filter((u) => u.status !== 'WITHDRAWN' && u.roles.includes(role)).length
 
-  async function changeRole(row: AccountRow) {
-    const current = row.roles.join(', ')
-    const input = window
-      .prompt(
-        `${row.loginId} 의 역할을 입력하세요. 쉼표로 여러 개.\n` +
-          `가능: ${ROLE_KEYS.join(', ')}\n` +
-          `⚠️ 지금 역할을 통째로 교체합니다 (현재: ${current})`,
-        current,
-      )
-      ?.trim()
-    if (!input) return
-
-    const next = input.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean)
-    const invalid = next.filter((r) => !(ROLE_KEYS as readonly string[]).includes(r))
-    if (invalid.length > 0) {
-      setActionMsg(`알 수 없는 역할입니다: ${invalid.join(', ')}`)
-      return
-    }
-
+  /**
+   * 역할 교체.
+   *
+   * ★ 예전에는 `prompt` 로 **쉼표로 구분한 역할 코드를 직접 치게** 했다(`SUPER_ADMIN, TEACHER`).
+   *   오타가 나면 "알 수 없는 역할입니다"로 되돌아왔고, 지금 역할이 무엇인지도 그 창 안에서만
+   *   보였다. 체크박스로 바꾸니 그 오류 경로 자체가 없어졌다.
+   */
+  async function changeRole(row: AccountRow, next: Role[]) {
     setBusy(row.accountId)
     setActionMsg(null)
     try {
-      await replaceRoles(row.accountId, next as Role[])
-      setActionMsg(`${row.loginId} 의 역할을 ${next.join(', ')} 로 바꿨습니다.`)
+      await replaceRoles(row.accountId, next)
+      setActionMsg(`${row.loginId} 의 역할을 바꿨습니다.`)
       list.reload()
     } catch (err) {
-      setActionMsg(err instanceof ApiError ? err.message : '역할 변경에 실패했습니다.')
+      setActionMsg(err instanceof ApiError ? err.message : '역할을 바꾸지 못했습니다.')
     } finally {
       setBusy(null)
     }
   }
+
 
   function setF<K extends keyof typeof EMPTY_FORM>(k: K, v: (typeof EMPTY_FORM)[K]) {
     setForm((f) => ({ ...f, [k]: v }))
@@ -301,8 +295,6 @@ function Content() {
   }
 
   async function withdraw(row: AccountRow) {
-    // 되돌리는 API 가 없다 — 한 번 더 묻는다
-    if (!window.confirm(`${row.loginId}(${row.name ?? '-'}) 를 탈퇴 처리합니다. 되돌릴 수 없습니다.`)) return
     setBusy(row.accountId)
     setActionMsg(null)
     try {
@@ -339,12 +331,6 @@ function Content() {
   async function reissuePassword(row: AccountRow) {
     /* ★ 평문이 응답에 **한 번만** 실리고 서버가 저장하지 않는다. 놓치면 또 발급해야 하므로
      *   등록 직후와 같은 방식으로 화면에 남기고 사용자가 직접 닫게 한다. */
-    if (
-      !window.confirm(
-        `${row.loginId} 의 비밀번호를 새로 발급합니다.\n기존 비밀번호는 즉시 쓸 수 없게 됩니다.`,
-      )
-    )
-      return
     setBusy(row.accountId)
     setActionMsg(null)
     try {
@@ -464,7 +450,7 @@ function Content() {
               className="btn"
               style={{ padding: '4px 9px', fontSize: 11.5 }}
               disabled={busy === r.accountId}
-              onClick={() => void changeRole(r)}
+              onClick={() => setRoleEdit({ row: r, picked: [...r.roles] })}
             >
               권한
             </button>
@@ -473,7 +459,7 @@ function Content() {
               style={{ padding: '4px 9px', fontSize: 11.5 }}
               disabled={busy === r.accountId || r.status === 'WITHDRAWN'}
               title="새 임시 비밀번호를 발급합니다. 한 번만 보여집니다"
-              onClick={() => void reissuePassword(r)}
+              onClick={() => setConfirm({ kind: 'password', row: r })}
             >
               비밀번호
             </button>
@@ -501,7 +487,7 @@ function Content() {
               className="btn"
               style={{ padding: '4px 9px', fontSize: 11.5, color: 'var(--red)' }}
               disabled={busy === r.accountId || r.status === 'WITHDRAWN'}
-              onClick={() => void withdraw(r)}
+              onClick={() => setConfirm({ kind: 'withdraw', row: r })}
             >
               탈퇴
             </button>
@@ -514,6 +500,73 @@ function Content() {
 
   return (
     <div className="p-matrix">
+      {roleEdit && (
+        <Modal
+          title={`${roleEdit.row.loginId} 의 역할`}
+          sub="지금 역할을 통째로 바꿉니다. 체크를 풀면 그 역할이 사라집니다."
+          confirmLabel="저장"
+          busy={busy === roleEdit.row.accountId}
+          confirmDisabled={roleEdit.picked.length === 0}
+          onConfirm={() => {
+            const e = roleEdit
+            setRoleEdit(null)
+            void changeRole(e.row, e.picked)
+          }}
+          onClose={() => setRoleEdit(null)}
+        >
+          <div style={{ display: 'grid', gap: 9 }}>
+            {ROLE_KEYS.map((code) => {
+              const on = roleEdit.picked.includes(code)
+              return (
+                <label key={code} style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 13 }}>
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    onChange={() =>
+                      setRoleEdit({
+                        ...roleEdit,
+                        picked: on
+                          ? roleEdit.picked.filter((x) => x !== code)
+                          : [...roleEdit.picked, code],
+                      })
+                    }
+                  />
+                  <b>{ROLE_LABEL[code]}</b>
+                </label>
+              )
+            })}
+          </div>
+          {roleEdit.picked.length === 0 && (
+            <div className="note-box" style={{ marginTop: 12 }}>역할을 하나 이상 골라야 합니다.</div>
+          )}
+        </Modal>
+      )}
+
+      {confirm && (
+        <Modal
+          title={
+            confirm.kind === 'withdraw'
+              ? `${confirm.row.loginId} 를 탈퇴 처리할까요?`
+              : `${confirm.row.loginId} 의 비밀번호를 새로 발급할까요?`
+          }
+          sub={
+            confirm.kind === 'withdraw'
+              ? `${confirm.row.name ?? '-'} · 되돌릴 수 없습니다.`
+              : '기존 비밀번호는 즉시 쓸 수 없게 됩니다. 새 비밀번호는 한 번만 보여집니다.'
+          }
+          confirmLabel={confirm.kind === 'withdraw' ? '탈퇴 처리' : '발급'}
+          danger
+          busy={busy === confirm.row.accountId}
+          onConfirm={() => {
+            const c = confirm
+            setConfirm(null)
+            if (c.kind === 'withdraw') void withdraw(c.row)
+            else void reissuePassword(c.row)
+          }}
+          onClose={() => setConfirm(null)}
+        />
+      )}
+
       <div className="stat-strip">
         {ROLES.map((r) => (
           <div className="stat" key={r.key}>
