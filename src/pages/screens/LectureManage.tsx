@@ -332,10 +332,10 @@ function Content() {
                    버튼이 활성화돼 눌리기만 하고 아무 일도 없었다 — 사용자는 저장된 줄 안다.
                    붙이기 전까지는 막고 이유를 말한다. 특강 회차가 여기서만 만들어져서
                    출석부·신청·대기까지 함께 막혀 있다. */}
-            <button className="btn" disabled title="저장 경로가 아직 화면에 연결되지 않았습니다">
+            <button className="btn" disabled title="준비 중입니다">
               <Icon name="save" size={14} /> 임시 저장
             </button>
-            <button className="btn pri" disabled title="저장 경로가 아직 화면에 연결되지 않았습니다">
+            <button className="btn pri" disabled title="준비 중입니다">
               <Icon name="send" size={14} /> 개설 · 접수 시작
             </button>
           </div>
