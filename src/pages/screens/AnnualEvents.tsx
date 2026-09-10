@@ -413,10 +413,14 @@ function Content() {
                     <div>
                       <div className="frow">
                         <label className="req">행사명</label>
+                        {/* ★ 50자를 넘기면 서버가 400 이 아니라 **500** 을 낸다(실호출로 51자부터 확인).
+                               스펙에는 길이 제한이 없어 화면이 막지 않으면 붙여넣기로 그대로 들어간다.
+                               서버 검증은 따로 요청해 뒀고, 그때까지 여기서 자른다. */}
                         <input
                           className="inp"
                           placeholder="어린이날"
                           value={name}
+                          maxLength={50}
                           onChange={(e) => setName(e.target.value)}
                         />
                       </div>
