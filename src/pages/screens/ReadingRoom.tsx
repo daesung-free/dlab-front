@@ -450,7 +450,7 @@ function Content() {
           emptyText="배정된 좌석이 없습니다."
           toolbar={
             <>
-              <button className="btn" disabled title="좌석 재배치 API가 아직 없습니다">
+              <button className="btn" disabled title="준비 중입니다">
                 <Icon name="refresh-cw" size={14} /> 좌석 재배치
               </button>
               <ExcelButton

@@ -232,11 +232,10 @@ function Content() {
                 <Icon name="info" size={17} />
               </div>
               <div>
-                <div className="tt">통계 화면은 별도 확인 대상</div>
+                <div className="tt">통계 항목은 아직 정하는 중입니다</div>
                 <div className="tx">
-                  DSA에서 <b>실적 입력</b> 화면은 확인했지만 <b>실적 통계(집계)</b> 화면은 실사에서 확인되지
-                  않았습니다. 위 막대는 계열별 단순 집계이며, 실제로 필요한 지표(전년 대비·반별·담임별·수시/정시
-                  비율 등)는 운영팀 확인 후 확정합니다. 전체 통계 대시보드는 <b>Phase 4</b> 범위입니다.
+                  위 막대는 계열별 단순 집계입니다. 전년 대비·반별·담임별·수시/정시 비율처럼
+                  실제로 보셔야 하는 지표는 <b>어떤 것이 필요한지 정해지면</b> 반영합니다.
                 </div>
               </div>
             </div>
@@ -251,10 +250,10 @@ export const adminResultMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn">
+      <button className="btn" disabled title="준비 중입니다">
         <Icon name="upload" size={14} /> 엑셀 일괄 등록
       </button>
-      <button className="btn">
+      <button className="btn" disabled title="준비 중입니다">
         <Icon name="printer" size={14} /> 실적 현황 출력
       </button>
     </>

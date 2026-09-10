@@ -316,7 +316,7 @@ function Content() {
             현재 운영하는 것은 <b>대면 질의응답</b>뿐이지만, 추후 온라인을 열 가능성이 있어 <b>예약 흐름과 데이터 모델을
             대면과 동일하게 만들어 두고 앱 노출 여부만 설정값으로 분리</b>했습니다. 나중에 스위치만 켜면 됩니다.
             <br />
-            슬롯 간격은 <b>15분으로 확정</b>됐습니다. 다만 회신서에 &ldquo;추후 변동 가능&rdquo;이 명시돼 있어 상수로
+            타임 간격은 <b>15분</b>입니다. 나중에 바꿀 수 있도록 설정값으로
             박지 않고 설정값으로 둡니다.
           </div>
         </div>
@@ -451,7 +451,7 @@ function Content() {
 
               <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
                 <MaskToggle masked={masked} onChange={setMasked} />
-                <button className="btn">
+                <button className="btn" disabled title="준비 중입니다">
                   <Icon name="plus" size={14} /> 타임 일괄 개설
                 </button>
                 <span style={{ fontSize: 11.5, color: 'var(--muted)', marginLeft: 'auto' }}>
@@ -634,7 +634,7 @@ function Content() {
 
                   <div className="frow">
                     <label>&nbsp;</label>
-                    <button className="btn pri">
+                    <button className="btn pri" disabled title="준비 중입니다">
                       <Icon name="save" size={14} /> 설정 저장
                     </button>
                   </div>
@@ -666,7 +666,7 @@ export const qnaMockup: Mockup = {
   actions: (
     <>
       <button className="btn">2026-06 1주 ▾</button>
-      <button className="btn pri">
+      <button className="btn pri" disabled title="준비 중입니다">
         <Icon name="plus" size={14} /> 타임 개설
       </button>
     </>

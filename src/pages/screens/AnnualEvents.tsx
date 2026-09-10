@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DataTable, ExcelButton, Unfilled, type Column, toDateStr } from '../../components/common'
+import { DataTable, Modal, ExcelButton, Unfilled, type Column, toDateStr } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
@@ -67,6 +67,8 @@ function Content() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  /** 삭제 확인 모달. null 이면 닫힌 상태 */
+  const [removing, setRemoving] = useState<Holiday | null>(null)
   const [result, setResult] = useState<string | null>(null)
 
   /* 등록 폼 */
@@ -94,15 +96,16 @@ function Content() {
     void load()
   }, [load])
 
-  async function remove(h: Holiday) {
-    if (!window.confirm(`${h.date} ${h.name} 을 지울까요?`)) return
+  async function remove(h: Holiday): Promise<boolean> {
     setBusy(true)
     try {
       await deleteHoliday(h.id)
       setResult(`${h.date} ${h.name} 을 지웠습니다.`)
       await load()
+      return true
     } catch (err) {
       setResult(err instanceof ApiError ? `지우지 못했습니다 — ${err.message}` : '지우지 못했습니다.')
+      return false
     } finally {
       setBusy(false)
     }
@@ -238,7 +241,7 @@ function Content() {
               className="btn"
               style={{ padding: '4px 9px', fontSize: 11.5, color: 'var(--red)' }}
               disabled={busy}
-              onClick={() => void remove(r)}
+              onClick={() => setRemoving(r)}
             >
               삭제
             </button>
@@ -261,6 +264,18 @@ function Content() {
 
   return (
     <>
+      {removing && (
+        <Modal
+          title={`${removing.name} 을 삭제할까요?`}
+          sub={`${removing.date} · 삭제하면 되돌릴 수 없습니다.`}
+          confirmLabel="삭제"
+          danger
+          busy={busy}
+          onConfirm={() => void remove(removing).then((ok) => ok && setRemoving(null))}
+          onClose={() => setRemoving(null)}
+        />
+      )}
+
       <div className="stat-strip">
         <div className="stat">
           <div className="l">
@@ -548,7 +563,7 @@ export const annualEventsMockup: Mockup = {
   actions: (
     <>
       <button className="btn">2026 시즌 ▾</button>
-      <button className="btn">
+      <button className="btn" disabled title="준비 중입니다">
         <Icon name="history" size={14} /> 전년도 복사
       </button>
     </>

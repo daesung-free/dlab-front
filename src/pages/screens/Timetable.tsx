@@ -257,7 +257,7 @@ function Content() {
             <Icon name="triangle-alert" size={13} /> 중복 배정
           </div>
           <div className="v">{roomRows.reduce((n, r) => n + r.conflict, 0)}</div>
-          <div className="d down">서버 UNIQUE 제약 필요</div>
+          <div className="d down">확인 필요</div>
         </div>
       </div>
 
@@ -271,8 +271,7 @@ function Content() {
             <b>반 시간표(여기)</b>는 교무팀이 반 단위로 짜는 <b>고정 편성</b>이고, <b>주·일 학습계획(F-4.11-2)</b>은
             학생이 본인 시간을 순번으로 채우는 <b>개인 계획</b>입니다. 주체도 단위도 다릅니다.
             <br />
-            <b>두 화면을 데이터로 잇지 않는 것이 확정 사항</b>입니다. 8/3 회신서가 &ldquo;정해준 시간 틀에 학습계획을
-            짜맞추는 것은 활용성이 떨어진다&rdquo;고 명시했기 때문에, 시간표를 학습계획에 자동 반영하지 않습니다.
+            <b>두 화면은 서로 연결되지 않습니다.</b> 시간표를 짜도 학생의 학습계획에 자동으로 들어가지 않습니다.
           </div>
         </div>
       </div>
@@ -439,11 +438,11 @@ function Content() {
             }
             toolbar={
               <>
-                <button className="btn">
+                <button className="btn" disabled title="준비 중입니다">
                   <Icon name="upload" size={14} /> 엑셀 일괄 배정
                 </button>
                 <ExcelButton filename={`이동수업_${subject}`} columns={MOVE_COLUMNS} rows={moveRows} />
-                <button className="btn pri">
+                <button className="btn pri" disabled title="준비 중입니다">
                   <Icon name="route" size={14} /> 선택 이동반 변경
                 </button>
               </>
@@ -508,10 +507,10 @@ export const timetableMockup: Mockup = {
   actions: (
     <>
       <button className="btn">2026 · 2학기 ▾</button>
-      <button className="btn">
+      <button className="btn" disabled title="준비 중입니다">
         <Icon name="history" size={14} /> 전 학기 복사
       </button>
-      <button className="btn pri">
+      <button className="btn pri" disabled title="준비 중입니다">
         <Icon name="save" size={14} /> 편성 저장
       </button>
     </>

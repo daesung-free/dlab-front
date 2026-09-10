@@ -15,7 +15,11 @@ import type { Mockup } from './types'
 
 /* F-4.1-4 반 배정(고정반 관리) — /api/v1/admin/classes
  *
- * 전년도 복사는 단순 INSERT SELECT가 금지된다. 의존 순서를 지켜 순회해야 한다:
+ * 전년도 복사는 단순 INSERT SELECT가 금지된다. 의존 순서를 지켜 순회해야 한다
+ * (department → course_type → class_group → curriculum → penalty_item → tuition).
+ * ★ 이 순서를 화면에 그리던 것을 뺐다(2026-09-10) — 클라이언트가 보는 URL 이라
+ *   테이블명·서비스명을 노출하지 않는다. 화면은 "순서대로 진행되고 되돌릴 수 없다"만 말한다.
+ * 원래 주석:
  *   department → course_type → class_group → curriculum → penalty_item → tuition
  *
  * ★ 미배정 학생은 **서버 조건(unassignedClass)** 으로 거른다. 예전에는 받아온 페이지 안에서만
@@ -33,8 +37,6 @@ import type { Mockup } from './types'
  *   그걸 배정하면 서버가 건별로 "다른 지점의 반에는 배정할 수 없습니다"로 거부한다 —
  *   사용자는 왜 일부만 실패했는지 모른다.
  *   지점을 아직 안 고른 전 지점 계정은 그대로 섞여 오므로 안내를 띄운다. */
-
-const COPY_ORDER = ['department', 'course_type', 'class_group', 'curriculum', 'penalty_item', 'tuition']
 
 const PAGE_SIZE = 20
 
@@ -124,16 +126,10 @@ function Content() {
           <Icon name="history" size={17} />
         </div>
         <div>
-          <div className="tt">전년도 복사 — 단순 INSERT SELECT 금지</div>
+          <div className="tt">전년도 복사는 순서대로 진행됩니다</div>
           <div className="tx">
-            <b>YearlySnapshotService</b>가 의존 순서를 지켜 순회합니다:{' '}
-            {COPY_ORDER.map((k, i) => (
-              <span key={k}>
-                <code>{k}</code>
-                {i < COPY_ORDER.length - 1 && ' → '}
-              </span>
-            ))}
-            . 앞 단계가 만든 새 연도 ID를 뒤 단계가 참조하므로 순서를 건너뛰면 참조가 깨집니다.
+            앞 단계가 만든 항목을 뒤 단계가 참조하므로 순서를 건너뛸 수 없습니다.
+            <b>복사한 것은 되돌릴 수 없습니다</b> — 다만 그 해에 이미 자료가 있으면 복사되지 않습니다.
           </div>
         </div>
       </div>
@@ -282,7 +278,7 @@ export const classAssignMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled title="전년도 복사 API가 아직 없습니다">
+      <button className="btn" disabled title="준비 중입니다">
         <Icon name="history" size={14} /> 전년도 반 구성 복사
       </button>
       <button className="btn pri" disabled title="반 등록 폼은 다음 단계입니다">

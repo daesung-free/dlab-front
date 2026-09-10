@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DataTable, ExcelButton, Unfilled, type Column } from '../../components/common'
+import { DataTable, ExcelButton, Unfilled, type Column, Modal } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
@@ -245,6 +245,9 @@ function Content() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  /** 교습일수 입력 모달 */
+  const [monthEdit, setMonthEdit] = useState<{ mo: number; days: string } | null>(null)
+  const [monthErr, setMonthErr] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -298,27 +301,25 @@ function Content() {
    * 교습일수는 **달력 일수가 아니다.** 학원이 아는 값을 그대로 받는다 —
    * 화면이 규칙을 추측해 채우면 조용히 틀린 금액이 나온다. 그래서 한 달씩 물어본다.
    */
-  async function editMonth(mo: number) {
+  /**
+   * ★ **성공한 뒤에** 모달을 닫는다. 먼저 닫으면 서버가 거부했을 때 오류가 뒤 화면에 떠서,
+   *   사용자는 무엇을 고쳐야 하는지 모른 채 입력값도 잃는다.
+   */
+  async function editMonth(mo: number, days: number) {
     if (academyId === null) {
       setNotice('먼저 지점을 고르세요.')
       return
     }
     const key = `${year}-${String(mo).padStart(2, '0')}`
-    const cur = daysByMonth.get(mo)
-    const next = window.prompt(`${year}년 ${mo}월 교습일수\n달력 일수가 아니라 실제 교습일수를 넣으세요.`, cur ? String(cur) : '')
-    if (next === null || next.trim() === '') return
-    const days = Number(next)
-    if (!Number.isInteger(days) || days < 0) {
-      setNotice('교습일수는 0 이상의 정수여야 합니다.')
-      return
-    }
     setBusy(true)
+    setMonthErr(null)
     try {
       await saveTuitionMonth({ academyId, month: key, teachingDays: days })
       setNotice(`${mo}월 교습일수를 ${days}일로 저장했습니다.`)
+      setMonthEdit(null)
       await load()
     } catch (err) {
-      setNotice(err instanceof ApiError ? `저장 실패 — ${err.message}` : '저장하지 못했습니다.')
+      setMonthErr(err instanceof ApiError ? err.message : '저장하지 못했습니다.')
     } finally {
       setBusy(false)
     }
@@ -326,6 +327,36 @@ function Content() {
 
   return (
     <>
+      {monthEdit && (
+        <Modal
+          title={`${year}년 ${monthEdit.mo}월 교습일수`}
+          sub="달력 일수가 아니라 실제 수업한 날수입니다. 학원이 아는 값을 그대로 넣으세요."
+          confirmLabel="저장"
+          busy={busy}
+          error={monthErr}
+          confirmDisabled={
+            monthEdit.days.trim() === '' ||
+            !Number.isInteger(Number(monthEdit.days)) ||
+            Number(monthEdit.days) < 0
+          }
+          onConfirm={() => void editMonth(monthEdit.mo, Number(monthEdit.days))}
+          onClose={() => setMonthEdit(null)}
+        >
+          <div className="frow">
+            <label className="req">교습일수</label>
+            <input
+              className="inp"
+              type="number"
+              min={0}
+              max={31}
+              value={monthEdit.days}
+              placeholder="예: 29"
+              onChange={(e) => setMonthEdit({ ...monthEdit, days: e.target.value })}
+            />
+          </div>
+        </Modal>
+      )}
+
       <div className="note-box plain">
         <div className="ic">
           <Icon name="git-compare" size={17} />
@@ -470,7 +501,7 @@ function Content() {
                           key={mo}
                           className="btn"
                           disabled={busy}
-                          onClick={() => void editMonth(mo)}
+                          onClick={() => setMonthEdit({ mo, days: String(daysByMonth.get(mo) ?? '') })}
                           style={{
                             flexDirection: 'column',
                             alignItems: 'flex-start',
@@ -542,7 +573,7 @@ export const adminBillingMockup: Mockup = {
   actions: (
     <>
       <button className="btn">2026 시즌 ▾</button>
-      <button className="btn">
+      <button className="btn" disabled title="준비 중입니다">
         <Icon name="history" size={14} /> 전년도 기준 복사
       </button>
     </>

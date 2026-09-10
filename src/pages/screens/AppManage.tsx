@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { DataTable, ExcelButton, Unfilled, type Column } from '../../components/common'
+import { DataTable, ExcelButton, Unfilled, type Column, Modal } from '../../components/common'
 import { Icon } from '../../components/Icon'
 import { Tabs } from '../../components/Tabs'
 import { ApiError } from '../../api/client'
@@ -31,7 +31,7 @@ import type { Mockup } from './types'
  *
  * ⚠ 푸시는 알림톡(F-4.4)과 채널이 다르다. 합치면 안 된다.
  *   · 알림톡 = 학부모 대상 · 심사 필요 · 템플릿 고정 (I-4)
- *   · FCM 푸시 = 학생 앱 대상 · 자유 문안 · 수신동의 필요
+ *   · 앱 알림 = 학생 앱 대상 · 자유 문안 · 수신동의 필요
  *   기술문서상 두 채널은 이중화(F-4.4)이므로 발송 로그는 notification_logs 로 합류시키되
  *   채널 컬럼으로 구분해 적재한다.
  *
@@ -205,6 +205,12 @@ function Content() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  /** 버전 입력 모달 */
+  const [verEdit, setVerEdit] = useState<{ c: AppConfigDetail; field: 'minVersion' | 'latestVersion'; value: string } | null>(null)
+  /** 점검 모드 안내 문구 모달. 켜면 그 플랫폼 사용자 전원이 앱을 못 쓴다 */
+  const [maintEdit, setMaintEdit] = useState<{ c: AppConfigDetail; message: string } | null>(null)
+  /** 모달 안에서 보여줄 실패 메시지 */
+  const [modalErr, setModalErr] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -231,39 +237,31 @@ function Content() {
   }, [load])
 
   /** `done`·`failed` 를 완성된 문장으로 받는다 — AdminLecture 의 같은 함수 주석 참고 */
-  async function run(done: string, failed: string, fn: () => Promise<unknown>) {
+  /** 성공하면 true. 호출부가 모달을 **성공했을 때만** 닫는 데 쓴다 */
+  async function run(done: string, failed: string, fn: () => Promise<unknown>): Promise<boolean> {
     setBusy(true)
     try {
       await fn()
       setNotice(done)
+      return true
       await load()
     } catch (err) {
-      setNotice(err instanceof ApiError ? `${failed} — ${err.message}` : failed)
+      setModalErr(err instanceof ApiError ? err.message : failed)
+      setNotice(null)
+      return false
     } finally {
       setBusy(false)
     }
   }
 
   function changeVersion(c: AppConfigDetail, field: 'minVersion' | 'latestVersion') {
-    const label = field === 'minVersion' ? '최소 지원 버전' : '최신 버전'
-    const next = window.prompt(`${PLATFORM_LABEL[c.platform]} ${label}`, c[field] ?? '')
-    if (next === null || next.trim() === '') return
-    void run(`${label}을 바꿨습니다.`, `${label}을 바꾸지 못했습니다.`, () =>
-      updateAppVersions(c.platform, { [field]: next.trim() }),
-    )
+    setVerEdit({ c, field, value: c[field] ?? '' })
   }
 
   function toggleMaintenance(c: AppConfigDetail) {
     // 켜면 그 플랫폼 전 사용자가 앱을 못 쓴다 — 되묻지 않으면 사고가 된다
     if (!c.maintenance) {
-      const msg = window.prompt(
-        `${PLATFORM_LABEL[c.platform]} 점검 모드를 켭니다.\n켜는 즉시 이 플랫폼 사용자 전원이 앱을 쓸 수 없습니다.\n\n사용자에게 보일 안내 문구를 적으세요.`,
-        c.maintenanceMessage ?? '시스템 점검 중입니다.',
-      )
-      if (msg === null) return
-      void run('점검 모드를 켰습니다.', '점검 모드를 켜지 못했습니다.', () =>
-        setMaintenance(c.platform, { maintenance: true, message: msg }),
-      )
+      setMaintEdit({ c, message: c.maintenanceMessage ?? '시스템 점검 중입니다.' })
       return
     }
     void run('점검 모드를 껐습니다.', '점검 모드를 끄지 못했습니다.', () =>
@@ -275,6 +273,63 @@ function Content() {
 
   return (
     <>
+      {verEdit && (
+        <Modal
+          title={`${PLATFORM_LABEL[verEdit.c.platform]} ${verEdit.field === 'minVersion' ? '최소 지원 버전' : '최신 버전'}`}
+          sub={verEdit.field === 'minVersion' ? '이보다 낮은 버전은 앱이 열리지 않습니다.' : undefined}
+          confirmLabel="저장"
+          confirmDisabled={verEdit.value.trim() === ''}
+          error={modalErr}
+          onConfirm={() => {
+            const e = verEdit
+            const label = e.field === 'minVersion' ? '최소 지원 버전' : '최신 버전'
+            void run(`${label}을 바꿨습니다.`, `${label}을 바꾸지 못했습니다.`, () =>
+              updateAppVersions(e.c.platform, { [e.field]: e.value.trim() }),
+            ).then((ok) => ok && setVerEdit(null))
+          }}
+          onClose={() => { setModalErr(null); setVerEdit(null) }}
+        >
+          <div className="frow">
+            <label className="req">버전</label>
+            <input
+              className="inp"
+              value={verEdit.value}
+              placeholder="1.0.0"
+              maxLength={20}
+              onChange={(e) => setVerEdit({ ...verEdit, value: e.target.value })}
+            />
+          </div>
+        </Modal>
+      )}
+
+      {maintEdit && (
+        <Modal
+          title={`${PLATFORM_LABEL[maintEdit.c.platform]} 점검 모드를 켤까요?`}
+          sub="켜는 즉시 이 플랫폼 사용자 전원이 앱을 쓸 수 없습니다."
+          confirmLabel="점검 모드 켜기"
+          danger
+          confirmDisabled={maintEdit.message.trim() === ''}
+          error={modalErr}
+          onConfirm={() => {
+            const e = maintEdit
+            void run('점검 모드를 켰습니다.', '점검 모드를 켜지 못했습니다.', () =>
+              setMaintenance(e.c.platform, { maintenance: true, message: e.message.trim() }),
+            ).then((ok) => ok && setMaintEdit(null))
+          }}
+          onClose={() => { setModalErr(null); setMaintEdit(null) }}
+        >
+          <div className="frow">
+            <label className="req">안내 문구</label>
+            <textarea
+              className="ta"
+              value={maintEdit.message}
+              maxLength={100}
+              onChange={(e) => setMaintEdit({ ...maintEdit, message: e.target.value })}
+            />
+          </div>
+        </Modal>
+      )}
+
       {/* 점검 모드가 켜져 있으면 어느 탭에 있든 보여야 한다 */}
       {inMaintenance.length > 0 && (
         <div className="note-box" role="alert" style={{ borderColor: 'var(--red)' }}>
@@ -357,10 +412,10 @@ function Content() {
           <Icon name="git-compare" size={17} />
         </div>
         <div>
-          <div className="tt">푸시(FCM)와 알림톡은 서로 다른 채널입니다 — 이 화면은 푸시만 다룹니다</div>
+          <div className="tt">앱 알림과 카카오 알림톡은 서로 다릅니다 — 이 화면은 앱 알림만 다룹니다</div>
           <div className="tx">
             학부모 대상 <b>카카오 알림톡</b>은 템플릿 심사가 필요하므로 <b>문자발송</b> 메뉴에서 관리합니다. 여기서는 학생 앱
-            대상 <b>FCM 푸시</b>만 발송하며, 수신 미동의자는 서버가 알림톡으로 폴백합니다. <b>SMS는 제공하지 않으므로</b>{' '}
+            대상 <b>앱 알림</b>만 발송하며, 수신 미동의자는 서버가 알림톡으로 폴백합니다. <b>SMS는 제공하지 않으므로</b>{' '}
             승인된 알림톡 문안이 없는 자유 문안은 폴백 경로가 없습니다.
           </div>
         </div>
@@ -406,11 +461,11 @@ function Content() {
             }
             toolbar={
               <>
-                <button className="btn" disabled title="예약 발송 API가 없습니다">
+                <button className="btn" disabled title="준비 중입니다">
                   <Icon name="clock" size={14} /> 예약 발송
                 </button>
                 <ExcelButton filename="앱_푸시발송이력" columns={PUSH_COLUMNS} rows={PUSH_ROWS} masked={false} />
-                <button className="btn pri" disabled title="푸시 발송 API가 없습니다">
+                <button className="btn pri" disabled title="준비 중입니다">
                   <Icon name="send" size={14} /> 새 푸시 발송
                 </button>
               </>
@@ -588,10 +643,10 @@ export const appManageMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn">
+      <button className="btn" disabled title="준비 중입니다">
         <Icon name="qr-code" size={14} /> 앱 설치 안내
       </button>
-      <button className="btn pri">
+      <button className="btn pri" disabled title="준비 중입니다">
         <Icon name="send" size={14} /> 푸시 발송
       </button>
     </>

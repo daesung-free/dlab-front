@@ -151,7 +151,7 @@ const APPLICANT_COLUMNS: Column<ApplicantRow>[] = [
     align: 'center',
     // 특강비 수납 여부는 청구(F-4.8) 쪽 데이터다. 신청자 응답에는 없다
     value: () => '',
-    render: () => <Unfilled reason="수납 여부는 청구 도메인이라 신청자 응답에 없다" />,
+    render: () => <Unfilled reason="수납 현황은 수납 화면에서 확인하세요" />,
   },
 ]
 
@@ -613,7 +613,7 @@ function Content() {
           </div>
           {/* 수납 여부는 청구 도메인이라 특강 응답에 없다 */}
           <div className="v" style={{ fontSize: 14, paddingTop: 8 }}>
-            <Unfilled reason="특강비 수납 현황은 청구 도메인이다" />
+            <Unfilled reason="수납 현황은 수납 화면에서 확인하세요" />
           </div>
           <div className="d">수납현황(F-4.8) 참조</div>
         </div>
@@ -624,7 +624,7 @@ function Content() {
           <div className="v" style={{ fontSize: 15, paddingTop: 6 }}>
             보완 개발
           </div>
-          <div className="d warn">DSA 대응 화면 없음</div>
+          <div className="d warn">신규</div>
         </div>
       </div>
 
@@ -732,7 +732,7 @@ function Content() {
                 </span>
                 <div className="dt-right">
                   <MaskToggle masked={masked} onChange={setMasked} />
-                  <button className="btn">
+                  <button className="btn" disabled title="준비 중입니다">
                     <Icon name="printer" size={14} /> 출석부 인쇄
                   </button>
                 </div>
@@ -791,7 +791,7 @@ export const lectureMockup: Mockup = {
   actions: (
     <>
       <button className="btn">2026-06 ▾</button>
-      <button className="btn">
+      <button className="btn" disabled title="준비 중입니다">
         <Icon name="megaphone" size={14} /> 설명회 신청 관리
       </button>
     </>

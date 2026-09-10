@@ -1,0 +1,55 @@
+.mo-back {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 30, 50, 0.34);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  z-index: 60;
+}
+.mo {
+  background: var(--card);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-2);
+  width: 100%;
+  max-width: 440px;
+  max-height: 100%;
+  overflow: auto;
+  animation: mo-in 0.14s ease-out;
+}
+@keyframes mo-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mo { animation: none; }
+}
+.mo-h {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 17px 19px 14px;
+  border-bottom: 1px solid var(--line-2);
+}
+.mo-t { font-weight: 700; font-size: 15px; }
+.mo-s { font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.55; }
+.mo-x {
+  margin-left: auto;
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 7px;
+  display: flex;
+}
+.mo-x:hover:not(:disabled) { background: var(--line-2); color: var(--ink-2); }
+.mo-x:disabled { opacity: 0.4; cursor: not-allowed; }
+.mo-b { padding: 18px 19px; }
+.mo-b .frow:last-of-type { margin-bottom: 0; }
+.mo-f {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 19px 17px;
+  border-top: 1px solid var(--line-2);
+}
