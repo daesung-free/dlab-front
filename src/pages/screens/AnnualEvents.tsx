@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DataTable, ExcelButton, Unfilled, type Column } from '../../components/common'
+import { DataTable, ExcelButton, Unfilled, type Column, toDateStr } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
@@ -54,7 +54,7 @@ function datesBetween(from: string, to: string): string[] {
   const out: string[] = []
   const end = new Date(`${to}T00:00:00Z`)
   for (const d = new Date(`${from}T00:00:00Z`); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
-    out.push(d.toISOString().slice(0, 10))
+    out.push(toDateStr(d))
   }
   return out
 }

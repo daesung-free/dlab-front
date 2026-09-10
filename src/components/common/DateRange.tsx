@@ -12,9 +12,8 @@ interface Props {
   presets?: boolean
 }
 
-function iso(d: Date): string {
-  return d.toISOString().slice(0, 10)
-}
+// UTC 변환이 끼면 한국 시간 자정이 전날이 된다 — localDate.ts 주석 참고
+import { toDateStr as iso } from './localDate'
 
 const PRESETS: { label: string; range: () => DateRangeValue }[] = [
   {

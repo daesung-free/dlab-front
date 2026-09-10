@@ -88,14 +88,21 @@ function Content() {
   const rows = useMemo(() => all.filter((l) => l.lectureType === wantType), [all, wantType])
   const hidden = rows.filter((l) => !l.visible && l.status === 'OPEN')
 
-  async function run(what: string, fn: () => Promise<unknown>) {
+  /**
+   * 동작 하나를 돌리고 결과를 알린다.
+   *
+   * ★ `done`·`failed` 를 **완성된 문장으로** 받는다. 예전에는 어간('접수를 열')을 받아
+   *   뒤에 '했습니다'를 붙였는데, 한국어는 그렇게 이어지지 않는다 —
+   *   "접수를 열 했습니다" · "최신 버전을 바꾸 했습니다" 가 그대로 화면에 나갔다.
+   */
+  async function run(done: string, failed: string, fn: () => Promise<unknown>) {
     setBusy(true)
     try {
       await fn()
-      setNotice(`${what} 했습니다.`)
+      setNotice(done)
       await load()
     } catch (err) {
-      setNotice(err instanceof ApiError ? `${what} 실패 — ${err.message}` : `${what}에 실패했습니다.`)
+      setNotice(err instanceof ApiError ? `${failed} — ${err.message}` : failed)
     } finally {
       setBusy(false)
     }
@@ -108,7 +115,8 @@ function Content() {
     }
     if (name.trim() === '') return
     // 만들 때 정하는 건 이름과 종류뿐이다. 정원·기간·비용은 F-4.7 개설 폼에서 채운다
-    void run(`${tab === 'lecture' ? '특강' : '설명회'}을(를) 등록`, async () => {
+    const kind = tab === 'lecture' ? '특강' : '설명회'
+    void run(`${kind}을 등록했습니다.`, `${kind}을 등록하지 못했습니다.`, async () => {
       const created = await createLecture({ academyId, year, lectureType: wantType, name: name.trim() })
       // ★ POST 는 이름·종류만 받는다. 유형은 PATCH 로 이어 붙여야 해서 등록이 2콜이다
       if (wantType === 'LECTURE' && categoryId !== '') {
@@ -220,7 +228,13 @@ function Content() {
               className="btn"
               style={{ padding: '4px 9px', fontSize: 11.5 }}
               disabled={busy}
-              onClick={() => void run(r.visible ? '앱에서 숨기' : '앱에 노출하', () => setLectureVisible(r.id, !r.visible))}
+              onClick={() =>
+                  void run(
+                    r.visible ? '앱에서 숨겼습니다.' : '앱에 노출했습니다.',
+                    r.visible ? '숨기지 못했습니다.' : '노출하지 못했습니다.',
+                    () => setLectureVisible(r.id, !r.visible),
+                  )
+                }
             >
               {r.visible ? '숨기기' : '노출'}
             </button>
@@ -231,7 +245,11 @@ function Content() {
               onClick={() => {
                 const next: LectureStatus = r.status === 'OPEN' ? 'CLOSED' : 'OPEN'
                 // 닫아도 이미 신청한 건은 그대로 남는다 — 상태는 "지금 받는가"다
-                void run(next === 'OPEN' ? '접수를 열' : '접수를 닫', () => changeLectureStatus(r.id, next))
+                void run(
+                  next === 'OPEN' ? '접수를 열었습니다.' : '접수를 닫았습니다.',
+                  next === 'OPEN' ? '접수를 열지 못했습니다.' : '접수를 닫지 못했습니다.',
+                  () => changeLectureStatus(r.id, next),
+                )
               }}
             >
               {r.status === 'OPEN' ? '접수 닫기' : '접수 열기'}

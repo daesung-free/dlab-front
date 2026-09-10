@@ -388,6 +388,15 @@ function Content() {
   }, [academyId, period?.from, period?.to, query.kind])
 
   const load = useCallback(async () => {
+    /* ★ 지점을 고르기 전에는 부르지 않는다. 예전에는 academyId 없이 먼저 던지고
+         고른 뒤 다시 던져서, **화면에 들어갈 때마다 400 이 두 건씩** 쌓였다.
+         화면은 결과적으로 정상으로 보여 아무도 몰랐다. */
+    if (academyId === null) {
+      setRows([])
+      setSummary(null)
+      setLoading(false)
+      return
+    }
     setLoading(true)
     setError(null)
     try {

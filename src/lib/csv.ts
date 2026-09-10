@@ -21,7 +21,10 @@ export function toCsv(headers: string[], rows: string[][]): string {
 
 /** 브라우저에서 즉시 다운로드 */
 export function downloadCsv(filename: string, csv: string): void {
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  /* ★ 맨 앞의 \uFEFF(BOM) 가 없으면 **Excel 이 한글을 깨서 연다.**
+       charset=utf-8 을 붙여도 소용없다 — Excel 은 그 헤더를 안 보고 BOM 으로 판단한다.
+       메모장·구글 시트는 BOM 없이도 잘 열려서 오래 안 드러났다. */
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
