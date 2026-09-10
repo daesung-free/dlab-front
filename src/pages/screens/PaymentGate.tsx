@@ -308,12 +308,12 @@ function Content() {
           toolbar={
             <>
               {tab === 'vbank' && (
-                <button className="btn">
+                <button className="btn" disabled title="준비 중입니다">
                   <Icon name="send" size={14} /> 입금 안내 재발송
                 </button>
               )}
               {tab === 'refund' && (
-                <button className="btn">
+                <button className="btn" disabled title="준비 중입니다">
                   <Icon name="refresh-cw" size={14} /> 환불 재시도
                 </button>
               )}
@@ -381,7 +381,7 @@ export const paymentGateMockup: Mockup = {
   actions: (
     <>
       <button className="btn">2026-05 ▾</button>
-      <button className="btn">
+      <button className="btn" disabled title="준비 중입니다">
         <Icon name="file-spreadsheet" size={14} /> 정산 대사
       </button>
     </>

@@ -286,10 +286,10 @@ export const absenceMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn">
+      <button className="btn" disabled title="준비 중입니다">
         <Icon name="settings" size={14} /> 승인 항목 설정
       </button>
-      <button className="btn pri">
+      <button className="btn pri" disabled title="준비 중입니다">
         <Icon name="plus" size={14} /> 관리자 직접 등록
       </button>
     </>

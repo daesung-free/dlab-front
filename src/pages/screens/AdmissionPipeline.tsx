@@ -331,8 +331,8 @@ export const admissionMockup: Mockup = {
   actions: (
     <>
       <button className="btn">2026 시즌 ▾</button>
-      <button className="btn">문자 자동발송 설정</button>
-      <button className="btn pri">+ 예약 수동등록</button>
+      <button className="btn" disabled title="준비 중입니다">문자 자동발송 설정</button>
+      <button className="btn pri" disabled title="준비 중입니다">+ 예약 수동등록</button>
     </>
   ),
 }

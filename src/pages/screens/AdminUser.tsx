@@ -926,7 +926,7 @@ export const adminUserMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn">
+      <button className="btn" disabled title="준비 중입니다">
         <Icon name="history" size={14} /> 권한 변경 이력
       </button>
     </>

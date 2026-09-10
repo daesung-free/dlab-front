@@ -588,10 +588,10 @@ export const appManageMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn">
+      <button className="btn" disabled title="준비 중입니다">
         <Icon name="qr-code" size={14} /> 앱 설치 안내
       </button>
-      <button className="btn pri">
+      <button className="btn pri" disabled title="준비 중입니다">
         <Icon name="send" size={14} /> 푸시 발송
       </button>
     </>

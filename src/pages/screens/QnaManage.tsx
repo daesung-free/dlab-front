@@ -451,7 +451,7 @@ function Content() {
 
               <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
                 <MaskToggle masked={masked} onChange={setMasked} />
-                <button className="btn">
+                <button className="btn" disabled title="준비 중입니다">
                   <Icon name="plus" size={14} /> 타임 일괄 개설
                 </button>
                 <span style={{ fontSize: 11.5, color: 'var(--muted)', marginLeft: 'auto' }}>
@@ -634,7 +634,7 @@ function Content() {
 
                   <div className="frow">
                     <label>&nbsp;</label>
-                    <button className="btn pri">
+                    <button className="btn pri" disabled title="준비 중입니다">
                       <Icon name="save" size={14} /> 설정 저장
                     </button>
                   </div>
@@ -666,7 +666,7 @@ export const qnaMockup: Mockup = {
   actions: (
     <>
       <button className="btn">2026-06 1주 ▾</button>
-      <button className="btn pri">
+      <button className="btn pri" disabled title="준비 중입니다">
         <Icon name="plus" size={14} /> 타임 개설
       </button>
     </>

@@ -89,9 +89,17 @@ button {
   align-items: center;
   gap: 7px;
 }
-.btn:hover { border-color: #d6dbe2; }
+.btn:hover:not(:disabled) { border-color: #d6dbe2; }
+
+/* ★ 비활성 버튼은 **보이기에도 달라야 한다.** 이게 없으면 disabled 를 걸어도 겉모습이
+     같아서, 눌러도 아무 일이 없는 것과 구분되지 않는다 — 보는 사람은 "고장 났다"로 읽는다.
+     실제로 그렇게 보고됐다. 아직 안 붙은 기능은 title 로 이유를 함께 말한다. */
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 .btn.pri { background: var(--mint); border-color: var(--mint); color: #fff; }
-.btn.pri:hover { background: var(--mint-d); }
+.btn.pri:hover:not(:disabled) { background: var(--mint-d); }
 
 /* ===== 필터 칩 (상담·성적 시안 공통) ===== */
 .filter-row {

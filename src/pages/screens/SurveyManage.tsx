@@ -1121,10 +1121,10 @@ export const surveyMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn">
+      <button className="btn" disabled title="준비 중입니다">
         <Icon name="copy" size={14} /> 템플릿에서 생성
       </button>
-      <button className="btn pri">
+      <button className="btn pri" disabled title="준비 중입니다">
         <Icon name="plus" size={14} /> 설문 생성
       </button>
     </>

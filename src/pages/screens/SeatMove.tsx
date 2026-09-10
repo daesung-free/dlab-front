@@ -141,10 +141,10 @@ const KIOSK_COLUMNS: Column<Kiosk>[] = [
     value: () => '',
     render: () => (
       <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }}>
+        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled title="준비 중입니다">
           설정
         </button>
-        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }}>
+        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled title="준비 중입니다">
           재시작
         </button>
       </div>
@@ -441,13 +441,13 @@ function Content() {
             }
             toolbar={
               <>
-                <button className="btn">
+                <button className="btn" disabled title="준비 중입니다">
                   <Icon name="refresh-cw" size={14} /> 전체 동기화
                 </button>
-                <button className="btn">
+                <button className="btn" disabled title="준비 중입니다">
                   <Icon name="upload" size={14} /> 펌웨어 배포
                 </button>
-                <button className="btn pri">
+                <button className="btn pri" disabled title="준비 중입니다">
                   <Icon name="plus" size={14} /> 단말 등록
                 </button>
               </>
@@ -464,7 +464,7 @@ export const seatMoveMockup: Mockup = {
   actions: (
     <>
       <button className="btn">A · B실 ▾</button>
-      <button className="btn">
+      <button className="btn" disabled title="준비 중입니다">
         <Icon name="monitor" size={14} /> 키오스크 관리
       </button>
     </>

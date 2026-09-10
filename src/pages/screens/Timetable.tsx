@@ -439,11 +439,11 @@ function Content() {
             }
             toolbar={
               <>
-                <button className="btn">
+                <button className="btn" disabled title="준비 중입니다">
                   <Icon name="upload" size={14} /> 엑셀 일괄 배정
                 </button>
                 <ExcelButton filename={`이동수업_${subject}`} columns={MOVE_COLUMNS} rows={moveRows} />
-                <button className="btn pri">
+                <button className="btn pri" disabled title="준비 중입니다">
                   <Icon name="route" size={14} /> 선택 이동반 변경
                 </button>
               </>
@@ -508,10 +508,10 @@ export const timetableMockup: Mockup = {
   actions: (
     <>
       <button className="btn">2026 · 2학기 ▾</button>
-      <button className="btn">
+      <button className="btn" disabled title="준비 중입니다">
         <Icon name="history" size={14} /> 전 학기 복사
       </button>
-      <button className="btn pri">
+      <button className="btn pri" disabled title="준비 중입니다">
         <Icon name="save" size={14} /> 편성 저장
       </button>
     </>

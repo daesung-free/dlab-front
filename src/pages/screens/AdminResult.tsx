@@ -251,10 +251,10 @@ export const adminResultMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn">
+      <button className="btn" disabled title="준비 중입니다">
         <Icon name="upload" size={14} /> 엑셀 일괄 등록
       </button>
-      <button className="btn">
+      <button className="btn" disabled title="준비 중입니다">
         <Icon name="printer" size={14} /> 실적 현황 출력
       </button>
     </>

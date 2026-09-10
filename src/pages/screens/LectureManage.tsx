@@ -732,7 +732,7 @@ function Content() {
                 </span>
                 <div className="dt-right">
                   <MaskToggle masked={masked} onChange={setMasked} />
-                  <button className="btn">
+                  <button className="btn" disabled title="준비 중입니다">
                     <Icon name="printer" size={14} /> 출석부 인쇄
                   </button>
                 </div>
@@ -791,7 +791,7 @@ export const lectureMockup: Mockup = {
   actions: (
     <>
       <button className="btn">2026-06 ▾</button>
-      <button className="btn">
+      <button className="btn" disabled title="준비 중입니다">
         <Icon name="megaphone" size={14} /> 설명회 신청 관리
       </button>
     </>

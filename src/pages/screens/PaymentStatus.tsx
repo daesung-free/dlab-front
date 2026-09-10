@@ -344,10 +344,10 @@ const DISCOUNT_COLUMNS: Column<Discount>[] = [
     value: () => '',
     render: () => (
       <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }}>
+        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled title="준비 중입니다">
           수정
         </button>
-        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5, color: 'var(--red)' }}>
+        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5, color: 'var(--red)' }} disabled title="준비 중입니다">
           삭제
         </button>
       </div>
@@ -546,7 +546,7 @@ function Content() {
                     toolbar={
                       <>
                         <ExcelButton filename="할인정책" columns={DISCOUNT_COLUMNS} rows={DISCOUNTS} masked={false} />
-                        <button className="btn pri">
+                        <button className="btn pri" disabled title="준비 중입니다">
                           <Icon name="plus" size={14} /> 할인 정책 등록
                         </button>
                       </>
@@ -729,7 +729,7 @@ function Content() {
               }
               toolbar={
                 <>
-                  <button className="btn">
+                  <button className="btn" disabled title="준비 중입니다">
                     <Icon name="bell" size={14} /> 미납자 일괄 알림톡
                   </button>
                   <MaskToggle masked={masked} onChange={setMasked} />
@@ -751,7 +751,7 @@ export const paymentMockup: Mockup = {
   actions: (
     <>
       <button className="btn">2026 시즌 ▾</button>
-      <button className="btn">
+      <button className="btn" disabled title="준비 중입니다">
         <Icon name="bar-chart-3" size={14} /> 기간·지점별 통계
       </button>
     </>
