@@ -91,14 +91,17 @@ export function Modal({
             </button>
           </div>
 
-          <div className="mo-b">
-            {children}
-            {error && (
-              <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
-                {error}
-              </div>
-            )}
-          </div>
+          {/* 확인만 묻는 모달은 본문이 없다 — 빈 칸을 그리면 가운데가 휑하게 뜬다 */}
+          {(children || error) && (
+            <div className="mo-b">
+              {children}
+              {error && (
+                <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+                  {error}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="mo-f">
             <button type="button" className="btn" onClick={onClose} disabled={busy}>

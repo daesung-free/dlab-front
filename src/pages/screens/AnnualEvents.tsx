@@ -96,14 +96,16 @@ function Content() {
     void load()
   }, [load])
 
-  async function remove(h: Holiday) {
+  async function remove(h: Holiday): Promise<boolean> {
     setBusy(true)
     try {
       await deleteHoliday(h.id)
       setResult(`${h.date} ${h.name} 을 지웠습니다.`)
       await load()
+      return true
     } catch (err) {
       setResult(err instanceof ApiError ? `지우지 못했습니다 — ${err.message}` : '지우지 못했습니다.')
+      return false
     } finally {
       setBusy(false)
     }
@@ -269,11 +271,7 @@ function Content() {
           confirmLabel="삭제"
           danger
           busy={busy}
-          onConfirm={() => {
-            const h = removing
-            setRemoving(null)
-            void remove(h)
-          }}
+          onConfirm={() => void remove(removing).then((ok) => ok && setRemoving(null))}
           onClose={() => setRemoving(null)}
         />
       )}

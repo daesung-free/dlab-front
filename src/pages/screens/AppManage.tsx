@@ -209,6 +209,8 @@ function Content() {
   const [verEdit, setVerEdit] = useState<{ c: AppConfigDetail; field: 'minVersion' | 'latestVersion'; value: string } | null>(null)
   /** 점검 모드 안내 문구 모달. 켜면 그 플랫폼 사용자 전원이 앱을 못 쓴다 */
   const [maintEdit, setMaintEdit] = useState<{ c: AppConfigDetail; message: string } | null>(null)
+  /** 모달 안에서 보여줄 실패 메시지 */
+  const [modalErr, setModalErr] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -235,14 +237,18 @@ function Content() {
   }, [load])
 
   /** `done`·`failed` 를 완성된 문장으로 받는다 — AdminLecture 의 같은 함수 주석 참고 */
-  async function run(done: string, failed: string, fn: () => Promise<unknown>) {
+  /** 성공하면 true. 호출부가 모달을 **성공했을 때만** 닫는 데 쓴다 */
+  async function run(done: string, failed: string, fn: () => Promise<unknown>): Promise<boolean> {
     setBusy(true)
     try {
       await fn()
       setNotice(done)
+      return true
       await load()
     } catch (err) {
-      setNotice(err instanceof ApiError ? `${failed} — ${err.message}` : failed)
+      setModalErr(err instanceof ApiError ? err.message : failed)
+      setNotice(null)
+      return false
     } finally {
       setBusy(false)
     }
@@ -273,15 +279,15 @@ function Content() {
           sub={verEdit.field === 'minVersion' ? '이보다 낮은 버전은 앱이 열리지 않습니다.' : undefined}
           confirmLabel="저장"
           confirmDisabled={verEdit.value.trim() === ''}
+          error={modalErr}
           onConfirm={() => {
             const e = verEdit
-            setVerEdit(null)
             const label = e.field === 'minVersion' ? '최소 지원 버전' : '최신 버전'
             void run(`${label}을 바꿨습니다.`, `${label}을 바꾸지 못했습니다.`, () =>
               updateAppVersions(e.c.platform, { [e.field]: e.value.trim() }),
-            )
+            ).then((ok) => ok && setVerEdit(null))
           }}
-          onClose={() => setVerEdit(null)}
+          onClose={() => { setModalErr(null); setVerEdit(null) }}
         >
           <div className="frow">
             <label className="req">버전</label>
@@ -303,14 +309,14 @@ function Content() {
           confirmLabel="점검 모드 켜기"
           danger
           confirmDisabled={maintEdit.message.trim() === ''}
+          error={modalErr}
           onConfirm={() => {
             const e = maintEdit
-            setMaintEdit(null)
             void run('점검 모드를 켰습니다.', '점검 모드를 켜지 못했습니다.', () =>
               setMaintenance(e.c.platform, { maintenance: true, message: e.message.trim() }),
-            )
+            ).then((ok) => ok && setMaintEdit(null))
           }}
-          onClose={() => setMaintEdit(null)}
+          onClose={() => { setModalErr(null); setMaintEdit(null) }}
         >
           <div className="frow">
             <label className="req">안내 문구</label>

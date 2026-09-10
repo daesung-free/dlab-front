@@ -375,6 +375,8 @@ function Content() {
   const [codeInput, setCodeInput] = useState<{ id: number; code: string } | null>(null)
   /** 심사 반려 사유 기록 */
   const [rejectNote, setRejectNote] = useState<{ id: number; note: string } | null>(null)
+  /** 모달 안에서 보여줄 실패 메시지 */
+  const [modalErr, setModalErr] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -406,7 +408,8 @@ function Content() {
   }
 
   /** 저장·심사 조작을 한 곳에서 감싼다 — 결과 메시지를 빠뜨리지 않기 위해 */
-  async function run(what: string, fn: () => Promise<NotificationTemplate>) {
+  /** 성공하면 true. 호출부가 모달을 **성공했을 때만** 닫는 데 쓴다 */
+  async function run(what: string, fn: () => Promise<NotificationTemplate>): Promise<boolean> {
     setBusy(true)
     try {
       const next = await fn()
@@ -418,8 +421,13 @@ function Content() {
           ? `${what} 완료 — 지금 발송됩니다.`
           : `${what} 완료 — 아직 발송되지 않습니다 (${blockedReason(next)}).`,
       )
+      return true
     } catch (err) {
-      setNotice(err instanceof ApiError ? `${what} 실패 — ${err.message}` : `${what}에 실패했습니다.`)
+      const msg = err instanceof ApiError ? `${what} 실패 — ${err.message}` : `${what}에 실패했습니다.`
+      // 모달이 열려 있으면 그 안에서, 아니면 화면 배너로. 둘 다 채워 두고 보이는 쪽이 쓴다
+      setModalErr(msg)
+      setNotice(msg)
+      return false
     } finally {
       setBusy(false)
     }
@@ -453,14 +461,17 @@ function Content() {
           confirmLabel="저장하고 재심사"
           danger
           busy={busy}
-          onConfirm={() => {
-            const id = reconfirm
-            setReconfirm(null)
+          error={modalErr}
+          onConfirm={() =>
             void run('문안 확정', () =>
-              updateTemplateContent(id, { titleTemplate: title, bodyTemplate: body, contentConfirmed: true }),
-            )
-          }}
-          onClose={() => setReconfirm(null)}
+              updateTemplateContent(reconfirm, {
+                titleTemplate: title,
+                bodyTemplate: body,
+                contentConfirmed: true,
+              }),
+            ).then((ok) => ok && setReconfirm(null))
+          }
+          onClose={() => { setModalErr(null); setReconfirm(null) }}
         />
       )}
 
@@ -471,12 +482,13 @@ function Content() {
           confirmLabel="심사 제출"
           busy={busy}
           confirmDisabled={codeInput.code.trim() === ''}
-          onConfirm={() => {
-            const c = codeInput
-            setCodeInput(null)
-            void run('심사 제출', () => submitTemplateReview(c.id, c.code.trim()))
-          }}
-          onClose={() => setCodeInput(null)}
+          error={modalErr}
+          onConfirm={() =>
+            void run('심사 제출', () => submitTemplateReview(codeInput.id, codeInput.code.trim())).then(
+              (ok) => ok && setCodeInput(null),
+            )
+          }
+          onClose={() => { setModalErr(null); setCodeInput(null) }}
         >
           <div className="frow">
             <label className="req">코드</label>
@@ -496,14 +508,13 @@ function Content() {
           sub="카카오가 알려준 반려 사유를 적어 두면 다음에 고칠 때 참고할 수 있습니다."
           confirmLabel="기록"
           busy={busy}
-          onConfirm={() => {
-            const r = rejectNote
-            setRejectNote(null)
+          error={modalErr}
+          onConfirm={() =>
             void run('심사 반려 기록', () =>
-              recordTemplateReviewResult(r.id, false, r.note.trim() || undefined),
-            )
-          }}
-          onClose={() => setRejectNote(null)}
+              recordTemplateReviewResult(rejectNote.id, false, rejectNote.note.trim() || undefined),
+            ).then((ok) => ok && setRejectNote(null))
+          }
+          onClose={() => { setModalErr(null); setRejectNote(null) }}
         >
           <div className="frow">
             <label>사유</label>

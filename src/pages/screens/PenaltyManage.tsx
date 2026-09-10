@@ -263,7 +263,7 @@ function Content() {
     [revoking],
   )
 
-  async function revoke(row: PenaltyRow) {
+  async function revoke(row: PenaltyRow): Promise<boolean> {
     const label = `${row.name} · ${PENALTY_CATEGORY_LABEL[row.category]} ${row.point > 0 ? `+${row.point}` : row.point}점 (${row.itemName})`
     setRevoking(row.id)
     setGrantMsg(null)
@@ -272,8 +272,10 @@ function Content() {
       setGrantMsg(`${label} 을 취소했습니다. 학생 앱 Daily Report 에도 즉시 반영됩니다.`)
       // 합계가 상단 통계에 걸려 있어 목록만 지우면 숫자가 안 맞는다
       board.reload()
+      return true
     } catch (err) {
       setGrantMsg(err instanceof ApiError ? err.message : '취소하지 못했습니다.')
+      return false
     } finally {
       setRevoking(null)
     }
@@ -313,11 +315,7 @@ function Content() {
           confirmLabel="취소 처리"
           danger
           busy={revoking !== null}
-          onConfirm={() => {
-            const row = confirming
-            setConfirming(null)
-            void revoke(row)
-          }}
+          onConfirm={() => void revoke(confirming).then((ok) => ok && setConfirming(null))}
           onClose={() => setConfirming(null)}
         />
       )}

@@ -68,6 +68,7 @@ function Content() {
   const [acting, setActing] = useState<number | null>(null)
   /** 반려 사유 입력 모달. 사유는 학생·학부모에게 그대로 전달된다 */
   const [rejecting, setRejecting] = useState<{ row: AbsenceRequestRow; reason: string } | null>(null)
+  const [rejectErr, setRejectErr] = useState<string | null>(null)
   const [actionMsg, setActionMsg] = useState<string | null>(null)
 
   // 서버 기본값과 같은 범위를 명시해서 보낸다 — 화면에 적은 기간과 실제 조회 범위를 맞추려는 것
@@ -97,6 +98,10 @@ function Content() {
   const canceled = countOf('CANCELED')
   const rows = useMemo(() => all.filter((r) => r.status === tab), [all, tab])
 
+  /**
+   * ★ 반려는 **성공한 뒤에** 모달을 닫는다. 먼저 닫으면 서버가 거부했을 때 길게 쓴 사유가
+   *   통째로 날아가고, 오류는 뒤 화면에 떠서 무엇이 문제인지도 모른다.
+   */
   async function act(row: AbsenceRequestRow, kind: 'approve' | 'reject', reason = '') {
     setActing(row.approvalRequestId)
     setActionMsg(null)
@@ -104,10 +109,14 @@ function Content() {
       if (kind === 'approve') await approveRequest(row.approvalRequestId)
       else await rejectRequest(row.approvalRequestId, reason)
       setActionMsg(`${row.name} · ${ABSENCE_TYPE_LABEL[row.type]} 건을 ${kind === 'approve' ? '승인' : '반려'}했습니다.`)
+      setRejecting(null)
       board.reload()
     } catch (err) {
       // 권한(대리승인 허용 범위)·이미 처리됨이 여기로 온다. 서버 문구를 그대로 보여준다
-      setActionMsg(err instanceof ApiError ? err.message : '처리에 실패했습니다.')
+      const msg = err instanceof ApiError ? err.message : '처리에 실패했습니다.'
+      // 반려 모달이 열려 있으면 그 안에서 보여준다 — 뒤 화면 배너는 모달에 가려 안 보인다
+      if (kind === 'reject') setRejectErr(msg)
+      else setActionMsg(msg)
     } finally {
       setActing(null)
     }
@@ -191,11 +200,8 @@ function Content() {
           danger
           busy={acting === rejecting.row.approvalRequestId}
           confirmDisabled={rejecting.reason.trim() === ''}
-          onConfirm={() => {
-            const r = rejecting
-            setRejecting(null)
-            void act(r.row, 'reject', r.reason.trim())
-          }}
+          error={rejectErr}
+          onConfirm={() => void act(rejecting.row, 'reject', rejecting.reason.trim())}
           onClose={() => setRejecting(null)}
         >
           <div className="frow">

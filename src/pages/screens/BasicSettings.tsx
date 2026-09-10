@@ -106,8 +106,14 @@ interface MasterDef {
    *   대화상자가 뜨는 동안 탭이 멈추고, 마지막에서 취소하면 앞 입력이 통째로 날아갔다.
    */
   createExtra?: { key: string; label: string; placeholder?: string; required?: boolean; numeric?: boolean }[]
-  /** row 를 함께 받는다 — 강의실·장학 종류는 PUT 에 다른 필드가 필수라 지금 값이 필요하다 */
-  rename?: (id: number, name: string, row?: MasterRow) => Promise<unknown>
+  /**
+   * 이름(과 `createExtra` 로 선언한 값들)을 고친다.
+   *
+   * ★ 예전에는 이름만 받고 나머지는 **기존 값을 그대로 다시 보냈다.** 그래서 강의실 호실
+   *   번호나 장학 할인율에 오타가 나면 **화면에서는 영영 고칠 수 없었다** — 서버는
+   *   고칠 수 있는데도. 지금은 등록과 같은 칸을 수정에서도 준다.
+   */
+  rename?: (id: number, name: string, row?: MasterRow, extra?: Record<string, string>) => Promise<unknown>
   remove?: (id: number) => Promise<unknown>
   /** 이 마스터에만 있는 추가 컬럼 */
   extra?: Column<MasterRow>
@@ -260,7 +266,8 @@ const MASTERS: MasterDef[] = [
     },
     createExtra: [{ key: 'roomNo', label: '호실 번호', placeholder: '201', required: true }],
     // ★ PUT 의 필수값이 roomNo 라 지금 번호를 함께 실어야 이름만 바꿀 수 있다
-    rename: (id, name, row) => updateRoom(id, { roomNo: row?.roomNo ?? name, name }),
+    rename: (id, name, row, extra) =>
+      updateRoom(id, { roomNo: (extra?.roomNo ?? row?.roomNo ?? name).trim(), name }),
     remove: deleteRoom,
     // 코드 자리는 roomNo 가 대신하므로 code 컬럼은 안 쓴다
     has: { memo: true, active: true },
@@ -311,7 +318,11 @@ const MASTERS: MasterDef[] = [
       { key: 'discountRate', label: '할인율(%)', placeholder: '100', required: true, numeric: true },
     ],
     // ★ PUT 의 필수값이 name·discountRate 다 — 지금 할인율을 함께 실어야 한다
-    rename: (id, name, row) => updateScholarshipMaster(id, { name, discountRate: row?.discountRate ?? 0 }),
+    rename: (id, name, row, extra) =>
+      updateScholarshipMaster(id, {
+        name,
+        discountRate: Number(extra?.discountRate ?? row?.discountRate ?? 0),
+      }),
     remove: deleteScholarshipMaster,
     has: { code: true, memo: true, active: true },
     extra: {
@@ -368,7 +379,7 @@ function Content() {
   const [draft, setDraft] = useState<{ name: string; extra: Record<string, string> } | null>(null)
   const [adding, setAdding] = useState(false)
   const [addErr, setAddErr] = useState<string | null>(null)
-  const [renaming, setRenaming] = useState<{ row: MasterRow; name: string } | null>(null)
+  const [renaming, setRenaming] = useState<{ row: MasterRow; name: string; extra: Record<string, string> } | null>(null)
   const [removing, setRemoving] = useState<MasterRow | null>(null)
   /** 전년도 복사 확인 모달 */
   const [copying, setCopying] = useState(false)
@@ -423,22 +434,42 @@ function Content() {
   }, [academyId, year])
 
   /**
-   * 동작 하나를 돌리고 결과를 알린다.
+   * 수정·삭제는 **성공한 뒤에** 모달을 닫는다.
    *
-   * ★ `done`·`failed` 를 **완성된 문장으로** 받는다. 예전에는 어간('지우')을 받아 뒤에
-   *   '했습니다'를 붙였는데, 한국어는 그렇게 이어지지 않는다 — "지우 했습니다"가 그대로
-   *   화면에 나갔다. 특강·앱 운영에서도 같은 버그가 있었다.
+   * ★ 예전에는 먼저 닫고 요청을 보냈다. 그래서 서버가 거부하면(할인율 2343 처럼)
+   *   모달은 이미 사라진 뒤라 오류가 **뒤 화면 배너에** 떴다 — 사용자는 무엇을 고쳐야
+   *   하는지 모른 채 입력값도 잃었다. 등록(submitAdd)은 원래 이 방식이었다.
    */
-  async function run(done: string, failed: string, fn: () => Promise<unknown>) {
-    setBusy(true)
+  async function submitRename() {
+    if (!renaming || !active.rename) return
+    setAdding(true)
+    setAddErr(null)
     try {
-      await fn()
-      setNotice(done)
+      await active.rename(renaming.row.id, renaming.name.trim(), renaming.row, renaming.extra)
+      setNotice('수정했습니다.')
+      setRenaming(null)
       await load()
     } catch (err) {
-      setNotice(err instanceof ApiError ? `${failed} — ${err.message}` : failed)
+      setAddErr(err instanceof ApiError ? err.message : '수정하지 못했습니다.')
     } finally {
-      setBusy(false)
+      setAdding(false)
+    }
+  }
+
+  async function submitRemove() {
+    if (!removing || !active.remove) return
+    setAdding(true)
+    setAddErr(null)
+    try {
+      await active.remove(removing.id)
+      setNotice('삭제했습니다.')
+      setRemoving(null)
+      await load()
+    } catch (err) {
+      // 사용 중이면 서버가 거부한다 — 그 이유를 모달 안에서 보여준다
+      setAddErr(err instanceof ApiError ? err.message : '삭제하지 못했습니다.')
+    } finally {
+      setAdding(false)
     }
   }
 
@@ -542,11 +573,13 @@ function Content() {
       base.push({
         key: 'act',
         header: '',
-        width: '92px',
+        /* ★ 수정·삭제 두 버튼이 들어갈 폭이다. 92px 이면 모자라서 **세로로 줄바꿈**됐다 —
+             가로로 두려던 것이 화면에서는 두 줄로 쌓여 보였다. */
+        width: '128px',
         align: 'center',
         value: () => '',
         render: (r) => (
-          <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+          <div style={{ display: 'flex', gap: 4, justifyContent: 'center', flexWrap: 'nowrap' }}>
             {active.rename && (
               <button
                 className="btn"
@@ -554,7 +587,16 @@ function Content() {
                 disabled={busy}
                 onClick={() => {
                   setAddErr(null)
-                  setRenaming({ row: r, name: r.name })
+                  setRenaming({
+                    row: r,
+                    name: r.name,
+                    extra: Object.fromEntries(
+                      (active.createExtra ?? []).map((f) => [
+                        f.key,
+                        String((r as unknown as Record<string, unknown>)[f.key] ?? ''),
+                      ]),
+                    ),
+                  })
                 }}
               >
                 수정
@@ -602,17 +644,13 @@ function Content() {
         <Modal
           title={`${active.label} 이름 수정`}
           confirmLabel="저장"
-          busy={busy}
+          busy={adding}
           error={addErr}
-          confirmDisabled={renaming.name.trim() === '' || renaming.name === renaming.row.name}
-          onConfirm={() => {
-            const next = renaming.name.trim()
-            const row = renaming.row
-            setRenaming(null)
-            void run('이름을 바꿨습니다.', '이름을 바꾸지 못했습니다.', () =>
-              active.rename!(row.id, next, row),
-            )
-          }}
+          confirmDisabled={
+            renaming.name.trim() === '' ||
+            (active.createExtra ?? []).some((f) => f.required && (renaming.extra[f.key] ?? '').trim() === '')
+          }
+          onConfirm={() => void submitRename()}
           onClose={() => setRenaming(null)}
         >
           <div className="frow">
@@ -624,6 +662,21 @@ function Content() {
               onChange={(e) => setRenaming({ ...renaming, name: e.target.value })}
             />
           </div>
+          {(active.createExtra ?? []).map((f) => (
+            <div className="frow" key={f.key}>
+              <label className={f.required ? 'req' : undefined}>{f.label}</label>
+              <input
+                className="inp"
+                type={f.numeric ? 'number' : 'text'}
+                value={renaming.extra[f.key] ?? ''}
+                placeholder={f.placeholder}
+                maxLength={30}
+                onChange={(e) =>
+                  setRenaming({ ...renaming, extra: { ...renaming.extra, [f.key]: e.target.value } })
+                }
+              />
+            </div>
+          ))}
         </Modal>
       )}
 
@@ -633,13 +686,9 @@ function Content() {
           sub="삭제하면 되돌릴 수 없습니다. 이미 사용 중이면 삭제되지 않습니다."
           confirmLabel="삭제"
           danger
-          busy={busy}
+          busy={adding}
           error={addErr}
-          onConfirm={() => {
-            const row = removing
-            setRemoving(null)
-            void run('삭제했습니다.', '삭제하지 못했습니다.', () => active.remove!(row.id))
-          }}
+          onConfirm={() => void submitRemove()}
           onClose={() => setRemoving(null)}
         />
       )}

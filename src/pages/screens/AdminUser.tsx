@@ -177,6 +177,8 @@ function Content() {
   const [confirm, setConfirm] = useState<{ kind: 'withdraw' | 'password'; row: AccountRow } | null>(null)
   /** 역할 변경 모달. 선택 상태를 들고 있는다 */
   const [roleEdit, setRoleEdit] = useState<{ row: AccountRow; picked: Role[] } | null>(null)
+  /** 모달 안에서 보여줄 실패 메시지 */
+  const [modalErr, setModalErr] = useState<string | null>(null)
   const [idCheck, setIdCheck] = useState<{ loginId: string; available: boolean } | null>(null)
   /** 부여 가능한 역할은 **서버가 판정한다** — 화면이 "내가 본사인가"로 계산하지 않는다 */
   const [roleOptions, setRoleOptions] = useState<RoleOption[]>([])
@@ -213,15 +215,17 @@ function Content() {
    *   오타가 나면 "알 수 없는 역할입니다"로 되돌아왔고, 지금 역할이 무엇인지도 그 창 안에서만
    *   보였다. 체크박스로 바꾸니 그 오류 경로 자체가 없어졌다.
    */
-  async function changeRole(row: AccountRow, next: Role[]) {
+  async function changeRole(row: AccountRow, next: Role[]): Promise<boolean> {
     setBusy(row.accountId)
     setActionMsg(null)
     try {
       await replaceRoles(row.accountId, next)
       setActionMsg(`${row.loginId} 의 역할을 바꿨습니다.`)
       list.reload()
+      return true
     } catch (err) {
-      setActionMsg(err instanceof ApiError ? err.message : '역할을 바꾸지 못했습니다.')
+      setModalErr(err instanceof ApiError ? err.message : '역할을 바꾸지 못했습니다.')
+      return false
     } finally {
       setBusy(null)
     }
@@ -294,15 +298,17 @@ function Content() {
     }
   }
 
-  async function withdraw(row: AccountRow) {
+  async function withdraw(row: AccountRow): Promise<boolean> {
     setBusy(row.accountId)
     setActionMsg(null)
     try {
       await withdrawAccount(row.accountId)
       setActionMsg(`${row.loginId} 를 탈퇴 처리했습니다.`)
       list.reload()
+      return true
     } catch (err) {
-      setActionMsg(err instanceof ApiError ? err.message : '탈퇴 처리에 실패했습니다.')
+      setModalErr(err instanceof ApiError ? err.message : '탈퇴 처리에 실패했습니다.')
+      return false
     } finally {
       setBusy(null)
     }
@@ -328,7 +334,7 @@ function Content() {
     }
   }
 
-  async function reissuePassword(row: AccountRow) {
+  async function reissuePassword(row: AccountRow): Promise<boolean> {
     /* ★ 평문이 응답에 **한 번만** 실리고 서버가 저장하지 않는다. 놓치면 또 발급해야 하므로
      *   등록 직후와 같은 방식으로 화면에 남기고 사용자가 직접 닫게 한다. */
     setBusy(row.accountId)
@@ -337,8 +343,10 @@ function Content() {
       const res = await issueTemporaryPassword(row.accountId)
       setReissued({ loginId: row.loginId, temporaryPassword: res.temporaryPassword })
       list.reload()
+      return true
     } catch (err) {
-      setActionMsg(err instanceof ApiError ? err.message : '임시 비밀번호를 발급하지 못했습니다.')
+      setModalErr(err instanceof ApiError ? err.message : '임시 비밀번호를 발급하지 못했습니다.')
+      return false
     } finally {
       setBusy(null)
     }
@@ -507,12 +515,13 @@ function Content() {
           confirmLabel="저장"
           busy={busy === roleEdit.row.accountId}
           confirmDisabled={roleEdit.picked.length === 0}
+          error={modalErr}
           onConfirm={() => {
+            setModalErr(null)
             const e = roleEdit
-            setRoleEdit(null)
-            void changeRole(e.row, e.picked)
+            void changeRole(e.row, e.picked).then((ok) => ok && setRoleEdit(null))
           }}
-          onClose={() => setRoleEdit(null)}
+          onClose={() => { setModalErr(null); setRoleEdit(null) }}
         >
           <div style={{ display: 'grid', gap: 9 }}>
             {ROLE_KEYS.map((code) => {
@@ -557,13 +566,14 @@ function Content() {
           confirmLabel={confirm.kind === 'withdraw' ? '탈퇴 처리' : '발급'}
           danger
           busy={busy === confirm.row.accountId}
+          error={modalErr}
           onConfirm={() => {
+            setModalErr(null)
             const c = confirm
-            setConfirm(null)
-            if (c.kind === 'withdraw') void withdraw(c.row)
-            else void reissuePassword(c.row)
+            const p = c.kind === 'withdraw' ? withdraw(c.row) : reissuePassword(c.row)
+            void p.then((ok) => ok && setConfirm(null))
           }}
-          onClose={() => setConfirm(null)}
+          onClose={() => { setModalErr(null); setConfirm(null) }}
         />
       )}
 

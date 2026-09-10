@@ -247,6 +247,7 @@ function Content() {
   const [busy, setBusy] = useState(false)
   /** 교습일수 입력 모달 */
   const [monthEdit, setMonthEdit] = useState<{ mo: number; days: string } | null>(null)
+  const [monthErr, setMonthErr] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -300,6 +301,10 @@ function Content() {
    * 교습일수는 **달력 일수가 아니다.** 학원이 아는 값을 그대로 받는다 —
    * 화면이 규칙을 추측해 채우면 조용히 틀린 금액이 나온다. 그래서 한 달씩 물어본다.
    */
+  /**
+   * ★ **성공한 뒤에** 모달을 닫는다. 먼저 닫으면 서버가 거부했을 때 오류가 뒤 화면에 떠서,
+   *   사용자는 무엇을 고쳐야 하는지 모른 채 입력값도 잃는다.
+   */
   async function editMonth(mo: number, days: number) {
     if (academyId === null) {
       setNotice('먼저 지점을 고르세요.')
@@ -307,12 +312,14 @@ function Content() {
     }
     const key = `${year}-${String(mo).padStart(2, '0')}`
     setBusy(true)
+    setMonthErr(null)
     try {
       await saveTuitionMonth({ academyId, month: key, teachingDays: days })
       setNotice(`${mo}월 교습일수를 ${days}일로 저장했습니다.`)
+      setMonthEdit(null)
       await load()
     } catch (err) {
-      setNotice(err instanceof ApiError ? `저장 실패 — ${err.message}` : '저장하지 못했습니다.')
+      setMonthErr(err instanceof ApiError ? err.message : '저장하지 못했습니다.')
     } finally {
       setBusy(false)
     }
@@ -326,16 +333,13 @@ function Content() {
           sub="달력 일수가 아니라 실제 수업한 날수입니다. 학원이 아는 값을 그대로 넣으세요."
           confirmLabel="저장"
           busy={busy}
+          error={monthErr}
           confirmDisabled={
             monthEdit.days.trim() === '' ||
             !Number.isInteger(Number(monthEdit.days)) ||
             Number(monthEdit.days) < 0
           }
-          onConfirm={() => {
-            const e = monthEdit
-            setMonthEdit(null)
-            void editMonth(e.mo, Number(e.days))
-          }}
+          onConfirm={() => void editMonth(monthEdit.mo, Number(monthEdit.days))}
           onClose={() => setMonthEdit(null)}
         >
           <div className="frow">
