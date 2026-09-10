@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { DataTable, Unfilled, useServerData, type Column } from '../../components/common'
+import { DataTable, Unfilled, useServerData, type Column, Modal } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { useAcademy } from '../../auth/AcademyContext'
@@ -66,6 +66,9 @@ function Content() {
   const { academyId } = useAcademy()
   const [tab, setTab] = useState<ApprovalStatus>('PENDING')
   const [acting, setActing] = useState<number | null>(null)
+  /** 반려 사유 입력 모달. 사유는 학생·학부모에게 그대로 전달된다 */
+  const [rejecting, setRejecting] = useState<{ row: AbsenceRequestRow; reason: string } | null>(null)
+  const [rejectErr, setRejectErr] = useState<string | null>(null)
   const [actionMsg, setActionMsg] = useState<string | null>(null)
 
   // 서버 기본값과 같은 범위를 명시해서 보낸다 — 화면에 적은 기간과 실제 조회 범위를 맞추려는 것
@@ -95,24 +98,25 @@ function Content() {
   const canceled = countOf('CANCELED')
   const rows = useMemo(() => all.filter((r) => r.status === tab), [all, tab])
 
-  async function act(row: AbsenceRequestRow, kind: 'approve' | 'reject') {
-    let reason = ''
-    if (kind === 'reject') {
-      // 반려 사유는 학생·학부모에게 그대로 전달된다. 서버도 필수값이다
-      reason = window.prompt('반려 사유를 입력하세요. 학생·학부모에게 그대로 전달됩니다.')?.trim() ?? ''
-      if (reason === '') return
-    }
-
+  /**
+   * ★ 반려는 **성공한 뒤에** 모달을 닫는다. 먼저 닫으면 서버가 거부했을 때 길게 쓴 사유가
+   *   통째로 날아가고, 오류는 뒤 화면에 떠서 무엇이 문제인지도 모른다.
+   */
+  async function act(row: AbsenceRequestRow, kind: 'approve' | 'reject', reason = '') {
     setActing(row.approvalRequestId)
     setActionMsg(null)
     try {
       if (kind === 'approve') await approveRequest(row.approvalRequestId)
       else await rejectRequest(row.approvalRequestId, reason)
       setActionMsg(`${row.name} · ${ABSENCE_TYPE_LABEL[row.type]} 건을 ${kind === 'approve' ? '승인' : '반려'}했습니다.`)
+      setRejecting(null)
       board.reload()
     } catch (err) {
       // 권한(대리승인 허용 범위)·이미 처리됨이 여기로 온다. 서버 문구를 그대로 보여준다
-      setActionMsg(err instanceof ApiError ? err.message : '처리에 실패했습니다.')
+      const msg = err instanceof ApiError ? err.message : '처리에 실패했습니다.'
+      // 반려 모달이 열려 있으면 그 안에서 보여준다 — 뒤 화면 배너는 모달에 가려 안 보인다
+      if (kind === 'reject') setRejectErr(msg)
+      else setActionMsg(msg)
     } finally {
       setActing(null)
     }
@@ -174,7 +178,7 @@ function Content() {
                 className="btn"
                 style={{ padding: '4px 10px', fontSize: 11.5, color: 'var(--red)' }}
                 disabled={busy}
-                onClick={() => void act(r, 'reject')}
+                onClick={() => setRejecting({ row: r, reason: '' })}
               >
                 반려
               </button>
@@ -188,6 +192,31 @@ function Content() {
 
   return (
     <>
+      {rejecting && (
+        <Modal
+          title="반려 사유"
+          sub="적으신 내용이 학생·학부모에게 그대로 전달됩니다."
+          confirmLabel="반려"
+          danger
+          busy={acting === rejecting.row.approvalRequestId}
+          confirmDisabled={rejecting.reason.trim() === ''}
+          error={rejectErr}
+          onConfirm={() => void act(rejecting.row, 'reject', rejecting.reason.trim())}
+          onClose={() => setRejecting(null)}
+        >
+          <div className="frow">
+            <label className="req">사유</label>
+            <textarea
+              className="ta"
+              value={rejecting.reason}
+              maxLength={200}
+              placeholder="예: 제출한 증빙으로는 확인이 어렵습니다."
+              onChange={(e) => setRejecting({ ...rejecting, reason: e.target.value })}
+            />
+          </div>
+        </Modal>
+      )}
+
       <div className="stat-strip">
         <div className="stat">
           <div className="l">
@@ -230,7 +259,7 @@ function Content() {
               미정인 것은 **확정 시점(I-10)** 하나뿐이라 목업을 고칠 건이 아니다.
               서버는 그때까지 penaltyConflictUnavailable 로 "판정 못 함"을 명시한다 */}
           <div className="v" style={{ fontSize: 15, paddingTop: 8 }}>
-            <Unfilled reason="벌점 확정 시점(I-10) 미정이라 서버가 판정하지 않음" />
+            <Unfilled reason="아직 표시할 수 없는 값입니다" />
           </div>
           <div className="d warn">벌점 확정 건</div>
         </div>
@@ -286,10 +315,10 @@ export const absenceMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn">
+      <button className="btn" disabled title="준비 중입니다">
         <Icon name="settings" size={14} /> 승인 항목 설정
       </button>
-      <button className="btn pri">
+      <button className="btn pri" disabled title="준비 중입니다">
         <Icon name="plus" size={14} /> 관리자 직접 등록
       </button>
     </>

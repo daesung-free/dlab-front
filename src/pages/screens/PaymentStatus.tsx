@@ -176,7 +176,7 @@ const UNPAID_COLUMNS: Column<ReceiptRow>[] = [
     align: 'center',
     value: () => '',
     render: () => (
-      <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled title="알림톡 발송 API 연동 전입니다">
+      <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled title="준비 중입니다">
         <Icon name="bell" size={12} /> 알림톡
       </button>
     ),
@@ -344,10 +344,10 @@ const DISCOUNT_COLUMNS: Column<Discount>[] = [
     value: () => '',
     render: () => (
       <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }}>
+        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled title="준비 중입니다">
           수정
         </button>
-        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5, color: 'var(--red)' }}>
+        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5, color: 'var(--red)' }} disabled title="준비 중입니다">
           삭제
         </button>
       </div>
@@ -388,6 +388,15 @@ function Content() {
   }, [academyId, period?.from, period?.to, query.kind])
 
   const load = useCallback(async () => {
+    /* ★ 지점을 고르기 전에는 부르지 않는다. 예전에는 academyId 없이 먼저 던지고
+         고른 뒤 다시 던져서, **화면에 들어갈 때마다 400 이 두 건씩** 쌓였다.
+         화면은 결과적으로 정상으로 보여 아무도 몰랐다. */
+    if (academyId === null) {
+      setRows([])
+      setSummary(null)
+      setLoading(false)
+      return
+    }
     setLoading(true)
     setError(null)
     try {
@@ -512,7 +521,7 @@ function Content() {
                 <div>
                   <div className="tt">지금은 온라인 결제에 할인이 반영되지 않습니다</div>
                   <div className="tx">
-                    KCP 연동 자체는 끝났지만, <b>그 앞단(학원 시스템)이 할인 없는 정가를 그대로 KCP에 넘기고</b> 있습니다.
+                    결제 연동 자체는 끝났지만, <b>할인 전 정가가 그대로 결제창에 넘어가고</b> 있습니다.
                     학생·학부모 결제창에 정가가 뜨고 할인은 나중에 수기 환불로 메꾸는 상태입니다.
                     <br />
                     결제 요청을 만들기 <b>전에</b> 아래 정책으로 <b>실제 청구액을 산출하는 단계</b>가 들어가야 합니다.
@@ -537,7 +546,7 @@ function Content() {
                     toolbar={
                       <>
                         <ExcelButton filename="할인정책" columns={DISCOUNT_COLUMNS} rows={DISCOUNTS} masked={false} />
-                        <button className="btn pri">
+                        <button className="btn pri" disabled title="준비 중입니다">
                           <Icon name="plus" size={14} /> 할인 정책 등록
                         </button>
                       </>
@@ -572,7 +581,7 @@ function Content() {
                       청구액 계산
                     </div>
                     <div className="r">
-                      <span className="mk supplement">KCP 전달 금액 미리보기</span>
+                      <span className="mk supplement">결제 금액 미리보기</span>
                     </div>
                   </div>
                   <div className="card-sec-b">
@@ -669,7 +678,7 @@ function Content() {
                       <div>
                         <div className="tt">이 금액은 서버가 다시 계산해야 합니다</div>
                         <div className="tx">
-                          프론트가 계산한 값을 그대로 KCP에 넘기면 <b>결제 금액을 조작할 수 있습니다.</b> 서버가 같은
+                          이 화면에서 계산한 값을 그대로 결제에 넘기면 <b>결제 금액을 조작할 수 있습니다.</b> 서버가 같은
                           정책으로 재계산해 <b>금액이 일치할 때만 결제창을 띄우고</b>, 승인 결과도 서버가 검증해야
                           합니다. 이 화면은 정책을 입력하고 결과를 확인하는 용도입니다.
                         </div>
@@ -720,7 +729,7 @@ function Content() {
               }
               toolbar={
                 <>
-                  <button className="btn">
+                  <button className="btn" disabled title="준비 중입니다">
                     <Icon name="bell" size={14} /> 미납자 일괄 알림톡
                   </button>
                   <MaskToggle masked={masked} onChange={setMasked} />
@@ -742,7 +751,7 @@ export const paymentMockup: Mockup = {
   actions: (
     <>
       <button className="btn">2026 시즌 ▾</button>
-      <button className="btn">
+      <button className="btn" disabled title="준비 중입니다">
         <Icon name="bar-chart-3" size={14} /> 기간·지점별 통계
       </button>
     </>

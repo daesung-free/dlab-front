@@ -164,7 +164,7 @@ function Content() {
         toolbar={
           <>
             {selected.length > 0 && (
-              <button className="btn">
+              <button className="btn" disabled title="준비 중입니다">
                 <Icon name="users" size={14} /> 선택 {selected.length}건 반 배정
               </button>
             )}
@@ -192,7 +192,7 @@ export const studentSearchMockup: Mockup = {
   actions: (
     <>
       <button className="btn">2026 시즌 ▾</button>
-      <button className="btn pri">+ 신규 접수 등록</button>
+      <button className="btn pri" disabled title="준비 중입니다">+ 신규 접수 등록</button>
     </>
   ),
 }

@@ -24,6 +24,9 @@ import '../../styles/forms.css'
  *
  * ⚠ 이 화면은 결제 상태모델이 먼저 확정돼야 한다. 화면부터 그리면 반드시 다시 만든다.
  *   · PG사가 급식(E-3)과 등록비(D-9)로 나뉘어 있어 상태값·웹훅 규격이 서로 다를 수 있다
+ *
+ * ⚠ 화면 문구에서 내부 사정을 뺐다(2026-09-10). 클라이언트가 보는 URL 이라 이슈 코드와
+ *   '7종 상태모델 초안' 같은 말을 화면에 두지 않는다. 근거는 위 주석에 그대로 있다.
  *   · 가상계좌는 "발급 → 입금대기 → 입금완료 / 만료" 라는 별도 생애주기를 가진다
  *   · 앱 취소(3일 전 자동환불)와 관리자 취소(즉시)는 환불 트랜잭션 성격이 다르다 */
 
@@ -43,10 +46,10 @@ type Method = '카드' | '가상계좌' | '간편결제'
 type Item = '교습비' | '급식비' | '특강비' | '등록비'
 
 const PG_OF: Record<Item, string> = {
-  교습비: 'PG-A (등록비 계약 · D-9 확정 대기)',
-  등록비: 'PG-A (등록비 계약 · D-9 확정 대기)',
-  급식비: 'PG-B (급식업체 기확보 · E-3 연동정보 대기)',
-  특강비: 'PG-A (등록비 계약 · D-9 확정 대기)',
+  교습비: '준비 중',
+  등록비: '준비 중',
+  급식비: '준비 중',
+  특강비: '준비 중',
 }
 
 const AMOUNTS: Record<Item, number> = {
@@ -260,11 +263,10 @@ function Content() {
           <Icon name="triangle-alert" size={17} />
         </div>
         <div>
-          <div className="tt">PG 연동정보 미수급 — 상태값과 웹훅 규격을 아직 고정할 수 없습니다</div>
+          <div className="tt">결제 연동은 준비 중입니다</div>
           <div className="tx">
-            급식은 <code>E-3</code>(급식업체 PG 연동정보), 교습비·등록비는 <code>D-9</code>(등록비 PG 주체)가 열려 있습니다.
-            PG사가 둘로 나뉘면 <b>상태값·부분환불 지원 여부·정산주기가 서로 다를 수 있어</b> 이 화면의 상태 배지 정의가 바뀝니다.
-            현재 화면은 <b>7종 상태모델 초안</b>을 전제로 그린 것이며, 연동정보 수급 후 확정합니다.
+            결제 대행사와의 연동이 아직 끝나지 않아 <b>이 화면의 내용은 예시</b>입니다.
+            실제 결제·환불 내역은 연동이 끝난 뒤에 표시됩니다.
           </div>
         </div>
       </div>
@@ -308,12 +310,12 @@ function Content() {
           toolbar={
             <>
               {tab === 'vbank' && (
-                <button className="btn">
+                <button className="btn" disabled title="준비 중입니다">
                   <Icon name="send" size={14} /> 입금 안내 재발송
                 </button>
               )}
               {tab === 'refund' && (
-                <button className="btn">
+                <button className="btn" disabled title="준비 중입니다">
                   <Icon name="refresh-cw" size={14} /> 환불 재시도
                 </button>
               )}
@@ -363,7 +365,7 @@ function Content() {
                   <div className="row">
                     <span className="k">미확정</span>
                     <span className="v" style={{ color: 'var(--amber)', fontWeight: 700 }}>
-                      {item === '급식비' ? 'E-3 연동정보(키·웹훅 URL·테스트 계정)' : 'D-9 결제 개발주체 · 정산주기'}
+                      {'연동 준비 중'}
                     </span>
                   </div>
                 </div>
@@ -381,7 +383,7 @@ export const paymentGateMockup: Mockup = {
   actions: (
     <>
       <button className="btn">2026-05 ▾</button>
-      <button className="btn">
+      <button className="btn" disabled title="준비 중입니다">
         <Icon name="file-spreadsheet" size={14} /> 정산 대사
       </button>
     </>

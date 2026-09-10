@@ -228,7 +228,7 @@ function Content() {
           <div className="v" style={{ fontSize: 15, paddingTop: 6 }}>
             23:00
           </div>
-          <div className="d">FCM 일괄 발송</div>
+          <div className="d">앱 알림 일괄 발송</div>
         </div>
         <div className="stat">
           <div className="l">
@@ -363,7 +363,7 @@ export const dailyReportMockup: Mockup = {
   actions: (
     <>
       <button className="btn">2026-05-28 ▾</button>
-      <button className="btn">
+      <button className="btn" disabled title="준비 중입니다">
         <Icon name="refresh-cw" size={14} /> 배치 재집계
       </button>
     </>

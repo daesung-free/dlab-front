@@ -330,7 +330,7 @@ function Content() {
                 </div>
                 <div>
                   등록 요청에는 배정 값이 없습니다. 저장 후 <b>고정반 관리</b>·<b>배정 관리</b> 화면에서
-                  배정하세요 — 각각 전용 API가 있습니다.
+                  배정하세요.
                 </div>
               </div>
             </div>
@@ -339,7 +339,7 @@ function Content() {
               <div className="two">
                 <div className="link-box" style={{ alignItems: 'center' }}>
                   <div>
-                    장학 <Unfilled reason="등록 요청에 없다 (장학은 별도 API)" />
+                    장학 <Unfilled reason="장학은 배정 관리 화면에서 정합니다" />
                   </div>
                 </div>
                 <input
@@ -363,7 +363,7 @@ function Content() {
             미완 상태로 남습니다.
           </div>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-            <button className="btn" disabled title="임시저장 API가 없습니다">
+            <button className="btn" disabled title="준비 중입니다">
               임시저장
             </button>
             <button className="btn pri" disabled={!canSave} onClick={() => void save()}>

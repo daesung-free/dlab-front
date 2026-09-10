@@ -252,7 +252,7 @@ function Content() {
           <div className="v" style={{ color: 'var(--amber)' }}>
             {REQUESTS.filter((r) => r.status !== '완료').length}
           </div>
-          <div className="d warn">미처리</div>
+          <div className="d warn">미처리 · <span className="mk supplement" title="준비 중입니다">표시용 예시</span></div>
         </div>
         <div className="stat">
           <div className="l">
@@ -523,10 +523,10 @@ export const chatMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn">
+      <button className="btn" disabled title="준비 중입니다">
         <Icon name="inbox" size={14} /> 수신함
       </button>
-      <button className="btn pri">
+      <button className="btn pri" disabled title="준비 중입니다">
         <Icon name="plus" size={14} /> 공지 작성
       </button>
     </>

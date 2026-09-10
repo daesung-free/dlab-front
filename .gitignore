@@ -19,3 +19,7 @@ tsconfig.tsbuildinfo
 # README 의 "공개 호스팅 금지"와 같은 이유다 — 거래처 협상 상태·인력 구성이 섞이기 쉽다.
 # 팀이 함께 봐야 하는 문서는 docs/ 에 둔다.
 notes/
+
+# IDE 설정 — 사람마다 다르고 레포에 남길 이유가 없다
+.idea/
+.vscode/

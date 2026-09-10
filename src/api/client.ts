@@ -4,6 +4,26 @@ import { clearTokens, getAccessToken, getRefreshToken, setTokens } from './token
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080').replace(/\/$/, '')
 
 /** 서버가 내려준 실패를 그대로 들고 있는 에러. 화면은 code로 분기하고 message를 그대로 보여준다. */
+/**
+ * 서버 검증 메시지를 사람이 읽을 수 있게 다듬는다.
+ *
+ * ★ 서버는 `필드명: 메시지` 로 보낸다. 여러 개면 쉼표로 잇는다 —
+ *     "discountRate: 할인율은 필수입니다., code: 장학 코드는 필수입니다."
+ *   그대로 띄우면 화면에 `discountRate` 같은 개발자 말이 그대로 나온다(CLAUDE.md 1-1).
+ *   메시지 자체가 이미 한국어로 무엇이 잘못됐는지 말하고 있으므로 앞의 필드명만 걷어낸다.
+ *
+ * ★ 필드명은 영문 식별자일 때만 벗긴다. "2026-09-10: 저장 실패" 같은 값은 건드리지 않는다.
+ */
+function readable(msg: string | undefined): string | undefined {
+  if (!msg) return undefined
+  const parts = msg
+    .split(/,\s*(?=[A-Za-z_][A-Za-z0-9_.]*:)/)
+    .map((p) => p.replace(/^[A-Za-z_][A-Za-z0-9_.]*:\s*/, '').trim())
+    .filter(Boolean)
+  const joined = parts.join(' ')
+  return joined || msg
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -119,7 +139,11 @@ export async function requestEnvelope<T>(path: string, opts: RequestOptions = {}
 
   if (!res.ok || !json.success) {
     if (res.status === 401) clearTokens()
-    throw new ApiError(res.status, json.error?.code ?? 'UNKNOWN', json.error?.message ?? `요청이 실패했습니다 (HTTP ${res.status}).`)
+    throw new ApiError(
+      res.status,
+      json.error?.code ?? 'UNKNOWN',
+      readable(json.error?.message) ?? `요청이 실패했습니다 (HTTP ${res.status}).`,
+    )
   }
 
   return json

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { DataTable, ExcelButton, MaskToggle, useServerTable, type Column } from '../../components/common'
+import { DataTable, ExcelButton, MaskToggle, useServerTable, type Column, toDateStr, todayStr } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { maskName } from '../../lib/mask'
@@ -15,6 +15,7 @@ import {
   type PlanItem,
   type PlanOption,
 } from '../../api/learningPlans'
+import { listHolidays } from '../../api/holidays'
 import type { Mockup } from './types'
 import './plan.css'
 
@@ -29,9 +30,16 @@ import './plan.css'
  *   색은 옵션 순서(sortOrder)로 정해 같은 과목이 화면마다 같은 색이 되게 한다.
  *
  * ★ 서버에 없는 것 — docs/API_GAPS.md 참고
- *   · **학습계획 입력 차단일** — 목업의 핵심 주의사항("차단일은 미작성이 아니다")인데
- *     서버에 그 개념이 없다. 지금은 board 의 missingDays 를 그대로 쓴다.
- *     서버가 차단일을 빼고 세는지 확인이 필요하다
+ * ★ **집계 대상일은 주 7일이다.** 이 학원은 토·일도 운영한다(교시 마스터가
+ *   WEEKDAY·SATURDAY·SUNDAY 3종이다). 차단일만 빠진다.
+ *
+ *   ⚠️ 이걸 모르면 서버가 고장 난 것으로 보인다. 실제로 그런 오판이 있었다 —
+ *   09-22·09-23 을 차단한 주의 countedDays 가 5로 나오자 "차단이 안 빠졌다(3이어야 한다)"고
+ *   판정했는데, 주말을 뺀 계산이었다. **차단 0일인 주를 같이 조회하면 바로 갈린다** —
+ *   09-14~09-20 은 7, 09-21~09-27 은 5로, 7 − 2 = 5 가 맞다.
+ *
+ *   · **학습계획 입력 차단일** — `/holidays` 의 `planExcluded`. 서버가 집계에서 빼고,
+ *     화면은 그 날에 자물쇠를 그린다(예전에는 holidays 를 아예 안 불러서 표시가 없었다)
  *   · **담임** — board 응답에 없다
  *   · **미체크 상태** — PlanItem.done 이 boolean 이라 O/X 2종뿐이다.
  *     목업은 '미체크(·)'가 따로 있는데, 이행률에서 "아직 안 찍은 것"과 "못 한 것"은 의미가 다르다 */
@@ -65,19 +73,15 @@ function weekDates(weekStart: string): string[] {
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(base)
     d.setDate(base.getDate() + i)
-    return d.toISOString().slice(0, 10)
+    return toDateStr(d)
   })
-}
-
-function todayStr(): string {
-  return new Date().toISOString().slice(0, 10)
 }
 
 function mondayOf(dateStr: string): string {
   const d = new Date(`${dateStr}T00:00:00`)
   const shift = (d.getDay() + 6) % 7 // 월요일 기준
   d.setDate(d.getDate() - shift)
-  return d.toISOString().slice(0, 10)
+  return toDateStr(d)
 }
 
 interface Tally {
@@ -231,6 +235,25 @@ function Content() {
     return { byForm, total: scopeItems.reduce((a, i) => a + i.durationMinutes, 0) }
   }, [scopeItems, forms])
 
+  /* 차단일(연간 행사에서 '학습계획 제외'로 등록한 날).
+     ★ 예전에는 이 화면이 holidays 를 **아예 부르지 않아서**, 차단으로 등록해도
+       다른 날과 똑같이 보였다. 화면 안내는 자물쇠를 약속하고 있었다. */
+  const [excluded, setExcluded] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    let cancelled = false
+    const to = weekDates(weekStart)[6] ?? weekStart
+    listHolidays(weekStart, to)
+      .then((hs) => {
+        if (cancelled) return
+        setExcluded(new Set(hs.filter((h) => h.planExcluded).map((h) => h.date)))
+      })
+      // 차단일을 못 읽어도 계획 자체는 봐야 한다 — 표시만 빠진다
+      .catch(() => !cancelled && setExcluded(new Set()))
+    return () => {
+      cancelled = true
+    }
+  }, [weekStart])
+
   const dayStats = useMemo(
     () =>
       dates.map((date, i) => {
@@ -241,9 +264,10 @@ function Content() {
           index: i,
           ...tally(d?.items ?? []),
           copied: d?.copied ?? false,
+          excluded: excluded.has(date),
         }
       }),
-    [dates, byDate],
+    [dates, byDate, excluded],
   )
 
   const filteredRoster = useMemo(() => {
@@ -324,7 +348,7 @@ function Content() {
   function shiftWeek(delta: number): void {
     const d = new Date(`${weekStart}T00:00:00`)
     d.setDate(d.getDate() + delta * 7)
-    setWeekStart(d.toISOString().slice(0, 10))
+    setWeekStart(toDateStr(d))
   }
 
   return (
@@ -336,9 +360,9 @@ function Content() {
         <div>
           <div className="tt">미작성일은 집계 대상일 기준입니다</div>
           <div className="tx">
-            예전에는 달력일 기준이라 휴원일도 미작성으로 잡혔는데, 서버가 고쳤습니다.
-            제외할 날은 <b>연간 행사에서 &lsquo;학습계획 제외&rsquo;로 등록</b>하면 반영됩니다
-            (기본은 꺼져 있어, 등록 전까지는 기존과 같은 값입니다).
+            제외할 날은 <b>연간 행사에서 &lsquo;학습계획 제외&rsquo;로 등록</b>하면 집계에서 빠지고,
+            아래 주간에 <b>자물쇠</b>로 표시됩니다 (기본은 꺼져 있어, 등록 전까지는 기존과 같은 값입니다).
+            <b>토·일도 운영일이라 집계에 들어갑니다</b> — 차단 없는 한 주는 5일이 아니라 <b>7일</b>입니다.
             표에는 <b>미작성일 / 집계 대상일</b>을 함께 보여줍니다.
           </div>
         </div>
@@ -477,9 +501,16 @@ function Content() {
                     setScope('day')
                   }}
                 >
-                  <b>{d.dow}</b>
+                  <b>
+                    {d.dow}
+                    {d.excluded && (
+                      <span style={{ marginLeft: 3 }} title="학습계획 입력 차단일">
+                        <Icon name="lock" size={10} />
+                      </span>
+                    )}
+                  </b>
                   <span>{d.date.slice(8)}</span>
-                  <i>{d.count > 0 ? `${d.count}건` : '-'}</i>
+                  <i>{d.excluded ? '차단' : d.count > 0 ? `${d.count}건` : '-'}</i>
                 </button>
               ))}
               <button

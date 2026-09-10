@@ -151,7 +151,7 @@ const APPLICANT_COLUMNS: Column<ApplicantRow>[] = [
     align: 'center',
     // 특강비 수납 여부는 청구(F-4.8) 쪽 데이터다. 신청자 응답에는 없다
     value: () => '',
-    render: () => <Unfilled reason="수납 여부는 청구 도메인이라 신청자 응답에 없다" />,
+    render: () => <Unfilled reason="수납 현황은 수납 화면에서 확인하세요" />,
   },
 ]
 
@@ -315,7 +315,6 @@ function Content() {
 
   /* ══ 특강 개설 폼 ══ */
   if (draft) {
-    const valid = draft.name.trim().length > 0 && sessions.length > 0
     return (
       <div className="card-sec">
         <div className="card-sec-h">
@@ -329,10 +328,14 @@ function Content() {
             <button className="btn" onClick={() => setDraft(null)}>
               취소
             </button>
-            <button className="btn" disabled={!valid}>
+            {/* ★ 폼·회차 미리보기는 다 되는데 **저장이 서버로 안 나간다.** 예전에는 valid 면
+                   버튼이 활성화돼 눌리기만 하고 아무 일도 없었다 — 사용자는 저장된 줄 안다.
+                   붙이기 전까지는 막고 이유를 말한다. 특강 회차가 여기서만 만들어져서
+                   출석부·신청·대기까지 함께 막혀 있다. */}
+            <button className="btn" disabled title="준비 중입니다">
               <Icon name="save" size={14} /> 임시 저장
             </button>
-            <button className="btn pri" disabled={!valid}>
+            <button className="btn pri" disabled title="준비 중입니다">
               <Icon name="send" size={14} /> 개설 · 접수 시작
             </button>
           </div>
@@ -610,7 +613,7 @@ function Content() {
           </div>
           {/* 수납 여부는 청구 도메인이라 특강 응답에 없다 */}
           <div className="v" style={{ fontSize: 14, paddingTop: 8 }}>
-            <Unfilled reason="특강비 수납 현황은 청구 도메인이다" />
+            <Unfilled reason="수납 현황은 수납 화면에서 확인하세요" />
           </div>
           <div className="d">수납현황(F-4.8) 참조</div>
         </div>
@@ -621,7 +624,7 @@ function Content() {
           <div className="v" style={{ fontSize: 15, paddingTop: 6 }}>
             보완 개발
           </div>
-          <div className="d warn">DSA 대응 화면 없음</div>
+          <div className="d warn">신규</div>
         </div>
       </div>
 
@@ -729,7 +732,7 @@ function Content() {
                 </span>
                 <div className="dt-right">
                   <MaskToggle masked={masked} onChange={setMasked} />
-                  <button className="btn">
+                  <button className="btn" disabled title="준비 중입니다">
                     <Icon name="printer" size={14} /> 출석부 인쇄
                   </button>
                 </div>
@@ -788,7 +791,7 @@ export const lectureMockup: Mockup = {
   actions: (
     <>
       <button className="btn">2026-06 ▾</button>
-      <button className="btn">
+      <button className="btn" disabled title="준비 중입니다">
         <Icon name="megaphone" size={14} /> 설명회 신청 관리
       </button>
     </>

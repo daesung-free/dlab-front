@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DataTable, ExcelButton, MaskToggle, Unfilled, type Column } from '../../components/common'
+import { DataTable, ExcelButton, MaskToggle, Unfilled, type Column, todayStr } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
@@ -55,10 +55,6 @@ function thisMonth(): string {
   return new Date().toISOString().slice(0, 7)
 }
 
-function todayStr(): string {
-  return new Date().toISOString().slice(0, 10)
-}
-
 const ROUTINE_COLUMNS: Column<Routine>[] = [
   { key: 'name', header: '루틴명', sortable: true, value: (r) => r.name },
   { key: 'subject', header: '과목', width: '84px', align: 'center', sortable: true, value: (r) => r.subject ?? '-' },
@@ -86,7 +82,7 @@ const ROUTINE_COLUMNS: Column<Routine>[] = [
     header: '상벌점 트리거',
     width: '176px',
     value: () => '',
-    render: () => <Unfilled reason="I-5(상벌점 규칙) 확정 대기 — 응답에도 필드가 없다" />,
+    render: () => <Unfilled reason="아직 표시할 수 없는 값입니다" />,
   },
 ]
 
@@ -201,7 +197,7 @@ function Content() {
         width: '90px',
         align: 'center',
         value: () => '',
-        render: () => <Unfilled reason="I-5(상벌점 규칙) 확정 대기" />,
+        render: () => <Unfilled reason="아직 표시할 수 없는 값입니다" />,
       },
     ],
     [cols],
@@ -252,7 +248,7 @@ function Content() {
           <div className="v" style={{ fontSize: 15, paddingTop: 6 }}>
             대기
           </div>
-          <div className="d warn">I-5 규칙 확정 필요</div>
+          <div className="d warn">준비 중</div>
         </div>
       </div>
 
@@ -333,7 +329,7 @@ function Content() {
                     value={month}
                     onChange={(e) => setMonth(e.target.value)}
                   />
-                  <button className="btn" disabled title="전월 복사 API는 있으나 확인 절차를 먼저 정해야 합니다">
+                  <button className="btn" disabled title="준비 중입니다">
                     <Icon name="copy" size={14} /> 전월 복사
                   </button>
                   <button className="btn pri" disabled title="루틴 추가 폼은 다음 단계입니다">

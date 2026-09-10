@@ -40,6 +40,13 @@ import './meal.css'
  *   이미 신청·결제된 날을 중단으로 바꾸면 해당 건은 전부 환불 대상이 되므로,
  *   서버가 (결제건 존재 여부) 확인 후 환불 배치를 태우고 나서 중단 처리해야 한다.
  *
+ * ⚠ 화면 문구에서 내부 사정을 뺐다(2026-09-10). 클라이언트가 보는 URL 이라 이슈 코드·
+ *   회신서 메모·Webhook/HMAC 같은 말을 화면에 두지 않는다.
+ *   ★ QR 설계 근거는 지우지 말고 여기 남긴다 — 구현할 때 반드시 지켜야 하는 조건이다:
+ *     학번을 인코딩한 **정적 QR 은 캡처 한 장으로 대리 수령**이 된다. 앱이 30초 내외로
+ *     회전하는 1회용 토큰을 발급하고, 서버가 1회 사용 후 소진시켜야 한다.
+ *     태깅 수신은 출결과 같은 Webhook 직접 수신(HMAC 서명검증) 구조를 재사용한다.
+ *
  * ⚠ #38 / I-18 (중) — 식사체크 방식.
  *   [0723 메모] "식사체크 주체 = 관리자(교직원), 학생 아님"
  *   [운영 확인] 실제로는 반대다. 학생이 본인 휴대폰에서 앱 QR을 꺼내 스캐너에 태깅하고,
@@ -275,6 +282,9 @@ const TAG_COLUMNS: Column<TagLog>[] = [
 ]
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
+
+/** 저장이 아직 서버에 안 붙은 자리에 붙이는 설명. 막아만 두고 이유를 말한다 */
+const SAVE_NOT_WIRED = '준비 중입니다'
 
 function thisMonth(): string {
   return new Date().toISOString().slice(0, 7)
@@ -690,8 +700,12 @@ function Content() {
             </div>
 
             <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-              <button className="btn">되돌리기</button>
-              <button className="btn pri">
+              {/* ★ 조회는 붙었는데 **저장이 서버로 안 나간다.** 예전에는 눌러도 요청이 없고
+                     토스트도 없어서, 새로고침하면 값이 조용히 원복됐다 — 바꾼 줄 알고 넘어간다. */}
+              <button className="btn" disabled title={SAVE_NOT_WIRED}>
+                되돌리기
+              </button>
+              <button className="btn pri" disabled title={SAVE_NOT_WIRED}>
                 <Icon name="save" size={14} /> 일정 저장 · 신청 차단 반영
               </button>
             </div>
@@ -709,9 +723,9 @@ function Content() {
                 <Icon name="triangle-alert" size={17} />
               </div>
               <div>
-                <div className="tt">이 탭은 아직 목업입니다 — 배식 태깅 로그 조회 API가 없습니다</div>
+                <div className="tt">배식 확인 내역은 준비 중입니다</div>
                 <div className="tx">
-                  키오스크가 배식 여부를 확인하는 API는 있지만, <b>관리자가 "누가 실제로 먹었는가"를
+                  배식대에서 확인하는 것은 되지만, <b>관리자가 "누가 실제로 먹었는가"를
                   되짚는 조회</b>가 없습니다. 수기 확인 건의 사유·처리자도 같이 필요합니다.
                 </div>
               </div>
@@ -779,10 +793,10 @@ function Content() {
                       </span>
                       <span className="tag-r fail">{p.reason}</span>
                       <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-                        <button className="btn pri" style={{ padding: '6px 12px', fontSize: 12 }}>
+                        <button className="btn pri" style={{ padding: '6px 12px', fontSize: 12 }} disabled title="준비 중입니다">
                           <Icon name="check" size={13} /> 수기 확인 통과
                         </button>
-                        <button className="btn" style={{ padding: '6px 12px', fontSize: 12, color: 'var(--red)' }}>
+                        <button className="btn" style={{ padding: '6px 12px', fontSize: 12, color: 'var(--red)' }} disabled title="준비 중입니다">
                           거부
                         </button>
                       </span>
@@ -880,10 +894,10 @@ function Content() {
               }
               toolbar={
                 <>
-                  <button className="btn">
+                  <button className="btn" disabled title="준비 중입니다">
                     <Icon name="user-x" size={14} /> 미체크자 조회
                   </button>
-                  <button className="btn">
+                  <button className="btn" disabled title="준비 중입니다">
                     <Icon name="search" size={14} /> 학번으로 수기 확인
                   </button>
                   <MaskToggle masked={masked} onChange={setMasked} />
@@ -892,23 +906,6 @@ function Content() {
               }
             />
 
-            <div className="blocked-note" style={{ marginTop: 14, marginBottom: 0 }}>
-              <div className="ic">
-                <Icon name="triangle-alert" size={17} />
-              </div>
-              <div>
-                <div className="tt">QR은 반드시 짧은 만료의 1회용 토큰이어야 합니다</div>
-                <div className="tx">
-                  학번을 인코딩한 <b>정적 QR을 쓰면 캡처 한 장으로 대리 수령</b>이 됩니다. 앱이 <b>30초 내외로 회전하는
-                  토큰</b>을 발급하고 서버가 1회 사용 후 소진시켜야 합니다.
-                  <br />
-                  <code>I-18</code>(식사체크 방식)과 <code>D-2</code>(단말 제어 주체)가 아직 열려 있습니다. 요구사항정의서
-                  0723 메모에는 <b>체크 주체가 관리자</b>로 적혀 있으나 실제 운영은 <b>학생 QR 제시 + 관리자 확인</b>이므로,
-                  I-18 종결 시 이 내용으로 확정해야 합니다. 태깅 수신은 출결과 같은{' '}
-                  <b>Webhook 직접 수신(HMAC 서명검증)</b> 구조를 재사용합니다.
-                </div>
-              </div>
-            </div>
           </div>
         )}
 
@@ -1000,10 +997,10 @@ export const mealMockup: Mockup = {
   actions: (
     <>
       <button className="btn">2026-05 ▾</button>
-      <button className="btn">
+      <button className="btn" disabled title="준비 중입니다">
         <Icon name="utensils" size={14} /> 식수 마감
       </button>
-      <button className="btn pri">
+      <button className="btn pri" disabled title="준비 중입니다">
         <Icon name="plus" size={14} /> 데스크 당일 신청
       </button>
     </>

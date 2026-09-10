@@ -40,6 +40,21 @@ import '../../styles/forms.css'
 
 type QType = 'single' | 'multi' | 'text' | 'score' | 'scale' | 'subject'
 
+/**
+ * `datetime-local` 값(`2026-09-10T09:00`) → 서버가 받는 instant.
+ *
+ * ★ 값이 비면 그대로 undefined 를 돌려준다 — 빈 문자열에 접미사를 붙이면
+ *   `T00:00:00Z` 같은 값이 만들어져 400 이 난다.
+ * @param endOfMinute 마감 쪽은 그 분의 끝까지 포함시킨다
+ */
+function toInstant(v: string, endOfMinute = false): string | undefined {
+  if (!v) return undefined
+  const [date, time] = v.split('T')
+  if (!date) return undefined
+  const hhmm = time || '00:00'
+  return `${date}T${hhmm}:${endOfMinute ? '59' : '00'}Z`
+}
+
 const QTYPE_META: Record<QType, { label: string; icon: string; hasOptions: boolean; desc: string }> = {
   single: { label: '객관식 (단일)', icon: 'circle-dot', hasOptions: true, desc: '보기 중 하나만 선택' },
   multi: { label: '객관식 (복수)', icon: 'list-checks', hasOptions: true, desc: '보기 여러 개 선택 가능' },
@@ -381,14 +396,25 @@ function Content() {
       setApiError('지점을 먼저 선택하세요.')
       return
     }
+    const opensAt = toInstant(d.opensAt)
+    const closesAt = toInstant(d.closesAt, true)
+    if (!opensAt || !closesAt) {
+      setApiError('응답 기간을 시작·마감 둘 다 입력하세요.')
+      return
+    }
+
     const body: SurveyCreate = {
       surveyType: d.kind === '가채점' ? 'GRADE_INPUT' : 'GENERAL',
       scope: 'BRANCH',
       academyId,
       title: d.title.trim(),
       anonymous: true,
-      opensAt: `${d.opensAt}T00:00:00Z`,
-      closesAt: `${d.closesAt}T14:59:59Z`,
+      /* ★ 입력칸은 datetime-local 이라 값이 이미 `2026-09-10T09:00` 이다.
+           예전에는 T 를 공백으로 바꿔 넣어두고 여기서 다시 `T00:00:00Z` 를 붙여
+           `2026-09-10 09:00T00:00:00Z` 라는 깨진 값을 보내고 있었다 — 서버는 400 이고
+           화면에는 아무 표시가 없어서 **저장이 안 된 사실조차 알 수 없었다.** */
+      opensAt,
+      closesAt,
       questions: d.questions.map((q) => ({
         ...toServerQuestion(q),
         title: q.title.trim(),
@@ -582,6 +608,14 @@ function Content() {
           </div>
 
           <div className="card-sec-b">
+            {/* ★ 저장 실패를 여기서도 보여준다. 목록 쪽 배너는 이 폼이 열려 있으면
+                   화면 밖이라, 예전에는 400 이 나도 폼이 그대로 남아 **사용자가 저장이
+                   안 된 사실조차 알 수 없었다.** */}
+            {apiError && (
+              <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+                {apiError}
+              </div>
+            )}
             {draft.locked && (
               <div className="blocked-note">
                 <div className="ic">
@@ -644,13 +678,13 @@ function Content() {
                       className="inp"
                       type="datetime-local"
                       value={draft.opensAt.replace(' ', 'T')}
-                      onChange={(e) => patch({ opensAt: e.target.value.replace('T', ' ') })}
+                      onChange={(e) => patch({ opensAt: e.target.value })}
                     />
                     <input
                       className="inp"
                       type="datetime-local"
                       value={draft.closesAt.replace(' ', 'T')}
-                      onChange={(e) => patch({ closesAt: e.target.value.replace('T', ' ') })}
+                      onChange={(e) => patch({ closesAt: e.target.value })}
                     />
                   </div>
                 </div>
@@ -845,13 +879,16 @@ function Content() {
 
   return (
     <>
+      {/* ★ 이 스트립은 서버가 아니라 화면 안의 상수(SURVEYS·TEMPLATES)로 그린다.
+             아래 목록은 서버 값이라 **위아래 숫자가 안 맞는다.** 어디까지가 실데이터인지
+             화면이 스스로 밝히지 않으면 보는 사람이 구분할 방법이 없다. */}
       <div className="stat-strip">
         <div className="stat">
           <div className="l">
             <Icon name="clipboard-list" size={13} /> 전체 설문
           </div>
           <div className="v">{SURVEYS.length}</div>
-          <div className="d">2026 시즌</div>
+          <div className="d"><span className="mk supplement" title="준비 중입니다">표시용 예시</span></div>
         </div>
         <div className="stat">
           <div className="l">
@@ -860,7 +897,7 @@ function Content() {
           <div className="v" style={{ color: 'var(--mint-d)' }}>
             {SURVEYS.filter((s) => s.status === '배포중').length}
           </div>
-          <div className="d">응답 수집 중</div>
+          <div className="d"><span className="mk supplement" title="준비 중입니다">표시용 예시</span></div>
         </div>
         <div className="stat">
           <div className="l">
@@ -874,14 +911,14 @@ function Content() {
             )}
             %
           </div>
-          <div className="d">마감 기준</div>
+          <div className="d"><span className="mk supplement" title="준비 중입니다">표시용 예시</span></div>
         </div>
         <div className="stat">
           <div className="l">
             <Icon name="copy" size={13} /> 템플릿
           </div>
           <div className="v">{TEMPLATES.length}</div>
-          <div className="d">재사용 가능</div>
+          <div className="d"><span className="mk supplement" title="준비 중입니다">표시용 예시</span></div>
         </div>
         <div className="stat">
           <div className="l">
@@ -1004,7 +1041,7 @@ function Content() {
                       </option>
                     ))}
                   </select>
-                  <button className="btn" style={{ padding: '5px 11px', fontSize: 11.5 }} disabled title="원시 응답 다운로드 API가 없습니다">
+                  <button className="btn" style={{ padding: '5px 11px', fontSize: 11.5 }} disabled title="준비 중입니다">
                     <Icon name="file-spreadsheet" size={12} /> 원시 응답 다운로드
                   </button>
                 </div>
@@ -1084,10 +1121,10 @@ export const surveyMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn">
+      <button className="btn" disabled title="준비 중입니다">
         <Icon name="copy" size={14} /> 템플릿에서 생성
       </button>
-      <button className="btn pri">
+      <button className="btn pri" disabled title="준비 중입니다">
         <Icon name="plus" size={14} /> 설문 생성
       </button>
     </>

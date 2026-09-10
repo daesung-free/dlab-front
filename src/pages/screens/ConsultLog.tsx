@@ -3,7 +3,7 @@ import { StudentList, type StudentRow } from '../../components/StudentList'
 import { StudentHeader } from '../../components/StudentHeader'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
-import { Unfilled } from '../../components/common'
+import { Unfilled, todayStr } from '../../components/common'
 import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
 import {
@@ -52,7 +52,7 @@ const DETAIL_TABS = [
 ]
 
 function today(): string {
-  return new Date().toISOString().slice(0, 10)
+  return todayStr()
 }
 
 /** 상담 현황 → 좌측 목록 행 */
@@ -223,7 +223,7 @@ function Content() {
             <div className="sc" style={{ gridColumn: '1 / -1' }}>
               <div className="l">성적 요약</div>
               <div className="v" style={{ fontSize: 13 }}>
-                <Unfilled reason="성적 API 연동은 묶음 F(성적 관리)에서 한다" />
+                <Unfilled reason="준비 중입니다" />
               </div>
             </div>
           </div>
@@ -239,7 +239,7 @@ function Content() {
                 <div>
                   <div className="tt">아직 연동하지 않은 탭입니다</div>
                   <div className="tx">
-                    성적 추이 · 출결·상벌점 · 학부모 공유내역은 각각 다른 도메인이라 해당 묶음에서 붙입니다.
+                    성적 추이 · 출결·상벌점 · 학부모 공유내역은 준비 중입니다.
                   </div>
                 </div>
               </div>
@@ -351,7 +351,7 @@ function Content() {
                       {saveMsg ?? '저장 시 학생 앱 · 학부모 앱(공유 설정에 따라)에 즉시 반영됩니다.'}
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button className="btn" disabled title="임시저장 API가 없습니다">
+                      <button className="btn" disabled title="준비 중입니다">
                         임시저장
                       </button>
                       <button

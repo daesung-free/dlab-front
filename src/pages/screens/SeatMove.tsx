@@ -11,6 +11,10 @@ import './seat.css'
  * 배경: 키오스크 증설이 중단(잔여 6대)돼 앱으로 대체한다.
  *       패드 소지 = 앱 신청 / 미소지 = 키오스크 병행.
  *
+ * ⚠ 화면 문구에서 내부 사정을 뺐다(2026-09-10). 클라이언트가 보는 URL 이라
+ *   'I-16' · '재실 센서' · '범위에서 제외' 같은 말을 화면에 두지 않는다. 남은 문구는
+ *   "기록에 남는 것과 안 남는 것"만 말한다 — 행정 선생님이 좌석표를 읽는 데 필요한 것은 그뿐이다.
+ *
  * ⚠ 사감 순찰기록은 범위에서 제외한다.
  *   순찰로 '좌석없음'을 잡아 미신고 이탈을 추정하던 방식을 쓰지 않는다.
  *   → 이탈 정보의 출처는 앱 신청과 키오스크 태깅 2개뿐이다.
@@ -141,10 +145,10 @@ const KIOSK_COLUMNS: Column<Kiosk>[] = [
     value: () => '',
     render: () => (
       <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }}>
+        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled title="준비 중입니다">
           설정
         </button>
-        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }}>
+        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled title="준비 중입니다">
           재시작
         </button>
       </div>
@@ -416,12 +420,11 @@ function Content() {
               <Icon name="triangle-alert" size={17} />
             </div>
             <div>
-              <div className="tt">사감 순찰기록은 범위에서 제외됐습니다</div>
+              <div className="tt">자리를 비운 것이 모두 기록되지는 않습니다</div>
               <div className="tx">
-                이탈 정보의 출처는 <b>앱 신청 · 키오스크 태깅 2개뿐</b>입니다. 즉 <b>신청 없이 자리를 비운 상태는 시스템이
-                알 수 없습니다.</b> 좌석표의 빈 자리는 &lsquo;미신고 이탈&rsquo;이 아니라 <b>&lsquo;데이터 없음&rsquo;</b>
-                으로 읽어야 합니다. 무단 이탈을 잡아야 한다면 별도 수단(재실 센서 등)이 필요하며 <code>I-16</code>에서 함께
-                정리해야 합니다.
+                기록에 남는 것은 <b>학생이 앱으로 신청했거나 키오스크에 태깅한 경우</b>입니다.
+                아무 것도 하지 않고 자리를 비우면 남지 않으므로, 좌석표의 빈 자리는
+                <b> &lsquo;자리를 비웠다&rsquo;가 아니라 &lsquo;기록이 없다&rsquo;</b>로 보셔야 합니다.
               </div>
             </div>
           </div>
@@ -441,13 +444,13 @@ function Content() {
             }
             toolbar={
               <>
-                <button className="btn">
+                <button className="btn" disabled title="준비 중입니다">
                   <Icon name="refresh-cw" size={14} /> 전체 동기화
                 </button>
-                <button className="btn">
+                <button className="btn" disabled title="준비 중입니다">
                   <Icon name="upload" size={14} /> 펌웨어 배포
                 </button>
-                <button className="btn pri">
+                <button className="btn pri" disabled title="준비 중입니다">
                   <Icon name="plus" size={14} /> 단말 등록
                 </button>
               </>
@@ -464,7 +467,7 @@ export const seatMoveMockup: Mockup = {
   actions: (
     <>
       <button className="btn">A · B실 ▾</button>
-      <button className="btn">
+      <button className="btn" disabled title="준비 중입니다">
         <Icon name="monitor" size={14} /> 키오스크 관리
       </button>
     </>
