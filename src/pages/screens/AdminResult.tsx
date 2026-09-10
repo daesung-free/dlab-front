@@ -15,7 +15,7 @@ import type { Mockup } from './types'
 /* ★ 이 화면은 통째로 목업이다 — 서버에 합격 실적 도메인이 없어 요청을 한 건도 보내지 않는다.
      표에 32건이 그럴듯하게 차 있어서 **살아 있는 화면으로 오해받는다.** 테스트 URL 을
      넘길 때 눌러도 아무 일이 없으면 고장으로 읽히므로, 막아두고 이유를 말한다. */
-const NO_DOMAIN = '합격 실적 API가 아직 없습니다 — 이 화면은 예시 데이터입니다'
+const NO_DOMAIN = '준비 중입니다'
 
 const TRACKS = ['메디컬', '서울 최상위', '서울 지거국', '수도권', '지방 4년제'] as const
 type TrackName = (typeof TRACKS)[number]

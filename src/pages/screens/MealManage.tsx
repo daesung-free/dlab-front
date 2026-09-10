@@ -277,7 +277,7 @@ const TAG_COLUMNS: Column<TagLog>[] = [
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
 
 /** 저장이 아직 서버에 안 붙은 자리에 붙이는 설명. 막아만 두고 이유를 말한다 */
-const SAVE_NOT_WIRED = '저장 경로가 아직 화면에 연결되지 않았습니다'
+const SAVE_NOT_WIRED = '준비 중입니다'
 
 function thisMonth(): string {
   return new Date().toISOString().slice(0, 7)
