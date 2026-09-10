@@ -276,6 +276,9 @@ const TAG_COLUMNS: Column<TagLog>[] = [
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
 
+/** 저장이 아직 서버에 안 붙은 자리에 붙이는 설명. 막아만 두고 이유를 말한다 */
+const SAVE_NOT_WIRED = '저장 경로가 아직 화면에 연결되지 않았습니다'
+
 function thisMonth(): string {
   return new Date().toISOString().slice(0, 7)
 }
@@ -690,8 +693,12 @@ function Content() {
             </div>
 
             <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-              <button className="btn">되돌리기</button>
-              <button className="btn pri">
+              {/* ★ 조회는 붙었는데 **저장이 서버로 안 나간다.** 예전에는 눌러도 요청이 없고
+                     토스트도 없어서, 새로고침하면 값이 조용히 원복됐다 — 바꾼 줄 알고 넘어간다. */}
+              <button className="btn" disabled title={SAVE_NOT_WIRED}>
+                되돌리기
+              </button>
+              <button className="btn pri" disabled title={SAVE_NOT_WIRED}>
                 <Icon name="save" size={14} /> 일정 저장 · 신청 차단 반영
               </button>
             </div>
