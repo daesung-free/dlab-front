@@ -31,7 +31,7 @@ import type { Mockup } from './types'
  *
  * ⚠ 푸시는 알림톡(F-4.4)과 채널이 다르다. 합치면 안 된다.
  *   · 알림톡 = 학부모 대상 · 심사 필요 · 템플릿 고정 (I-4)
- *   · FCM 푸시 = 학생 앱 대상 · 자유 문안 · 수신동의 필요
+ *   · 앱 알림 = 학생 앱 대상 · 자유 문안 · 수신동의 필요
  *   기술문서상 두 채널은 이중화(F-4.4)이므로 발송 로그는 notification_logs 로 합류시키되
  *   채널 컬럼으로 구분해 적재한다.
  *
@@ -357,10 +357,10 @@ function Content() {
           <Icon name="git-compare" size={17} />
         </div>
         <div>
-          <div className="tt">푸시(FCM)와 알림톡은 서로 다른 채널입니다 — 이 화면은 푸시만 다룹니다</div>
+          <div className="tt">앱 알림과 카카오 알림톡은 서로 다릅니다 — 이 화면은 앱 알림만 다룹니다</div>
           <div className="tx">
             학부모 대상 <b>카카오 알림톡</b>은 템플릿 심사가 필요하므로 <b>문자발송</b> 메뉴에서 관리합니다. 여기서는 학생 앱
-            대상 <b>FCM 푸시</b>만 발송하며, 수신 미동의자는 서버가 알림톡으로 폴백합니다. <b>SMS는 제공하지 않으므로</b>{' '}
+            대상 <b>앱 알림</b>만 발송하며, 수신 미동의자는 서버가 알림톡으로 폴백합니다. <b>SMS는 제공하지 않으므로</b>{' '}
             승인된 알림톡 문안이 없는 자유 문안은 폴백 경로가 없습니다.
           </div>
         </div>
@@ -406,11 +406,11 @@ function Content() {
             }
             toolbar={
               <>
-                <button className="btn" disabled title="예약 발송 API가 없습니다">
+                <button className="btn" disabled title="준비 중입니다">
                   <Icon name="clock" size={14} /> 예약 발송
                 </button>
                 <ExcelButton filename="앱_푸시발송이력" columns={PUSH_COLUMNS} rows={PUSH_ROWS} masked={false} />
-                <button className="btn pri" disabled title="푸시 발송 API가 없습니다">
+                <button className="btn pri" disabled title="준비 중입니다">
                   <Icon name="send" size={14} /> 새 푸시 발송
                 </button>
               </>

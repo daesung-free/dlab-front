@@ -888,7 +888,7 @@ function Content() {
             <Icon name="clipboard-list" size={13} /> 전체 설문
           </div>
           <div className="v">{SURVEYS.length}</div>
-          <div className="d"><span className="mk supplement" title="붙일 집계 API가 아직 없습니다">표시용 예시</span></div>
+          <div className="d"><span className="mk supplement" title="준비 중입니다">표시용 예시</span></div>
         </div>
         <div className="stat">
           <div className="l">
@@ -897,7 +897,7 @@ function Content() {
           <div className="v" style={{ color: 'var(--mint-d)' }}>
             {SURVEYS.filter((s) => s.status === '배포중').length}
           </div>
-          <div className="d"><span className="mk supplement" title="붙일 집계 API가 아직 없습니다">표시용 예시</span></div>
+          <div className="d"><span className="mk supplement" title="준비 중입니다">표시용 예시</span></div>
         </div>
         <div className="stat">
           <div className="l">
@@ -911,14 +911,14 @@ function Content() {
             )}
             %
           </div>
-          <div className="d"><span className="mk supplement" title="붙일 집계 API가 아직 없습니다">표시용 예시</span></div>
+          <div className="d"><span className="mk supplement" title="준비 중입니다">표시용 예시</span></div>
         </div>
         <div className="stat">
           <div className="l">
             <Icon name="copy" size={13} /> 템플릿
           </div>
           <div className="v">{TEMPLATES.length}</div>
-          <div className="d"><span className="mk supplement" title="붙일 집계 API가 아직 없습니다">표시용 예시</span></div>
+          <div className="d"><span className="mk supplement" title="준비 중입니다">표시용 예시</span></div>
         </div>
         <div className="stat">
           <div className="l">
@@ -1041,7 +1041,7 @@ function Content() {
                       </option>
                     ))}
                   </select>
-                  <button className="btn" style={{ padding: '5px 11px', fontSize: 11.5 }} disabled title="원시 응답 다운로드 API가 없습니다">
+                  <button className="btn" style={{ padding: '5px 11px', fontSize: 11.5 }} disabled title="준비 중입니다">
                     <Icon name="file-spreadsheet" size={12} /> 원시 응답 다운로드
                   </button>
                 </div>

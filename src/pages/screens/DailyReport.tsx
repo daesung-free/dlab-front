@@ -228,7 +228,7 @@ function Content() {
           <div className="v" style={{ fontSize: 15, paddingTop: 6 }}>
             23:00
           </div>
-          <div className="d">FCM 일괄 발송</div>
+          <div className="d">앱 알림 일괄 발송</div>
         </div>
         <div className="stat">
           <div className="l">

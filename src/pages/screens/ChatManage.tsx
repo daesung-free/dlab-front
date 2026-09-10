@@ -252,7 +252,7 @@ function Content() {
           <div className="v" style={{ color: 'var(--amber)' }}>
             {REQUESTS.filter((r) => r.status !== '완료').length}
           </div>
-          <div className="d warn">미처리 · <span className="mk supplement" title="붙일 집계 API가 아직 없습니다">표시용 예시</span></div>
+          <div className="d warn">미처리 · <span className="mk supplement" title="준비 중입니다">표시용 예시</span></div>
         </div>
         <div className="stat">
           <div className="l">

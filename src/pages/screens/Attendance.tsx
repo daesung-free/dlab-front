@@ -220,7 +220,7 @@ function Content() {
           ) : (
             /* '발송됨'은 판단할 수 없다. 알림 발송 자체가 E-5·E-7(문구·FCM) 대기라
                notification_log 가 비어 있다 — 발송이 붙을 때 같이 나온다(2026-09-02 회신) */
-            <Unfilled reason="알림 발송 이력 없음 — 발송 기능이 E-5·E-7 대기" />
+            <Unfilled reason="알림 발송 기록은 준비 중입니다" />
           ),
       },
     ],
@@ -286,7 +286,7 @@ function Content() {
         onSearch={setQuery}
         presetKey="attendance"
         headerRight={
-          <span className="mk verified" title="키오스크 Webhook 직접 수신 (HMAC 서명검증)">
+          <span className="mk verified" title="키오스크에서 자동으로 받습니다">
             <Icon name="zap" size={11} /> 실시간 수신 중
           </span>
         }

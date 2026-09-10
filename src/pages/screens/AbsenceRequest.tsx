@@ -230,7 +230,7 @@ function Content() {
               미정인 것은 **확정 시점(I-10)** 하나뿐이라 목업을 고칠 건이 아니다.
               서버는 그때까지 penaltyConflictUnavailable 로 "판정 못 함"을 명시한다 */}
           <div className="v" style={{ fontSize: 15, paddingTop: 8 }}>
-            <Unfilled reason="벌점 확정 시점(I-10) 미정이라 서버가 판정하지 않음" />
+            <Unfilled reason="아직 표시할 수 없는 값입니다" />
           </div>
           <div className="d warn">벌점 확정 건</div>
         </div>
