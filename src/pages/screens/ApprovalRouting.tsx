@@ -419,7 +419,8 @@ export const approvalMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn">
+      {/* 승인 이력 조회 경로가 아직 없다 — 눌러도 아무 일이 없으면 고장으로 읽히므로 막는다 */}
+      <button className="btn" disabled title="승인 이력 조회 API가 아직 없습니다">
         <Icon name="history" size={14} /> 승인 이력
       </button>
     </>
