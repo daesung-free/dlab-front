@@ -15,6 +15,7 @@ import {
   type PlanItem,
   type PlanOption,
 } from '../../api/learningPlans'
+import { listHolidays } from '../../api/holidays'
 import type { Mockup } from './types'
 import './plan.css'
 
@@ -29,9 +30,11 @@ import './plan.css'
  *   색은 옵션 순서(sortOrder)로 정해 같은 과목이 화면마다 같은 색이 되게 한다.
  *
  * ★ 서버에 없는 것 — docs/API_GAPS.md 참고
- *   · **학습계획 입력 차단일** — 목업의 핵심 주의사항("차단일은 미작성이 아니다")인데
- *     서버에 그 개념이 없다. 지금은 board 의 missingDays 를 그대로 쓴다.
- *     서버가 차단일을 빼고 세는지 확인이 필요하다
+ *   · **학습계획 입력 차단일** — `/holidays` 의 `planExcluded` 로 개념은 생겼고 화면도
+ *     자물쇠로 표시한다. **다만 집계는 아직 그 날을 빼지 않는다** — 09-22·09-23 을 차단으로
+ *     등록한 주에서 countedDays 가 여전히 5였다(3이어야 한다). 실호출로 확인했고
+ *     백엔드에 올렸다. 그때까지 화면은 "숫자에는 반영되지 않는다"고 밝힌다 —
+ *     안 밝히면 휴원일마다 전원이 미작성자로 잡히는 것을 담당자가 결함으로 본다
  *   · **담임** — board 응답에 없다
  *   · **미체크 상태** — PlanItem.done 이 boolean 이라 O/X 2종뿐이다.
  *     목업은 '미체크(·)'가 따로 있는데, 이행률에서 "아직 안 찍은 것"과 "못 한 것"은 의미가 다르다 */
@@ -227,6 +230,25 @@ function Content() {
     return { byForm, total: scopeItems.reduce((a, i) => a + i.durationMinutes, 0) }
   }, [scopeItems, forms])
 
+  /* 차단일(연간 행사에서 '학습계획 제외'로 등록한 날).
+     ★ 예전에는 이 화면이 holidays 를 **아예 부르지 않아서**, 차단으로 등록해도
+       다른 날과 똑같이 보였다. 화면 안내는 자물쇠를 약속하고 있었다. */
+  const [excluded, setExcluded] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    let cancelled = false
+    const to = weekDates(weekStart)[6] ?? weekStart
+    listHolidays(weekStart, to)
+      .then((hs) => {
+        if (cancelled) return
+        setExcluded(new Set(hs.filter((h) => h.planExcluded).map((h) => h.date)))
+      })
+      // 차단일을 못 읽어도 계획 자체는 봐야 한다 — 표시만 빠진다
+      .catch(() => !cancelled && setExcluded(new Set()))
+    return () => {
+      cancelled = true
+    }
+  }, [weekStart])
+
   const dayStats = useMemo(
     () =>
       dates.map((date, i) => {
@@ -237,9 +259,10 @@ function Content() {
           index: i,
           ...tally(d?.items ?? []),
           copied: d?.copied ?? false,
+          excluded: excluded.has(date),
         }
       }),
-    [dates, byDate],
+    [dates, byDate, excluded],
   )
 
   const filteredRoster = useMemo(() => {
@@ -330,12 +353,12 @@ function Content() {
           <Icon name="lock" size={17} />
         </div>
         <div>
-          <div className="tt">미작성일은 집계 대상일 기준입니다</div>
+          <div className="tt">차단일이 아직 집계에서 빠지지 않습니다</div>
           <div className="tx">
-            예전에는 달력일 기준이라 휴원일도 미작성으로 잡혔는데, 서버가 고쳤습니다.
-            제외할 날은 <b>연간 행사에서 &lsquo;학습계획 제외&rsquo;로 등록</b>하면 반영됩니다
-            (기본은 꺼져 있어, 등록 전까지는 기존과 같은 값입니다).
-            표에는 <b>미작성일 / 집계 대상일</b>을 함께 보여줍니다.
+            연간 행사에서 <b>&lsquo;학습계획 제외&rsquo;</b>로 등록한 날은 아래 주간에
+            <b>자물쇠</b>로 표시됩니다. 다만 <b>미작성일 / 집계 대상일 숫자에는 아직 반영되지
+            않습니다</b> — 서버가 그 날을 빼고 세지 않아 휴원일마다 전원이 미작성으로 잡힙니다.
+            수정 요청해 둔 사항입니다.
           </div>
         </div>
       </div>
@@ -473,9 +496,16 @@ function Content() {
                     setScope('day')
                   }}
                 >
-                  <b>{d.dow}</b>
+                  <b>
+                    {d.dow}
+                    {d.excluded && (
+                      <span style={{ marginLeft: 3 }} title="학습계획 입력 차단일">
+                        <Icon name="lock" size={10} />
+                      </span>
+                    )}
+                  </b>
                   <span>{d.date.slice(8)}</span>
-                  <i>{d.count > 0 ? `${d.count}건` : '-'}</i>
+                  <i>{d.excluded ? '차단' : d.count > 0 ? `${d.count}건` : '-'}</i>
                 </button>
               ))}
               <button

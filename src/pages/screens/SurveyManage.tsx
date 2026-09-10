@@ -879,13 +879,16 @@ function Content() {
 
   return (
     <>
+      {/* ★ 이 스트립은 서버가 아니라 화면 안의 상수(SURVEYS·TEMPLATES)로 그린다.
+             아래 목록은 서버 값이라 **위아래 숫자가 안 맞는다.** 어디까지가 실데이터인지
+             화면이 스스로 밝히지 않으면 보는 사람이 구분할 방법이 없다. */}
       <div className="stat-strip">
         <div className="stat">
           <div className="l">
             <Icon name="clipboard-list" size={13} /> 전체 설문
           </div>
           <div className="v">{SURVEYS.length}</div>
-          <div className="d">2026 시즌</div>
+          <div className="d"><span className="mk supplement" title="붙일 집계 API가 아직 없습니다">표시용 예시</span></div>
         </div>
         <div className="stat">
           <div className="l">
@@ -894,7 +897,7 @@ function Content() {
           <div className="v" style={{ color: 'var(--mint-d)' }}>
             {SURVEYS.filter((s) => s.status === '배포중').length}
           </div>
-          <div className="d">응답 수집 중</div>
+          <div className="d"><span className="mk supplement" title="붙일 집계 API가 아직 없습니다">표시용 예시</span></div>
         </div>
         <div className="stat">
           <div className="l">
@@ -908,14 +911,14 @@ function Content() {
             )}
             %
           </div>
-          <div className="d">마감 기준</div>
+          <div className="d"><span className="mk supplement" title="붙일 집계 API가 아직 없습니다">표시용 예시</span></div>
         </div>
         <div className="stat">
           <div className="l">
             <Icon name="copy" size={13} /> 템플릿
           </div>
           <div className="v">{TEMPLATES.length}</div>
-          <div className="d">재사용 가능</div>
+          <div className="d"><span className="mk supplement" title="붙일 집계 API가 아직 없습니다">표시용 예시</span></div>
         </div>
         <div className="stat">
           <div className="l">
