@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { ApiError } from '../api/client'
+import { takeSignedOutReason } from '../api/tokens'
 import { useAuth } from './AuthContext'
 import './login.css'
 
@@ -10,6 +11,11 @@ export function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  /* 왜 로그인 화면으로 왔는지 한 번만 알린다.
+     ★ 스스로 로그아웃한 것과 토큰이 만료돼 튕긴 것은 사용자에게 전혀 다른 일이다. 안내가
+       없으면 작업 중에 화면이 갑자기 바뀐 셈이라 "저장한 게 날아갔나"부터 의심한다.
+     ★ useState 초기화 함수로 한 번만 읽는다 — 읽으면서 지우므로 렌더마다 부르면 안 된다. */
+  const [signedOut] = useState(() => takeSignedOutReason())
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
@@ -30,6 +36,12 @@ export function LoginPage() {
       <form className="login-card" onSubmit={onSubmit}>
         <h1 className="login-title">D.Lab 통합관리</h1>
         <p className="login-sub">관리자 계정으로 로그인하세요.</p>
+
+        {signedOut === 'expired' && (
+          <p className="login-notice" role="status">
+            로그인 유지 시간이 지나 자동으로 로그아웃되었습니다. 다시 로그인해 주세요.
+          </p>
+        )}
 
         <label className="login-label" htmlFor="loginId">아이디</label>
         <input

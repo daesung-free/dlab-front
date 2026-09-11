@@ -36,9 +36,29 @@ export function setTokens(accessToken: string, refreshToken: string): void {
   notify()
 }
 
-export function clearTokens(): void {
+/**
+ * 왜 로그아웃됐는가. 로그인 화면이 이걸 읽어 한 줄 띄운다.
+ *
+ * ★ 스스로 로그아웃한 것과 **토큰이 만료돼 튕긴 것**은 사용자에게 전혀 다른 일이다.
+ *   구분하지 않으면 작업 중에 갑자기 로그인 화면이 떠도 이유를 알 수 없어, 사용자는
+ *   "방금 저장한 것이 날아갔나"부터 의심한다. 실제로 2차 테스트에서 그렇게 올라왔다.
+ * ★ sessionStorage 에 둔다 — 탭을 닫으면 사라져야 하고, 다음 로그인까지만 유효하다.
+ */
+const REASON_KEY = 'dlab.signedOutReason'
+export type SignedOutReason = 'expired'
+
+export function takeSignedOutReason(): SignedOutReason | null {
+  const v = sessionStorage.getItem(REASON_KEY)
+  // 한 번 보여주고 버린다. 남겨두면 다음 로그인 화면에도 계속 뜬다
+  sessionStorage.removeItem(REASON_KEY)
+  return v === 'expired' ? 'expired' : null
+}
+
+export function clearTokens(reason?: SignedOutReason): void {
   localStorage.removeItem(ACCESS_KEY)
   localStorage.removeItem(REFRESH_KEY)
+  if (reason) sessionStorage.setItem(REASON_KEY, reason)
+  else sessionStorage.removeItem(REASON_KEY)
   notify()
 }
 
