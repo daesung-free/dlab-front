@@ -43,6 +43,14 @@ interface Props {
   presetKey?: string
   /** 헤더 우측 커스텀 영역 */
   headerRight?: React.ReactNode
+  /**
+   * 처음 채워둘 값. 초기화를 눌러도 여기로 돌아온다.
+   *
+   * ★ 서버가 **조건을 비우면 기본값을 적용하는** 목록이 있다(감사 로그는 비우면 오늘분).
+   *   그 경우 칸이 비어 있으면 지금 무엇을 보고 있는지가 화면에 안 드러나서, 사용자는
+   *   전체를 보고 있다고 생각한다. 기본값을 화면에도 그대로 적어준다.
+   */
+  initial?: SearchValues
 }
 
 function emptyValue(f: Field): SearchValue {
@@ -51,8 +59,8 @@ function emptyValue(f: Field): SearchValue {
   return ''
 }
 
-function initialValues(fields: Field[]): SearchValues {
-  return Object.fromEntries(fields.map((f) => [f.name, emptyValue(f)]))
+function initialValues(fields: Field[], initial?: SearchValues): SearchValues {
+  return { ...Object.fromEntries(fields.map((f) => [f.name, emptyValue(f)])), ...initial }
 }
 
 interface Preset {
@@ -79,8 +87,8 @@ function savePresets(key: string, presets: Preset[]): void {
   }
 }
 
-export function SearchForm({ fields, onSearch, presetKey, headerRight }: Props) {
-  const [values, setValues] = useState<SearchValues>(() => initialValues(fields))
+export function SearchForm({ fields, onSearch, presetKey, headerRight, initial }: Props) {
+  const [values, setValues] = useState<SearchValues>(() => initialValues(fields, initial))
   const [presets, setPresets] = useState<Preset[]>([])
 
   useEffect(() => {
@@ -92,7 +100,7 @@ export function SearchForm({ fields, onSearch, presetKey, headerRight }: Props) 
   }
 
   function reset() {
-    const init = initialValues(fields)
+    const init = initialValues(fields, initial)
     setValues(init)
     onSearch(init)
   }

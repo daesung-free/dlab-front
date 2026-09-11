@@ -148,7 +148,9 @@ function Content() {
 
   /* 관리자 설정 — 노출 여부와 간격은 화면에서 바꾼다 */
   const [visible, setVisible] = useState<Record<QnaType, boolean>>({ OFFLINE: true, ONLINE: false })
-  const [interval, setIntervalMin] = useState(30)
+  /* ★ 15분이 현재 운영값이다(클라이언트 회신, 파일 상단 주석). 초기값이 30이라 격자는 15분인데
+       상단 카드만 '30분 간격'이라고 말하고 있었다. 상수로 박지 않는 이유도 위 주석에 있다. */
+  const [interval, setIntervalMin] = useState(15)
 
   const [anchor, setAnchor] = useState(() => todayStr())
   const [byDate, setByDate] = useState<Map<string, QnaSlot[]>>(new Map())
@@ -671,7 +673,7 @@ export const qnaMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled title="준비 중입니다">2026-06 1주 ▾</button>
+      <button className="btn" disabled title="준비 중입니다">주 선택 ▾</button>
       <button className="btn pri" disabled title="준비 중입니다">
         <Icon name="plus" size={14} /> 타임 개설
       </button>

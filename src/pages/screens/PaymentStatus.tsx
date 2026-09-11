@@ -768,7 +768,7 @@ export const paymentMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled title="준비 중입니다">2026 시즌 ▾</button>
+      <button className="btn" disabled title="준비 중입니다">기수 선택 ▾</button>
       <button className="btn" disabled title="준비 중입니다">
         <Icon name="bar-chart-3" size={14} /> 기간·지점별 통계
       </button>

@@ -277,7 +277,7 @@ export const affairsMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled title="준비 중입니다">2026 시즌 ▾</button>
+      <button className="btn" disabled title="준비 중입니다">기수 선택 ▾</button>
     </>
   ),
 }
