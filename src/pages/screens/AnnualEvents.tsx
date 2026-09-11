@@ -562,7 +562,7 @@ export const annualEventsMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn">2026 시즌 ▾</button>
+      <button className="btn" disabled title="준비 중입니다">2026 시즌 ▾</button>
       <button className="btn" disabled title="준비 중입니다">
         <Icon name="history" size={14} /> 전년도 복사
       </button>

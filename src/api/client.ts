@@ -146,7 +146,8 @@ export async function requestEnvelope<T>(path: string, opts: RequestOptions = {}
   }
 
   if (!res.ok || !json.success) {
-    if (res.status === 401 && !opts.keepSessionOn401) clearTokens()
+    // 토큰이 죽어 튕기는 경우다. 사용자가 스스로 나간 것과 구분해 로그인 화면에서 알린다
+    if (res.status === 401 && !opts.keepSessionOn401) clearTokens('expired')
     throw new ApiError(
       res.status,
       json.error?.code ?? 'UNKNOWN',

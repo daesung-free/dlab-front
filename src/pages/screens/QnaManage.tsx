@@ -671,7 +671,7 @@ export const qnaMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn">2026-06 1주 ▾</button>
+      <button className="btn" disabled title="준비 중입니다">2026-06 1주 ▾</button>
       <button className="btn pri" disabled title="준비 중입니다">
         <Icon name="plus" size={14} /> 타임 개설
       </button>

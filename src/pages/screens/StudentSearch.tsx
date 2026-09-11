@@ -191,7 +191,7 @@ export const studentSearchMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn">2026 시즌 ▾</button>
+      <button className="btn" disabled title="준비 중입니다">2026 시즌 ▾</button>
       <button className="btn pri" disabled title="준비 중입니다">+ 신규 접수 등록</button>
     </>
   ),
