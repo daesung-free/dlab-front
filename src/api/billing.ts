@@ -25,6 +25,8 @@ export const PAY_METHOD_LABEL: Record<PayMethod, string> = {
 
 /** 수납 상태. 서버가 문자열로 주므로 모르는 값이 와도 그대로 표시한다 */
 export const BILLING_STATUS_LABEL: Record<string, string> = {
+  /** ★ 서버가 실제로 보내는 값이다. 라벨에 없어서 화면에 **영문 ISSUED 가 그대로** 나왔다 */
+  ISSUED: '미납',
   PENDING: '미납',
   PARTIAL: '부분납',
   PAID: '완납',
