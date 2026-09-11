@@ -2075,3 +2075,94 @@ DELETE /admin/holidays/11   (admin 이 만든 것, viewer1 토큰)  → 200
 > 학습계획·급식 화면이 차단일을 읽어야 한다.
 
 ⚠️ 화면에서 버튼을 감추는 것으로는 못 막는다. 토큰만 있으면 그대로 호출된다.
+
+---
+
+# 24부. 4차 점검 준비 중 확인한 것 (2026-09-11)
+
+3차 점검 회신을 받고 프론트에서 직접 호출해 확인한 결과다. **전부 운영 서버(api.d-dlab.link)
+기준**이고, 요청·응답을 그대로 옮긴다.
+
+## 24-1. 감사 로그가 아무것도 기록하지 않는다 ★ (F-C-1 금일 수정 이력)
+
+`GET /api/v1/admin/audit-logs` 는 200 을 준다. 그런데 **쓰기를 일으켜도 행이 안 생긴다.**
+
+```
+POST /api/v1/admin/holidays
+     {"academyId":1,"date":"2026-12-31","name":"zz_감사로그확인","type":"ACADEMY"}
+  → 200, data.id = 17                                   (실제로 생성됨)
+
+GET  /api/v1/admin/audit-logs?page=0&size=5
+  → {"success":true,"data":[],"meta":{"totalElements":0,"totalPages":0}}
+
+DELETE /api/v1/admin/holidays/17  → 200                 (정리)
+
+GET  /api/v1/admin/audit-logs?page=0&size=5
+  → 여전히 totalElements: 0
+```
+
+academyId 를 넣어도(`?academyId=1`) 같다.
+
+**화면을 못 붙인다.** 행이 하나도 없어서 **필드 이름조차 알 수 없다.** 추측으로 컬럼을
+만들면 반드시 틀린다. 로그가 한 건이라도 쌓이면 그때 붙인다.
+
+→ 요청: 감사 로그 수집이 실제로 도는지, 어떤 엔티티가 대상인지 알려달라.
+
+## 24-2. 결제 관리는 PG 미연동이라 그대로 둔다 (F-C-5)
+
+백엔드 회신에서 "`/billings` 가 있으니 붙일 수 있다"고 했는데, **도메인이 다르다.**
+
+`/billings` 가 주는 것은 **청구와 수납**(청구액·수납액·미납액·납기일)이고 그건 이미
+수납현황(F-4.8)에 붙어 있다. 결제 관리는 **PG 트랜잭션** 관점이다 — 화면 상단 주석에
+"둘을 합치면 정산이 틀어진다"고 적어둔 이유가, 하나의 수납 건이 결제 트랜잭션 여러 개
+(부분환불·재결제)를 가질 수 있어서다.
+
+목업이 요구하는 상태 7종 중 `/billings` 로 만들 수 있는 것이 없다.
+
+| 목업 상태 | 서버 |
+|---|---|
+| 입금대기 · 결제실패 · 기한만료 | 없음 (가상계좌 생애주기) |
+| 부분환불 | 없음 |
+| 결제취소 · 전액환불 | 청구 취소와 다른 개념 |
+
+PG 경로도 전부 없다.
+
+```
+GET /api/v1/admin/payments          → 404 NOT_FOUND
+GET /api/v1/admin/pg/transactions   → 404 NOT_FOUND
+GET /api/v1/admin/refunds           → 404 NOT_FOUND
+GET /api/v1/admin/billings/payments → 405 (POST 전용 — 조회가 없다)
+```
+
+**2026-09-11 확인: PG 자체가 아직 안 붙었다.** 그래서 이 화면은 목업 유지가 맞다.
+붙일 엔드포인트를 찾지 말 것.
+
+다만 `/billings` 의 쓰기(납부 처리·납부 취소·청구 취소)는 쓸모가 있다. **목업에 그 버튼이
+없어서** 안 붙였다 — 붙이려면 화면을 늘려야 하므로 승인 사항이다.
+
+## 24-3. 특강 정원·확정 인원이 신청자 목록과 안 맞는다 (F-4.7)
+
+```
+GET /api/v1/admin/lectures?academyId=1&year=2026
+  → id=2  zz_lecture_국어실전   capacity=2  confirmedCount=3
+    id=3  zz_lecture_수학해설   capacity=5  confirmedCount=0
+    id=1  zz_lecture1          capacity=null confirmedCount=0
+
+GET /api/v1/admin/lectures/2/applicants  → data: []   (0건)
+```
+
+`confirmedCount` 가 3 인데 신청자 목록이 비어 있다. 둘 중 하나가 틀렸다.
+
+**시드 요청** — 대기자 확정 화면(정원 초과 경고)을 확인할 수가 없다. 특강 3개 전부
+신청자 0명이라 확정할 대상이 없다. `zz_lecture_국어실전`(정원 2)에 **대기자 2~3명**이면
+정원 초과 경고까지 한 번에 확인된다.
+
+## 24-4. 비밀번호를 바꿔도 옛 토큰이 즉시 죽지 않는다 (확인만)
+
+```
+POST /api/v1/admin/auth/password  (teacher1, 정상 변경)  → 200 + 새 토큰 한 쌍
+GET  /api/v1/admin/auth/me        (변경 전에 받은 옛 토큰) → 200
+```
+
+즉 유출된 액세스 토큰은 비밀번호를 바꿔도 만료까지 유효하다. 프론트에서 할 수 있는 것이
+없어 적어만 둔다. (테스트 후 비밀번호는 원복했다)
