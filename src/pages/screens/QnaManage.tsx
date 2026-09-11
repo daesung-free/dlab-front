@@ -122,11 +122,17 @@ const REQ_COLUMNS: Column<ReqRow>[] = [
   },
 ]
 
-/** 그 주(월~금) 날짜 5개. 슬롯 조회가 날짜 단위라 화면이 주를 만든다 */
+/**
+ * 그 주(월~일) 날짜 7개. 슬롯 조회가 날짜 단위라 화면이 주를 만든다.
+ *
+ * ★ **토·일을 빼면 안 된다.** 이 학원은 주 7일 운영한다(교시 마스터가 WEEKDAY·SATURDAY·
+ *   SUNDAY 3종이다). 예전에는 5일만 만들어서, 토요일에 열린 슬롯 8개와 거기 잡힌 예약
+ *   3건이 **화면에서 통째로 안 보였다** — 데이터는 있는데 없는 것처럼 보인다.
+ */
 function weekDates(anchor: string): string[] {
   const d = new Date(`${anchor}T00:00:00`)
   d.setDate(d.getDate() - ((d.getDay() + 6) % 7))
-  return Array.from({ length: 5 }, (_, i) => {
+  return Array.from({ length: 7 }, (_, i) => {
     const x = new Date(d)
     x.setDate(d.getDate() + i)
     return toDateStr(x)

@@ -23,13 +23,27 @@ export const PAY_METHOD_LABEL: Record<PayMethod, string> = {
   ETC: '기타',
 }
 
-/** 수납 상태. 서버가 문자열로 주므로 모르는 값이 와도 그대로 표시한다 */
+/** 청구의 생애주기 상태. 서버가 문자열로 주므로 모르는 값이 와도 그대로 표시한다.
+ *
+ *  ★ 여기에 `PARTIAL` 은 없다 — 서버 enum 자체에 없다. 납부 진행도는 상태가 아니라
+ *    **금액**으로 갈린다(`paymentLabel` 참고). 상태로 두면 납부·취소가 들어올 때마다
+ *    다시 계산해 저장해야 하고, 한 곳만 빠뜨려도 화면과 실제 금액이 어긋난다.
+ *  ★ 철자 주의 — 서버는 `CANCELLED`(L 두 개)다. `CANCELED` 로 적어두면 라벨에 안 걸려
+ *    화면에 영문이 그대로 나온다. 실제로 그렇게 새어나갔다. */
 export const BILLING_STATUS_LABEL: Record<string, string> = {
-  PENDING: '미납',
-  PARTIAL: '부분납',
+  PENDING: '발행 전',
+  ISSUED: '발행',
   PAID: '완납',
-  CANCELED: '취소',
+  CANCELLED: '취소',
+  EXPIRED: '기한 만료',
   REFUNDED: '환불',
+}
+
+/** 납부 진행도 — **금액으로만** 판정한다. `status` 와는 축이 다르다(취소된 건도 부분 납부일 수 있다) */
+export function paymentLabel(r: Pick<ReceiptRow, 'billedAmount' | 'receivedAmount'>): string {
+  if (r.receivedAmount <= 0) return '미납'
+  if (r.receivedAmount < r.billedAmount) return '부분 납부'
+  return '완납'
 }
 
 /** 살아 있는 수납 거래. **취소분은 빠진다** — 취소까지 세면 결제수단이 실제와 어긋난다 */
