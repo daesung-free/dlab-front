@@ -40,20 +40,27 @@ import '../../styles/forms.css'
 
 type QType = 'single' | 'multi' | 'text' | 'score' | 'scale' | 'subject'
 
+/** UTC instant → 한국 시각 기준 `yyyy-MM-dd`. 문자열을 자르면 UTC 날짜가 나온다 */
+function localDay(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
 /**
  * `datetime-local` 값(`2026-09-10T09:00`) → 서버가 받는 instant.
  *
  * ★ 값이 비면 그대로 undefined 를 돌려준다 — 빈 문자열에 접미사를 붙이면
  *   `T00:00:00Z` 같은 값이 만들어져 400 이 난다.
- * @param endOfMinute 마감 쪽은 그 분의 끝까지 포함시킨다
  */
-function toInstant(v: string, endOfMinute = false): string | undefined {
+function toInstant(v: string): string | undefined {
   if (!v) return undefined
   /* ★ `Z` 를 문자열로 붙이면 안 된다. `2026-09-10T09:00` 은 **한국 시간** 인데
        `…09:00:00Z` 로 보내면 서버는 UTC 09:00 으로 받아 화면에 18:00 으로 돌아온다 —
        정확히 9시간이 밀린다. 실제로 그렇게 나갔다(2026-09-10).
        `new Date('2026-09-10T09:00')` 은 로컬로 해석하므로 toISOString 이 옳게 바꿔준다. */
-  const d = new Date(`${v}:${endOfMinute ? '59' : '00'}`)
+  const d = new Date(`${v}:00`)
   if (Number.isNaN(d.getTime())) return undefined
   return d.toISOString().replace(/\.\d{3}Z$/, 'Z')
 }
@@ -400,7 +407,7 @@ function Content() {
       return
     }
     const opensAt = toInstant(d.opensAt)
-    const closesAt = toInstant(d.closesAt, true)
+    const closesAt = toInstant(d.closesAt)
     if (!opensAt || !closesAt) {
       setApiError('응답 기간을 시작·마감 둘 다 입력하세요.')
       return
@@ -483,7 +490,9 @@ function Content() {
         width: '180px',
         sortable: true,
         value: (r) => r.opensAt,
-        render: (r) => `${r.opensAt.slice(0, 10)} ~ ${r.closesAt.slice(0, 10)}`,
+        /* ★ 서버가 주는 것은 UTC instant 다. 문자열을 그대로 자르면 **UTC 날짜**가 보인다 —
+             한국 시각 00:00~08:59 에 열리거나 닫히는 설문이 하루 전 날짜로 나온다. */
+        render: (r) => `${localDay(r.opensAt)} ~ ${localDay(r.closesAt)}`,
       },
       {
         key: 'status',
