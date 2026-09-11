@@ -466,7 +466,7 @@ export const seatMoveMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn">A · B실 ▾</button>
+      <button className="btn" disabled title="준비 중입니다">A · B실 ▾</button>
       <button className="btn" disabled title="준비 중입니다">
         <Icon name="monitor" size={14} /> 키오스크 관리
       </button>

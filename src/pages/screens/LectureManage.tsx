@@ -878,7 +878,7 @@ export const lectureMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn">2026-06 ▾</button>
+      <button className="btn" disabled title="준비 중입니다">2026-06 ▾</button>
       <button className="btn" disabled title="준비 중입니다">
         <Icon name="megaphone" size={14} /> 설명회 신청 관리
       </button>
