@@ -239,7 +239,11 @@ export function DataTable<T>({
       {totalPages > 1 && (
         <div className="dt-foot">
           <span className="dt-page-info">
-            {current} / {totalPages} 페이지 · {serverPaging ? rows.length : pageSize}건씩
+            {current} / {totalPages} 페이지 ·{' '}
+            {/* ★ 서버 페이징일 때 `rows.length` 를 '건씩'으로 쓰면 **마지막 쪽에서 숫자가 바뀐다**
+                   (20건씩인데 마지막 쪽에 12건이면 '12건씩'). 쪽 크기는 훅이 정하고 이 컴포넌트는
+                   모르므로, 서버 페이징이면 대신 전체 건수를 말한다. */}
+            {serverPaging ? `전체 ${serverPaging.totalElements}건` : `${pageSize}건씩`}
           </span>
           <div className="dt-pager">
             <button type="button" onClick={() => goToPage(current - 1)} disabled={current === 1}>

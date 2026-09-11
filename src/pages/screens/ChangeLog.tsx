@@ -5,6 +5,7 @@ import {
   MaskToggle,
   SearchForm,
   Unfilled,
+  todayStr,
   useServerTable,
   type Column,
   type Field,
@@ -165,8 +166,13 @@ const COLUMNS: Column<LogRow>[] = [
   },
 ]
 
+/* 기본값을 화면에도 적어둔다.
+   ★ 서버는 기간을 안 보내면 오늘분만 준다. 그런데 조회 칸이 비어 있으면 "전체를 보고 있다"로
+     읽혀서, 어제 것이 왜 없냐는 말이 나온다. 실제로 4차 점검에서 그렇게 올라왔다. */
+const TODAY_RANGE: SearchValues = { date: { from: todayStr(), to: todayStr() } }
+
 function Content() {
-  const [query, setQuery] = useState<SearchValues>({})
+  const [query, setQuery] = useState<SearchValues>(TODAY_RANGE)
   const [masked, setMasked] = useState(true)
   const { academyId } = useAcademy()
 
@@ -196,6 +202,14 @@ function Content() {
 
   /* ⚠ 아래 집계는 **현재 페이지 기준**이다. 서버가 유형별 합계를 주지 않아 전체를 셀 수
      없다. '금일 변경'만 서버 총건수를 쓴다 — 그 숫자와 유형별 합이 안 맞는 이유다. */
+  /* 기간을 넓혔는데 카드 이름이 '금일 변경'으로 남아 있으면 그 숫자를 오늘 것으로 읽는다 */
+  const periodLabel = useMemo(() => {
+    const d = query.date as { from?: string; to?: string } | undefined
+    if (!d?.from && !d?.to) return '전체 변경'
+    if (d.from && d.from === d.to) return d.from === todayStr() ? '금일 변경' : `${d.from} 변경`
+    return `${d.from || '처음'} ~ ${d.to || '오늘'} 변경`
+  }, [query])
+
   const countAct = (a: AuditAction) => rows.filter((r) => r.action === a).length
   const actorCount = new Set(rows.map((r) => r.actorName ?? r.actorId)).size
 
@@ -204,7 +218,7 @@ function Content() {
       <div className="stat-strip">
         <div className="stat">
           <div className="l">
-            <Icon name="history" size={13} /> 금일 변경
+            <Icon name="history" size={13} /> {periodLabel}
           </div>
           <div className="v">{table.serverPaging?.totalElements ?? rows.length}</div>
           <div className="d">조회 조건 기준</div>
@@ -244,6 +258,7 @@ function Content() {
       <SearchForm
         fields={FIELDS}
         onSearch={setQuery}
+        initial={TODAY_RANGE}
         presetKey="change-log"
         headerRight={
           <span className="mk supplement" title="조회 기본값은 오늘입니다">
@@ -290,7 +305,7 @@ export const changeLogMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled title="준비 중입니다">2026-05-28 ▾</button>
+      <button className="btn" disabled title="준비 중입니다">기간 선택 ▾</button>
       <button className="btn" disabled title="준비 중입니다">
         <Icon name="shield-check" size={14} /> 보존정책
       </button>
