@@ -5,11 +5,14 @@ import { request } from './client'
 export type ConsultType = 'REGULAR' | 'SCORE' | 'LIFE' | 'ADMISSION' | 'PARENT'
 export type ConsultMethod = 'FACE' | 'PHONE' | 'ONLINE'
 
+/* ★ ADMISSION 을 '입학예약 상담'으로 적었었다. **진학 상담이다** — 서버 주석도 그렇다.
+     점검표의 '진로/진학'과 같은 항목인데 이름이 달라서, 점검표 4종과 구현 5종을 비교할 때
+     서로 다른 항목인 줄 알고 "구성이 다르다"로 읽혔다. 실제 차이는 학부모 상담 하나뿐이다. */
 export const CONSULT_TYPE_LABEL: Record<ConsultType, string> = {
   REGULAR: '정기 상담',
   SCORE: '성적 상담',
   LIFE: '생활 · 태도',
-  ADMISSION: '입학예약 상담',
+  ADMISSION: '진학 상담',
   PARENT: '학부모 상담',
 }
 

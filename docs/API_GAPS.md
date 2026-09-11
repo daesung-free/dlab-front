@@ -2083,30 +2083,44 @@ DELETE /admin/holidays/11   (admin 이 만든 것, viewer1 토큰)  → 200
 3차 점검 회신을 받고 프론트에서 직접 호출해 확인한 결과다. **전부 운영 서버(api.d-dlab.link)
 기준**이고, 요청·응답을 그대로 옮긴다.
 
-## 24-1. 감사 로그가 아무것도 기록하지 않는다 ★ (F-C-1 금일 수정 이력)
+## 24-1. ❌ 취소 — 감사 로그는 정상이다 (F-C-1 금일 수정 이력)
 
-`GET /api/v1/admin/audit-logs` 는 200 을 준다. 그런데 **쓰기를 일으켜도 행이 안 생긴다.**
+처음에 "`/audit-logs` 가 아무것도 기록하지 않는다"고 적었다. **내 확인이 틀렸다.**
+
+감사 로그는 **opt-in** 이라 정해진 도메인만 남긴다. 내가 시험에 쓴 **휴일은 대상이 아니다.**
+그래서 만들고 지워도 0건이었던 것이지, 수집이 안 도는 것이 아니었다.
 
 ```
-POST /api/v1/admin/holidays
-     {"academyId":1,"date":"2026-12-31","name":"zz_감사로그확인","type":"ACADEMY"}
-  → 200, data.id = 17                                   (실제로 생성됨)
-
-GET  /api/v1/admin/audit-logs?page=0&size=5
-  → {"success":true,"data":[],"meta":{"totalElements":0,"totalPages":0}}
-
-DELETE /api/v1/admin/holidays/17  → 200                 (정리)
-
-GET  /api/v1/admin/audit-logs?page=0&size=5
-  → 여전히 totalElements: 0
+대상    학생 등록 · 사유신청 · 상벌점 · 청구 · 성적 · 공지 · 직원 계정
+비대상  휴일 · 특강 · 급식 · 설문 · 루틴 …
 ```
 
-academyId 를 넣어도(`?academyId=1`) 같다.
+대상 도메인으로 다시 확인했다.
 
-**화면을 못 붙인다.** 행이 하나도 없어서 **필드 이름조차 알 수 없다.** 추측으로 컬럼을
-만들면 반드시 틀린다. 로그가 한 건이라도 쌓이면 그때 붙인다.
+```
+POST /api/v1/admin/penalties  {"enrollmentIds":[1],"itemId":7,"reason":"zz_감사로그확인"}
+  → 200
 
-→ 요청: 감사 로그 수집이 실제로 도는지, 어떤 엔티티가 대상인지 알려달라.
+GET  /api/v1/admin/audit-logs?page=0&size=3
+  → {"id":31,"entityType":"상벌점","entityId":1,"action":"CREATE",
+     "academyId":null,"actorId":1,"actorName":"EMPLOYEE",
+     "actorIp":"211.217.165.128","changes":null,
+     "occurredAt":"2026-09-11T02:21:08.934635Z"}      ← 바로 남는다
+
+DELETE /api/v1/admin/penalties/1  → 200                (정리함)
+```
+
+**화면을 붙일 수 있다.** 응답 필드가 확인됐다 —
+`entityType · entityId · action · academyId · actorId · actorName · actorIp · changes · occurredAt`.
+
+다만 붙이기 전에 세 가지를 확인해야 한다. 이 화면의 핵심이 **"누가·무엇을·어떻게"** 인데
+지금 응답으로는 셋 다 못 채운다.
+
+- **`actorName` 이 `"EMPLOYEE"`** — 사람 이름이 아니라 계정 유형으로 보인다. 전부 `EMPLOYEE`
+  로 나오면 "누가"를 구분할 수 없다.
+- **`changes` 가 `null`** — "무엇을 어떻게 바꿨는가"를 못 보여준다. CREATE 라서 비는 것인지,
+  UPDATE 에서는 채워지는지 확인이 필요하다.
+- **`academyId` 가 `null`** — 지점으로 거를 수 없다. 본사 계정이 전 지점 로그를 통으로 본다.
 
 ## 24-2. 결제 관리는 PG 미연동이라 그대로 둔다 (F-C-5)
 
@@ -2140,22 +2154,23 @@ GET /api/v1/admin/billings/payments → 405 (POST 전용 — 조회가 없다)
 다만 `/billings` 의 쓰기(납부 처리·납부 취소·청구 취소)는 쓸모가 있다. **목업에 그 버튼이
 없어서** 안 붙였다 — 붙이려면 화면을 늘려야 하므로 승인 사항이다.
 
-## 24-3. 특강 정원·확정 인원이 신청자 목록과 안 맞는다 (F-4.7)
+## 24-3. 특강 — 시드가 정원 초과 경계를 못 만든다 (F-4.7)
+
+처음에 "신청자 목록이 0건"이라고 적었다. **내 확인이 틀렸다** — 없는 경로(`/applicants`)를
+쳤고 그 404 응답을 0건으로 잘못 읽었다. 실제 경로는 `/applications` 이고 **프론트는 처음부터
+그것을 부르고 있다**(`src/api/lectures.ts:109`).
 
 ```
-GET /api/v1/admin/lectures?academyId=1&year=2026
-  → id=2  zz_lecture_국어실전   capacity=2  confirmedCount=3
-    id=3  zz_lecture_수학해설   capacity=5  confirmedCount=0
-    id=1  zz_lecture1          capacity=null confirmedCount=0
-
-GET /api/v1/admin/lectures/2/applicants  → data: []   (0건)
+GET /api/v1/admin/lectures/2/applications
+  → 3건 (신하윤 · 한민주 …) 전부 status=APPLIED, waitlisted=false
 ```
 
-`confirmedCount` 가 3 인데 신청자 목록이 비어 있다. 둘 중 하나가 틀렸다.
+**진짜 문제는 시드 구성이다.** `zz_lecture_국어실전` 은 정원 2 인데 3명이 **전부 APPLIED** 다.
+대기자가 0명이라 **대기자 확정(정원 초과 경고)을 확인할 수가 없다** — 확정할 대상이 없다.
 
-**시드 요청** — 대기자 확정 화면(정원 초과 경고)을 확인할 수가 없다. 특강 3개 전부
-신청자 0명이라 확정할 대상이 없다. `zz_lecture_국어실전`(정원 2)에 **대기자 2~3명**이면
-정원 초과 경고까지 한 번에 확인된다.
+→ 요청: 3명 중 1~2명을 대기자(`waitlisted`)로 돌려달라. 정원 2 / 확정 2 / 대기 1 이 되면
+확정할 때 "2명 → 3명 (정원 2명) — 1명 넘깁니다" 경고까지 한 번에 확인된다.
+(백엔드에서 고쳐 다시 넣기로 함)
 
 ## 24-4. 비밀번호를 바꿔도 옛 토큰이 즉시 죽지 않는다 (확인만)
 
