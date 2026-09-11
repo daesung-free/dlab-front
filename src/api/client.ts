@@ -195,3 +195,66 @@ export async function requestPaged<T>(path: string, opts: RequestOptions = {}): 
     totalPages: data.totalPages,
   }
 }
+
+/**
+ * 서버가 만든 파일을 받아 저장한다 (엑셀 내보내기).
+ *
+ * ★ 화면에서 만드는 엑셀과 **결과가 다르다.** 화면 엑셀은 지금 보고 있는 쪽만 담기지만
+ *   이쪽은 **검색조건에 맞는 전량**이다. 목록이 서버 페이징이면 화면 엑셀은 20건짜리가 된다.
+ *
+ * ★ 마스킹도 서버가 판단한다. 파일은 회수가 안 되므로 화면 토글보다 기준이 높다.
+ *
+ * ★ 파일명은 Content-Disposition 에 RFC 5987 로 온다(한글이라 그렇다). 못 읽으면
+ *   넘겨받은 기본 이름을 쓴다.
+ */
+export async function downloadFile(path: string, fallbackName: string, opts: RequestOptions = {}): Promise<void> {
+  let res: Response
+  try {
+    res = await send(path, opts)
+  } catch {
+    throw new ApiError(0, 'NETWORK', 'API 서버에 연결할 수 없습니다.')
+  }
+
+  if (res.status === 401 && !opts.anonymous && (await refreshTokens())) {
+    res = await send(path, opts)
+  }
+
+  if (!res.ok) {
+    // 실패 응답은 파일이 아니라 봉투다 — 그걸 읽어 서버 문구를 그대로 보여준다
+    let message = `내보내기에 실패했습니다 (HTTP ${res.status}).`
+    try {
+      const json = (await res.json()) as ApiEnvelope<unknown>
+      message = json.error?.message ?? message
+    } catch {
+      /* 본문이 파일이거나 비어 있으면 기본 문구 */
+    }
+    if (res.status === 401) clearTokens()
+    throw new ApiError(res.status, 'EXPORT_FAILED', message)
+  }
+
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filenameOf(res.headers.get('Content-Disposition')) ?? fallbackName
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  // 즉시 해제하면 저장이 취소되는 브라우저가 있어 한 틱 뒤에 푼다
+  setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
+/** `attachment; filename*=UTF-8''%ED%95%9C%EA%B8%80.xlsx` 에서 이름만 꺼낸다 */
+function filenameOf(header: string | null): string | null {
+  if (!header) return null
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(header)
+  if (star) {
+    try {
+      return decodeURIComponent(star[1])
+    } catch {
+      return null
+    }
+  }
+  const plain = /filename="?([^";]+)"?/i.exec(header)
+  return plain ? plain[1] : null
+}

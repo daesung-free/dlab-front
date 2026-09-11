@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   CopyButton,
   DataTable,
-  ExcelButton,
   MaskToggle,
   PrintButton,
   SearchForm,
@@ -15,12 +14,14 @@ import {
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { useAcademy } from '../../auth/AcademyContext'
+import { ApiError } from '../../api/client'
 import { listClasses, type ClassGroup } from '../../api/classes'
 import {
   SORTABLE,
   STATUS_LABEL,
   TRACK_LABEL,
   retakeLabel,
+  exportStudents,
   searchStudents,
   type EnrollmentStatus,
   type Student,
@@ -59,6 +60,7 @@ const sortableKey = (key: string): boolean => (SORTABLE as readonly string[]).in
 /** 구분 컬럼 — I-1 확정 전까지 값을 채우지 않는다 */
 const UNDEFINED_COL: Column<Student> = {
   key: 'gubun',
+  exportHeader: '구분',
   header: (
     <span title="항목 정의 준비 중" style={{ color: 'var(--amber)' }}>
       구분 <Icon name="triangle-alert" size={11} />
@@ -212,6 +214,9 @@ function Content() {
     }
   }, [query, scholarOnly, academyId])
 
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
+
   const table = useServerTable({
     fetcher: searchStudents,
     params,
@@ -227,8 +232,25 @@ function Content() {
   const serverMasked = table.rows.some((r) => r.masked)
   const effectiveMasked = serverMasked ? false : masked
 
+  async function exportExcel() {
+    setExporting(true)
+    setExportError(null)
+    try {
+      await exportStudents(params, `${label}.xlsx`)
+    } catch (err) {
+      setExportError(err instanceof ApiError ? err.message : '엑셀을 내보내지 못했습니다.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <>
+      {exportError && (
+        <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+          {exportError}
+        </div>
+      )}
       <SearchForm fields={fields} onSearch={setQuery} presetKey="affairs" />
 
       {table.error && (
@@ -262,7 +284,10 @@ function Content() {
                   <MaskToggle masked={masked} onChange={setMasked} />
                 )}
                 <CopyButton columns={columns} rows={rows} masked={effectiveMasked} />
-                <ExcelButton filename={label} columns={columns} rows={rows} masked={effectiveMasked} />
+                {/* ★ 엑셀은 서버가 만든다 — 화면에서 만들면 보고 있는 쪽(20건)만 담긴다 */}
+                <button className="btn" disabled={exporting} onClick={() => void exportExcel()}>
+                  <Icon name="download" size={14} /> {exporting ? '내보내는 중…' : '엑셀'}
+                </button>
                 <PrintButton />
               </>
             }

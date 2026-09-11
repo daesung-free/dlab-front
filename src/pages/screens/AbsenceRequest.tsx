@@ -139,6 +139,19 @@ function Content() {
       { key: 'period', header: '기간', width: '110px', value: (r) => r.period },
       { key: 'reason', header: '사유', value: (r) => r.reason ?? '-' },
       {
+        key: 'rejectReason',
+        header: '반려 사유',
+        width: '160px',
+        // 반려 건에만 값이 있다. 학생·학부모에게 그대로 전달된 문구라 그대로 보여준다
+        value: (r) => r.rejectReason ?? '',
+        render: (r) =>
+          r.rejectReason ? (
+            <span style={{ color: 'var(--red)' }}>{r.rejectReason}</span>
+          ) : (
+            <span style={{ color: 'var(--muted)' }}>-</span>
+          ),
+      },
+      {
         key: 'approverType',
         header: '승인 주체',
         width: '116px',

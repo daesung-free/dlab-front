@@ -1,4 +1,4 @@
-import { request, requestPaged } from './client'
+import { downloadFile, request, requestPaged } from './client'
 import type { Paged } from './types'
 
 /* 학생 검색 (F-4.1-1) — GET /api/v1/admin/students
@@ -181,4 +181,19 @@ export function updateStudent(enrollmentId: number, body: StudentUpdateRequest):
 /** 저장하면 부여될 다음 학번. 미리보기용이고 예약은 아니다 */
 export function getNextStudentNo(academyId: number, year: number): Promise<string> {
   return request<string>('/api/v1/admin/students/next-student-no', { query: { academyId, year } })
+}
+
+/**
+ * 검색조건에 맞는 **전량**을 서버 엑셀로 받는다.
+ *
+ * ★ 화면의 엑셀 버튼과 결과가 다르다. 목록이 서버 페이징이라 화면에서 만들면
+ *   **지금 보고 있는 쪽(20건)만** 담긴다 — 전체 명부를 내보내려면 이쪽을 써야 한다.
+ * ★ 마스킹 해제 권한도 서버가 판단한다. 파일은 회수가 안 되기 때문이다.
+ */
+export function exportStudents(params: StudentSearchParams, filename = '학생_명부.xlsx'): Promise<void> {
+  const { sort, page, size, ...rest } = params
+  void sort
+  void page
+  void size
+  return downloadFile('/api/v1/admin/students/export', filename, { query: { ...rest } })
 }

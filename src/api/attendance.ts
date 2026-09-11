@@ -17,7 +17,7 @@ import { request } from './client'
  */
 
 /** 서버 ScreenStatus. 화면 표시용 축이라 서버 내부 DailyStatus 와 다르다 */
-export type AttendanceStatus = 'ON_TIME' | 'LATE' | 'ABSENT' | 'OUT' | 'EARLY_LEAVE'
+export type AttendanceStatus = 'ON_TIME' | 'LATE' | 'ABSENT' | 'OUT' | 'EARLY_LEAVE' | 'NOT_YET'
 
 export const ATTENDANCE_STATUS: readonly AttendanceStatus[] = [
   'ON_TIME',
@@ -25,6 +25,7 @@ export const ATTENDANCE_STATUS: readonly AttendanceStatus[] = [
   'ABSENT',
   'OUT',
   'EARLY_LEAVE',
+  'NOT_YET',
 ] as const
 
 export const ATTENDANCE_STATUS_LABEL: Record<AttendanceStatus, string> = {
@@ -33,6 +34,8 @@ export const ATTENDANCE_STATUS_LABEL: Record<AttendanceStatus, string> = {
   ABSENT: '결석',
   OUT: '외출',
   EARLY_LEAVE: '조퇴',
+  /** ★ 아직 오지 않은 날. **결석과 반드시 구분해야 한다** — 미래 날짜를 조회하면 전원 이 값이다 */
+  NOT_YET: '예정',
 }
 
 export interface AttendanceRow {

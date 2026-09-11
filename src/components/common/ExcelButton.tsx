@@ -17,7 +17,10 @@ interface Props<T> {
 }
 
 function extract<T>(columns: Column<T>[], rows: T[], masked: boolean): { headers: string[]; body: string[][] } {
-  const headers = columns.map((c) => (typeof c.header === 'string' ? c.header : c.key))
+  // 헤더가 문자열이 아니면(배지·아이콘) exportHeader 를 쓰고, 그것도 없을 때만 key 로 떨어진다
+  const headers = columns.map((c) =>
+    typeof c.header === 'string' ? c.header : (c.exportHeader ?? c.key),
+  )
   const body = rows.map((r) => columns.map((c) => displayCell(c, r, masked)))
   return { headers, body }
 }
