@@ -996,7 +996,7 @@ export const mealMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn">2026-05 ▾</button>
+      <button className="btn" disabled title="준비 중입니다">2026-05 ▾</button>
       <button className="btn" disabled title="준비 중입니다">
         <Icon name="utensils" size={14} /> 식수 마감
       </button>

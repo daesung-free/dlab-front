@@ -100,3 +100,30 @@ export interface Me {
 export function getMe(): Promise<Me> {
   return request<Me>('/api/v1/admin/auth/me')
 }
+
+/**
+ * 본인 비밀번호 변경 — `POST /api/v1/admin/auth/password`
+ *
+ * ★ 관리자 계정 관리(F-4.10-2)의 **비밀번호 초기화와는 다른 것**이다. 그쪽은 남의 계정을
+ *   임시 비밀번호로 되돌리는 것이고, 이건 본인이 아는 비밀번호로 바꾸는 것이다.
+ *   초기화만 있고 이게 없으면 임시 비밀번호를 받은 사람이 그걸 계속 쓰게 된다 —
+ *   발급한 사람도 아는 비밀번호다.
+ *
+ * ★ **응답이 새 토큰 한 쌍이다.** 받아서 갈아끼우지 않으면 손해는 안 나지만(옛 토큰도
+ *   만료까지는 산다) 서버가 새로 준 이유가 있으므로 그대로 쓴다. 특히 `mustChangePassword`
+ *   가 여기서 false 로 내려온다 — 강제 변경 화면을 닫을 근거가 이 값이다.
+ *
+ * ★ 옛 토큰이 즉시 죽지는 않는 것을 확인했다(비밀번호를 바꾼 뒤에도 `/auth/me` 200).
+ *   즉 유출된 토큰은 비밀번호를 바꿔도 만료까지 유효하다 — 서버 몫이라 여기 적어만 둔다.
+ */
+export async function changePassword(currentPassword: string, newPassword: string): Promise<AuthResponse> {
+  const res = await request<AuthResponse>('/api/v1/admin/auth/password', {
+    method: 'POST',
+    body: { currentPassword, newPassword },
+    /* 현재 비밀번호가 틀리면 서버가 401(INVALID_CREDENTIALS)을 준다. 토큰 문제가 아니다 —
+       이걸 안 막으면 오타 한 번에 로그아웃되고, 사용자는 이유를 모른 채 다시 로그인한다. */
+    keepSessionOn401: true,
+  })
+  setTokens(res.accessToken, res.refreshToken)
+  return res
+}

@@ -385,7 +385,7 @@ export const studentStatusMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn">2026 시즌 ▾</button>
+      <button className="btn" disabled title="준비 중입니다">2026 시즌 ▾</button>
       <button className="btn" disabled title="준비 중입니다">
         <Icon name="bar-chart-3" size={14} /> 전년 대비 비교
       </button>

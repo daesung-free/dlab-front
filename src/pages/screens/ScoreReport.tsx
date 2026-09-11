@@ -38,8 +38,15 @@ import './score.css'
  * ★ 더프리미엄 자동 조회·엑셀 일괄 업로드는 **요청하지 않는다.** 전자는 더프가 평가원 성적을
  *   주지 않아 불가능하고, 후자는 우리가 제안했다가 채택되지 않은 안이다(0826 회신). */
 
-/** 백분위 합(국수탐) — 상담에서 쓰는 지표라 화면이 계산한다 */
-const SUM_CODES = ['KOR', 'MATH', 'INQ1', 'INQ2']
+/**
+ * 백분위 합(국수탐) — 상담에서 쓰는 지표라 화면이 계산한다.
+ *
+ * ★ 코드는 **서버가 주는 그대로** 써야 한다. 예전에는 `KOR`·`INQ1`·`INQ2` 로 찾았는데
+ *   서버는 `KOREAN`·`INQUIRY1`·`INQUIRY2` 다. `MATH` 하나만 겹쳐서 **수학 백분위가
+ *   곧 합계로 나왔다** — 72×4과목인 학생의 합이 72 였다. 틀린 줄 모르고 상담에 쓰인다.
+ *   실제 코드: KOREAN MATH ENGLISH INQUIRY1 INQUIRY2 HISTORY SOCIAL SCIENCE (2026-09-11)
+ */
+const SUM_CODES = ['KOREAN', 'MATH', 'INQUIRY1', 'INQUIRY2']
 
 function toRow(s: Student): StudentRow {
   return {

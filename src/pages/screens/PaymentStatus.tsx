@@ -15,6 +15,7 @@ import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
 import {
   BILLING_STATUS_LABEL,
+  paymentLabel,
   BILLING_TYPE_LABEL,
   PAY_METHOD_LABEL,
   getReceiptSummary,
@@ -61,7 +62,23 @@ const FIELDS: Field[] = [
   { type: 'chips', name: 'method', label: '결제수단', options: METHODS, multiple: true },
 ]
 
-const STATUS_TONE: Record<string, string> = { PAID: 'verified', PARTIAL: 'supplement', PENDING: 'brandnew' }
+/* ★ '상태' 열은 두 축이 겹쳐 있다.
+ *   - 납부 진행도(미납·부분 납부·완납)는 **금액**에서 나온다. 서버 enum 에 PARTIAL 이 없다.
+ *   - 청구 생애주기(취소·기한 만료·환불)는 status 에서 나온다.
+ *   목업이 열 하나라 생애주기가 종료된 건만 status 를 보여주고, 그 밖에는 금액으로 판정한다.
+ *   status 만 찍었더니 절반 납부된 4건이 '미납'과 구분되지 않았다. */
+const TERMINAL_STATUS = new Set(['CANCELLED', 'EXPIRED', 'REFUNDED'])
+
+function statusText(r: ReceiptRow): string {
+  if (TERMINAL_STATUS.has(r.status)) return BILLING_STATUS_LABEL[r.status] ?? r.status
+  return paymentLabel(r)
+}
+
+const STATUS_TONE: Record<string, string> = {
+  완납: 'verified',
+  '부분 납부': 'supplement',
+  미납: 'brandnew',
+}
 
 const wonOf = (n: number) => `${n.toLocaleString()}원`
 
@@ -152,10 +169,11 @@ const COLUMNS: Column<ReceiptRow>[] = [
     header: '상태',
     width: '76px',
     align: 'center',
-    value: (r) => BILLING_STATUS_LABEL[r.status] ?? r.status,
-    render: (r) => (
-      <span className={`mk ${STATUS_TONE[r.status] ?? ''}`}>{BILLING_STATUS_LABEL[r.status] ?? r.status}</span>
-    ),
+    value: (r) => statusText(r),
+    render: (r) => {
+      const t = statusText(r)
+      return <span className={`mk ${STATUS_TONE[t] ?? ''}`}>{t}</span>
+    },
   },
 ]
 
@@ -750,7 +768,7 @@ export const paymentMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn">2026 시즌 ▾</button>
+      <button className="btn" disabled title="준비 중입니다">2026 시즌 ▾</button>
       <button className="btn" disabled title="준비 중입니다">
         <Icon name="bar-chart-3" size={14} /> 기간·지점별 통계
       </button>

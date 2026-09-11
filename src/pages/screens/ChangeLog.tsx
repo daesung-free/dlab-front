@@ -267,7 +267,7 @@ export const changeLogMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn">2026-05-28 ▾</button>
+      <button className="btn" disabled title="준비 중입니다">2026-05-28 ▾</button>
       <button className="btn" disabled title="준비 중입니다">
         <Icon name="shield-check" size={14} /> 보존정책
       </button>

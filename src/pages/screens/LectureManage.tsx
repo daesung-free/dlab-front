@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DataTable, ExcelButton, MaskToggle, Unfilled, type Column } from '../../components/common'
+import { DataTable, ExcelButton, MaskToggle, Modal, Unfilled, type Column } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
@@ -234,6 +234,9 @@ function Content() {
   const [sessionList, setSessionList] = useState<LectureSession[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  /* 확정 전에 한 번 묻는다. 정원을 넘기는 경우가 있어서다 — 아래 confirmPromote 주석 참고 */
+  const [promoting, setPromoting] = useState<{ ids: number[] } | null>(null)
+  const [promoteBusy, setPromoteBusy] = useState(false)
 
   const loadLectures = useCallback(async () => {
     if (academyId === null) {
@@ -293,13 +296,39 @@ function Content() {
 
   const selectedLecture = lectures.find((l) => l.id === lectureId) ?? null
 
-  async function promote(applicationId: number) {
-    try {
-      await promoteApplicant(applicationId)
-      if (lectureId !== null) setApplicants(await listLectureApplicants(lectureId))
-      await loadLectures()
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : '대기자를 확정하지 못했습니다.')
+  /**
+   * 대기자 → 확정.
+   *
+   * ★ 서버는 **정원을 넘겨도 승격을 막지 않는다.** 일부러 그렇게 돼 있다 — 요구사항 F-4.7
+   *   '일괄 이동'이 "한 명 더 받자"는 관리자 판단을 허용하는 기능이라, 막으면 그 기능이
+   *   안 된다. 자동 승격(확정자가 취소했을 때)은 자리가 빈 경우에만 돌아서 이 경로와 다르다.
+   *
+   * ★ 그래서 **넘긴다는 사실을 화면이 알려야 한다.** 서버가 조용히 받아주므로, 경고가 없으면
+   *   관리자는 정원이 넘은 줄 모르고 지나간다. 승격 전에 결과 인원을 보여주고 한 번 묻는다.
+   *
+   * ★ 일괄 API 가 없어 건별로 나간다. 중간에 실패해도 앞의 것은 이미 올라가 있으므로
+   *   "몇 건 됐고 몇 건 안 됐는지"를 그대로 알린다. 뭉뚱그리면 다시 눌러 중복으로 올린다.
+   */
+  async function runPromote(ids: number[]) {
+    setPromoteBusy(true)
+    setError(null)
+    let done = 0
+    const failed: string[] = []
+    for (const id of ids) {
+      try {
+        await promoteApplicant(id)
+        done += 1
+      } catch (err) {
+        failed.push(err instanceof ApiError ? err.message : `#${id}`)
+      }
+    }
+    if (lectureId !== null) setApplicants(await listLectureApplicants(lectureId))
+    await loadLectures()
+    setPromoteBusy(false)
+    setSelected([])
+    setPromoting(null)
+    if (failed.length > 0) {
+      setError(`${ids.length}명 중 ${done}명만 확정됐습니다. 실패 ${failed.length}건 — ${failed[0]}`)
     }
   }
 
@@ -700,12 +729,7 @@ function Content() {
                     className="btn"
                     disabled={selected.length === 0 || tab !== 'wait'}
                     title={tab === 'wait' ? '선택한 대기자를 확정으로 올립니다' : '대기자 탭에서 사용합니다'}
-                    onClick={() => {
-                      void (async () => {
-                        for (const id of selected) await promote(Number(id))
-                        setSelected([])
-                      })()
-                    }}
+                    onClick={() => setPromoting({ ids: selected.map(Number) })}
                   >
                     <Icon name="arrow-right" size={14} /> 선택 확정
                   </button>
@@ -782,7 +806,71 @@ function Content() {
           )}
         </div>
       </div>
+
+      {promoting && (
+        <PromoteConfirm
+          count={promoting.ids.length}
+          capacity={selectedLecture?.capacity ?? null}
+          confirmed={selectedLecture?.confirmedCount ?? 0}
+          busy={promoteBusy}
+          onClose={() => setPromoting(null)}
+          onConfirm={() => void runPromote(promoting.ids)}
+        />
+      )}
     </>
+  )
+}
+
+/**
+ * 대기자 확정 전 확인.
+ *
+ * ★ 정원을 넘기는 것 자체는 허용된다(runPromote 주석). 다만 **넘긴다는 사실**을 여기서
+ *   숫자로 보여준다 — "정원 20명 / 확정 후 22명". 서버가 조용히 받아주기 때문에 화면이
+ *   말하지 않으면 아무도 모른다.
+ * ★ 정원이 없는 특강(capacity null)은 넘길 것이 없으므로 경고를 띄우지 않는다.
+ */
+function PromoteConfirm({
+  count,
+  capacity,
+  confirmed,
+  busy,
+  onClose,
+  onConfirm,
+}: {
+  count: number
+  capacity: number | null
+  confirmed: number
+  busy: boolean
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  const after = confirmed + count
+  const over = capacity !== null && after > capacity
+
+  return (
+    <Modal
+      title="대기자 확정"
+      sub={`선택한 ${count}명을 확정 인원으로 올립니다.`}
+      confirmLabel={over ? '정원을 넘겨 확정' : '확정'}
+      danger={over}
+      busy={busy}
+      onClose={onClose}
+      onConfirm={onConfirm}
+    >
+      <div className="frow">
+        <label>확정 인원</label>
+        <div>
+          {confirmed}명 → <b>{after}명</b>
+          {capacity !== null && <span style={{ color: 'var(--muted)' }}> (정원 {capacity}명)</span>}
+        </div>
+      </div>
+
+      {over && (
+        <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+          정원 {capacity}명을 <b>{after - capacity}명 넘깁니다.</b> 그래도 확정하시겠습니까?
+        </div>
+      )}
+    </Modal>
   )
 }
 
@@ -790,7 +878,7 @@ export const lectureMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn">2026-06 ▾</button>
+      <button className="btn" disabled title="준비 중입니다">2026-06 ▾</button>
       <button className="btn" disabled title="준비 중입니다">
         <Icon name="megaphone" size={14} /> 설명회 신청 관리
       </button>
