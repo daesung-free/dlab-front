@@ -48,6 +48,14 @@ interface RequestOptions {
   body?: unknown
   /** 로그인·재발급처럼 토큰을 붙이면 안 되는(또는 붙일 수 없는) 요청 */
   anonymous?: boolean
+  /**
+   * 401 을 "세션이 끊겼다"로 해석하지 않는다. 기본은 해석한다(재발급 시도 → 실패면 토큰 삭제).
+   *
+   * ★ 비밀번호 변경처럼 **입력값이 틀려서** 401 이 오는 엔드포인트가 있다. 서버가
+   *   INVALID_CREDENTIALS 로 401 을 주는데, 토큰은 멀쩡하다. 그대로 두면 현재 비밀번호를
+   *   한 글자 잘못 친 사람이 **그 자리에서 로그아웃된다** — 오타의 대가가 재로그인이다.
+   */
+  keepSessionOn401?: boolean
 }
 
 function buildUrl(path: string, query?: Query, repeatable?: RequestOptions['repeatable']): string {
@@ -123,7 +131,7 @@ export async function requestEnvelope<T>(path: string, opts: RequestOptions = {}
     throw new ApiError(0, 'NETWORK', 'API 서버에 연결할 수 없습니다. 백엔드(:8080) 기동 상태와 CORS 허용 origin을 확인하세요.')
   }
 
-  if (res.status === 401 && !opts.anonymous && (await refreshTokens())) {
+  if (res.status === 401 && !opts.anonymous && !opts.keepSessionOn401 && (await refreshTokens())) {
     res = await send(path, opts)
   }
 
@@ -138,7 +146,7 @@ export async function requestEnvelope<T>(path: string, opts: RequestOptions = {}
   }
 
   if (!res.ok || !json.success) {
-    if (res.status === 401) clearTokens()
+    if (res.status === 401 && !opts.keepSessionOn401) clearTokens()
     throw new ApiError(
       res.status,
       json.error?.code ?? 'UNKNOWN',

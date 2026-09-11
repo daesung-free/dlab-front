@@ -23,6 +23,14 @@ interface Props {
    * ★ 색만 바꾼다. 문구는 호출부가 "무엇이 사라지는지" 그대로 쓴다 — '확인' 대신 '삭제'.
    */
   danger?: boolean
+  /**
+   * 닫을 수 있는가. 기본 true.
+   *
+   * ★ false 면 X·취소 버튼이 사라지고 Esc·배경 클릭도 안 먹는다. 임시 비밀번호를 받은
+   *   사람이 비밀번호를 바꾸기 전까지 빠져나가지 못하게 할 때만 쓴다. 그 사람이 모달을
+   *   닫아버리면 임시 비밀번호를 계속 쓰게 되는데, 그건 남이 아는 비밀번호다.
+   */
+  dismissible?: boolean
   children?: ReactNode
 }
 
@@ -49,6 +57,7 @@ export function Modal({
   confirmDisabled = false,
   error,
   danger = false,
+  dismissible = true,
   children,
 }: Props) {
   const box = useRef<HTMLDivElement>(null)
@@ -60,7 +69,7 @@ export function Modal({
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape' && !busy) onClose()
+      if (e.key === 'Escape' && !busy && dismissible) onClose()
     }
     document.addEventListener('keydown', onKey)
     // 뒤 화면이 같이 스크롤되면 모달이 떠 있는 동안 위치를 잃는다
@@ -70,10 +79,10 @@ export function Modal({
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = prev
     }
-  }, [busy, onClose])
+  }, [busy, dismissible, onClose])
 
   return (
-    <div className="mo-back" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
+    <div className="mo-back" onMouseDown={(e) => e.target === e.currentTarget && !busy && dismissible && onClose()}>
       <div className="mo" role="dialog" aria-modal="true" aria-label={title} ref={box}>
         <form
           onSubmit={(e) => {
@@ -86,9 +95,11 @@ export function Modal({
               <div className="mo-t">{title}</div>
               {sub && <div className="mo-s">{sub}</div>}
             </div>
-            <button type="button" className="mo-x" onClick={onClose} disabled={busy} aria-label="닫기">
-              <Icon name="x" size={16} />
-            </button>
+            {dismissible && (
+              <button type="button" className="mo-x" onClick={onClose} disabled={busy} aria-label="닫기">
+                <Icon name="x" size={16} />
+              </button>
+            )}
           </div>
 
           {/* 확인만 묻는 모달은 본문이 없다 — 빈 칸을 그리면 가운데가 휑하게 뜬다 */}
@@ -104,9 +115,11 @@ export function Modal({
           )}
 
           <div className="mo-f">
-            <button type="button" className="btn" onClick={onClose} disabled={busy}>
-              취소
-            </button>
+            {dismissible && (
+              <button type="button" className="btn" onClick={onClose} disabled={busy}>
+                취소
+              </button>
+            )}
             <button
               type="submit"
               className="btn pri"
