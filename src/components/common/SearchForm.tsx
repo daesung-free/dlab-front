@@ -12,6 +12,18 @@ interface FieldBase {
   label: string
   /** 그리드 가로 폭 (4열 기준) */
   span?: 1 | 2 | 4
+  /**
+   * 서버가 아직 못 거르는 조건. 입력을 막고 이유를 붙인다.
+   *
+   * ★ 조건을 **지우지 않는다**(CLAUDE.md 4). 지우면 "원래 없던 검색조건"처럼 보여서
+   *   백엔드에 요청해야 할 것이 조용히 사라진다.
+   * ★ 그렇다고 살려두면 더 나쁘다 — 서버가 **400 이 아니라 조용히 무시**하는 파라미터가
+   *   있어서(CLAUDE.md 3-3), 골라도 결과가 안 바뀌는 것을 사용자는 "필터가 고장났다"가
+   *   아니라 "해당 데이터가 원래 그만큼"으로 읽는다.
+   */
+  disabled?: boolean
+  /** 왜 못 쓰는지. 사용자 말로 쓴다 — 파라미터명·엔드포인트를 적지 않는다 */
+  disabledReason?: string
 }
 
 export type Field =
@@ -160,7 +172,10 @@ export function SearchForm({ fields, onSearch, presetKey, headerRight }: Props) 
 
       <div className="sf-body">
         {fields.map((f) => (
-          <div className={`sf-field${f.span && f.span > 1 ? ` span${f.span}` : ''}`} key={f.name}>
+          <div
+            className={`sf-field${f.span && f.span > 1 ? ` span${f.span}` : ''}${f.disabled ? ' off' : ''}`}
+            key={f.name}
+          >
             <label htmlFor={`sf-${f.name}`}>{f.label}</label>
 
             {f.type === 'text' && (
@@ -169,6 +184,8 @@ export function SearchForm({ fields, onSearch, presetKey, headerRight }: Props) 
                 className="inp"
                 placeholder={f.placeholder}
                 value={values[f.name] as string}
+                disabled={f.disabled}
+                title={f.disabledReason}
                 onChange={(e) => set(f.name, e.target.value)}
               />
             )}
@@ -178,6 +195,8 @@ export function SearchForm({ fields, onSearch, presetKey, headerRight }: Props) 
                 id={`sf-${f.name}`}
                 className="sel"
                 value={values[f.name] as string}
+                disabled={f.disabled}
+                title={f.disabledReason}
                 onChange={(e) => set(f.name, e.target.value)}
               >
                 <option value="">전체</option>
@@ -207,6 +226,8 @@ export function SearchForm({ fields, onSearch, presetKey, headerRight }: Props) 
                       type="button"
                       key={o}
                       className={`chip${on ? ' on' : ''}`}
+                      disabled={f.disabled}
+                      title={f.disabledReason}
                       onClick={() => {
                         if (f.multiple) {
                           const arr = Array.isArray(cur) ? cur : []
@@ -222,6 +243,8 @@ export function SearchForm({ fields, onSearch, presetKey, headerRight }: Props) 
                 })}
               </div>
             )}
+
+            {f.disabled && f.disabledReason && <div className="sf-off-why">{f.disabledReason}</div>}
           </div>
         ))}
       </div>

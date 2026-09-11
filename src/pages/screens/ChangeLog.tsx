@@ -4,12 +4,15 @@ import {
   ExcelButton,
   MaskToggle,
   SearchForm,
+  Unfilled,
+  useServerTable,
   type Column,
   type Field,
   type SearchValues,
 } from '../../components/common'
 import { Icon } from '../../components/Icon'
-import { MOCK_STUDENTS } from './mockStudents'
+import { useAcademy } from '../../auth/AcademyContext'
+import { listAuditLogs, type AuditAction, type AuditLog } from '../../api/auditLogs'
 import type { Mockup } from './types'
 
 /* 학원생 관리 > 메모/기타 > 금일 수정 이력 — 클라이언트 메뉴표 기준 추가 화면
@@ -33,91 +36,22 @@ const ACTION_META: Record<Action, { label: string; cls: string; icon: string }> 
 }
 
 /** 변경이 발생한 업무 영역 — 화면이 아니라 도메인 기준으로 묶는다 */
-const AREAS = ['학원생 정보', '수납', '출결', '반 배정', '상벌점', '급식', '특강'] as const
-type Area = (typeof AREAS)[number]
-
-const ACTORS = ['강민서(분당 지점관리자)', '이장원(담임)', '김유진(담임)', '정하람(행정)', '시스템(자동)']
-
-interface LogRow {
-  id: string
-  at: string
-  actor: string
-  area: Area
-  action: Action
-  /** 변경 대상 — 학생이면 이름·학번, 아니면 마스터명 */
-  target: string
-  targetNo: string
-  field: string
-  before: string
-  after: string
-  ip: string
-}
-
-const FIELD_SAMPLES: Record<Area, [string, string, string][]> = {
-  '학원생 정보': [
-    ['연락처', '010-2231-8845', '010-2231-9012'],
-    ['출신학교', '분당고', '보평고'],
-    ['상태', '재원', '휴원'],
-  ],
-  수납: [
-    ['수납금액', '1,320,000', '1,180,000'],
-    ['수납상태', '미납', '완납'],
-    ['청구기수', '2기', '3기'],
-  ],
-  출결: [
-    ['출결상태', 'LATE', 'EXCUSED'],
-    ['등원시각', '09:24', '08:51'],
-    ['하원시각', '22:10', '21:40'],
-  ],
-  '반 배정': [
-    ['고정반', '2반', '3반'],
-    ['좌석', 'A-14', 'A-27'],
-  ],
-  상벌점: [
-    ['부여점수', '-2', '-5'],
-    ['항목', '지각', '무단결석'],
-  ],
-  급식: [
-    ['신청일수', '18', '16'],
-    ['취소사유', '-', '학생 앱 취소(3일 전)'],
-  ],
-  특강: [
-    ['진행상태', '접수', '확정'],
-    ['수강료', '340,000', '300,000'],
-  ],
-}
-
-/** 결정적 생성 — 새로고침해도 같은 목록 */
-const ROWS: LogRow[] = Array.from({ length: 63 }, (_, i) => {
-  const area = AREAS[i % AREAS.length]
-  const samples = FIELD_SAMPLES[area]
-  const [field, before, after] = samples[i % samples.length]
-  const action: Action = i % 17 === 16 ? 'DELETE' : i % 6 === 5 ? 'CREATE' : 'UPDATE'
-  const st = MOCK_STUDENTS[i % MOCK_STUDENTS.length]
-  const hour = 8 + Math.floor(i / 5)
-  return {
-    id: `log-${String(i + 1).padStart(3, '0')}`,
-    at: `2026-05-28 ${String(Math.min(hour, 22)).padStart(2, '0')}:${String((i * 7) % 60).padStart(2, '0')}:${String((i * 13) % 60).padStart(2, '0')}`,
-    actor: ACTORS[i % ACTORS.length],
-    area,
-    action,
-    target: st.name,
-    targetNo: st.studentNo,
-    field,
-    before: action === 'CREATE' ? '-' : before,
-    after: action === 'DELETE' ? '(삭제됨)' : after,
-    ip: `10.20.${(i % 4) + 1}.${100 + (i % 50)}`,
-  }
-})
+/* 업무 영역 = 서버의 entityType 이다. **서버가 한국어로 준다** — 목록에서 실제로 온 값이
+   '상벌점' · '공지' · '학생 등록' 이었다. 감사 로그가 opt-in 이라 아래 7개만 남는다
+   (auditLogs.ts 첫 주석). 목업의 '출결 · 반 배정 · 급식 · 특강'은 대상이 아니라 뺐다 —
+   골라도 항상 0건이면 "그날 변경이 없었다"로 잘못 읽힌다. */
+const AREAS = ['학생 등록', '사유신청', '상벌점', '청구', '성적', '공지', '직원 계정'] as const
 
 const FIELDS: Field[] = [
   { type: 'dateRange', name: 'date', label: '조회 기간', presets: true, span: 2 },
-  { type: 'text', name: 'keyword', label: '대상 · 항목 · 값', placeholder: '예: 이승민 / 연락처', span: 2 },
   {
-    type: 'select',
-    name: 'actor',
-    label: '수정한 사용자',
-    options: ACTORS.map((v) => ({ value: v, label: v })),
+    type: 'text',
+    name: 'keyword',
+    label: '대상 · 항목 · 값',
+    placeholder: '예: 이승민 / 연락처',
+    span: 2,
+    disabled: true,
+    disabledReason: '기록에 대상 이름과 변경 내용이 아직 담기지 않아 검색할 수 없습니다.',
   },
   {
     type: 'select',
@@ -125,63 +59,145 @@ const FIELDS: Field[] = [
     label: '업무 영역',
     options: AREAS.map((v) => ({ value: v, label: v })),
   },
-  { type: 'chips', name: 'action', label: '변경 유형', options: ['CREATE', 'UPDATE', 'DELETE'], multiple: true },
+  {
+    type: 'select',
+    name: 'actor',
+    label: '수정한 사용자',
+    options: [],
+    disabled: true,
+    disabledReason: '사용자 목록을 불러올 수 없어 지금은 전체만 조회됩니다.',
+  },
+  {
+    type: 'chips',
+    name: 'action',
+    label: '변경 유형',
+    options: ['등록', '수정', '삭제'],
+    multiple: true,
+    disabled: true,
+    disabledReason: '유형별 조회는 아직 지원되지 않습니다.',
+  },
 ]
 
+/** 표에 그리는 한 줄. 서버 응답 + 화면에서 쓰기 좋은 형태 */
+interface LogRow extends AuditLog {
+  /** 한국 시각 문자열. 서버는 UTC instant 를 준다 — 문자열을 자르면 날짜가 하루 밀린다 */
+  at: string
+}
+
+/** UTC instant → 한국 시각 `yyyy-MM-dd HH:mm:ss` */
+function localAt(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+
 const COLUMNS: Column<LogRow>[] = [
-  { key: 'at', header: '변경 시각', width: '164px', sortable: true, value: (r) => r.at },
-  { key: 'actor', header: '수정자', width: '176px', sortable: true, value: (r) => r.actor },
-  { key: 'area', header: '업무 영역', width: '100px', align: 'center', sortable: true, value: (r) => r.area },
+  { key: 'at', header: '변경 시각', width: '164px', value: (r) => r.at },
+  {
+    key: 'actor',
+    header: '수정자',
+    width: '176px',
+    value: (r) => r.actorName ?? '',
+    /* ★ 서버가 계정 유형('EMPLOYEE')을 이름 자리에 넣어 보내던 때가 있었다. 고쳐졌지만
+         배포가 안 올라간 환경에서는 그대로 오므로, 사람 이름이 아닌 것이 그대로 보이면
+         오해를 만든다. 그 값만 따로 알린다. */
+    render: (r) =>
+      !r.actorName || r.actorName === 'EMPLOYEE' ? (
+        <Unfilled reason="바꾼 사람의 이름을 아직 안 준다" />
+      ) : (
+        r.actorName
+      ),
+  },
+  { key: 'area', header: '업무 영역', width: '100px', align: 'center', value: (r) => r.entityType },
   {
     key: 'action',
     header: '유형',
     width: '72px',
     align: 'center',
-    sortable: true,
-    value: (r) => r.action,
-    render: (r) => <span className={`mk ${ACTION_META[r.action].cls}`}>{ACTION_META[r.action].label}</span>,
+    value: (r) => ACTION_META[r.action]?.label ?? r.action,
+    render: (r) => {
+      const m = ACTION_META[r.action]
+      return m ? <span className={`mk ${m.cls}`}>{m.label}</span> : <span>{r.action}</span>
+    },
   },
-  { key: 'targetNo', header: '대상 학번', width: '100px', value: (r) => r.targetNo },
-  { key: 'target', header: '대상', width: '80px', mask: 'name', value: (r) => r.target },
-  { key: 'field', header: '변경 항목', width: '96px', value: (r) => r.field },
+  {
+    key: 'targetNo',
+    header: '대상 학번',
+    width: '100px',
+    value: () => '',
+    render: () => <Unfilled reason="기록에 학번이 없다" />,
+  },
+  {
+    key: 'target',
+    header: '대상',
+    width: '80px',
+    value: () => '',
+    render: () => <Unfilled reason="기록에 대상 이름이 없다" />,
+  },
+  {
+    key: 'field',
+    header: '변경 항목',
+    width: '96px',
+    value: () => '',
+    render: () => <Unfilled reason="어느 항목을 바꿨는지 안 준다" />,
+  },
   {
     key: 'diff',
     header: '변경 전 → 변경 후',
-    value: (r) => `${r.before} → ${r.after}`,
-    render: (r) => (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12 }}>
-        <span style={{ color: 'var(--muted)', textDecoration: 'line-through' }}>{r.before}</span>
-        <Icon name="arrow-right" size={12} />
-        <b style={{ color: r.action === 'DELETE' ? 'var(--red)' : 'var(--mint-d)' }}>{r.after}</b>
-      </span>
-    ),
+    /* ★ 이 화면의 존재 이유인 열이다. 서버가 changes 를 채우면 여기부터 살아난다 —
+         지금은 전 건 null 이다(API_GAPS 24-1). 열을 지우지 않는 이유가 그것이다. */
+    value: () => '',
+    render: () => <Unfilled reason="변경 전후 값을 아직 안 준다" />,
   },
   {
     key: 'ip',
     header: '접속 IP',
     width: '108px',
     align: 'center',
-    value: (r) => r.ip,
-    render: (_r, v) => <code style={{ fontSize: 10.5, color: 'var(--muted)' }}>{v}</code>,
+    value: (r) => r.actorIp ?? '-',
+    render: (r) =>
+      r.actorIp ? (
+        <code style={{ fontSize: 10.5, color: 'var(--muted)' }}>{r.actorIp}</code>
+      ) : (
+        <span style={{ color: 'var(--muted)' }}>-</span>
+      ),
   },
 ]
-
-function matches(r: LogRow, q: SearchValues): boolean {
-  const kw = String(q.keyword ?? '').trim()
-  if (kw && !`${r.target}${r.targetNo}${r.field}${r.before}${r.after}`.includes(kw)) return false
-  if (typeof q.actor === 'string' && q.actor && r.actor !== q.actor) return false
-  if (typeof q.area === 'string' && q.area && r.area !== q.area) return false
-  if (Array.isArray(q.action) && q.action.length > 0 && !q.action.includes(r.action)) return false
-  return true
-}
 
 function Content() {
   const [query, setQuery] = useState<SearchValues>({})
   const [masked, setMasked] = useState(true)
+  const { academyId } = useAcademy()
 
-  const rows = useMemo(() => ROWS.filter((r) => matches(r, query)), [query])
-  const countAct = (a: Action) => rows.filter((r) => r.action === a).length
-  const actorCount = new Set(rows.map((r) => r.actor)).size
+  /* ★ useMemo 필수 — 매 렌더 새 객체를 넘기면 무한 요청이 된다.
+     ★ 기간을 안 보내면 서버가 오늘분만 준다. 화면 이름이 '금일 수정 이력'이라 그게 맞다.
+     ★ action 은 **일부러 안 보낸다.** 서버가 받지 않고 조용히 무시해서, 보내면 걸러진
+       것처럼 보이는데 결과가 그대로다(auditLogs.ts 주석). */
+  const params = useMemo(() => {
+    const d = query.date as { from?: string; to?: string } | undefined
+    const area = typeof query.area === 'string' ? query.area : ''
+    return {
+      from: d?.from || undefined,
+      to: d?.to || undefined,
+      entityType: area || undefined,
+      academyId: academyId ?? undefined,
+    }
+  }, [query, academyId])
+
+  const table = useServerTable({ fetcher: listAuditLogs, params })
+
+  /* 표시용 한 줄로 바꾼다. 서버는 UTC instant 를 주므로 한국 시각으로 환산한다 —
+     문자열을 그냥 자르면 자정 근처 기록이 하루 밀린다. */
+  const rows: LogRow[] = useMemo(
+    () => table.rows.map((r) => ({ ...r, at: localAt(r.occurredAt) })),
+    [table.rows],
+  )
+
+  /* ⚠ 아래 집계는 **현재 페이지 기준**이다. 서버가 유형별 합계를 주지 않아 전체를 셀 수
+     없다. '금일 변경'만 서버 총건수를 쓴다 — 그 숫자와 유형별 합이 안 맞는 이유다. */
+  const countAct = (a: AuditAction) => rows.filter((r) => r.action === a).length
+  const actorCount = new Set(rows.map((r) => r.actorName ?? r.actorId)).size
 
   return (
     <>
@@ -190,18 +206,16 @@ function Content() {
           <div className="l">
             <Icon name="history" size={13} /> 금일 변경
           </div>
-          <div className="v">{rows.length}</div>
-          <div className="d">2026-05-28 기준</div>
+          <div className="v">{table.serverPaging?.totalElements ?? rows.length}</div>
+          <div className="d">조회 조건 기준</div>
         </div>
-        {(['CREATE', 'UPDATE', 'DELETE'] as Action[]).map((a) => (
+        {(['CREATE', 'UPDATE', 'DELETE'] as AuditAction[]).map((a) => (
           <div className="stat" key={a}>
             <div className="l">
               <Icon name={ACTION_META[a].icon} size={13} /> {ACTION_META[a].label}
             </div>
             <div className="v">{countAct(a)}</div>
-            <div className={`d${a === 'DELETE' && countAct(a) > 0 ? ' down' : ''}`}>
-              {a === 'DELETE' ? '복구 근거 보존 대상' : ACTION_META[a].label + ' 건수'}
-            </div>
+            <div className={`d${a === 'DELETE' && countAct(a) > 0 ? ' down' : ''}`}>이 페이지 기준</div>
           </div>
         ))}
         <div className="stat">
@@ -209,7 +223,7 @@ function Content() {
             <Icon name="users" size={13} /> 수정한 사용자
           </div>
           <div className="v">{actorCount}</div>
-          <div className="d">중복 제외</div>
+          <div className="d">이 페이지 기준</div>
         </div>
       </div>
 
@@ -218,11 +232,11 @@ function Content() {
           <Icon name="shield" size={17} />
         </div>
         <div>
-          <div className="tt">모든 화면의 수정이 자동으로 기록됩니다</div>
+          <div className="tt">주요 변경이 자동으로 기록됩니다</div>
           <div className="tx">
-            학생 정보·출결·수납 등 <b>어느 화면에서 무엇을 고쳤든</b> 변경 전후 값이 함께 남습니다.
-            담당자가 따로 기록할 필요는 없습니다. 다만 <b>기록 방식이 확정된 뒤에 열리는 화면</b>이라
-            지금은 표시만 준비돼 있습니다.
+            학생 등록 · 사유신청 · 상벌점 · 청구 · 성적 · 공지 · 직원 계정에서 생긴 변경이 남습니다.
+            담당자가 따로 기록할 필요는 없습니다. <b>무엇을 어떤 값으로 바꿨는지</b>는 아직
+            기록되지 않아 지금은 비어 있습니다.
           </div>
         </div>
       </div>
@@ -238,17 +252,26 @@ function Content() {
         }
       />
 
+      {table.error && (
+        <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+          {table.error}
+        </div>
+      )}
+
       <DataTable
         columns={COLUMNS}
         rows={rows}
-        rowKey={(r) => r.id}
+        rowKey={(r) => String(r.id)}
+        serverPaging={table.serverPaging}
+        loading={table.loading}
         masked={masked}
         pageSize={15}
         countLabel={
           <>
-            금일 수정 이력 <b>{rows.length}</b>건
+            수정 이력 <b>{table.serverPaging?.totalElements ?? rows.length}</b>건
           </>
         }
+        emptyText="이 기간에 기록된 변경이 없습니다."
         toolbar={
           <>
             <button className="btn" disabled title="준비 중입니다">
