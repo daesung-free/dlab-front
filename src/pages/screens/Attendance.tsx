@@ -50,6 +50,8 @@ const STATUS_META: Record<AttendanceStatus, { cls: string; icon: string }> = {
   ABSENT: { cls: 'brandnew', icon: 'x' },
   OUT: { cls: 'supplement', icon: 'door-open' },
   EARLY_LEAVE: { cls: 'supplement', icon: 'log-out' },
+  // 아직 오지 않은 날. 결석과 구분되게 톤을 다르게 준다
+  NOT_YET: { cls: '', icon: 'clock' },
 }
 
 /* 칩은 options 가 string[] 이라 표시 라벨과 서버 enum 코드를 함께 실을 수 없다.
@@ -251,7 +253,7 @@ function Content() {
 
   return (
     <>
-      <div className="stat-strip c7">
+      <div className="stat-strip c8">
         <div className="stat">
           <div className="l">
             <Icon name="users" size={13} /> 조회 대상

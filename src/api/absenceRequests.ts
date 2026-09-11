@@ -65,8 +65,12 @@ export interface AbsenceRequestRow {
   /** 서버가 만든 '13:00 ~ 15:00' · '종일' 문자열. 화면은 그대로 찍는다 */
   period: string
   reason: string | null
+  /** 사유 카테고리명. 서버가 분류를 붙여 보낸다 */
+  categoryName: string | null
   approverType: ApproverType
   status: ApprovalStatus
+  /** 반려 사유. 학생·학부모에게 그대로 전달된 문구다 — 반려 건에만 값이 있다 */
+  rejectReason: string | null
   /** 학부모가 타임아웃까지 응답하지 않아 담임에게 넘어갈 후보 */
   escalationCandidate: boolean
 }

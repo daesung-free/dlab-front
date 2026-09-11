@@ -7,6 +7,13 @@ import './data-table.css'
 export interface Column<T> {
   key: string
   header: ReactNode
+  /**
+   * 엑셀·복사에 쓸 헤더 문자열.
+   *
+   * ★ `header` 에 배지·아이콘을 넣으면 문자열이 아니게 되고, 그때 내보내기는 `key` 를
+   *   대신 쓴다 — 파일에 `gubun` 같은 내부 이름이 찍힌다. 그런 컬럼은 이걸 같이 준다.
+   */
+  exportHeader?: string
   /** CSS width (예: '120px', '18%') */
   width?: string
   align?: 'left' | 'center' | 'right'

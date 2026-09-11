@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import {
   CopyButton,
   DataTable,
-  ExcelButton,
   MaskToggle,
   PrintButton,
   SearchForm,
@@ -14,12 +13,14 @@ import {
 } from '../../components/common'
 import { Icon } from '../../components/Icon'
 import { useAcademy } from '../../auth/AcademyContext'
+import { ApiError } from '../../api/client'
 import {
   GRADE_LABEL,
   SORTABLE,
   STATUS_LABEL,
   TRACK_LABEL,
   retakeLabel,
+  exportStudents,
   searchStudents,
   type EnrollmentStatus,
   type GradeType,
@@ -107,7 +108,9 @@ function one(v: unknown): string | undefined {
 
 function Content() {
   const { academyId } = useAcademy()
-  const [query, setQuery] = useState<SearchValues>({})
+  /* 상태를 안 고르면 **재원생**이다. 비워두면 휴원·퇴원생이 첫 쪽에 섞여 들어와
+   * "재원생 명부"를 뽑는 기본 용도와 어긋난다. 전체를 보려면 '전체'를 고르면 된다 */
+  const [query, setQuery] = useState<SearchValues>({ status: 'ENROLLED' })
   const [selected, setSelected] = useState<string[]>([])
   const [masked, setMasked] = useState(true)
 
@@ -128,6 +131,9 @@ function Content() {
     }
   }, [query, academyId])
 
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
+
   const table = useServerTable({
     fetcher: searchStudents,
     params,
@@ -140,9 +146,27 @@ function Content() {
   const serverMasked = table.rows.some((r) => r.masked)
   const effectiveMasked = serverMasked ? false : masked
 
+  async function exportExcel() {
+    setExporting(true)
+    setExportError(null)
+    try {
+      await exportStudents(params, '재원생_명부.xlsx')
+    } catch (err) {
+      setExportError(err instanceof ApiError ? err.message : '엑셀을 내보내지 못했습니다.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <>
       <SearchForm fields={FIELDS} onSearch={setQuery} presetKey="student-search" />
+
+      {exportError && (
+        <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+          {exportError}
+        </div>
+      )}
 
       {table.error && (
         <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
@@ -175,10 +199,13 @@ function Content() {
             ) : (
               <MaskToggle masked={masked} onChange={setMasked} />
             )}
-            {/* ⚠️ 아래 내보내기는 현재 페이지(20건)만 담는다.
-                전체는 GET /api/v1/admin/students/export 로 바꿔야 한다 */}
+            {/* 복사는 눈에 보이는 쪽을 옮기는 용도라 현재 쪽 그대로 둔다 */}
             <CopyButton columns={COLUMNS} rows={table.rows} masked={effectiveMasked} />
-            <ExcelButton filename="재원생_명부" columns={COLUMNS} rows={table.rows} masked={effectiveMasked} />
+            {/* ★ 엑셀은 서버가 만든다 — 화면에서 만들면 보고 있는 쪽(20건)만 담긴다.
+                마스킹 해제 권한도 서버가 판단한다(파일은 회수가 안 된다) */}
+            <button className="btn" disabled={exporting} onClick={() => void exportExcel()}>
+              <Icon name="download" size={14} /> {exporting ? '내보내는 중…' : '엑셀'}
+            </button>
             <PrintButton />
           </>
         }
