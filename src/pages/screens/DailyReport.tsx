@@ -362,7 +362,7 @@ export const dailyReportMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled title="준비 중입니다">2026-05-28 ▾</button>
+      <button className="btn" disabled title="준비 중입니다">기간 선택 ▾</button>
       <button className="btn" disabled title="준비 중입니다">
         <Icon name="refresh-cw" size={14} /> 배치 재집계
       </button>
