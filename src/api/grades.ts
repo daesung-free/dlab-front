@@ -86,8 +86,16 @@ export interface ScoreInput {
   gradeLevel?: number | null
 }
 
-export function listExamForms(year: number, academyId?: number): Promise<ExamForm[]> {
-  return request<ExamForm[]>('/api/v1/admin/exam-forms', { query: { year, academyId } })
+/**
+ * 시험 양식(성적 표의 열).
+ *
+ * ★ **지점을 보내지 않는다.** 시험 양식은 전 지점 공통이라 서버에 `academy_id` 가
+ *   NULL 인 행으로 들어 있다. `academyId` 를 붙이면 그 행들이 걸러져 **0건**이 온다 —
+ *   화면은 "시험 양식이 없습니다"를 띄우고 성적 표가 열을 못 만든다.
+ *   실호출: `?year=2026` → 9건 · `?year=2026&academyId=1` → 0건 (2026-09-11).
+ */
+export function listExamForms(year: number): Promise<ExamForm[]> {
+  return request<ExamForm[]>('/api/v1/admin/exam-forms', { query: { year } })
 }
 
 export function getStudentGrades(enrollmentId: number): Promise<GradeSubmission> {

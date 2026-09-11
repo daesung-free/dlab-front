@@ -66,10 +66,13 @@ function Content() {
   const year = new Date().getFullYear()
 
   /* 좌측 목록 */
+  /* ★ 지점을 넘겨야 한다. `/students` 는 안 보내면 **계정 스코프 그대로** 오므로
+       본사 계정에서는 전 지점 학생이 섞여 나온다 — 분당을 골라도 65명이 다 보였다.
+       (400 이 아니라 조용히 섞여서 들어오는 것이라 더 늦게 드러났다. CLAUDE.md 3-1) */
   const loadStudents = useCallback(async () => {
     setListLoading(true)
     try {
-      const page = await searchStudents({ status: 'ENROLLED', size: 100 })
+      const page = await searchStudents({ status: 'ENROLLED', size: 100, academyId: academyId ?? undefined })
       setStudents(page.rows)
       setSelectedId((prev) => prev ?? (page.rows[0] ? String(page.rows[0].enrollmentId) : null))
       setError(null)
@@ -78,7 +81,7 @@ function Content() {
     } finally {
       setListLoading(false)
     }
-  }, [])
+  }, [academyId])
 
   useEffect(() => {
     void loadStudents()
@@ -87,13 +90,13 @@ function Content() {
   /* 시험 양식 — 표의 열을 정한다 */
   useEffect(() => {
     let cancelled = false
-    listExamForms(year, academyId ?? undefined)
+    listExamForms(year)
       .then((f) => !cancelled && setForms(f))
       .catch(() => !cancelled && setForms([]))
     return () => {
       cancelled = true
     }
-  }, [year, academyId])
+  }, [year])
 
   const selected = students.find((s) => String(s.enrollmentId) === selectedId) ?? null
 
