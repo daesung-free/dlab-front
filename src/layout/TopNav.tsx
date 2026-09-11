@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { NAV, navItemCount } from '../data/nav'
 import { useAuth } from '../auth/AuthContext'
@@ -5,6 +6,7 @@ import { ROLE_LABEL, type Role } from '../api/accounts'
 import { getLoginId } from '../api/tokens'
 import { Icon } from '../components/Icon'
 import { useAcademy } from '../auth/AcademyContext'
+import { PasswordModal } from '../auth/PasswordModal'
 
 export function TopNav() {
   const { academies, academyId, setAcademyId, selectable } = useAcademy()
@@ -24,6 +26,14 @@ export function TopNav() {
   /* 이름 → 로그인 아이디 → 계정번호 순으로 물러선다.
      배포 서버에 아직 /auth/me 가 없어서(404) 이름이 없는 구간이 실제로 있다. */
   const who = me?.name ?? getLoginId() ?? `#${principal?.accountId ?? '?'}`
+
+  /* 임시 비밀번호로 들어온 사람은 바꾸기 전에는 못 빠져나간다.
+     ★ 서버가 JWT 의 pcr 클레임으로 알려준다(/auth/me 에도 같은 값이 있다). 이걸 안 보면
+       초기화를 받은 사람이 남도 아는 비밀번호를 계속 쓰게 된다.
+     ★ 변경에 성공하면 서버가 새 토큰을 주고 AuthContext 가 그걸 다시 해석하므로
+       `forced` 는 저절로 false 가 된다 — 여기서 따로 상태를 끌 필요가 없다. */
+  const forced = principal?.mustChangePassword === true
+  const [pwOpen, setPwOpen] = useState(false)
 
   return (
     <header className="topnav">
@@ -85,10 +95,15 @@ export function TopNav() {
           <b>{who}</b>
           <span>{scopeLabel ? `${scopeLabel} · ${roleLabel}` : roleLabel}</span>
         </div>
+        <button className="icon-btn" title="비밀번호 변경" onClick={() => setPwOpen(true)}>
+          <Icon name="lock" size={17} />
+        </button>
         <button className="icon-btn" title="로그아웃" onClick={() => void logout()}>
           <Icon name="log-out" size={17} />
         </button>
       </div>
+
+      {(pwOpen || forced) && <PasswordModal forced={forced} onClose={() => setPwOpen(false)} />}
     </header>
   )
 }
