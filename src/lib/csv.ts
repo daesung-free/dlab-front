@@ -21,10 +21,10 @@ export function toCsv(headers: string[], rows: string[][]): string {
 
 /** 브라우저에서 즉시 다운로드 */
 export function downloadCsv(filename: string, csv: string): void {
-  /* ★ 맨 앞의 \uFEFF(BOM) 가 없으면 **Excel 이 한글을 깨서 연다.**
-       charset=utf-8 을 붙여도 소용없다 — Excel 은 그 헤더를 안 보고 BOM 으로 판단한다.
-       메모장·구글 시트는 BOM 없이도 잘 열려서 오래 안 드러났다. */
-  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+  /* ★ BOM 은 여기서 붙이지 않는다 — `toCsv` 가 이미 맨 앞에 넣는다(위 BOM 상수).
+       여기서 한 번 더 붙였더니 **BOM 이 두 개**가 되어 Excel 첫 칸에 이상한 글자가 남았다.
+       BOM 자체가 없으면 Excel 이 한글을 깨서 여는 것은 맞다 — 다만 그 책임은 toCsv 에 있다. */
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
