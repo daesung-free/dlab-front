@@ -107,3 +107,32 @@ export function getStudentWeek(enrollmentId: number, date: string): Promise<Plan
 export function listPlanOptions(academyId: number, year?: number): Promise<PlanOption[]> {
   return request<PlanOption[]>('/api/v1/admin/learning-plans/options', { query: { academyId, year } })
 }
+
+/**
+ * 과목·학습형태 선택지 추가 — `POST /admin/learning-plans/options`
+ *
+ * ★ `academyId`·`year` 는 **쿼리스트링**이고 `optionType`·`label` 은 본문이다.
+ *   본문에 academyId 를 넣으면 "필수 파라미터 'year' 이(가) 없습니다" 로 400 이 난다.
+ * ★ 이름 칸은 `label` 이다. `name` 으로 보내면 "label: must not be blank" 가 된다.
+ * ★ 과목을 코드에 박지 않는 이유는 탐구 과목이 **학생 선택에 따라 갈리기** 때문이다
+ *   (서버 스펙 주석). 그래서 학원이 직접 늘릴 수 있어야 한다.
+ */
+export function createPlanOption(
+  academyId: number,
+  year: number,
+  body: { optionType: PlanOptionType; label: string },
+): Promise<PlanOption> {
+  return request<PlanOption>('/api/v1/admin/learning-plans/options', {
+    method: 'POST',
+    query: { academyId, year },
+    body,
+  })
+}
+
+/** ★ `academyId` 를 안 붙이면 "지점을 지정해야 합니다" 로 실패한다 */
+export function deletePlanOption(optionId: number, academyId: number): Promise<void> {
+  return request<void>(`/api/v1/admin/learning-plans/options/${optionId}`, {
+    method: 'DELETE',
+    query: { academyId },
+  })
+}

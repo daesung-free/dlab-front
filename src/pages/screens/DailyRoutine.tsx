@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DataTable, ExcelButton, MaskToggle, Unfilled, type Column, todayStr } from '../../components/common'
+import { DataTable, ExcelButton, MaskToggle, Modal, Unfilled, type Column, todayStr } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
@@ -7,6 +7,7 @@ import { useAcademy } from '../../auth/AcademyContext'
 import {
   DONE_STATUSES,
   ROUTINE_STATUS_LABEL,
+  createRoutine,
   getRoutineMatrix,
   listRoutines,
   type MatrixRow,
@@ -94,10 +95,42 @@ function Content() {
   const [date, setDate] = useState(todayStr())
 
   const [routines, setRoutines] = useState<Routine[]>([])
+  /** 루틴 추가. classId 를 안 보내면 지점 공통이 된다 — 화면에서 그 뜻을 적어준다 */
+  const [newRoutine, setNewRoutine] = useState<{ name: string; subject: string; maxScore: string } | null>(null)
+  const [routineBusy, setRoutineBusy] = useState(false)
+  const [routineErr, setRoutineErr] = useState<string | null>(null)
   const [cols, setCols] = useState<RoutineRef[]>([])
   const [matrix, setMatrix] = useState<Row[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  /**
+   * 루틴 추가.
+   *
+   * ★ 반을 고르지 않으면 **지점 공통**이라 그 지점 재원생 전원에게 생긴다. 되돌리려면
+   *   지워야 하는데, 이미 결과가 쌓이면 그것까지 사라진다. 그래서 모달에 그 뜻을 적는다.
+   * ★ `month` 는 `yyyy-MM` 문자열로 보낸다 — 응답의 month 는 숫자라 형태가 다르다.
+   */
+  async function addRoutine() {
+    if (!newRoutine || academyId === null) return
+    setRoutineBusy(true)
+    setRoutineErr(null)
+    try {
+      await createRoutine({
+        academyId,
+        month,
+        name: newRoutine.name.trim(),
+        subject: newRoutine.subject.trim() || undefined,
+        maxScore: Number(newRoutine.maxScore) || undefined,
+      })
+      setNewRoutine(null)
+      await load()
+    } catch (err) {
+      setRoutineErr(err instanceof ApiError ? err.message : '루틴을 추가하지 못했습니다.')
+    } finally {
+      setRoutineBusy(false)
+    }
+  }
 
   const load = useCallback(async () => {
     if (academyId === null) {
@@ -208,6 +241,52 @@ function Content() {
 
   return (
     <>
+      {newRoutine && (
+        <Modal
+          title="루틴 추가"
+          sub={`${month} 루틴을 만듭니다. 이 지점 재원생 전원에게 생깁니다.`}
+          confirmLabel="추가"
+          busy={routineBusy}
+          error={routineErr}
+          confirmDisabled={newRoutine.name.trim() === ''}
+          onConfirm={() => void addRoutine()}
+          onClose={() => setNewRoutine(null)}
+        >
+          <div className="frow">
+            <label className="req">루틴명</label>
+            <input
+              className="inp"
+              value={newRoutine.name}
+              placeholder="예: 수학 하루 3문제"
+              onChange={(e) => setNewRoutine({ ...newRoutine, name: e.target.value })}
+            />
+          </div>
+          <div className="frow">
+            <label>과목</label>
+            <input
+              className="inp"
+              value={newRoutine.subject}
+              placeholder="예: 수학"
+              onChange={(e) => setNewRoutine({ ...newRoutine, subject: e.target.value })}
+            />
+          </div>
+          <div className="frow">
+            <label>만점</label>
+            <div>
+              <input
+                className="inp"
+                type="number"
+                min={0}
+                value={newRoutine.maxScore}
+                placeholder="비우면 점수 없음"
+                onChange={(e) => setNewRoutine({ ...newRoutine, maxScore: e.target.value })}
+              />
+              <div className="hint">비워두면 점수 없이 완료 · 미완료만 확인합니다.</div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       <div className="stat-strip">
         <div className="stat">
           <div className="l">
@@ -329,10 +408,16 @@ function Content() {
                     value={month}
                     onChange={(e) => setMonth(e.target.value)}
                   />
-                  <button className="btn" disabled data-soon title="준비 중입니다">
+                  {/* 복사 경로가 서버에 없다(POST /routines/copy 405). 한 건씩 다시 만들어야 한다 */}
+                  <button className="btn" disabled data-soon title="지난달 루틴을 한 번에 가져오는 기능은 아직 없습니다">
                     <Icon name="copy" size={14} /> 전월 복사
                   </button>
-                  <button className="btn pri" disabled title="루틴 추가 폼은 다음 단계입니다">
+                  <button
+                    className="btn pri"
+                    disabled={academyId === null}
+                    title={academyId === null ? '지점을 먼저 선택하세요' : undefined}
+                    onClick={() => setNewRoutine({ name: '', subject: '', maxScore: '' })}
+                  >
                     <Icon name="plus" size={14} /> 루틴 추가
                   </button>
                 </>
