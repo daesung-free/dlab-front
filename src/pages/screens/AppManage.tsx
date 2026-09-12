@@ -448,24 +448,24 @@ function Content() {
               </div>
             </div>
           </div>
+          {/* ★ 표를 비운다. 배너로 "예시"라고 적어도 **12행이 차 있으면 사람은 실데이터로 읽는다** —
+              발송자 이름(강민서·이장원)과 수신률 93%까지 들어 있어 더 그렇다.
+              발송 자체가 E-5(문구 심사)·E-7(FCM 자격증명) 대기라 채울 값이 없다 */}
           <DataTable
             columns={PUSH_COLUMNS}
-            rows={PUSH_ROWS}
+            rows={[]}
             rowKey={(r) => r.id}
             masked={false}
             pageSize={12}
-            countLabel={
-              <>
-                푸시 발송 이력 <b>{PUSH_ROWS.length}</b>건 (예시)
-              </>
-            }
+            emptyText="발송 기록이 없습니다 — 푸시 발송이 아직 연결되지 않았습니다."
+            countLabel={<>푸시 발송 이력 <b>0</b>건</>}
             toolbar={
               <>
-                <button className="btn" disabled title="준비 중입니다">
+                <button className="btn" disabled data-soon title="준비 중입니다">
                   <Icon name="clock" size={14} /> 예약 발송
                 </button>
                 <ExcelButton filename="앱_푸시발송이력" columns={PUSH_COLUMNS} rows={PUSH_ROWS} masked={false} />
-                <button className="btn pri" disabled title="준비 중입니다">
+                <button className="btn pri" disabled data-soon title="준비 중입니다">
                   <Icon name="send" size={14} /> 새 푸시 발송
                 </button>
               </>
@@ -643,10 +643,10 @@ export const appManageMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled title="준비 중입니다">
+      <button className="btn" disabled data-soon title="준비 중입니다">
         <Icon name="qr-code" size={14} /> 앱 설치 안내
       </button>
-      <button className="btn pri" disabled title="준비 중입니다">
+      <button className="btn pri" disabled data-soon title="준비 중입니다">
         <Icon name="send" size={14} /> 푸시 발송
       </button>
     </>

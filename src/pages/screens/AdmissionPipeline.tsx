@@ -330,9 +330,9 @@ export const admissionMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled title="준비 중입니다">기수 선택 ▾</button>
-      <button className="btn" disabled title="준비 중입니다">문자 자동발송 설정</button>
-      <button className="btn pri" disabled title="준비 중입니다">+ 예약 수동등록</button>
+      <button className="btn" disabled data-soon title="준비 중입니다">기수 선택 ▾</button>
+      <button className="btn" disabled data-soon title="준비 중입니다">문자 자동발송 설정</button>
+      <button className="btn pri" disabled data-soon title="준비 중입니다">+ 예약 수동등록</button>
     </>
   ),
 }

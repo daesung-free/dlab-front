@@ -278,7 +278,7 @@ export const classAssignMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled title="준비 중입니다">
+      <button className="btn" disabled data-soon title="준비 중입니다">
         <Icon name="history" size={14} /> 전년도 반 구성 복사
       </button>
       <button className="btn pri" disabled title="반 등록 폼은 다음 단계입니다">

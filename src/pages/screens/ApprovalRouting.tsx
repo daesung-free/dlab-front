@@ -420,7 +420,7 @@ export const approvalMockup: Mockup = {
   actions: (
     <>
       {/* 승인 이력 조회 경로가 아직 없다 — 눌러도 아무 일이 없으면 고장으로 읽히므로 막는다 */}
-      <button className="btn" disabled title="준비 중입니다">
+      <button className="btn" disabled data-soon title="준비 중입니다">
         <Icon name="history" size={14} /> 승인 이력
       </button>
     </>

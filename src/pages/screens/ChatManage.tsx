@@ -523,10 +523,10 @@ export const chatMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled title="준비 중입니다">
+      <button className="btn" disabled data-soon title="준비 중입니다">
         <Icon name="inbox" size={14} /> 수신함
       </button>
-      <button className="btn pri" disabled title="준비 중입니다">
+      <button className="btn pri" disabled data-soon title="준비 중입니다">
         <Icon name="plus" size={14} /> 공지 작성
       </button>
     </>

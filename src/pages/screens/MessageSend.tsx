@@ -728,7 +728,7 @@ function Content() {
                   <button className="btn pri" disabled={blocked}>
                     <Icon name="send" size={14} /> {target.count.toLocaleString()}명에게 발송
                   </button>
-                  <button className="btn" disabled title="준비 중입니다">테스트 발송</button>
+                  <button className="btn" disabled data-soon title="준비 중입니다">테스트 발송</button>
                   {blocked && (
                     <span style={{ fontSize: 11.5, color: 'var(--red)', fontWeight: 700 }}>
                       심사 {template.status} 상태라 실발송할 수 없습니다
@@ -1077,10 +1077,10 @@ export const messageMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled title="준비 중입니다">
+      <button className="btn" disabled data-soon title="준비 중입니다">
         <Icon name="history" size={14} /> 발송 이력
       </button>
-      <button className="btn pri" disabled title="준비 중입니다">
+      <button className="btn pri" disabled data-soon title="준비 중입니다">
         <Icon name="send" size={14} /> 새 발송
       </button>
     </>

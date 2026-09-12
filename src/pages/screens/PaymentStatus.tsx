@@ -45,7 +45,9 @@ import './payment.css'
  *
  * ★ 아직 없는 것: 지점(행에는 없다. 조회가 지점 단위라 헤더로 대신한다).
  *
- * ★ 지점은 행에 없지만 조회 자체가 지점 단위다(academyId). 선택한 지점을 헤더에 보여준다. */
+ * ★ 지점은 행에 없지만 조회 자체가 지점 단위다(academyId). 선택한 지점을 헤더에 보여준다.
+ *   검색폼에 있던 '지점' 칸은 **뺐다** — 어디에도 안 쓰이는 칸이었고 값도 실재하지 않는
+ *   지점(대치·평촌)이었다. 지점은 상단바에서 고른다. */
 
 type Method = '카드' | '가상계좌' | '현금'
 type Kind = '등록비' | '교습비' | '특강비' | '급식비'
@@ -56,7 +58,6 @@ const METHODS: Method[] = ['카드', '가상계좌', '현금']
 const FIELDS: Field[] = [
   { type: 'dateRange', name: 'period', label: '결제 기간', presets: true, span: 2 },
   { type: 'text', name: 'keyword', label: '이름 · 학번 · 전표번호', placeholder: '예: 이승민 / DS-2026-010001', span: 2 },
-  { type: 'select', name: 'branch', label: '지점', options: ['분당', '대치', '평촌'].map((v) => ({ value: v, label: v })) },
   { type: 'select', name: 'round', label: '청구기수', options: ['1기', '2기', '3기'].map((v) => ({ value: v, label: v })) },
   { type: 'chips', name: 'kind', label: '항목', options: KINDS, multiple: true },
   { type: 'chips', name: 'method', label: '결제수단', options: METHODS, multiple: true },
@@ -194,7 +195,7 @@ const UNPAID_COLUMNS: Column<ReceiptRow>[] = [
     align: 'center',
     value: () => '',
     render: () => (
-      <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled title="준비 중입니다">
+      <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled data-soon title="준비 중입니다">
         <Icon name="bell" size={12} /> 알림톡
       </button>
     ),
@@ -362,10 +363,10 @@ const DISCOUNT_COLUMNS: Column<Discount>[] = [
     value: () => '',
     render: () => (
       <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled title="준비 중입니다">
+        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled data-soon title="준비 중입니다">
           수정
         </button>
-        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5, color: 'var(--red)' }} disabled title="준비 중입니다">
+        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5, color: 'var(--red)' }} disabled data-soon title="준비 중입니다">
           삭제
         </button>
       </div>
@@ -564,7 +565,7 @@ function Content() {
                     toolbar={
                       <>
                         <ExcelButton filename="할인정책" columns={DISCOUNT_COLUMNS} rows={DISCOUNTS} masked={false} />
-                        <button className="btn pri" disabled title="준비 중입니다">
+                        <button className="btn pri" disabled data-soon title="준비 중입니다">
                           <Icon name="plus" size={14} /> 할인 정책 등록
                         </button>
                       </>
@@ -747,7 +748,7 @@ function Content() {
               }
               toolbar={
                 <>
-                  <button className="btn" disabled title="준비 중입니다">
+                  <button className="btn" disabled data-soon title="준비 중입니다">
                     <Icon name="bell" size={14} /> 미납자 일괄 알림톡
                   </button>
                   <MaskToggle masked={masked} onChange={setMasked} />
@@ -768,8 +769,8 @@ export const paymentMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled title="준비 중입니다">기수 선택 ▾</button>
-      <button className="btn" disabled title="준비 중입니다">
+      <button className="btn" disabled data-soon title="준비 중입니다">기수 선택 ▾</button>
+      <button className="btn" disabled data-soon title="준비 중입니다">
         <Icon name="bar-chart-3" size={14} /> 기간·지점별 통계
       </button>
     </>

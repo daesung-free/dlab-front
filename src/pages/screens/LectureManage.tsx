@@ -361,10 +361,10 @@ function Content() {
                    버튼이 활성화돼 눌리기만 하고 아무 일도 없었다 — 사용자는 저장된 줄 안다.
                    붙이기 전까지는 막고 이유를 말한다. 특강 회차가 여기서만 만들어져서
                    출석부·신청·대기까지 함께 막혀 있다. */}
-            <button className="btn" disabled title="준비 중입니다">
+            <button className="btn" disabled data-soon title="준비 중입니다">
               <Icon name="save" size={14} /> 임시 저장
             </button>
-            <button className="btn pri" disabled title="준비 중입니다">
+            <button className="btn pri" disabled data-soon title="준비 중입니다">
               <Icon name="send" size={14} /> 개설 · 접수 시작
             </button>
           </div>
@@ -756,7 +756,7 @@ function Content() {
                 </span>
                 <div className="dt-right">
                   <MaskToggle masked={masked} onChange={setMasked} />
-                  <button className="btn" disabled title="준비 중입니다">
+                  <button className="btn" disabled data-soon title="준비 중입니다">
                     <Icon name="printer" size={14} /> 출석부 인쇄
                   </button>
                 </div>
@@ -880,8 +880,8 @@ export const lectureMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled title="준비 중입니다">기간 선택 ▾</button>
-      <button className="btn" disabled title="준비 중입니다">
+      <button className="btn" disabled data-soon title="준비 중입니다">기간 선택 ▾</button>
+      <button className="btn" disabled data-soon title="준비 중입니다">
         <Icon name="megaphone" size={14} /> 설명회 신청 관리
       </button>
     </>

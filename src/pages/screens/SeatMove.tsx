@@ -145,10 +145,10 @@ const KIOSK_COLUMNS: Column<Kiosk>[] = [
     value: () => '',
     render: () => (
       <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled title="준비 중입니다">
+        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled data-soon title="준비 중입니다">
           설정
         </button>
-        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled title="준비 중입니다">
+        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled data-soon title="준비 중입니다">
           재시작
         </button>
       </div>
@@ -298,8 +298,9 @@ function Content() {
       <Tabs
         items={[
           { key: 'map', label: '실시간 좌석표' },
-          { key: 'log', label: '이동 신청 내역', count: MOVES.length },
-          { key: 'kiosk', label: '키오스크 관리', count: KIOSKS.length },
+          // 목업 배열 길이를 배지로 쓰면 없는 건수가 실재하는 것처럼 보인다
+          { key: 'log', label: '이동 신청 내역' },
+          { key: 'kiosk', label: '키오스크 관리' },
         ]}
         active={tab}
         onChange={setTab}
@@ -444,13 +445,13 @@ function Content() {
             }
             toolbar={
               <>
-                <button className="btn" disabled title="준비 중입니다">
+                <button className="btn" disabled data-soon title="준비 중입니다">
                   <Icon name="refresh-cw" size={14} /> 전체 동기화
                 </button>
-                <button className="btn" disabled title="준비 중입니다">
+                <button className="btn" disabled data-soon title="준비 중입니다">
                   <Icon name="upload" size={14} /> 펌웨어 배포
                 </button>
-                <button className="btn pri" disabled title="준비 중입니다">
+                <button className="btn pri" disabled data-soon title="준비 중입니다">
                   <Icon name="plus" size={14} /> 단말 등록
                 </button>
               </>
@@ -466,8 +467,8 @@ export const seatMoveMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled title="준비 중입니다">호실 선택 ▾</button>
-      <button className="btn" disabled title="준비 중입니다">
+      <button className="btn" disabled data-soon title="준비 중입니다">호실 선택 ▾</button>
+      <button className="btn" disabled data-soon title="준비 중입니다">
         <Icon name="monitor" size={14} /> 키오스크 관리
       </button>
     </>

@@ -1053,7 +1053,7 @@ function Content() {
                       </option>
                     ))}
                   </select>
-                  <button className="btn" style={{ padding: '5px 11px', fontSize: 11.5 }} disabled title="준비 중입니다">
+                  <button className="btn" style={{ padding: '5px 11px', fontSize: 11.5 }} disabled data-soon title="준비 중입니다">
                     <Icon name="file-spreadsheet" size={12} /> 원시 응답 다운로드
                   </button>
                 </div>
@@ -1133,10 +1133,10 @@ export const surveyMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled title="준비 중입니다">
+      <button className="btn" disabled data-soon title="준비 중입니다">
         <Icon name="copy" size={14} /> 템플릿에서 생성
       </button>
-      <button className="btn pri" disabled title="준비 중입니다">
+      <button className="btn pri" disabled data-soon title="준비 중입니다">
         <Icon name="plus" size={14} /> 설문 생성
       </button>
     </>

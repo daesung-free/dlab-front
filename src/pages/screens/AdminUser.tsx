@@ -989,7 +989,7 @@ export const adminUserMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled title="준비 중입니다">
+      <button className="btn" disabled data-soon title="준비 중입니다">
         <Icon name="history" size={14} /> 권한 변경 이력
       </button>
     </>
