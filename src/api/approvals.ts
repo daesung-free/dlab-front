@@ -66,3 +66,47 @@ export function clearApprovalItem(requestType: RequestType, academyId: number, y
     query: { academyId, year },
   })
 }
+
+/* ── 승인 이력 ─────────────────────────────────────────────────────────────── */
+
+export type ApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELED' | 'TIMEOUT'
+
+export interface ApprovalBoardRow {
+  id: number
+  requestType: RequestType
+  status: ApprovalStatus
+  enrollmentId: number
+  studentNo: string | null
+  studentName: string
+  requestedAt: string
+  /** 1차 승인자가 응답을 안 하면 이 시각에 담임으로 넘어간다 */
+  escalationAt: string | null
+  timeoutMinutes: number | null
+  primaryApprover: ApproverType | null
+  currentApprover: ApproverType | null
+  reminderSentAt: string | null
+  handedOverAt: string | null
+  resolvedAt: string | null
+  rejectReason: string | null
+}
+
+export interface ApprovalBoardParams {
+  academyId?: number
+  /** yyyy-MM-dd */
+  from?: string
+  to?: string
+  status?: ApprovalStatus
+  requestType?: RequestType
+}
+
+/**
+ * 승인 이력 — `GET /admin/approvals/board`
+ *
+ * ★ **`/admin/approvals` 와 다른 것이다.** 그쪽은 `hasRole('TEACHER')` 라
+ *   "내가 담당인 대기 목록"이고 관리자는 못 본다. 이 board 가 관리자용이고
+ *   `status` 에 APPROVED·REJECTED 를 넣어야 **끝난 건**이 나온다.
+ * ★ 응답이 `{ rows: [...] }` 로 한 겹 더 싸여 있다.
+ */
+export function listApprovalBoard(params: ApprovalBoardParams): Promise<{ rows: ApprovalBoardRow[] }> {
+  return request<{ rows: ApprovalBoardRow[] }>('/api/v1/admin/approvals/board', { query: { ...params } })
+}
