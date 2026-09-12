@@ -136,3 +136,38 @@
   letter-spacing: 0.02em;
   white-space: nowrap;
 }
+
+/* ── 조회 전용 계정 ──
+ *
+ * ★ 실제 차단은 API 클라이언트가 한다(쓰기 요청을 보내기 전에 막는다). 여기는 **보이게**
+ *   하는 몫이다 — 클라이언트가 겪는 것은 "눌렀는데 아무 일도 안 남" 하나뿐이라,
+ *   누르기 전에 알 수 있어야 한다.
+ * ★ 주 동작 버튼(.btn.pri)만 잠근다. 일반 버튼에는 검색·엑셀·닫기처럼 읽기 동작이
+ *   섞여 있어 한꺼번에 잠그면 조회까지 막힌다.
+ */
+.readonly-bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 22px;
+  background: var(--amber-wash, #fff7e6);
+  border-bottom: 1px solid #f0dcb4;
+  color: var(--ink-2);
+  font-size: 12.5px;
+}
+
+[data-readonly] .btn.pri {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+[data-readonly] .btn.pri::after {
+  content: '조회 전용';
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.12);
+  font-size: 9.5px;
+  font-weight: 800;
+  white-space: nowrap;
+}

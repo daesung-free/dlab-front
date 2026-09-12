@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from 'react'
 import { decodePrincipal, getMe, login as loginApi, logout as logoutApi, type Me, type Principal } from '../api/auth'
 import { getAccessToken, subscribeTokens } from '../api/tokens'
+import { setReadOnlyMode } from '../api/client'
 
 interface AuthState {
   principal: Principal | null
@@ -11,6 +12,13 @@ interface AuthState {
    */
   me: Me | null
   signedIn: boolean
+  /**
+   * 조회 전용 계정인가 — READONLY 만 가진 계정.
+   *
+   * ★ 다른 역할 판정은 **권한 매트릭스가 확정돼야** 할 수 있다. READONLY 만은 정의가
+   *   "읽기만"이라 따로 정할 것이 없어서 지금 구현한다.
+   */
+  readOnly: boolean
   login: (loginId: string, password: string) => Promise<void>
   logout: () => Promise<void>
 }
@@ -52,8 +60,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AuthState>(() => {
     const principal = decodePrincipal(token)
-    return { principal, me, signedIn: principal !== null, login, logout }
+    const roles = me?.roles ?? principal?.roles ?? []
+    // 역할을 여러 개 가질 수 있다 — READONLY **만** 있을 때가 조회 전용이다.
+    // 하나라도 다른 역할이 섞이면 그쪽 권한으로 쓰기가 가능하다
+    const readOnly = roles.length > 0 && roles.every((r) => r === 'READONLY')
+    return { principal, me, signedIn: principal !== null, readOnly, login, logout }
   }, [token, me, login, logout])
+
+  /* API 클라이언트에도 알려준다 — 쓰기를 **보내기 전에** 막기 위해서다.
+     쓰기 버튼이 188개라 화면마다 막으면 반드시 빠뜨린다(client.ts 주석 참고) */
+  useEffect(() => {
+    setReadOnlyMode(value.readOnly)
+  }, [value.readOnly])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
