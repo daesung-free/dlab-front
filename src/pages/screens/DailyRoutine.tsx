@@ -7,6 +7,7 @@ import { useAcademy } from '../../auth/AcademyContext'
 import {
   DONE_STATUSES,
   ROUTINE_STATUS_LABEL,
+  copyRoutinesFromPreviousMonth,
   createRoutine,
   getRoutineMatrix,
   listRoutines,
@@ -99,6 +100,9 @@ function Content() {
   const [newRoutine, setNewRoutine] = useState<{ name: string; subject: string; maxScore: string } | null>(null)
   const [routineBusy, setRoutineBusy] = useState(false)
   const [routineErr, setRoutineErr] = useState<string | null>(null)
+  /* 복사는 되돌릴 수 없다 — 두 번 누르면 그만큼 더 생긴다. 그래서 먼저 묻는다 */
+  const [copying, setCopying] = useState(false)
+  const [copyAsk, setCopyAsk] = useState(false)
   const [cols, setCols] = useState<RoutineRef[]>([])
   const [matrix, setMatrix] = useState<Row[]>([])
   const [loading, setLoading] = useState(true)
@@ -129,6 +133,24 @@ function Content() {
       setRoutineErr(err instanceof ApiError ? err.message : '루틴을 추가하지 못했습니다.')
     } finally {
       setRoutineBusy(false)
+    }
+  }
+
+  /** 지난달 루틴을 이 달로 가져온다. 같은 루틴이 있어도 서버가 안 막으므로 중복이 쌓인다 */
+  async function copyPrevMonth() {
+    if (academyId === null) return
+    setCopying(true)
+    setRoutineErr(null)
+    try {
+      const { copied } = await copyRoutinesFromPreviousMonth(academyId, month)
+      setCopyAsk(false)
+      await load()
+      setRoutineErr(copied === 0 ? '지난달에 가져올 루틴이 없습니다.' : null)
+    } catch (err) {
+      setRoutineErr(err instanceof ApiError ? err.message : '전월 루틴을 가져오지 못했습니다.')
+      setCopyAsk(false)
+    } finally {
+      setCopying(false)
     }
   }
 
@@ -241,6 +263,31 @@ function Content() {
 
   return (
     <>
+      {copyAsk && (
+        <Modal
+          title="전월 루틴 가져오기"
+          sub={`지난달 루틴을 ${month} 로 복사합니다.`}
+          confirmLabel="가져오기"
+          busy={copying}
+          onConfirm={() => void copyPrevMonth()}
+          onClose={() => setCopyAsk(false)}
+        >
+          {/* ★ 되돌리기가 없다. 이미 있는 루틴과 겹쳐도 서버가 안 막아서 두 번 누르면
+                 그만큼 더 생기고, 지우는 것은 한 건씩이다. 그래서 먼저 알린다. */}
+          <div className="note-box warn">
+            <div className="ic">
+              <Icon name="alert-triangle" size={17} />
+            </div>
+            <div>
+              <div className="tt">한 번만 누르세요</div>
+              <div className="tx">
+                이미 {month} 에 같은 루틴이 있어도 <b>또 만들어집니다.</b> 잘못 가져오면 한 건씩 지워야 합니다.
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {newRoutine && (
         <Modal
           title="루틴 추가"
@@ -408,9 +455,13 @@ function Content() {
                     value={month}
                     onChange={(e) => setMonth(e.target.value)}
                   />
-                  {/* 복사 경로가 서버에 없다(POST /routines/copy 405). 한 건씩 다시 만들어야 한다 */}
-                  <button className="btn" disabled data-soon title="지난달 루틴을 한 번에 가져오는 기능은 아직 없습니다">
-                    <Icon name="copy" size={14} /> 전월 복사
+                  <button
+                    className="btn"
+                    disabled={academyId === null || copying}
+                    title={academyId === null ? '지점을 먼저 선택하세요' : undefined}
+                    onClick={() => setCopyAsk(true)}
+                  >
+                    <Icon name="copy" size={14} /> {copying ? '가져오는 중…' : '전월 복사'}
                   </button>
                   <button
                     className="btn pri"

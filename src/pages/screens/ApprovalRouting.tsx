@@ -2,11 +2,14 @@ import { useCallback, useEffect, useState } from 'react'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
+import { DataTable, Modal, addDaysStr, todayStr, type Column } from '../../components/common'
 import {
   REQUEST_TYPE_CATEGORY,
   REQUEST_TYPE_LABEL,
+  listApprovalBoard,
   listApprovalItems,
   saveApprovalItem,
+  type ApprovalBoardRow,
   type ApprovalItem,
   type ApproverType,
 } from '../../api/approvals'
@@ -415,15 +418,124 @@ function Content() {
   )
 }
 
+
+/* ── 승인 이력 ──────────────────────────────────────────────────────────────
+ *
+ * ★ 버튼이 화면 본문 밖(`Mockup.actions`)에 있어서 Content 의 상태를 못 쓴다. 지점은
+ *   컨텍스트라 여기서도 읽히므로 작은 컴포넌트로 따로 둔다.
+ * ★ 조회 경로가 `/approvals` 가 아니라 **`/approvals/board`** 다. `/approvals` 는
+ *   `hasRole('TEACHER')` 라 "내가 담당인 대기 목록"이고 관리자는 못 본다.
+ */
+
+const STATUS_LABEL: Record<string, string> = {
+  PENDING: '대기',
+  APPROVED: '승인',
+  REJECTED: '반려',
+  CANCELED: '취소',
+  TIMEOUT: '시간 초과',
+}
+
+const STATUS_TONE: Record<string, string> = {
+  APPROVED: 'verified',
+  REJECTED: 'brandnew',
+  PENDING: 'supplement',
+}
+
+/** UTC instant → 한국 시각 `MM-DD HH:mm`. 문자열을 자르면 날짜가 하루 밀린다 */
+function atLabel(iso: string | null): string {
+  if (!iso) return '-'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+const HISTORY_COLUMNS: Column<ApprovalBoardRow>[] = [
+  { key: 'requestedAt', header: '신청', width: '104px', value: (r) => atLabel(r.requestedAt) },
+  { key: 'studentName', header: '학생', width: '86px', mask: 'name', value: (r) => r.studentName },
+  {
+    key: 'requestType',
+    header: '유형',
+    width: '190px',
+    value: (r) => REQUEST_TYPE_LABEL[r.requestType] ?? r.requestType,
+  },
+  {
+    key: 'status',
+    header: '결과',
+    width: '78px',
+    align: 'center',
+    value: (r) => STATUS_LABEL[r.status] ?? r.status,
+    render: (r) => (
+      <span className={`mk ${STATUS_TONE[r.status] ?? ''}`}>{STATUS_LABEL[r.status] ?? r.status}</span>
+    ),
+  },
+  { key: 'resolvedAt', header: '처리', width: '104px', value: (r) => atLabel(r.resolvedAt) },
+  {
+    key: 'rejectReason',
+    header: '반려 사유',
+    value: (r) => r.rejectReason ?? '',
+    render: (r) =>
+      r.rejectReason ? <>{r.rejectReason}</> : <span style={{ color: 'var(--muted)' }}>-</span>,
+  },
+]
+
+function HistoryButton() {
+  const { academyId } = useAcademy()
+  const [open, setOpen] = useState(false)
+  const [rows, setRows] = useState<ApprovalBoardRow[]>([])
+  const [loading, setLoading] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!open || academyId === null) return
+    let alive = true
+    setLoading(true)
+    setErr(null)
+    /* 기본 30일. 기간을 안 주면 서버가 전체를 훑어 느려지고, 이력은 최근 것부터 본다 */
+    listApprovalBoard({ academyId, from: addDaysStr(todayStr(), -30), to: todayStr() })
+      .then((v) => alive && setRows(v.rows))
+      .catch((e) => alive && setErr(e instanceof ApiError ? e.message : '승인 이력을 불러오지 못했습니다.'))
+      .finally(() => alive && setLoading(false))
+    return () => {
+      alive = false
+    }
+  }, [open, academyId])
+
+  return (
+    <>
+      <button
+        className="btn"
+        disabled={academyId === null}
+        title={academyId === null ? '지점을 먼저 선택하세요' : undefined}
+        onClick={() => setOpen(true)}
+      >
+        <Icon name="history" size={14} /> 승인 이력
+      </button>
+
+      {open && (
+        <Modal title="승인 이력" sub="최근 30일" confirmLabel="닫기" onConfirm={() => setOpen(false)} onClose={() => setOpen(false)}>
+          <div style={{ minWidth: 640 }}>
+            <DataTable
+              columns={HISTORY_COLUMNS}
+              rows={rows}
+              rowKey={(r) => String(r.id)}
+              loading={loading}
+              pageSize={10}
+              countLabel={<>최근 30일 <b>{rows.length}</b>건</>}
+              emptyText={err ?? '최근 30일에 처리된 승인이 없습니다.'}
+            />
+          </div>
+        </Modal>
+      )}
+    </>
+  )
+}
+
 export const approvalMockup: Mockup = {
   Content,
   actions: (
     <>
-      {/* 승인 이력 조회 경로가 아직 없다 — 눌러도 아무 일이 없으면 고장으로 읽히므로 막는다 */}
-      {/* 승인 이력 조회 경로가 서버에 없다(404). 현재 상태만 보이고 지난 기록은 못 본다 */}
-      <button className="btn" disabled data-soon title="지난 승인 기록을 조회하는 기능은 아직 없습니다">
-        <Icon name="history" size={14} /> 승인 이력
-      </button>
+      <HistoryButton />
     </>
   ),
 }
