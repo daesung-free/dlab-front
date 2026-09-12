@@ -124,3 +124,28 @@ export interface RoutineDayMatrix {
 export function getRoutineMatrix(academyId: number, date: string): Promise<RoutineDayMatrix> {
   return request<RoutineDayMatrix>('/api/v1/admin/routines/results', { query: { academyId, date } })
 }
+
+/**
+ * 루틴 추가 — `POST /admin/routines`
+ *
+ * ★ `month` 는 **`yyyy-MM` 문자열**로 보낸다. 응답의 `month` 는 숫자(1~12)라 형태가 다르다.
+ * ★ `classId` 를 안 보내면 **지점 공통 루틴**이 된다 — 그 지점 재원생 전원에게 생긴다.
+ *   반을 지정하면 그 반만. 실수로 공통으로 만들면 전원 목록에 뜬다.
+ * ★ `maxScore` 0 은 "점수 없이 완료/미완료만" 이라는 뜻이다. 안 보내면 0 이다.
+ */
+export function createRoutine(body: {
+  academyId: number
+  /** yyyy-MM */
+  month: string
+  name: string
+  classId?: number
+  subject?: string
+  maxScore?: number
+  recommended?: boolean
+}): Promise<Routine> {
+  return request<Routine>('/api/v1/admin/routines', { method: 'POST', body })
+}
+
+export function deleteRoutine(routineId: number): Promise<void> {
+  return request<void>(`/api/v1/admin/routines/${routineId}`, { method: 'DELETE' })
+}

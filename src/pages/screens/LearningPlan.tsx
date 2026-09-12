@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
-import { DataTable, ExcelButton, MaskToggle, useServerTable, type Column, toDateStr, todayStr } from '../../components/common'
+import {
+  DataTable,
+  ExcelButton,
+  MaskToggle,
+  Modal,
+  useServerTable,
+  type Column,
+  toDateStr,
+  todayStr,
+} from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { maskName } from '../../lib/mask'
@@ -7,9 +16,11 @@ import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
 import { listClasses, type ClassGroup } from '../../api/classes'
 import {
+  createPlanOption,
   getStudentWeek,
   listPlanBoard,
   listPlanOptions,
+  type PlanOptionType,
   type PlanBoardRow,
   type PlanDay,
   type PlanItem,
@@ -110,6 +121,33 @@ function Content() {
 
   const [classes, setClasses] = useState<ClassGroup[]>([])
   const [options, setOptions] = useState<PlanOption[]>([])
+  /* 과목·형태 선택지 추가. 탐구는 학생 선택에 따라 갈려서 코드에 박을 수 없다(서버 스펙) */
+  const [newOpt, setNewOpt] = useState<{ optionType: PlanOptionType; label: string } | null>(null)
+  const [optBusy, setOptBusy] = useState(false)
+  const [optErr, setOptErr] = useState<string | null>(null)
+
+  /**
+   * 선택지 추가.
+   *
+   * ★ academyId·year 는 **쿼리**고 optionType·label 은 본문이다(learningPlans.ts 주석).
+   *   본문에 섞으면 "필수 파라미터 'year' 이(가) 없습니다" 로 400 이 난다.
+   * ★ 실패해도 모달을 닫지 않는다 — 같은 이름이 이미 있는 경우가 흔하다.
+   */
+  async function addOption() {
+    if (!newOpt || academyId === null) return
+    setOptBusy(true)
+    setOptErr(null)
+    try {
+      const year = new Date().getFullYear()
+      await createPlanOption(academyId, year, { optionType: newOpt.optionType, label: newOpt.label.trim() })
+      setOptions(await listPlanOptions(academyId, year))
+      setNewOpt(null)
+    } catch (err) {
+      setOptErr(err instanceof ApiError ? err.message : '항목을 추가하지 못했습니다.')
+    } finally {
+      setOptBusy(false)
+    }
+  }
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [week, setWeek] = useState<PlanDay[]>([])
   const [weekLoading, setWeekLoading] = useState(false)
@@ -641,6 +679,40 @@ function Content() {
         />
       )}
 
+      {newOpt && (
+        <Modal
+          title="항목 추가"
+          sub="학습 계획을 쓸 때 고르는 과목·형태 선택지입니다."
+          confirmLabel="추가"
+          busy={optBusy}
+          error={optErr}
+          confirmDisabled={newOpt.label.trim() === ''}
+          onConfirm={() => void addOption()}
+          onClose={() => setNewOpt(null)}
+        >
+          <div className="frow">
+            <label className="req">종류</label>
+            <select
+              className="sel"
+              value={newOpt.optionType}
+              onChange={(e) => setNewOpt({ ...newOpt, optionType: e.target.value as PlanOptionType })}
+            >
+              <option value="SUBJECT">과목</option>
+              <option value="STUDY_TYPE">학습 형태</option>
+            </select>
+          </div>
+          <div className="frow">
+            <label className="req">이름</label>
+            <input
+              className="inp"
+              value={newOpt.label}
+              placeholder={newOpt.optionType === 'SUBJECT' ? '예: 생활과 윤리' : '예: 인강'}
+              onChange={(e) => setNewOpt({ ...newOpt, label: e.target.value })}
+            />
+          </div>
+        </Modal>
+      )}
+
       {/* ═══ 형태 · 과목 마스터 ═══ */}
       {tab === 'master' && (
         <div className="card-sec">
@@ -652,7 +724,12 @@ function Content() {
               형태 · 과목 마스터
             </div>
             <div className="r">
-              <button className="btn pri" disabled title="옵션 추가 폼은 다음 단계입니다">
+              <button
+                className="btn pri"
+                disabled={academyId === null}
+                title={academyId === null ? '지점을 먼저 선택하세요' : undefined}
+                onClick={() => setNewOpt({ optionType: 'SUBJECT', label: '' })}
+              >
                 <Icon name="plus" size={14} /> 항목 추가
               </button>
             </div>

@@ -12,6 +12,7 @@ import {
   listMealClosures,
   listMealMonthly,
   getMealPolicy,
+  saveMealPolicy,
   listMealOrders,
   type MealClosure,
   type MealDay,
@@ -283,9 +284,6 @@ const TAG_COLUMNS: Column<TagLog>[] = [
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
 
-/** 저장이 아직 서버에 안 붙은 자리에 붙이는 설명. 막아만 두고 이유를 말한다 */
-const SAVE_NOT_WIRED = '준비 중입니다'
-
 function thisMonth(): string {
   return new Date().toISOString().slice(0, 7)
 }
@@ -302,9 +300,35 @@ function Content() {
   const [closureList, setClosureList] = useState<MealClosure[]>([])
   const [orders, setOrders] = useState<MealOrder[]>([])
   const [policy, setPolicy] = useState<MealPolicy | null>(null)
+  const [savingPolicy, setSavingPolicy] = useState(false)
+  const [policyNote, setPolicyNote] = useState<{ ok: boolean; text: string } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  /**
+   * 마감 정책 저장.
+   *
+   * ★ 이 값은 **앱의 신청·취소를 막는 기준**이다. D-3 을 D-5 로 바꾸면 이용 5일 전부터
+   *   학생이 신청·취소를 못 한다. 조용히 저장하면 안 되는 값이라 결과를 화면에 남긴다.
+   * ★ 저장 뒤 policy 를 갱신해야 '되돌리기'와 '바뀐 것 없음' 판정이 맞는다.
+   */
+  async function savePolicy() {
+    if (academyId === null) return
+    setSavingPolicy(true)
+    setPolicyNote(null)
+    try {
+      const year = Number(month.slice(0, 4))
+      const saved = await saveMealPolicy(academyId, year, deadlineDays)
+      setPolicy({ academyId, year, deadlineDays: saved, registered: true })
+      setDeadlineDays(saved)
+      setPolicyNote({ ok: true, text: `이용일 ${saved}일 전까지로 저장했습니다. 앱 신청·취소가 이 기준으로 막힙니다.` })
+    } catch (err) {
+      setPolicyNote({ ok: false, text: err instanceof ApiError ? err.message : '마감 정책을 저장하지 못했습니다.' })
+    } finally {
+      setSavingPolicy(false)
+    }
+  }
 
   const load = useCallback(async () => {
     if (academyId === null) {
@@ -700,13 +724,43 @@ function Content() {
             </div>
 
             <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-              {/* ★ 조회는 붙었는데 **저장이 서버로 안 나간다.** 예전에는 눌러도 요청이 없고
-                     토스트도 없어서, 새로고침하면 값이 조용히 원복됐다 — 바꾼 줄 알고 넘어간다. */}
-              <button className="btn" disabled title={SAVE_NOT_WIRED}>
+              {/* 되돌리기 = 서버에 저장된 값으로 입력칸을 되돌린다. 저장 전이면 바뀐 것이 없다 */}
+              {policyNote && (
+                <span
+                  role="status"
+                  style={{
+                    fontSize: 11.5,
+                    fontWeight: 700,
+                    color: policyNote.ok ? 'var(--mint-d)' : 'var(--red)',
+                    marginRight: 6,
+                  }}
+                >
+                  {policyNote.text}
+                </span>
+              )}
+              <button
+                className="btn"
+                disabled={!policy || savingPolicy || deadlineDays === policy.deadlineDays}
+                onClick={() => {
+                  if (policy) setDeadlineDays(policy.deadlineDays)
+                  setPolicyNote(null)
+                }}
+              >
                 되돌리기
               </button>
-              <button className="btn pri" disabled title={SAVE_NOT_WIRED}>
-                <Icon name="save" size={14} /> 일정 저장 · 신청 차단 반영
+              <button
+                className="btn pri"
+                disabled={savingPolicy || academyId === null || deadlineDays === policy?.deadlineDays}
+                title={
+                  academyId === null
+                    ? '지점을 먼저 선택하세요'
+                    : deadlineDays === policy?.deadlineDays
+                      ? '바뀐 것이 없습니다'
+                      : undefined
+                }
+                onClick={() => void savePolicy()}
+              >
+                <Icon name="save" size={14} /> {savingPolicy ? '저장 중…' : '일정 저장 · 신청 차단 반영'}
               </button>
             </div>
           </div>

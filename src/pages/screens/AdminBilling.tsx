@@ -7,9 +7,13 @@ import { useAcademy } from '../../auth/AcademyContext'
 import { GRADE_LABEL } from '../../api/students'
 import {
   PAYMENT_METHOD_LABEL,
+  createBillingStandard,
   listBillingStandards,
   listRefundRules,
   setBillingStandardActive,
+  type AmountSource,
+  type BillingItemType,
+  type PaymentMethod,
   type BillingStandard,
   type RefundRule,
 } from '../../api/billingStandards'
@@ -234,6 +238,39 @@ const REFUND_COLUMNS: Column<RefundRule>[] = [
   { key: 'note', header: '비고', value: (r) => r.note ?? '-' },
 ]
 
+/** 청구 기준 등록 폼의 입력값. 금액은 문자열로 들고 있다 — 빈 칸과 0 을 구분해야 한다 */
+interface NewStandard {
+  code: string
+  itemType: BillingItemType
+  name: string
+  amountSource: AmountSource
+  amount: string
+  dueDesc: string
+  paymentMethod: PaymentMethod | ''
+  memo: string
+}
+
+const EMPTY_STANDARD: NewStandard = {
+  code: '',
+  itemType: 'TUITION',
+  name: '',
+  amountSource: 'FIXED',
+  amount: '',
+  dueDesc: '',
+  paymentMethod: '',
+  memo: '',
+}
+
+/* 화면에 쓰는 이름. 서버는 목록 응답에 itemLabel 을 주지만 등록 전에는 그 값이 없다 */
+const ITEM_TYPE_LABEL: Record<BillingItemType, string> = {
+  TUITION: '교습비',
+  STUDY_ROOM: '독서실',
+  MEAL: '급식비',
+  LECTURE: '특강비',
+  REGISTRATION: '등록비',
+  ETC: '기타',
+}
+
 function Content() {
   const { academyId } = useAcademy()
   const [tab, setTab] = useState('billing')
@@ -249,6 +286,10 @@ function Content() {
   const [monthEdit, setMonthEdit] = useState<{ mo: number; days: string } | null>(null)
   const [monthErr, setMonthErr] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+
+  /* 청구 기준 등록. **코드·항목·금액 방식이 필수**라 이름만 받는 창으로는 못 만든다 */
+  const [newStd, setNewStd] = useState<NewStandard | null>(null)
+  const [newStdErr, setNewStdErr] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -274,6 +315,44 @@ function Content() {
   useEffect(() => {
     void load()
   }, [load])
+
+  /**
+   * 청구 기준 등록.
+   *
+   * ★ `amountSource` 가 화면을 가른다.
+   *     FIXED         한 값으로 끝난다 — 금액을 여기서 받는다
+   *     PRICE_MATRIX  학년 × 좌석유형 단가표에서 갈린다 — 금액을 받지 않는다.
+   *                   아래 '교습비 단가표'가 그 표이고, 금액은 거기서 채운다
+   *   두 방식을 한 칸으로 합치면 단가표 기준인데 금액이 박혀 버린다.
+   * ★ `code` 는 나중에 바꿀 수 없다(PUT 에 code 가 없다). 등록할 때만 정한다.
+   */
+  async function submitStandard() {
+    if (!newStd) return
+    setBusy(true)
+    setNewStdErr(null)
+    try {
+      await createBillingStandard({
+        academyId: academyId ?? undefined,
+        year,
+        code: newStd.code.trim().toUpperCase(),
+        itemType: newStd.itemType,
+        name: newStd.name.trim(),
+        amountSource: newStd.amountSource,
+        amount: newStd.amountSource === 'FIXED' ? Number(newStd.amount) || 0 : undefined,
+        dueDesc: newStd.dueDesc.trim() || undefined,
+        paymentMethod: newStd.paymentMethod || undefined,
+        memo: newStd.memo.trim() || undefined,
+      })
+      await load()
+      setNewStd(null)
+      setNotice('청구 기준을 등록했습니다.')
+    } catch (err) {
+      /* ★ 모달을 닫지 않는다. 코드 중복이 흔한데, 닫아버리면 입력한 것을 다시 쳐야 한다 */
+      setNewStdErr(err instanceof ApiError ? err.message : '청구 기준을 등록하지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const daysByMonth = useMemo(() => {
     const m = new Map<number, number>()
@@ -327,6 +406,129 @@ function Content() {
 
   return (
     <>
+      {newStd && (
+        <Modal
+          title="청구 기준 등록"
+          sub={`${year}년 청구 항목을 하나 만듭니다. 코드는 나중에 바꿀 수 없습니다.`}
+          confirmLabel="등록"
+          busy={busy}
+          error={newStdErr}
+          confirmDisabled={
+            newStd.code.trim() === '' ||
+            newStd.name.trim() === '' ||
+            (newStd.amountSource === 'FIXED' && Number(newStd.amount) <= 0)
+          }
+          onConfirm={() => void submitStandard()}
+          onClose={() => setNewStd(null)}
+        >
+          <div className="frow">
+            <label className="req">코드</label>
+            <div>
+              <input
+                className="inp"
+                value={newStd.code}
+                placeholder="예: TUITION-2026"
+                onChange={(e) => setNewStd({ ...newStd, code: e.target.value })}
+              />
+              <div className="hint">등록 후에는 바꿀 수 없습니다. 영문·숫자·하이픈을 씁니다.</div>
+            </div>
+          </div>
+
+          <div className="frow">
+            <label className="req">항목</label>
+            <select
+              className="sel"
+              value={newStd.itemType}
+              onChange={(e) => setNewStd({ ...newStd, itemType: e.target.value as BillingItemType })}
+            >
+              {(Object.keys(ITEM_TYPE_LABEL) as BillingItemType[]).map((k) => (
+                <option key={k} value={k}>
+                  {ITEM_TYPE_LABEL[k]}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="frow">
+            <label className="req">이름</label>
+            <input
+              className="inp"
+              value={newStd.name}
+              placeholder="예: 2026년 교습비"
+              onChange={(e) => setNewStd({ ...newStd, name: e.target.value })}
+            />
+          </div>
+
+          <div className="frow">
+            <label className="req">금액 방식</label>
+            <div>
+              <select
+                className="sel"
+                value={newStd.amountSource}
+                onChange={(e) => setNewStd({ ...newStd, amountSource: e.target.value as AmountSource })}
+              >
+                <option value="FIXED">정액 — 한 값으로 청구합니다</option>
+                <option value="PRICE_MATRIX">단가표 — 학년·좌석유형에 따라 갈립니다</option>
+              </select>
+              {newStd.amountSource === 'PRICE_MATRIX' && (
+                <div className="hint">금액은 아래 &lsquo;교습비 단가표&rsquo;에서 학년·좌석유형별로 채웁니다.</div>
+              )}
+            </div>
+          </div>
+
+          {/* ★ 단가표 방식일 때는 금액 칸을 아예 없앤다. 남겨두면 단가표 기준인데
+                 금액이 박힌 기준이 생겨서, 어느 값으로 청구되는지 알 수 없어진다 */}
+          {newStd.amountSource === 'FIXED' && (
+            <div className="frow">
+              <label className="req">금액</label>
+              <input
+                className="inp"
+                type="number"
+                min={0}
+                value={newStd.amount}
+                placeholder="예: 660000"
+                onChange={(e) => setNewStd({ ...newStd, amount: e.target.value })}
+              />
+            </div>
+          )}
+
+          <div className="frow">
+            <label>납부 기한</label>
+            <input
+              className="inp"
+              value={newStd.dueDesc}
+              placeholder="예: 매월 25일까지"
+              onChange={(e) => setNewStd({ ...newStd, dueDesc: e.target.value })}
+            />
+          </div>
+
+          <div className="frow">
+            <label>결제 수단</label>
+            <select
+              className="sel"
+              value={newStd.paymentMethod}
+              onChange={(e) => setNewStd({ ...newStd, paymentMethod: e.target.value as PaymentMethod | '' })}
+            >
+              <option value="">선택 안 함</option>
+              {(Object.keys(PAYMENT_METHOD_LABEL) as PaymentMethod[]).map((k) => (
+                <option key={k} value={k}>
+                  {PAYMENT_METHOD_LABEL[k]}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="frow">
+            <label>메모</label>
+            <input
+              className="inp"
+              value={newStd.memo}
+              onChange={(e) => setNewStd({ ...newStd, memo: e.target.value })}
+            />
+          </div>
+        </Modal>
+      )}
+
       {monthEdit && (
         <Modal
           title={`${year}년 ${monthEdit.mo}월 교습일수`}
@@ -427,8 +629,7 @@ function Content() {
                   </>
                 }
                 toolbar={
-                  // 코드·항목·금액 방식이 필수라 이름만으로는 못 만든다 — 전용 폼이 필요하다
-                  <button className="btn pri" disabled title="코드·항목·금액 방식이 필수라 전용 등록 폼이 필요합니다">
+                  <button className="btn pri" onClick={() => setNewStd({ ...EMPTY_STANDARD })}>
                     <Icon name="plus" size={14} /> 청구 기준 등록
                   </button>
                 }
@@ -463,7 +664,9 @@ function Content() {
                         </option>
                       ))}
                     </select>
-                    <button className="btn pri" disabled title="정가 등록은 학년·좌석유형 단위 폼이 필요합니다">
+                    {/* ★ 같은 등록 폼이다. 단가표 금액은 여기서 안 받는다 —
+                           '단가표' 방식을 고르면 금액 칸이 사라지고, 실제 금액은 아래 표에서 채운다 */}
+                    <button className="btn pri" onClick={() => setNewStd({ ...EMPTY_STANDARD })}>
                       <Icon name="plus" size={14} /> 청구 기준 등록
                     </button>
                   </>
