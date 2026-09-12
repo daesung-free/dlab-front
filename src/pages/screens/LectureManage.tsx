@@ -13,6 +13,8 @@ import {
   listLectures,
   changeLectureStatus,
   createLecture,
+  deleteLecture,
+  deleteLectureSession,
   createLectureSession,
   setLectureVisible,
   promoteApplicant,
@@ -266,6 +268,13 @@ function Content() {
   /** 저장 결과. 3단계로 나뉘어 나가므로 **어디까지 됐는지**를 그대로 적는다 */
   const [saveNote, setSaveNote] = useState<{ ok: boolean; text: string } | null>(null)
 
+  /* 삭제. 신청자가 있으면 서버가 400 을 주는데, 그 메시지가 대안까지 알려주므로 그대로 쓴다 */
+  const [deleting, setDeleting] = useState<ApiLecture | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteErr, setDeleteErr] = useState<string | null>(null)
+  /** 회차 삭제. 출석부의 열이 하나 사라지는 것이라 먼저 묻는다 */
+  const [deletingSession, setDeletingSession] = useState<LectureSession | null>(null)
+
   const loadLectures = useCallback(async () => {
     if (academyId === null) {
       setLoading(false)
@@ -389,8 +398,7 @@ function Content() {
    *     ① POST /lectures           이름·종류만 받는다
    *     ② PATCH /lectures/{id}     정원·비용·기간·담당
    *     ③ POST .../sessions        회차 1건씩 (일괄이 없다)
-   *   중간에 실패하면 **앞 단계는 이미 서버에 남아 있다.** 되돌릴 경로도 없다
-   *   (회차 삭제 API 가 없는 것을 확인했다). 그래서 "저장 실패"로 뭉뚱그리지 않고
+   *   중간에 실패하면 **앞 단계는 이미 서버에 남아 있다.** 그래서 "저장 실패"로 뭉뚱그리지 않고
    *   어디까지 됐는지 그대로 알린다 — 안 그러면 다시 눌러 **특강이 두 개** 생긴다.
    *
    * ★ 회차가 없으면 출석부가 0회차라 신청·대기·출결이 전부 막힌다. 그래서 회차까지 한 번에 만든다.
@@ -466,6 +474,74 @@ function Content() {
     setTab('list')
     setSaveNote({ ok: true, text: steps.join(' · ') })
   }
+
+  /**
+   * 특강 삭제.
+   *
+   * ★ 신청자가 있으면 400 이다. 서버 메시지가 "신청자가 있는 특강은 삭제할 수 없습니다(5명).
+   *   접수를 마감하거나 취소해 주세요." 처럼 **무엇을 해야 하는지까지** 말해주므로 그대로 띄운다.
+   * ★ 회차는 함께 지워진다 — 회차만 남는 일은 없다.
+   */
+  async function removeLecture() {
+    if (!deleting) return
+    setDeleteBusy(true)
+    setDeleteErr(null)
+    try {
+      await deleteLecture(deleting.id)
+      if (lectureId === deleting.id) setLectureId(null)
+      await loadLectures()
+      setDeleting(null)
+    } catch (err) {
+      setDeleteErr(err instanceof ApiError ? err.message : '특강을 삭제하지 못했습니다.')
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
+
+  /** 회차 삭제. 출결이 찍힌 회차는 서버가 400 을 준다 */
+  async function removeSession() {
+    if (!deletingSession || lectureId === null) return
+    setDeleteBusy(true)
+    setDeleteErr(null)
+    try {
+      await deleteLectureSession(deletingSession.id)
+      setSessionList(await listLectureSessions(lectureId))
+      setDeletingSession(null)
+    } catch (err) {
+      setDeleteErr(err instanceof ApiError ? err.message : '회차를 삭제하지 못했습니다.')
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
+
+  /* 목록에 삭제 버튼을 더한다. 열 정의가 모듈 상수라 화면 상태를 못 써서 여기서 잇는다 */
+  const columns = useMemo<Column<ApiLecture>[]>(
+    () => [
+      ...LECTURE_COLUMNS,
+      {
+        key: 'act',
+        header: '',
+        width: '64px',
+        align: 'center',
+        value: () => '',
+        render: (r) => (
+          <button
+            className="btn"
+            style={{ padding: '4px 9px', fontSize: 11.5, color: 'var(--red)' }}
+            /* 행을 누르면 특강이 선택되므로 여기서 끊는다 */
+            onClick={(e) => {
+              e.stopPropagation()
+              setDeleteErr(null)
+              setDeleting(r)
+            }}
+          >
+            삭제
+          </button>
+        ),
+      },
+    ],
+    [],
+  )
 
   /* 저장을 막는 이유를 하나로 모은다 — 버튼이 왜 안 눌리는지 마우스를 올리면 나온다 */
   const canSave =
@@ -845,7 +921,7 @@ function Content() {
         <div style={{ padding: 14 }}>
           {tab === 'list' && (
             <DataTable
-              columns={LECTURE_COLUMNS}
+              columns={columns}
               rows={lectures}
               rowKey={(r) => String(r.id)}
               masked={false}
@@ -940,6 +1016,25 @@ function Content() {
                       {sessionList.map((se) => (
                         <th key={se.id} className="al-center" style={{ width: 68 }} title={se.room ?? ''}>
                           {se.sessionDate.slice(5)}
+                          {/* 회차가 곧 이 표의 열이라 지우는 자리도 여기가 맞다 */}
+                          <button
+                            type="button"
+                            aria-label={`${se.sessionNo}회차 삭제`}
+                            title="이 회차를 지웁니다"
+                            onClick={() => {
+                              setDeleteErr(null)
+                              setDeletingSession(se)
+                            }}
+                            style={{
+                              border: 'none',
+                              background: 'none',
+                              color: 'var(--muted)',
+                              cursor: 'pointer',
+                              padding: '0 0 0 4px',
+                            }}
+                          >
+                            <Icon name="x" size={11} />
+                          </button>
                         </th>
                       ))}
                       <th className="al-center" style={{ width: 80 }}>
@@ -973,6 +1068,61 @@ function Content() {
           )}
         </div>
       </div>
+
+      {deletingSession && (
+        <Modal
+          title={`${deletingSession.sessionNo}회차 삭제`}
+          sub={`${deletingSession.sessionDate} 수업을 지웁니다.`}
+          confirmLabel="삭제"
+          danger
+          busy={deleteBusy}
+          error={deleteErr}
+          onConfirm={() => void removeSession()}
+          onClose={() => setDeletingSession(null)}
+        >
+          {/* ★ 서버가 번호를 다시 안 매긴다. 3회차를 지워도 4회차는 그대로 4회차라
+                 번호가 비어 보이는데, 미리 말하지 않으면 그걸 결함으로 읽는다. */}
+          <div className="note-box warn">
+            <div className="ic">
+              <Icon name="alert-triangle" size={17} />
+            </div>
+            <div>
+              <div className="tt">회차 번호는 다시 매기지 않습니다</div>
+              <div className="tx">
+                {deletingSession.sessionNo}회차를 지워도 뒤 회차 번호는 <b>그대로</b>입니다. 출결이 기록된
+                회차는 지울 수 없습니다.
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {deleting && (
+        <Modal
+          title="특강 삭제"
+          sub={`${deleting.name} 을(를) 지웁니다.`}
+          confirmLabel="삭제"
+          danger
+          busy={deleteBusy}
+          error={deleteErr}
+          onConfirm={() => void removeLecture()}
+          onClose={() => setDeleting(null)}
+        >
+          {/* ★ 회차가 함께 지워진다. 출석부의 열이 사라지는 것이라 미리 말한다 */}
+          <div className="note-box risk">
+            <div className="ic">
+              <Icon name="alert-triangle" size={17} />
+            </div>
+            <div>
+              <div className="tt">되돌릴 수 없습니다</div>
+              <div className="tx">
+                회차도 <b>함께 지워집니다.</b> 신청자가 있으면 지울 수 없고, 그때는 접수를 마감하거나 취소로
+                두시면 됩니다.
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {promoting && (
         <PromoteConfirm
