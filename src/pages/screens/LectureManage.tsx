@@ -37,6 +37,10 @@ import '../../styles/forms.css'
  *   ③ 청구 항목        : 특강비는 수납(F-4.8)·청구기준(F-4.10-5)과 엮인다
  *   따라서 개설 폼에서 회차를 생성해두지 않으면 출석부 탭이 빈 채로 남는다.
  *
+ * ⚠ 다만 **③ 은 개설 폼이 만들지 않는다**(2026-09-13 확인). 서버에 그런 경로가 없어서
+ *   수납 관리의 청구 기준에서 따로 등록한다. 화면 안내가 "3가지가 함께 생성됩니다"라고
+ *   적고 있었는데, 개설 후 수납에 안 뜬다는 말이 그래서 나왔다.
+ *
  * ⚠ 개설 후 정원을 줄이는 것은 막아야 한다.
  *   이미 신청한 인원보다 적게 줄이면 누구를 대기자로 밀어낼지 결정할 수 없다.
  *   서버에서 capacity >= applied 제약을 걸고, 줄이려면 개별 취소를 먼저 하게 한다. */
@@ -167,7 +171,6 @@ const APPLICANT_COLUMNS: Column<ApplicantRow>[] = [
 
 /* ══ 특강 개설 ══ */
 
-const TEACHERS = ['김유진', '최지원', '이장원', '박서영', '정하람']
 const ROOMS = ['201호', '202호', '301호', '302호', '401호']
 const TRACK_TARGETS = ['전체', '자연계열', '인문계열']
 const DOW_LABELS = ['월', '화', '수', '목', '금', '토']
@@ -175,7 +178,14 @@ const DOW_LABELS = ['월', '화', '수', '목', '금', '토']
 interface LectureDraft {
   name: string
   month: string
-  teacher: string
+  /**
+   * 담당 강사 **id**. 서버가 id 로 받는다.
+   * ★ 예전에는 이름 문자열을 들고 저장할 때 목록에서 찾았는데, 초기값이 목업 이름
+   *   ('김유진')이라 서버 목록에 없었다. 브라우저는 일치하는 option 이 없으면 첫 항목을
+   *   **보여주기만** 하고 onChange 를 안 낸다 — 화면에는 강사가 떠 있는데 값은 목업 이름이라
+   *   저장할 때 조용히 빠졌다. 고른 적이 없어도 값이 맞도록 id 를 직접 든다.
+   */
+  teacherId: number | null
   room: string
   capacity: number
   fee: number
@@ -196,7 +206,7 @@ interface LectureDraft {
 const EMPTY_DRAFT: LectureDraft = {
   name: '',
   month: '2026-07',
-  teacher: TEACHERS[0],
+  teacherId: null,
   room: ROOMS[0],
   capacity: 25,
   fee: 280000,
@@ -435,7 +445,7 @@ function Content() {
              ★ `+'T00:00:00Z'` 로 붙이면 UTC 자정 = 한국 09:00 이 된다. 로컬로 해석시켜 변환한다. */
         applyFrom: toInstant(draft.applyFrom, '00:00'),
         applyTo: toInstant(draft.applyTo, '23:59'),
-        teacherId: teachers.find((t) => t.name === draft.teacher)?.id,
+        teacherId: draft.teacherId ?? undefined,
         description: draft.memo || undefined,
       })
       steps.push('상세 정보를 저장했습니다')
@@ -610,10 +620,15 @@ function Content() {
                 <label className="req">담당 강사</label>
                 {/* ★ 서버가 강사를 id 로 받는다. 목업의 이름 목록을 그대로 두면 아무리 골라도
                        매칭이 안 돼 담당이 '미지정'으로 저장된다 — 실제로 그렇게 들어간 적이 있다. */}
-                <select className="sel" value={draft.teacher} onChange={(e) => patch({ teacher: e.target.value })}>
-                  {teachers.length === 0 && <option value="">등록된 강사가 없습니다</option>}
+                <select
+                  className="sel"
+                  value={draft.teacherId ?? ''}
+                  onChange={(e) => patch({ teacherId: e.target.value ? Number(e.target.value) : null })}
+                >
+                  {/* 빈 값을 **선택지로 둔다.** 안 고르면 '미지정'이라는 것이 화면에 보여야 한다 */}
+                  <option value="">{teachers.length === 0 ? '등록된 강사가 없습니다' : '미지정'}</option>
                   {teachers.map((t) => (
-                    <option key={t.id} value={t.name}>
+                    <option key={t.id} value={t.id}>
                       {t.name}
                     </option>
                   ))}
@@ -804,11 +819,15 @@ function Content() {
                     <Icon name="info" size={17} />
                   </div>
                   <div>
-                    <div className="tt">개설하면 3가지가 함께 생성됩니다</div>
+                    {/* ★ 청구 항목은 **여기서 안 만들어진다.** 그렇게 적어뒀더니 개설하고 나서
+                           수납에 안 뜬다는 말이 나왔다 — 특강비 청구는 수납 관리에서 따로 만든다. */}
+                    <div className="tt">개설하면 특강과 회차가 함께 생성됩니다</div>
                     <div className="tx">
-                      <b>① 특강</b> · <b>② 회차 {sessions.length}건</b>(출석부의 열) · <b>③ 청구 항목</b>(수납 연동).
+                      <b>① 특강</b> · <b>② 회차 {sessions.length}건</b>(출석부의 열).
                       <br />
                       회차 없이는 출석부를 만들 수 없어 <b>개설 자체가 막힙니다.</b>
+                      <br />
+                      <b>특강비 청구는 따로 만듭니다</b> — 수납 관리의 청구 기준에서 등록합니다.
                       <br />
                       개설 후 <b>정원을 신청 인원보다 적게 줄일 수 없습니다</b> — 누구를 대기자로 밀어낼지 결정할 수 없기
                       때문이며, 서버에서 제약으로 막습니다.

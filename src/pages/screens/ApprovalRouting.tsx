@@ -513,7 +513,15 @@ function HistoryButton() {
       </button>
 
       {open && (
-        <Modal title="승인 이력" sub="최근 30일" confirmLabel="닫기" onConfirm={() => setOpen(false)} onClose={() => setOpen(false)}>
+        <Modal
+          title="승인 이력"
+          sub="최근 30일"
+          confirmLabel="닫기"
+          /* 조회만 하는 모달이라 '취소'를 감춘다 — 되돌릴 것이 없다 */
+          hideCancel
+          onConfirm={() => setOpen(false)}
+          onClose={() => setOpen(false)}
+        >
           <div style={{ minWidth: 640 }}>
             <DataTable
               columns={HISTORY_COLUMNS}
