@@ -11,11 +11,17 @@ import {
   listLectureApplicants,
   listLectureSessions,
   listLectures,
+  changeLectureStatus,
+  createLecture,
+  createLectureSession,
+  setLectureVisible,
   promoteApplicant,
+  updateLecture,
   type Lecture as ApiLecture,
   type LectureApplicant,
   type LectureSession,
 } from '../../api/lectures'
+import { listTeachers, type TeacherRow } from '../../api/accounts'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
 
@@ -203,7 +209,20 @@ const EMPTY_DRAFT: LectureDraft = {
   memo: '',
 }
 
-/** 기간 + 요일 → 회차(수업일) 목록. 출석부의 열이 된다 */
+/**
+ * `yyyy-MM-dd` + 시각 → UTC 시점.
+ *
+ * ★ 문자열에 `Z` 를 이어 붙이면 안 된다. 입력은 한국 시각인데 `…T00:00:00Z` 로 보내면
+ *   서버가 UTC 자정으로 받아 한국 09:00 이 된다 — 설문에서 정확히 그렇게 9시간이 밀렸다.
+ */
+function toInstant(day: string, time: string): string | undefined {
+  if (!day) return undefined
+  const d = new Date(`${day}T${time}:00`)
+  if (Number.isNaN(d.getTime())) return undefined
+  return d.toISOString().replace(/\.\d{3}Z$/, 'Z')
+}
+
+/** 기간 + 요일 → 회차(수업일) 목록 `yyyy-MM-dd`. 출석부의 열이 되고 그대로 서버에 보낸다 */
 function buildSessions(d: LectureDraft): string[] {
   const start = new Date(`${d.startDate}T00:00:00`)
   const end = new Date(`${d.endDate}T00:00:00`)
@@ -213,7 +232,10 @@ function buildSessions(d: LectureDraft): string[] {
   // 상한을 둬서 잘못된 기간 입력에도 루프가 폭주하지 않게 한다
   while (cur <= end && out.length < 60) {
     if (d.dows.includes(cur.getDay())) {
-      out.push(`${String(cur.getMonth() + 1).padStart(2, '0')}/${String(cur.getDate()).padStart(2, '0')}`)
+      /* ★ toISOString 을 쓰면 안 된다 — UTC 로 바뀌면서 한국 시간 자정이 전날이 된다 */
+      out.push(
+        `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`,
+      )
     }
     cur.setDate(cur.getDate() + 1)
   }
@@ -238,6 +260,12 @@ function Content() {
   const [promoting, setPromoting] = useState<{ ids: number[] } | null>(null)
   const [promoteBusy, setPromoteBusy] = useState(false)
 
+  /* 담당 강사는 서버가 **id 로** 받는다. 이름 문자열을 보내면 조용히 무시되고 '미지정'이 된다 */
+  const [teachers, setTeachers] = useState<TeacherRow[]>([])
+  const [saving, setSaving] = useState<'' | 'draft' | 'open'>('')
+  /** 저장 결과. 3단계로 나뉘어 나가므로 **어디까지 됐는지**를 그대로 적는다 */
+  const [saveNote, setSaveNote] = useState<{ ok: boolean; text: string } | null>(null)
+
   const loadLectures = useCallback(async () => {
     if (academyId === null) {
       setLoading(false)
@@ -260,6 +288,18 @@ function Content() {
   useEffect(() => {
     void loadLectures()
   }, [loadLectures])
+
+  /* 담당 강사 선택지. 직원 목록에는 안 나온다 — 강사는 kind 가 따로다(accounts.ts listTeachers) */
+  useEffect(() => {
+    if (academyId === null) return
+    let alive = true
+    listTeachers(academyId)
+      .then((v) => alive && setTeachers(v))
+      .catch(() => alive && setTeachers([]))
+    return () => {
+      alive = false
+    }
+  }, [academyId])
 
   // 선택한 특강의 신청자·회차. 목록에서 특강을 고르면 아래 탭이 그 특강 기준이 된다
   useEffect(() => {
@@ -342,6 +382,103 @@ function Content() {
     setDraft((d) => (d ? { ...d, dows: d.dows.includes(n) ? d.dows.filter((x) => x !== n) : [...d.dows, n].sort() } : d))
   }
 
+  /**
+   * 개설 저장.
+   *
+   * ★ **한 번에 안 끝난다.** 서버가 이렇게 나눠 놨다.
+   *     ① POST /lectures           이름·종류만 받는다
+   *     ② PATCH /lectures/{id}     정원·비용·기간·담당
+   *     ③ POST .../sessions        회차 1건씩 (일괄이 없다)
+   *   중간에 실패하면 **앞 단계는 이미 서버에 남아 있다.** 되돌릴 경로도 없다
+   *   (회차 삭제 API 가 없는 것을 확인했다). 그래서 "저장 실패"로 뭉뚱그리지 않고
+   *   어디까지 됐는지 그대로 알린다 — 안 그러면 다시 눌러 **특강이 두 개** 생긴다.
+   *
+   * ★ 회차가 없으면 출석부가 0회차라 신청·대기·출결이 전부 막힌다. 그래서 회차까지 한 번에 만든다.
+   */
+  async function saveDraft(mode: 'draft' | 'open') {
+    if (!draft || academyId === null) return
+    setSaving(mode)
+    setSaveNote(null)
+    setError(null)
+
+    let made: ApiLecture | null = null
+    try {
+      made = await createLecture({
+        academyId,
+        year: Number(draft.month.slice(0, 4)),
+        lectureType: 'LECTURE',
+        name: draft.name.trim(),
+      })
+    } catch (err) {
+      setSaving('')
+      setSaveNote({ ok: false, text: err instanceof ApiError ? err.message : '특강을 만들지 못했습니다.' })
+      return
+    }
+
+    const steps: string[] = ['특강을 만들었습니다']
+
+    try {
+      await updateLecture(made.id, {
+        capacity: draft.capacity,
+        fee: draft.fee,
+        startDate: draft.startDate,
+        endDate: draft.endDate,
+        /* ★ 접수 기간만 시점이다(lectures.ts 주석). 날짜 문자열 그대로 보내면 400.
+             ★ `+'T00:00:00Z'` 로 붙이면 UTC 자정 = 한국 09:00 이 된다. 로컬로 해석시켜 변환한다. */
+        applyFrom: toInstant(draft.applyFrom, '00:00'),
+        applyTo: toInstant(draft.applyTo, '23:59'),
+        teacherId: teachers.find((t) => t.name === draft.teacher)?.id,
+        description: draft.memo || undefined,
+      })
+      steps.push('상세 정보를 저장했습니다')
+    } catch {
+      steps.push('상세 정보(정원·기간·담당)는 저장하지 못했습니다 — 목록에서 수정해 주세요')
+    }
+
+    let done = 0
+    for (const date of sessions) {
+      try {
+        await createLectureSession(made.id, { sessionDate: date, room: draft.room })
+        done += 1
+      } catch {
+        break
+      }
+    }
+    steps.push(
+      done === sessions.length
+        ? `회차 ${done}건을 만들었습니다`
+        : `회차는 ${sessions.length}건 중 ${done}건만 만들어졌습니다 — 나머지는 다시 추가해 주세요`,
+    )
+
+    if (mode === 'open') {
+      try {
+        await changeLectureStatus(made.id, 'OPEN')
+        await setLectureVisible(made.id, true)
+        steps.push('접수를 열고 앱에 노출했습니다')
+      } catch {
+        steps.push('접수 열기는 실패했습니다 — 목록에서 상태를 바꿔 주세요')
+      }
+    }
+
+    await loadLectures()
+    setSaving('')
+    setDraft(null)
+    setTab('list')
+    setSaveNote({ ok: true, text: steps.join(' · ') })
+  }
+
+  /* 저장을 막는 이유를 하나로 모은다 — 버튼이 왜 안 눌리는지 마우스를 올리면 나온다 */
+  const canSave =
+    draft !== null && draft.name.trim().length > 0 && sessions.length > 0 && academyId !== null
+  const saveBlockReason =
+    academyId === null
+      ? '지점을 먼저 선택하세요'
+      : draft && draft.name.trim().length === 0
+        ? '특강명을 입력하세요'
+        : sessions.length === 0
+          ? '수업 요일과 기간을 정해 회차를 1건 이상 만들어 주세요'
+          : undefined
+
   /* ══ 특강 개설 폼 ══ */
   if (draft) {
     return (
@@ -357,15 +494,24 @@ function Content() {
             <button className="btn" onClick={() => setDraft(null)}>
               취소
             </button>
-            {/* ★ 폼·회차 미리보기는 다 되는데 **저장이 서버로 안 나간다.** 예전에는 valid 면
-                   버튼이 활성화돼 눌리기만 하고 아무 일도 없었다 — 사용자는 저장된 줄 안다.
-                   붙이기 전까지는 막고 이유를 말한다. 특강 회차가 여기서만 만들어져서
-                   출석부·신청·대기까지 함께 막혀 있다. */}
-            <button className="btn" disabled data-soon title="준비 중입니다">
-              <Icon name="save" size={14} /> 임시 저장
+            {/* ★ 저장이 3단계로 나뉜다(saveDraft 주석). 회차까지 만들어야 출석부가 열린다.
+                   ★ 회차 0건이면 막는다 — 회차 없는 특강은 신청·대기·출결이 전부 막힌 채로
+                     목록에만 남고, 지울 경로도 없다. */}
+            <button
+              className="btn"
+              disabled={!canSave || saving !== ''}
+              title={saveBlockReason}
+              onClick={() => void saveDraft('draft')}
+            >
+              <Icon name="save" size={14} /> {saving === 'draft' ? '저장 중…' : '임시 저장'}
             </button>
-            <button className="btn pri" disabled data-soon title="준비 중입니다">
-              <Icon name="send" size={14} /> 개설 · 접수 시작
+            <button
+              className="btn pri"
+              disabled={!canSave || saving !== ''}
+              title={saveBlockReason}
+              onClick={() => void saveDraft('open')}
+            >
+              <Icon name="send" size={14} /> {saving === 'open' ? '개설 중…' : '개설 · 접수 시작'}
             </button>
           </div>
         </div>
@@ -386,10 +532,13 @@ function Content() {
 
               <div className="frow">
                 <label className="req">담당 강사</label>
+                {/* ★ 서버가 강사를 id 로 받는다. 목업의 이름 목록을 그대로 두면 아무리 골라도
+                       매칭이 안 돼 담당이 '미지정'으로 저장된다 — 실제로 그렇게 들어간 적이 있다. */}
                 <select className="sel" value={draft.teacher} onChange={(e) => patch({ teacher: e.target.value })}>
-                  {TEACHERS.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
+                  {teachers.length === 0 && <option value="">등록된 강사가 없습니다</option>}
+                  {teachers.map((t) => (
+                    <option key={t.id} value={t.name}>
+                      {t.name}
                     </option>
                   ))}
                 </select>
@@ -544,7 +693,8 @@ function Content() {
                           color: 'var(--mint-d)',
                         }}
                       >
-                        {i + 1}. {s}
+                        {/* 서버에 보내는 값은 yyyy-MM-dd 지만 화면에는 월/일만 있으면 된다 */}
+                        {i + 1}. {s.slice(5).replace('-', '/')}
                       </span>
                     ))}
                   </div>
@@ -658,8 +808,25 @@ function Content() {
       </div>
 
       {error && (
-        <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+        <div className="note-box risk" role="alert">
           {error}
+        </div>
+      )}
+
+      {/* ★ 저장이 3단계라 '성공/실패' 둘로는 못 적는다. 어디까지 됐는지 그대로 보여주고,
+             사용자가 닫기 전에는 안 사라지게 둔다 — 사라지면 다시 눌러 특강이 두 개 생긴다. */}
+      {saveNote && (
+        <div className={`note-box ${saveNote.ok ? 'plain' : 'risk'}`} role="status">
+          <div className="ic">
+            <Icon name={saveNote.ok ? 'check' : 'alert-triangle'} size={17} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div className="tt">{saveNote.ok ? '개설 결과' : '개설하지 못했습니다'}</div>
+            <div className="tx">{saveNote.text}</div>
+          </div>
+          <button className="btn" onClick={() => setSaveNote(null)}>
+            닫기
+          </button>
         </div>
       )}
 

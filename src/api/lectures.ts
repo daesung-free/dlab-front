@@ -160,12 +160,34 @@ export function updateLecture(
     categoryId: number
     description: string
     capacity: number
+    /**
+     * 접수 시작·마감. **날짜가 아니라 시점(Instant)이다** — `2026-09-20T00:00:00Z`.
+     * `2026-09-20` 만 보내면 400 이다(형식 오류). 반면 startDate·endDate 는 날짜다.
+     * 두 짝이 규칙이 달라서, 같이 보내면 한쪽만 틀려 **전체가 거절**된다.
+     */
     applyFrom: string
     applyTo: string
+    /** 수업 시작·종료. 이쪽은 `yyyy-MM-dd` 날짜다 */
     startDate: string
     endDate: string
     fee: number
   }>,
 ): Promise<Lecture> {
   return request<Lecture>(`/api/v1/admin/lectures/${lectureId}`, { method: 'PATCH', body })
+}
+
+/**
+ * 회차 추가 — `POST /admin/lectures/{id}/sessions`
+ *
+ * ★ **특강을 만들어도 회차가 없으면 아무것도 못 한다.** 출석부가 0회차가 되고 신청·대기·출결이
+ *   전부 막힌다. 그래서 개설 폼은 기간·요일로 회차를 계산해 여기까지 보낸다.
+ * ★ `sessionNo` 는 **서버가 매긴다** — 보내지 않는다.
+ * ★ 일괄 생성이 없어 회차 수만큼 호출된다. 중간에 실패하면 **앞의 회차는 이미 만들어져 있다.**
+ *   되돌릴 경로도 없으므로(삭제 API 가 없다) 호출부가 "몇 회차까지 됐는지"를 반드시 알려야 한다.
+ */
+export function createLectureSession(
+  lectureId: number,
+  body: { sessionDate: string; startTime?: string; endTime?: string; room?: string },
+): Promise<LectureSession> {
+  return request<LectureSession>(`/api/v1/admin/lectures/${lectureId}/sessions`, { method: 'POST', body })
 }

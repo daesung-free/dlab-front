@@ -249,3 +249,24 @@ export function updateStaff(
     body: changes,
   })
 }
+
+/* ── 담당 강사 고르기 ─────────────────────────────────────────────────────── */
+
+export interface TeacherRow {
+  id: number
+  name: string
+  academyId: number
+  phone: string | null
+}
+
+/**
+ * 특강·반 배정에서 담당 강사를 고를 때 쓴다 — `GET /admin/staff/teachers`
+ *
+ * ★ **`/staff/employees` 와 다른 목록이다.** 강사는 `kind: 'TEACHER'` 로 따로 있어서
+ *   직원 목록에는 안 나온다. 실제로 직원 목록만 보고 "강사가 하나도 없다"고 판단한 적이 있다.
+ * ★ 서버는 강사를 **id 로** 받는다(`updateLecture` 의 teacherId). 이름 문자열을 보내면
+ *   조용히 무시되고 담당이 '미지정'으로 남는다.
+ */
+export function listTeachers(academyId: number): Promise<TeacherRow[]> {
+  return request<TeacherRow[]>('/api/v1/admin/staff/teachers', { query: { academyId } })
+}
