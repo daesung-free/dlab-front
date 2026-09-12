@@ -122,3 +122,17 @@ export interface MealPolicy {
 export function getMealPolicy(academyId: number, year: number): Promise<MealPolicy> {
   return request<MealPolicy>('/api/v1/admin/meals/policy', { query: { academyId, year } })
 }
+
+/**
+ * 급식 신청 마감 정책 저장 — `PUT /admin/meals/policy`
+ *
+ * ★ 지점·연도 단위다. 조회는 붙어 있었는데 저장이 안 붙어서, 값을 바꿔도 새로고침하면
+ *   조용히 원복됐다 — 바꾼 줄 알고 넘어간다.
+ * ★ 응답은 저장된 `deadlineDays` 숫자 하나다(객체가 아니다).
+ */
+export function saveMealPolicy(academyId: number, year: number, deadlineDays: number): Promise<number> {
+  return request<number>('/api/v1/admin/meals/policy', {
+    method: 'PUT',
+    body: { academyId, year, deadlineDays },
+  })
+}
