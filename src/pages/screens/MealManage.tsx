@@ -793,10 +793,10 @@ function Content() {
                       </span>
                       <span className="tag-r fail">{p.reason}</span>
                       <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-                        <button className="btn pri" style={{ padding: '6px 12px', fontSize: 12 }} disabled title="준비 중입니다">
+                        <button className="btn pri" style={{ padding: '6px 12px', fontSize: 12 }} disabled data-soon title="준비 중입니다">
                           <Icon name="check" size={13} /> 수기 확인 통과
                         </button>
-                        <button className="btn" style={{ padding: '6px 12px', fontSize: 12, color: 'var(--red)' }} disabled title="준비 중입니다">
+                        <button className="btn" style={{ padding: '6px 12px', fontSize: 12, color: 'var(--red)' }} disabled data-soon title="준비 중입니다">
                           거부
                         </button>
                       </span>
@@ -894,10 +894,10 @@ function Content() {
               }
               toolbar={
                 <>
-                  <button className="btn" disabled title="준비 중입니다">
+                  <button className="btn" disabled data-soon title="준비 중입니다">
                     <Icon name="user-x" size={14} /> 미체크자 조회
                   </button>
-                  <button className="btn" disabled title="준비 중입니다">
+                  <button className="btn" disabled data-soon title="준비 중입니다">
                     <Icon name="search" size={14} /> 학번으로 수기 확인
                   </button>
                   <MaskToggle masked={masked} onChange={setMasked} />
@@ -996,11 +996,11 @@ export const mealMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled title="준비 중입니다">기간 선택 ▾</button>
-      <button className="btn" disabled title="준비 중입니다">
+      <button className="btn" disabled data-soon title="준비 중입니다">기간 선택 ▾</button>
+      <button className="btn" disabled data-soon title="준비 중입니다">
         <Icon name="utensils" size={14} /> 식수 마감
       </button>
-      <button className="btn pri" disabled title="준비 중입니다">
+      <button className="btn pri" disabled data-soon title="준비 중입니다">
         <Icon name="plus" size={14} /> 데스크 당일 신청
       </button>
     </>

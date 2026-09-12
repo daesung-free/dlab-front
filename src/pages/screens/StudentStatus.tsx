@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
-import { DataTable, ExcelButton, PrintButton, type Column } from '../../components/common'
+import {DataTable, ExcelButton, PrintButton, type Column, MockNotice } from '../../components/common'
 import { Icon } from '../../components/Icon'
 import { Tabs } from '../../components/Tabs'
+import { useAcademy } from '../../auth/AcademyContext'
 import { MOCK_STUDENTS, type MockStudent } from './mockStudents'
 import type { Mockup } from './types'
 import './matrix.css'
@@ -124,6 +125,7 @@ function countBy(list: MockStudent[], fn: (s: MockStudent) => boolean): number {
 }
 
 function Content() {
+  const { academies } = useAcademy()
   const [tab, setTab] = useState('class')
   const [branch, setBranch] = useState<string>('전체')
 
@@ -191,6 +193,7 @@ function Content() {
 
   return (
     <>
+      <MockNotice reason="반별 집계 API가 없습니다. /statistics 는 대시보드용 전체 요약이라 축이 다릅니다. 퇴원·제적 처리도 아직 붙지 않았습니다." />
       <div className="stat-strip c6">
         <div className="stat">
           <div className="l">
@@ -237,7 +240,9 @@ function Content() {
       </div>
 
       <div className="filter-row" style={{ background: '#fff', borderRadius: 12, marginBottom: 14, border: 'none' }}>
-        {['전체', '분당', '대치', '평촌'].map((b) => (
+        {/* 지점은 하드코딩하지 않는다 — 권한에 맞는 목록을 서버가 준다.
+            전에는 실재하지 않는 대치·평촌이 박혀 있었다 */}
+        {['전체', ...academies.map((a) => a.acadNm)].map((b) => (
           <button key={b} type="button" className={`chip${branch === b ? ' on' : ''}`} onClick={() => setBranch(b)}>
             {b}
           </button>
@@ -385,8 +390,8 @@ export const studentStatusMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled title="준비 중입니다">기수 선택 ▾</button>
-      <button className="btn" disabled title="준비 중입니다">
+      <button className="btn" disabled data-soon title="준비 중입니다">기수 선택 ▾</button>
+      <button className="btn" disabled data-soon title="준비 중입니다">
         <Icon name="bar-chart-3" size={14} /> 전년 대비 비교
       </button>
     </>

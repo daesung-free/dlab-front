@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { DataTable, ExcelButton, MaskToggle, type Column } from '../../components/common'
+import {DataTable, ExcelButton, MaskToggle, type Column, MockNotice } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { MOCK_STUDENTS } from './mockStudents'
@@ -186,6 +186,7 @@ function Content() {
 
   return (
     <>
+      <MockNotice reason="관리자용 집계 도메인이 서버에 없습니다. 학생 한 명씩은 조회되지만 순공·집중도 순위는 집계가 없습니다." />
       <div className="stat-strip c6">
         <div className="stat">
           <div className="l">
@@ -244,7 +245,8 @@ function Content() {
       <div className="card-sec">
         <Tabs
           items={[
-            { key: 'rank', label: '순공시간 랭킹', count: rows.length },
+            // 목업 배열 길이라 배지를 뺀다
+            { key: 'rank', label: '순공시간 랭킹' },
             { key: 'cal', label: '달력 뷰' },
           ]}
           active={tab}
@@ -362,8 +364,8 @@ export const dailyReportMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled title="준비 중입니다">기간 선택 ▾</button>
-      <button className="btn" disabled title="준비 중입니다">
+      <button className="btn" disabled data-soon title="준비 중입니다">기간 선택 ▾</button>
+      <button className="btn" disabled data-soon title="준비 중입니다">
         <Icon name="refresh-cw" size={14} /> 배치 재집계
       </button>
     </>

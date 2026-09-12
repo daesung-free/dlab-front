@@ -1,12 +1,50 @@
+import { useMemo } from 'react'
 import { Link, NavLink, useLocation, useParams } from 'react-router-dom'
 import { findScreen } from '../data/menu'
 import { NAV, findNavCat, navCatOfScreen, navItemCount, navPath, type NavItem } from '../data/nav'
-import { ATTENDANCE, TODOS } from '../data/mockDashboard'
+import { TODOS } from '../data/mockDashboard'
 import { Icon } from '../components/Icon'
+import { useAcademy } from '../auth/AcademyContext'
+import { useServerData } from '../components/common'
+import { fetchAttendanceBoard } from '../api/attendance'
 
-/** 대시보드에서 보이는 사이드바 — 오늘 요약 + 자주 쓰는 메뉴 */
+/** UTC 로 만들면 오전에 하루가 밀린다 — 오늘 요약이라 로컬 날짜여야 한다 */
+function today(): Date {
+  return new Date()
+}
+
+function ymd(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토']
+
+/**
+ * 대시보드에서 보이는 사이드바 — 오늘 요약 + 자주 쓰는 메뉴.
+ *
+ * ★ 요약 숫자는 **실제 출결**이다. 전에는 목업(재원생 296명·5월 28일)이 박혀 있었는데,
+ *   사이드바라 전 화면에 같이 떠서 실데이터 옆에 가짜 숫자가 나란히 보였다.
+ */
 function DashboardSide() {
+  const { academyId, academies } = useAcademy()
   const urgent = TODOS.filter((t) => t.tone === 'urgent')
+
+  const now = today()
+  const dateLabel = `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일 ${WEEKDAY[now.getDay()]}요일`
+  const academyName = academies.find((a) => a.id === academyId)?.acadNm ?? null
+
+  const params = useMemo(
+    () => ({ academyId: academyId ?? undefined, date: ymd(today()) }),
+    [academyId],
+  )
+  const board = useServerData({
+    fetcher: fetchAttendanceBoard,
+    params,
+    // 지점을 못 고른 상태로 부르면 전 지점 권한 계정이 400을 받는다
+    enabled: academyId !== null,
+    errorMessage: '오늘 출결을 불러오지 못했습니다.',
+  })
+  const summary = board.data?.summary
   const quick = [
     { id: 'student-search', icon: 'search', label: '학생 검색' },
     { id: 'attendance', icon: 'scan-line', label: '출결 현황' },
@@ -24,29 +62,32 @@ function DashboardSide() {
         </span>{' '}
         오늘
       </div>
-      <div className="side-desc">2026년 5월 28일 목요일 · 분당지점</div>
+      <div className="side-desc">
+        {dateLabel}
+        {academyName ? ` · ${academyName}지점` : ''}
+      </div>
 
       <div className="side-summary">
         <div className="ss-row">
           <span className="k">재원생</span>
-          <span className="v">{ATTENDANCE.enrolled}명</span>
+          <span className="v">{summary?.total ?? '-'}명</span>
         </div>
         <div className="ss-row">
           <span className="k">등원</span>
           <span className="v" style={{ color: 'var(--mint-d)' }}>
-            {ATTENDANCE.arrived}명
+            {summary ? summary.ON_TIME + summary.LATE : '-'}명
           </span>
         </div>
         <div className="ss-row">
           <span className="k">지각</span>
           <span className="v" style={{ color: 'var(--amber)' }}>
-            {ATTENDANCE.late}명
+            {summary?.LATE ?? '-'}명
           </span>
         </div>
         <div className="ss-row">
           <span className="k">미등원</span>
           <span className="v" style={{ color: 'var(--red)' }}>
-            {ATTENDANCE.missing}명
+            {summary?.ABSENT ?? '-'}명
           </span>
         </div>
       </div>

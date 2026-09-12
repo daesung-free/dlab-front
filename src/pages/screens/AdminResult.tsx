@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { DataTable, ExcelButton, MaskToggle, type Column } from '../../components/common'
+import {DataTable, ExcelButton, MaskToggle, type Column, MockNotice } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { MOCK_STUDENTS } from './mockStudents'
@@ -146,6 +146,7 @@ function Content() {
 
   return (
     <>
+      <MockNotice reason="합격 실적 도메인이 서버에 없습니다. 합격 대학·학과·전형·등록확정을 저장할 곳이 없습니다." />
       <div className="stat-strip">
         {TRACKS.map((t) => (
           <div className="stat" key={t}>
@@ -165,7 +166,8 @@ function Content() {
       <div className="card-sec">
         <Tabs
           items={[
-            { key: 'list', label: '실적 입력', count: rows.length },
+            // 목업 배열 길이라 배지를 뺀다
+            { key: 'list', label: '실적 입력' },
             { key: 'stat', label: '현황 · 통계' },
           ]}
           active={tab}
@@ -250,10 +252,10 @@ export const adminResultMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled title="준비 중입니다">
+      <button className="btn" disabled data-soon title="준비 중입니다">
         <Icon name="upload" size={14} /> 엑셀 일괄 등록
       </button>
-      <button className="btn" disabled title="준비 중입니다">
+      <button className="btn" disabled data-soon title="준비 중입니다">
         <Icon name="printer" size={14} /> 실적 현황 출력
       </button>
     </>

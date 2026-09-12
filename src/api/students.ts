@@ -197,3 +197,41 @@ export function exportStudents(params: StudentSearchParams, filename = '학생_�
   void size
   return downloadFile('/api/v1/admin/students/export', filename, { query: { ...rest } })
 }
+
+/* ── 재원 상태 변경 (F-C-2 / 학생 상세) ──────────────────────────
+ *
+ * ★ **삭제 대신 쓰는 경로다.** 출결·상벌점 이력이 붙은 학생은 서버가 지우지 못하게 막는다
+ *   (409 STUDENT_HAS_HISTORY). 잘못 만든 학생을 되돌릴 수단이 이것뿐이라,
+ *   화면이 이걸 안 부르면 명단에 영구히 남는다.
+ */
+
+/** 상태 변경 이력 한 줄 */
+export interface StatusLog {
+  id: number
+  fromStatus: EnrollmentStatus | null
+  toStatus: EnrollmentStatus
+  reason: string | null
+  changedBy: string | null
+  /** ISO instant */
+  changedAt: string
+}
+
+/**
+ * 재원 상태 변경.
+ *
+ * @param reason 사유. 서버는 선택값이지만 **이력에 남는 유일한 설명**이라 화면은 받아둔다
+ */
+export function changeStudentStatus(
+  enrollmentId: number,
+  status: EnrollmentStatus,
+  reason?: string,
+): Promise<unknown> {
+  return request(`/api/v1/admin/students/${enrollmentId}/status`, {
+    method: 'POST',
+    body: { status, reason },
+  })
+}
+
+export function listStatusLogs(enrollmentId: number): Promise<StatusLog[]> {
+  return request<StatusLog[]>(`/api/v1/admin/students/${enrollmentId}/status-logs`)
+}

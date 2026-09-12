@@ -116,3 +116,23 @@
   .stat-strip.c7,
   .stat-strip.c8 { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ── 개발 중 표시 ──
+ *
+ * ★ 비활성 버튼에 `title` 로 사유를 달아뒀지만 **마우스를 올려야 보인다.**
+ *   클라이언트가 겪는 것은 "눌러도 안 됨" 하나뿐이라, 눌러보기 전에 알 수 있어야 한다.
+ *   `data-soon` 이 붙은 버튼에만 배지를 붙인다 — 저장 중처럼 일시적으로 비활성인
+ *   버튼까지 잡으면 안 되기 때문이다.
+ */
+.btn[data-soon]::after {
+  content: '개발 중';
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--line);
+  color: var(--muted);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}

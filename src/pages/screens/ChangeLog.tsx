@@ -289,7 +289,7 @@ function Content() {
         emptyText="이 기간에 기록된 변경이 없습니다."
         toolbar={
           <>
-            <button className="btn" disabled title="준비 중입니다">
+            <button className="btn" disabled data-soon title="준비 중입니다">
               <Icon name="refresh-cw" size={14} /> 되돌리기 요청
             </button>
             <MaskToggle masked={masked} onChange={setMasked} />
@@ -305,8 +305,8 @@ export const changeLogMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled title="준비 중입니다">기간 선택 ▾</button>
-      <button className="btn" disabled title="준비 중입니다">
+      <button className="btn" disabled data-soon title="준비 중입니다">기간 선택 ▾</button>
+      <button className="btn" disabled data-soon title="준비 중입니다">
         <Icon name="shield-check" size={14} /> 보존정책
       </button>
     </>

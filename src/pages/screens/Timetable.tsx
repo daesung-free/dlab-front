@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { DataTable, ExcelButton, PrintButton, type Column } from '../../components/common'
+import {DataTable, ExcelButton, PrintButton, type Column, MockNotice } from '../../components/common'
 import { Icon } from '../../components/Icon'
 import { Tabs } from '../../components/Tabs'
 import { MOCK_STUDENTS } from './mockStudents'
@@ -219,6 +219,7 @@ function Content() {
 
   return (
     <>
+      <MockNotice reason="시간표 편성 도메인이 서버에 없습니다. 교시·교육과정 마스터만 있고 이동수업 배치는 저장할 곳이 없습니다." />
       <div className="stat-strip">
         <div className="stat">
           <div className="l">
@@ -279,7 +280,8 @@ function Content() {
       <Tabs
         items={[
           { key: 'grid', label: '반 시간표' },
-          { key: 'move', label: '이동수업 편성', count: moveRows.length },
+          // 목업 배열 길이라 배지를 뺀다
+          { key: 'move', label: '이동수업 편성' },
           { key: 'room', label: '강의실 사용 현황' },
         ]}
         active={tab}
@@ -438,11 +440,11 @@ function Content() {
             }
             toolbar={
               <>
-                <button className="btn" disabled title="준비 중입니다">
+                <button className="btn" disabled data-soon title="준비 중입니다">
                   <Icon name="upload" size={14} /> 엑셀 일괄 배정
                 </button>
                 <ExcelButton filename={`이동수업_${subject}`} columns={MOVE_COLUMNS} rows={moveRows} />
-                <button className="btn pri" disabled title="준비 중입니다">
+                <button className="btn pri" disabled data-soon title="준비 중입니다">
                   <Icon name="route" size={14} /> 선택 이동반 변경
                 </button>
               </>
@@ -506,11 +508,11 @@ export const timetableMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled title="준비 중입니다">학기 선택 ▾</button>
-      <button className="btn" disabled title="준비 중입니다">
+      <button className="btn" disabled data-soon title="준비 중입니다">학기 선택 ▾</button>
+      <button className="btn" disabled data-soon title="준비 중입니다">
         <Icon name="history" size={14} /> 전 학기 복사
       </button>
-      <button className="btn pri" disabled title="준비 중입니다">
+      <button className="btn pri" disabled data-soon title="준비 중입니다">
         <Icon name="save" size={14} /> 편성 저장
       </button>
     </>

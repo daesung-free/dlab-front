@@ -294,28 +294,28 @@ function Content() {
         standalone
       />
 
+      {/* ★ 표를 비운다. 위에 "준비 중"을 적어도 **15행 × 7쪽이 차 있으면 그 안내가 묻힌다** —
+          거래번호(TX2026100000)와 금액(1,320,000원)까지 들어 있어 실데이터로 읽힌다.
+          PG 연동 도메인 자체가 서버에 없어 채울 값이 없다 */}
       {tab !== 'pg' && (
         <DataTable
           columns={COLUMNS}
-          rows={rows}
+          rows={[]}
           rowKey={(r) => r.id}
           selectable
           masked={masked}
           pageSize={15}
-          countLabel={
-            <>
-              결제 <b>{rows.length}</b>건 · 합계 <b>{won(sum(rows))}</b>
-            </>
-          }
+          emptyText="결제 기록이 없습니다 — PG 연동이 아직 준비되지 않았습니다."
+          countLabel={<>결제 <b>0</b>건</>}
           toolbar={
             <>
               {tab === 'vbank' && (
-                <button className="btn" disabled title="준비 중입니다">
+                <button className="btn" disabled data-soon title="준비 중입니다">
                   <Icon name="send" size={14} /> 입금 안내 재발송
                 </button>
               )}
               {tab === 'refund' && (
-                <button className="btn" disabled title="준비 중입니다">
+                <button className="btn" disabled data-soon title="준비 중입니다">
                   <Icon name="refresh-cw" size={14} /> 환불 재시도
                 </button>
               )}
@@ -382,8 +382,8 @@ export const paymentGateMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled title="준비 중입니다">기간 선택 ▾</button>
-      <button className="btn" disabled title="준비 중입니다">
+      <button className="btn" disabled data-soon title="준비 중입니다">기간 선택 ▾</button>
+      <button className="btn" disabled data-soon title="준비 중입니다">
         <Icon name="file-spreadsheet" size={14} /> 정산 대사
       </button>
     </>

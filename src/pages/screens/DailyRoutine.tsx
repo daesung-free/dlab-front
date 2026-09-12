@@ -329,7 +329,7 @@ function Content() {
                     value={month}
                     onChange={(e) => setMonth(e.target.value)}
                   />
-                  <button className="btn" disabled title="준비 중입니다">
+                  <button className="btn" disabled data-soon title="준비 중입니다">
                     <Icon name="copy" size={14} /> 전월 복사
                   </button>
                   <button className="btn pri" disabled title="루틴 추가 폼은 다음 단계입니다">

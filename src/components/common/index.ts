@@ -25,6 +25,10 @@ export { ExcelButton, CopyButton, PrintButton, MaskToggle } from './ExcelButton'
 /* 아직 API가 값을 주지 않는 셀. 컬럼을 지우는 대신 이걸 쓴다 */
 export { Unfilled } from './Unfilled'
 
+/* 화면 전체가 아직 목업일 때 맨 위에 다는 배너.
+ * 표에 값이 차 있으면 사람은 그걸 실데이터로 읽는다 — 표보다 먼저 보이게 둔다 */
+export { MockNotice } from './MockNotice'
+
 export { Modal } from './Modal'
 
 export { toDateStr, todayStr, addDaysStr } from './localDate'

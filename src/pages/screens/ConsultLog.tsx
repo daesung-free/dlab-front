@@ -351,7 +351,7 @@ function Content() {
                       {saveMsg ?? '저장 시 학생 앱 · 학부모 앱(공유 설정에 따라)에 즉시 반영됩니다.'}
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button className="btn" disabled title="준비 중입니다">
+                      <button className="btn" disabled data-soon title="준비 중입니다">
                         임시저장
                       </button>
                       <button

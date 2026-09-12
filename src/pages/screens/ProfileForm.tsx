@@ -258,7 +258,7 @@ function Content() {
             >
               미완료만 보기
             </button>
-            <button className="btn" disabled title="준비 중입니다">
+            <button className="btn" disabled data-soon title="준비 중입니다">
               <Icon name="bell" size={14} /> 미작성자 작성 독려 발송
             </button>
             <MaskToggle masked={masked} onChange={setMasked} />
@@ -275,7 +275,7 @@ export const profileFormMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled title="준비 중입니다">
+      <button className="btn" disabled data-soon title="준비 중입니다">
         <Icon name="filter" size={14} /> 담임별 보기
       </button>
     </>

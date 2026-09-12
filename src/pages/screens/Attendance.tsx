@@ -345,7 +345,7 @@ function Content() {
 export const attendanceMockup: Mockup = {
   Content,
   actions: (
-    <button className="btn" disabled title="준비 중입니다">
+    <button className="btn" disabled data-soon title="준비 중입니다">
       <Icon name="bell" size={14} /> 출결 알림 템플릿
     </button>
   ),

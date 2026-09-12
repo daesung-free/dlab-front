@@ -363,7 +363,7 @@ function Content() {
             미완 상태로 남습니다.
           </div>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-            <button className="btn" disabled title="준비 중입니다">
+            <button className="btn" disabled data-soon title="준비 중입니다">
               임시저장
             </button>
             <button className="btn pri" disabled={!canSave} onClick={() => void save()}>

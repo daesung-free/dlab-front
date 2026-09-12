@@ -20,6 +20,7 @@ import {
   STATUS_LABEL,
   TRACK_LABEL,
   retakeLabel,
+  changeStudentStatus,
   exportStudents,
   searchStudents,
   type EnrollmentStatus,
@@ -97,6 +98,7 @@ const COLUMNS: Column<Student>[] = [
     value: (r) => STATUS_LABEL[r.enrollmentStatus] ?? r.enrollmentStatus,
     render: (r, shown) => <span className={`mk ${STATUS_TONE[r.enrollmentStatus] ?? ''}`}>{shown}</span>,
   },
+
 ]
 
 /** SearchForm 값(문자열·배열·기간 혼재)에서 단일 문자열만 꺼낸다. 빈 값은 client 가 뺀다 */
@@ -134,6 +136,8 @@ function Content() {
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
 
+  const [changing, setChanging] = useState<number | null>(null)
+
   const table = useServerTable({
     fetcher: searchStudents,
     params,
@@ -143,8 +147,67 @@ function Content() {
 
   // 서버가 이미 가려서 보낸 경우(masked=true) 프론트에서 또 가리지 않는다 — 이중 마스킹이 된다.
   // 서버 마스킹은 권한에 따라 결정되므로 사용자가 토글로 풀 수 없다.
+  const columns = useMemo<Column<Student>[]>(
+    () => [
+      ...COLUMNS,
+      {
+        key: 'act',
+        header: '',
+        width: '84px',
+        align: 'center',
+        value: () => '',
+        // 삭제가 아니라 상태 변경이다 — 이력이 붙은 학생은 서버가 삭제를 막는다
+        render: (r) => (
+          <button
+            className="btn"
+            style={{ padding: '4px 9px', fontSize: 11.5 }}
+            disabled={changing === r.enrollmentId}
+            title="퇴원·제적·휴원으로 바꿉니다. 삭제는 이력 때문에 막혀 있습니다"
+            onClick={() => void changeStatus(r)}
+          >
+            상태 변경
+          </button>
+        ),
+      },
+    ],
+    [changing],
+  )
+
   const serverMasked = table.rows.some((r) => r.masked)
   const effectiveMasked = serverMasked ? false : masked
+
+  /**
+   * 재원 상태 변경 — **삭제 대신 쓰는 경로다.**
+   *
+   * 이력이 붙은 학생은 서버가 삭제를 막는다(409 STUDENT_HAS_HISTORY). 잘못 만든 학생을
+   * 되돌릴 수단이 이것뿐이라, 이 화면에 없으면 명단에 영구히 남는다.
+   */
+  async function changeStatus(row: Student) {
+    const next = window.prompt(
+      `${row.name}(${row.studentNo ?? '-'}) 의 재원 상태를 바꿉니다.\n` +
+        `${(['LEAVE', 'WITHDRAWN', 'EXPELLED', 'GRADUATED'] as EnrollmentStatus[])
+          .map((v) => `${v} = ${STATUS_LABEL[v]}`)
+          .join(' · ')}`,
+      'WITHDRAWN',
+    )?.trim()
+    if (!next) return
+    if (!(['ENROLLED', 'LEAVE', 'WITHDRAWN', 'EXPELLED', 'GRADUATED'] as string[]).includes(next)) {
+      setExportError(`알 수 없는 상태입니다: ${next}`)
+      return
+    }
+    const reason = window.prompt('사유를 입력하세요. 이력에 남는 유일한 설명입니다.')?.trim()
+
+    setChanging(row.enrollmentId)
+    setExportError(null)
+    try {
+      await changeStudentStatus(row.enrollmentId, next as EnrollmentStatus, reason || undefined)
+      table.reload()
+    } catch (err) {
+      setExportError(err instanceof ApiError ? err.message : '상태를 바꾸지 못했습니다.')
+    } finally {
+      setChanging(null)
+    }
+  }
 
   async function exportExcel() {
     setExporting(true)
@@ -175,7 +238,7 @@ function Content() {
       )}
 
       <DataTable
-        columns={COLUMNS}
+        columns={columns}
         rows={table.rows}
         rowKey={(r) => String(r.enrollmentId)}
         selectable
@@ -188,7 +251,7 @@ function Content() {
         toolbar={
           <>
             {selected.length > 0 && (
-              <button className="btn" disabled title="준비 중입니다">
+              <button className="btn" disabled data-soon title="준비 중입니다">
                 <Icon name="users" size={14} /> 선택 {selected.length}건 반 배정
               </button>
             )}
@@ -218,8 +281,8 @@ export const studentSearchMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled title="준비 중입니다">기수 선택 ▾</button>
-      <button className="btn pri" disabled title="준비 중입니다">+ 신규 접수 등록</button>
+      <button className="btn" disabled data-soon title="준비 중입니다">기수 선택 ▾</button>
+      <button className="btn pri" disabled data-soon title="준비 중입니다">+ 신규 접수 등록</button>
     </>
   ),
 }
