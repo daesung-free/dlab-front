@@ -7,6 +7,7 @@ import { useAcademy } from '../../auth/AcademyContext'
 import {
   PLATFORM_LABEL,
   listAppConfigs,
+  createTerms,
   listTerms,
   setMaintenance,
   updateAppVersions,
@@ -211,6 +212,14 @@ function Content() {
   const [maintEdit, setMaintEdit] = useState<{ c: AppConfigDetail; message: string } | null>(null)
   /** 모달 안에서 보여줄 실패 메시지 */
   const [modalErr, setModalErr] = useState<string | null>(null)
+  /* 약관은 고치는 게 아니라 **버전을 올려 새로 등록**한다 — 덮어쓰면 동의 근거가 사라진다 */
+  const [newTerms, setNewTerms] = useState<{
+    code: string
+    version: string
+    title: string
+    content: string
+    required: boolean
+  } | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -242,9 +251,11 @@ function Content() {
     setBusy(true)
     try {
       await fn()
+      /* ★ 갱신이 return 뒤에 있어서 영영 안 돌았다. 저장은 되는데 화면이 그대로라
+           "저장이 안 됐다"로 읽힌다 — 실제로 그렇게 올라온 적이 있다. */
+      await load()
       setNotice(done)
       return true
-      await load()
     } catch (err) {
       setModalErr(err instanceof ApiError ? err.message : failed)
       setNotice(null)
@@ -273,6 +284,101 @@ function Content() {
 
   return (
     <>
+      {newTerms && (
+        <Modal
+          title="약관 새 버전 배포"
+          sub="기존 문구는 고치지 않습니다. 버전을 올려 새로 등록합니다."
+          confirmLabel="배포"
+          busy={busy}
+          error={modalErr}
+          confirmDisabled={
+            newTerms.code.trim() === '' ||
+            newTerms.version.trim() === '' ||
+            newTerms.title.trim() === '' ||
+            newTerms.content.trim() === ''
+          }
+          onConfirm={() => {
+            void run('약관을 배포했습니다.', '약관을 배포하지 못했습니다.', () =>
+              createTerms({
+                academyId: academyId ?? undefined,
+                code: newTerms.code.trim().toUpperCase(),
+                version: newTerms.version.trim(),
+                title: newTerms.title.trim(),
+                content: newTerms.content,
+                required: newTerms.required,
+              }),
+            ).then((ok) => ok && setNewTerms(null))
+          }}
+          onClose={() => {
+            setModalErr(null)
+            setNewTerms(null)
+          }}
+        >
+          {/* ★ 고치는 API 가 없다. 오타 하나도 버전을 올려야 한다 — 문구를 덮어쓰면
+                 이미 동의한 사람들의 동의 근거가 사라지기 때문이다. */}
+          <div className="note-box warn">
+            <div className="ic">
+              <Icon name="alert-triangle" size={17} />
+            </div>
+            <div>
+              <div className="tt">지우거나 고칠 수 없습니다</div>
+              <div className="tx">
+                한 번 배포한 약관은 <b>수정·삭제가 안 됩니다.</b> 같은 코드·버전으로 다시 배포하는 것도 막혀
+                있습니다. 오타를 고치려면 버전을 올려 다시 배포해야 합니다.
+              </div>
+            </div>
+          </div>
+
+          <div className="frow">
+            <label className="req">약관 코드</label>
+            <input
+              className="inp"
+              value={newTerms.code}
+              placeholder="예: SERVICE / PRIVACY"
+              onChange={(e) => setNewTerms({ ...newTerms, code: e.target.value })}
+            />
+          </div>
+          <div className="frow">
+            <label className="req">버전</label>
+            <input
+              className="inp"
+              value={newTerms.version}
+              placeholder="예: 1.1"
+              onChange={(e) => setNewTerms({ ...newTerms, version: e.target.value })}
+            />
+          </div>
+          <div className="frow">
+            <label className="req">제목</label>
+            <input
+              className="inp"
+              value={newTerms.title}
+              placeholder="예: 서비스 이용약관"
+              onChange={(e) => setNewTerms({ ...newTerms, title: e.target.value })}
+            />
+          </div>
+          <div className="frow">
+            <label className="req">본문</label>
+            <textarea
+              className="ta"
+              rows={8}
+              value={newTerms.content}
+              onChange={(e) => setNewTerms({ ...newTerms, content: e.target.value })}
+            />
+          </div>
+          <div className="frow">
+            <label>필수 동의</label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5 }}>
+              <input
+                type="checkbox"
+                checked={newTerms.required}
+                onChange={(e) => setNewTerms({ ...newTerms, required: e.target.checked })}
+              />
+              동의하지 않으면 앱을 쓸 수 없습니다
+            </label>
+          </div>
+        </Modal>
+      )}
+
       {verEdit && (
         <Modal
           title={`${PLATFORM_LABEL[verEdit.c.platform]} ${verEdit.field === 'minVersion' ? '최소 지원 버전' : '최신 버전'}`}
@@ -594,7 +700,12 @@ function Content() {
               <span className="mk supplement" title="동의 시점의 약관 버전을 함께 저장합니다">
                 동의 이력 버전 고정
               </span>
-              <button className="btn pri" disabled title="약관 본문 입력은 별도 화면이 필요합니다">
+              <button
+                className="btn pri"
+                onClick={() =>
+                  setNewTerms({ code: '', version: '', title: '', content: '', required: true })
+                }
+              >
                 <Icon name="plus" size={14} /> 새 버전 배포
               </button>
             </div>

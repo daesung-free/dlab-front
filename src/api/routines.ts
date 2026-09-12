@@ -149,3 +149,19 @@ export function createRoutine(body: {
 export function deleteRoutine(routineId: number): Promise<void> {
   return request<void>(`/api/v1/admin/routines/${routineId}`, { method: 'DELETE' })
 }
+
+/**
+ * 전월 루틴 복사 — `POST /admin/routines/copy-from-previous-month`
+ *
+ * ★ `month` 는 **받을 달**이다(2026-10 을 주면 2026-09 것을 가져온다).
+ * ★ 응답은 `{ copied: n }` — 몇 건 왔는지 알려준다.
+ * ★ **되돌리기가 없다.** 이미 그 달에 같은 루틴이 있어도 막지 않아서, 두 번 누르면
+ *   그만큼 더 생긴다. 복사된 행은 `copiedFromId` 가 차 있어 구분은 되지만, 지우는 것은
+ *   한 건씩이다. 그래서 화면에서 먼저 묻는다.
+ */
+export function copyRoutinesFromPreviousMonth(academyId: number, month: string): Promise<{ copied: number }> {
+  return request<{ copied: number }>('/api/v1/admin/routines/copy-from-previous-month', {
+    method: 'POST',
+    body: { academyId, month },
+  })
+}
