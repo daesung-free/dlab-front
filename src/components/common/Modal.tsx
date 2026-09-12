@@ -16,6 +16,13 @@ interface Props {
   busy?: boolean
   /** 확인을 누를 수 없는 상태. 필수값이 비었을 때 */
   confirmDisabled?: boolean
+  /**
+   * 취소 버튼을 감춘다. **읽기만 하는 모달**에 쓴다.
+   *
+   * ★ 조회용 모달에 '취소'와 '닫기'가 나란히 있으면 둘이 다른 일을 하는 것처럼 보인다.
+   *   실제로는 같은데, 무엇을 되돌리는 건지 묻게 된다.
+   */
+  hideCancel?: boolean
   /** 실패 메시지. 모달 안에서 보여준다 — 뒤에 깔린 화면의 배너는 안 보인다 */
   error?: string | null
   /**
@@ -55,6 +62,7 @@ export function Modal({
   onClose,
   busy = false,
   confirmDisabled = false,
+  hideCancel = false,
   error,
   danger = false,
   dismissible = true,
@@ -115,7 +123,7 @@ export function Modal({
           )}
 
           <div className="mo-f">
-            {dismissible && (
+            {dismissible && !hideCancel && (
               <button type="button" className="btn" onClick={onClose} disabled={busy}>
                 취소
               </button>
