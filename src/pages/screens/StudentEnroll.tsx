@@ -248,7 +248,7 @@ function Content() {
                   <Icon name="lock" size={12} />
                 </div>
                 <div>
-                  전화·주소·생년월일은 <b>BRANCH_ADMIN 이상만 조회</b> 가능한 민감 필드입니다. 목록·엑셀에서는 기본
+                  전화·주소·생년월일은 <b>지점 관리자 이상만</b> 볼 수 있습니다. 목록·엑셀에서는 기본
                   마스킹되며, 수집 항목은 최소화 원칙을 따릅니다.
                 </div>
               </div>
@@ -359,7 +359,7 @@ function Content() {
         <div className="card-sec-b" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6 }}>
             저장하면 <b style={{ color: 'var(--ink)' }}>학번이 확정</b>됩니다. 회원가입 후{' '}
-            <b style={{ color: 'var(--ink)' }}>신상기록부(F-4.11-9) 작성이 필수 단계</b>로 강제되며, 미작성 시 등록
+            <b style={{ color: 'var(--ink)' }}>신상기록부 작성이 필수 단계</b>로 강제되며, 미작성 시 등록
             미완 상태로 남습니다.
           </div>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
@@ -380,7 +380,7 @@ export const enrollMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled title="일괄 등록은 /students/import 연동 후 활성화합니다">
+      <button className="btn" disabled data-soon title="엑셀 일괄 등록은 아직 준비 중입니다">
         <Icon name="upload" size={14} /> 엑셀 일괄 등록
       </button>
     </>

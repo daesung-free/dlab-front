@@ -426,7 +426,7 @@ function Content() {
                   />
                   <MaskToggle masked={masked} onChange={setMasked} />
                   <ExcelButton filename="데일리루틴_결과" columns={columns} rows={matrix} masked={masked} />
-                  <button className="btn pri" disabled title="결과 입력 UI는 다음 단계입니다 (PUT은 일괄 저장을 지원합니다)">
+                  <button className="btn pri" disabled data-soon title="결과 입력은 아직 준비 중입니다">
                     <Icon name="save" size={14} /> 결과 저장
                   </button>
                 </>

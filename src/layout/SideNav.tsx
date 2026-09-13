@@ -94,8 +94,13 @@ function DashboardSide() {
 
       {urgent.length > 0 && (
         <div className="legend-block" style={{ background: 'var(--red-wash)' }}>
-          <div className="lt" style={{ color: 'var(--red)' }}>
+          {/* ★ 이 숫자는 목업이다(mockDashboard). 사이드바라 전 화면에 같이 떠서, 라벨이
+                 없으면 바로 위 실제 출결 숫자와 나란히 보여 둘 다 진짜로 읽힌다. */}
+          <div className="lt" style={{ color: 'var(--red)', display: 'flex', alignItems: 'center', gap: 6 }}>
             즉시 확인
+            <span className="mk supplement" title="붙일 집계 API가 아직 없습니다">
+              표시용 예시
+            </span>
           </div>
           {urgent.map((t) => (
             <Link
@@ -162,11 +167,10 @@ function CatSide({ catId, here }: { catId: string; here: string }) {
         </div>
       ))}
 
+      {/* ★ '중분류'·'기획 신규 도메인'은 우리끼리 쓰는 말이다(CLAUDE.md 1-1). 행정 선생님이
+             읽고 할 일이 달라지지 않는다 — 화면 개수만 남긴다. */}
       <div className="side-foot">
-        <b style={{ color: 'var(--ink-2)' }}>{cat.name}</b> · 중분류 {cat.sections.length}개 · 기능 {navItemCount(cat)}개
-        <br />
-        <span className="nwdot" style={{ display: 'inline-block', verticalAlign: 1, marginRight: 5 }} />
-        표시는 기획 신규 도메인을 이 자리에 편입한 메뉴입니다.
+        <b style={{ color: 'var(--ink-2)' }}>{cat.name}</b> · 화면 {navItemCount(cat)}개
       </div>
     </>
   )
@@ -188,7 +192,7 @@ function NavItemLink({ item, here }: { item: NavItem; here: string }) {
         <Icon name={item.icon ?? screen?.icon ?? 'circle-dot'} />
       </span>
       <span className="nm">{item.label}</span>
-      {item.added && <span className="nwdot" title="기획 신규 도메인 — 이 자리에 편입" />}
+      {item.added && <span className="nwdot" title="이번에 새로 만든 화면입니다" />}
     </NavLink>
   )
 }
@@ -212,11 +216,7 @@ function SpecSide() {
           <span className="nm">전체 화면 구성</span>
         </NavLink>
       </nav>
-      <div className="side-foot">
-        화면별 상세는 카드에서 메뉴명을 누르세요.
-        <br />
-        API·테이블 전체 목록은 <code style={{ fontSize: 10.5 }}>docs/</code> 참고.
-      </div>
+      <div className="side-foot">화면별 상세는 카드에서 메뉴명을 누르세요.</div>
     </>
   )
 }

@@ -74,7 +74,7 @@ export interface Screen {
 
 export const GROUPS: Group[] = [
   { id: 'student', no: '4.1', name: '학생 관리', icon: 'users', desc: '재원생 검색·상벌점·접수등록·반배정·사유신청' },
-  { id: 'waitlist', no: '4.2', name: '대기자 관리', icon: 'list-ordered', desc: '디멤버 입학예약자 대기 등록부터 원생 전환까지' },
+  { id: 'waitlist', no: '4.2', name: '대기자 관리', icon: 'list-ordered', desc: '입학 예약자 대기 등록부터 원생 전환까지' },
   { id: 'attendance', no: '4.3', name: '출결 관리', icon: 'scan-line', desc: '키오스크 직접 연동 기반 출결 수신·승인' },
   { id: 'message', no: '4.4', name: '메시지 / 알림', icon: 'send', desc: '카카오 알림톡·FCM 이중화 발송' },
   { id: 'meal', no: '4.5', name: '급식 관리', icon: 'utensils', desc: '급식 신청·결제·취소와 수납 반영' },
@@ -155,7 +155,7 @@ export const SCREENS: Screen[] = [
     phase: 1,
     feOrder: 2,
     summary:
-      'D.Lab 사이트(디멤버) 입학예약자 → 대기자 자동 등록, 순번 처리 알림 자동 발송, 대기자→원생 원클릭 전환 + 앱 초대 알림',
+      'D.Lab 사이트 입학예약자 → 대기자 자동 등록, 순번 처리 알림 자동 발송, 대기자→원생 원클릭 전환 + 앱 초대 알림',
     refHtml: 'design/02_admin_ipsi.html',
   },
 
@@ -190,7 +190,7 @@ export const SCREENS: Screen[] = [
     id: 'meal',
     code: 'F-4.5',
     groupId: 'meal',
-    name: '급식 관리(디멤버 급식신청 대체)',
+    name: '급식 관리',
     icon: 'utensils',
     kind: 'brandnew',
     phase: 2,
