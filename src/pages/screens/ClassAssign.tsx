@@ -70,7 +70,14 @@ function Content() {
       setTarget((prev) => prev ?? list[0]?.id ?? null)
       setLoadError(null)
     } catch (err) {
-      setLoadError(err instanceof ApiError ? err.message : '반 목록을 불러오지 못했습니다.')
+      // ★ 서버 문구만 띄우면("권한이 없습니다") **화면 전체가 막힌 것처럼 읽힌다.**
+      //   실제로는 반 목록 위젯만 막히고 아래 학생 목록은 정상으로 나온다 —
+      //   어느 영역이 안 된 것인지 앞에 붙인다
+      setLoadError(
+        err instanceof ApiError
+          ? `반 목록을 불러오지 못했습니다 — ${err.message}`
+          : '반 목록을 불러오지 못했습니다.',
+      )
     }
   }, [academyId])
 

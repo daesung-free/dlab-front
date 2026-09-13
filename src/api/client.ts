@@ -35,6 +35,26 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * 조회 전용 계정인가.
+ *
+ * ★ 서버는 이미 403 으로 막는다. 여기서 또 막는 이유는 **사용자에게 먼저 알려주기
+ *   위해서다** — 누르고 나서 "권한이 없습니다"를 보는 것과, 누르기 전에 아는 것은 다르다.
+ * ★ 판정을 화면마다 두지 않고 여기 한 곳에 둔다. 쓰기 버튼이 188개라 하나씩 막으면
+ *   반드시 빠뜨리고, 빠뜨린 자리는 403 으로만 드러난다.
+ * ★ 역할 판정은 AuthContext 가 한다(토큰이 진실의 원천) — 여기서 또 디코드하면
+ *   auth.ts ↔ client.ts 가 서로를 부르게 된다.
+ */
+let readOnlyMode = false
+
+export function setReadOnlyMode(v: boolean): void {
+  readOnlyMode = v
+}
+
+export function isReadOnlyMode(): boolean {
+  return readOnlyMode
+}
+
 export type Query = Record<string, string | number | boolean | undefined | null>
 
 interface RequestOptions {
@@ -109,6 +129,10 @@ async function refreshTokens(): Promise<boolean> {
 }
 
 async function send(path: string, opts: RequestOptions): Promise<Response> {
+  // 조회 전용 계정은 쓰기를 **보내기 전에** 막는다. 로그인·재발급은 anonymous 라 예외다
+  if (readOnlyMode && !opts.anonymous && (opts.method ?? 'GET') !== 'GET') {
+    throw new ApiError(403, 'READ_ONLY', '조회 전용 계정입니다. 등록·수정·삭제는 할 수 없습니다.')
+  }
   const token = opts.anonymous ? null : getAccessToken()
   return fetch(buildUrl(path, opts.query, opts.repeatable), {
     method: opts.method ?? 'GET',
@@ -125,7 +149,9 @@ export async function requestEnvelope<T>(path: string, opts: RequestOptions = {}
   let res: Response
   try {
     res = await send(path, opts)
-  } catch {
+  } catch (err) {
+    // 우리가 던진 것(조회 전용 차단)은 그대로 올린다 — 여기서 덮으면 원인이 사라진다
+    if (err instanceof ApiError) throw err
     // fetch 자체가 실패 — 서버가 안 떠 있거나 CORS에 막혔다.
     // CORS는 브라우저가 응답을 안 넘겨줘서 여기서 구분이 안 된다(콘솔에만 보인다).
     throw new ApiError(0, 'NETWORK', 'API 서버에 연결할 수 없습니다. 백엔드(:8080) 기동 상태와 CORS 허용 origin을 확인하세요.')
@@ -211,7 +237,8 @@ export async function downloadFile(path: string, fallbackName: string, opts: Req
   let res: Response
   try {
     res = await send(path, opts)
-  } catch {
+  } catch (err) {
+    if (err instanceof ApiError) throw err
     throw new ApiError(0, 'NETWORK', 'API 서버에 연결할 수 없습니다.')
   }
 
