@@ -34,12 +34,22 @@ export async function login(loginId: string, password: string): Promise<AuthResp
   return res
 }
 
+/**
+ * 로그아웃.
+ *
+ * ★ **실패할 수 없는 동작이다.** 서버 응답과 무관하게 이 브라우저에서는 나가야 한다.
+ *   그래서 오류를 밖으로 던지지 않는다 — 예전에는 던져서 처리되지 않은 예외로 남았고,
+ *   토큰은 지워졌는데 화면은 그 상태로 굳어 "조회가 아예 안 된다"로 보였다.
+ * ★ 실제로 500 이 난다: **같은 토큰으로 두 번 로그아웃하면 서버가 500**이다(확인함).
+ *   계정을 바꿔 가며 볼 때 쉽게 밟는다.
+ * ★ 서버 블랙리스트에 못 올리면 그 토큰은 만료까지 유효하다 — 서버 로그로 확인할 것.
+ */
 export async function logout(): Promise<void> {
   try {
     await request<void>('/api/v1/admin/auth/logout', { method: 'POST' })
+  } catch {
+    /* 서버가 거절해도 나가는 것은 막지 않는다 */
   } finally {
-    // 서버가 실패해도 이 브라우저에서는 반드시 지운다.
-    // (서버 블랙리스트에 못 올리면 그 토큰은 만료까지 유효하다 — 서버 로그로 확인할 것)
     clearTokens()
   }
 }

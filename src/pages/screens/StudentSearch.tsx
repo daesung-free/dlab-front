@@ -171,7 +171,11 @@ function Content() {
             title="퇴원·제적·휴원으로 바꿉니다. 삭제는 이력 때문에 막혀 있습니다"
             onClick={() => {
               setStatusErr(null)
-              setStatusEdit({ row: r, next: 'WITHDRAWN', reason: '' })
+              setStatusEdit({
+                row: r,
+                next: r.enrollmentStatus === 'WITHDRAWN' ? 'ENROLLED' : 'WITHDRAWN',
+                reason: '',
+              })
             }}
           >
             상태 변경
@@ -249,11 +253,15 @@ function Content() {
               value={statusEdit.next}
               onChange={(e) => setStatusEdit({ ...statusEdit, next: e.target.value as EnrollmentStatus })}
             >
-              {(['ENROLLED', 'LEAVE', 'WITHDRAWN', 'EXPELLED', 'GRADUATED'] as EnrollmentStatus[]).map((v) => (
-                <option key={v} value={v}>
-                  {STATUS_LABEL[v]}
-                </option>
-              ))}
+              {/* ★ 지금과 같은 상태는 빼둔다. 서버가 "이미 같은 상태입니다"로 거절하는데,
+                     고를 수 있게 두면 그 오류를 보고서야 안다. */}
+              {(['ENROLLED', 'LEAVE', 'WITHDRAWN', 'EXPELLED', 'GRADUATED'] as EnrollmentStatus[])
+                .filter((v) => v !== statusEdit.row.enrollmentStatus)
+                .map((v) => (
+                  <option key={v} value={v}>
+                    {STATUS_LABEL[v]}
+                  </option>
+                ))}
             </select>
           </div>
           <div className="frow">

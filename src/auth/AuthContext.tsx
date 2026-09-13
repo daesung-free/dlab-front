@@ -13,6 +13,15 @@ interface AuthState {
   signedIn: boolean
   login: (loginId: string, password: string) => Promise<void>
   logout: () => Promise<void>
+  /**
+   * 「관리자」 메뉴를 볼 수 있는가.
+   *
+   * ★ 메뉴에서 감추는 것만으로는 부족하다 — **주소를 직접 치면 그대로 열린다.** 실제로
+   *   viewer1 으로 /g/admin 이 보였다. 라우트에서도 같은 판단을 써야 해서 여기에 둔다.
+   * ★ 여기까지만 막는다. 담임이 상벌점을 줄 수 있는지 같은 것은 권한 매트릭스가 없어
+   *   정할 수 없다 — 서버는 이미 403 으로 막고 있다.
+   */
+  canSeeAdmin: boolean
 }
 
 const Ctx = createContext<AuthState | null>(null)
@@ -52,7 +61,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AuthState>(() => {
     const principal = decodePrincipal(token)
-    return { principal, me, signedIn: principal !== null, login, logout }
+    const roles = me?.roles ?? principal?.roles ?? []
+    const canSeeAdmin = roles.some((r) => r === 'SUPER_ADMIN' || r === 'BRANCH_ADMIN')
+    return { principal, me, signedIn: principal !== null, login, logout, canSeeAdmin }
   }, [token, me, login, logout])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
