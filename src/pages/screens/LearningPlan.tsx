@@ -17,6 +17,7 @@ import { useAcademy } from '../../auth/AcademyContext'
 import { listClasses, type ClassGroup } from '../../api/classes'
 import {
   createPlanOption,
+  deletePlanOption,
   getStudentWeek,
   listPlanBoard,
   listPlanOptions,
@@ -125,6 +126,7 @@ function Content() {
   const [newOpt, setNewOpt] = useState<{ optionType: PlanOptionType; label: string } | null>(null)
   const [optBusy, setOptBusy] = useState(false)
   const [optErr, setOptErr] = useState<string | null>(null)
+  const [delOpt, setDelOpt] = useState<PlanOption | null>(null)
 
   /**
    * 선택지 추가.
@@ -133,6 +135,22 @@ function Content() {
    *   본문에 섞으면 "필수 파라미터 'year' 이(가) 없습니다" 로 400 이 난다.
    * ★ 실패해도 모달을 닫지 않는다 — 같은 이름이 이미 있는 경우가 흔하다.
    */
+  /** 선택지 삭제. 이미 그 항목으로 쓴 계획이 있으면 서버가 막는다 */
+  async function removeOption() {
+    if (!delOpt || academyId === null) return
+    setOptBusy(true)
+    setOptErr(null)
+    try {
+      await deletePlanOption(delOpt.id, academyId)
+      setOptions(await listPlanOptions(academyId, new Date().getFullYear()))
+      setDelOpt(null)
+    } catch (err) {
+      setOptErr(err instanceof ApiError ? err.message : '항목을 삭제하지 못했습니다.')
+    } finally {
+      setOptBusy(false)
+    }
+  }
+
   async function addOption() {
     if (!newOpt || academyId === null) return
     setOptBusy(true)
@@ -679,6 +697,33 @@ function Content() {
         />
       )}
 
+      {delOpt && (
+        <Modal
+          title="항목 삭제"
+          sub={`${delOpt.label} 을(를) 선택지에서 지웁니다.`}
+          confirmLabel="삭제"
+          danger
+          busy={optBusy}
+          error={optErr}
+          onConfirm={() => void removeOption()}
+          onClose={() => {
+            setOptErr(null)
+            setDelOpt(null)
+          }}
+        >
+          {/* 이미 쓴 계획이 있으면 서버가 막는다 — 지난 계획의 과목이 사라지면 안 되기 때문이다 */}
+          <div className="note-box warn">
+            <div className="ic">
+              <Icon name="alert-triangle" size={17} />
+            </div>
+            <div>
+              <div className="tt">앞으로 못 고르게 됩니다</div>
+              <div className="tx">이미 이 항목으로 작성된 계획이 있으면 지울 수 없습니다.</div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {newOpt && (
         <Modal
           title="항목 추가"
@@ -744,6 +789,9 @@ function Content() {
                     <span className="sw" style={{ background: subjectColor.get(s.label) }} />
                     <span className="nm">{s.label}</span>
                     <span className="vv">{s.sortOrder}</span>
+                    <button type="button" className="master-del" title="이 항목을 지웁니다" onClick={() => setDelOpt(s)}>
+                      <Icon name="x" size={12} />
+                    </button>
                   </div>
                 ))}
               </div>
@@ -755,6 +803,9 @@ function Content() {
                     <span className={`mk ${formClass.get(f.label) ?? ''}`}>{f.label}</span>
                     <span className="nm" />
                     <span className="vv">{f.sortOrder}</span>
+                    <button type="button" className="master-del" title="이 항목을 지웁니다" onClick={() => setDelOpt(f)}>
+                      <Icon name="x" size={12} />
+                    </button>
                   </div>
                 ))}
               </div>
