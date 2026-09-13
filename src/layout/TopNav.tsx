@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom'
 import { NAV, navItemCount } from '../data/nav'
 import { useAuth } from '../auth/AuthContext'
 import { ROLE_LABEL, type Role } from '../api/accounts'
-import { getLoginId } from '../api/tokens'
+import { getDisplayName, getLoginId } from '../api/tokens'
 import { Icon } from '../components/Icon'
 import { useAcademy } from '../auth/AcademyContext'
 import { PasswordModal } from '../auth/PasswordModal'
@@ -23,9 +23,11 @@ export function TopNav() {
   const scopeLabel = principal?.allAcademy
     ? '전 지점'
     : (me?.academyName ?? academies.find((a) => a.id === principal?.academyId)?.acadNm ?? '')
-  /* 이름 → 로그인 아이디 → 계정번호 순으로 물러선다.
-     배포 서버에 아직 /auth/me 가 없어서(404) 이름이 없는 구간이 실제로 있다. */
-  const who = me?.name ?? getLoginId() ?? `#${principal?.accountId ?? '?'}`
+  /* 이름 → **직전에 받아둔 이름** → 로그인 아이디 → 계정번호 순으로 물러선다.
+     ★ /auth/me 는 새로고침마다 다시 부른다. 그 사이 아이디를 그리면 응답이 온 순간
+       "viewer1님" → "조회 전용님" 으로 깜빡인다. 한 번 받은 이름을 먼저 쓴다.
+     ★ 저장된 이름은 로그아웃할 때 지운다(tokens.ts) — 앞사람 이름이 스치면 안 된다. */
+  const who = me?.name ?? getDisplayName() ?? getLoginId() ?? `#${principal?.accountId ?? '?'}`
 
   /* 임시 비밀번호로 들어온 사람은 바꾸기 전에는 못 빠져나간다.
      ★ 서버가 JWT 의 pcr 클레임으로 알려준다(/auth/me 에도 같은 값이 있다). 이걸 안 보면

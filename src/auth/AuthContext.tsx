@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { decodePrincipal, getMe, login as loginApi, logout as logoutApi, type Me, type Principal } from '../api/auth'
-import { getAccessToken, subscribeTokens } from '../api/tokens'
+import { getAccessToken, setDisplayName, subscribeTokens } from '../api/tokens'
 
 interface AuthState {
   principal: Principal | null
@@ -44,7 +44,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     let alive = true
     getMe()
-      .then((v) => alive && setMe(v))
+      .then((v) => {
+        if (!alive) return
+        setMe(v)
+        // 다음 새로고침에서 아이디 → 이름으로 깜빡이지 않게 남겨둔다
+        if (v.name) setDisplayName(v.name)
+      })
       .catch(() => alive && setMe(null))
     return () => {
       alive = false
