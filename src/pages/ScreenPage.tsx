@@ -1,5 +1,6 @@
 import { Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAcademy } from '../auth/AcademyContext'
+import { useAuth } from '../auth/AuthContext'
 import { findScreen } from '../data/menu'
 import { NAV, navCatOfScreen, navSectionOfScreen } from '../data/nav'
 import { PageHead } from '../components/PageHead'
@@ -14,8 +15,11 @@ export function ScreenPage() {
   const { screenId } = useParams()
   const [params] = useSearchParams()
   const { academyId, selectable } = useAcademy()
+  const { canSeeAdmin } = useAuth()
   const s = screenId ? findScreen(screenId) : undefined
   if (!s) return <Navigate to="/" replace />
+  /* 메뉴에서 감춰도 주소를 직접 치면 열린다 — 화면 단위로도 같은 판단을 건다 */
+  if (s.groupId === 'admin' && !canSeeAdmin) return <Navigate to="/" replace />
 
   const mockup = MOCKUPS[s.id]
   if (!mockup) return <Navigate to="/" replace />

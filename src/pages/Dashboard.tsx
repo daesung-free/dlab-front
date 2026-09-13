@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAcademy } from '../auth/AcademyContext'
 import { useServerData } from '../components/common'
 import { getStatistics } from '../api/statistics'
-import { getLoginId } from '../api/tokens'
+import { getDisplayName, getLoginId } from '../api/tokens'
 import { useAuth } from '../auth/AuthContext'
 import { Unfilled } from '../components/common'
 import { Icon } from '../components/Icon'
@@ -105,7 +105,9 @@ export function Dashboard() {
   const arrived = present + late
 
   const branchName = academies.find((x) => x.id === academyId)?.acadNm ?? ''
-  const who = me?.name ?? getLoginId() ?? ''
+  /* 헤더(TopNav)와 같은 순서로 물러선다 — 저장된 이름을 먼저 쓴다.
+     ★ /auth/me 를 기다리는 동안 아이디를 그리면 "viewer1님" → "조회 전용님" 으로 깜빡인다. */
+  const who = me?.name ?? getDisplayName() ?? getLoginId() ?? ''
 
   const maxWeekly = Math.max(...WEEKLY.map((w) => w.arrived + w.late + w.absent))
   /* 순공 랭킹은 집계가 준다. 이름·분만 오고 반은 없다 */

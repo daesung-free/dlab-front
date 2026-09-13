@@ -3,14 +3,14 @@ import { NavLink } from 'react-router-dom'
 import { NAV, navItemCount } from '../data/nav'
 import { useAuth } from '../auth/AuthContext'
 import { ROLE_LABEL, type Role } from '../api/accounts'
-import { getLoginId } from '../api/tokens'
+import { getDisplayName, getLoginId } from '../api/tokens'
 import { Icon } from '../components/Icon'
 import { useAcademy } from '../auth/AcademyContext'
 import { PasswordModal } from '../auth/PasswordModal'
 
 export function TopNav() {
   const { academies, academyId, setAcademyId, selectable } = useAcademy()
-  const { principal, me, logout } = useAuth()
+  const { principal, me, logout, canSeeAdmin } = useAuth()
 
   /* 로그인한 계정을 그대로 보여준다.
      ★ 예전에는 mockDashboard 의 ME('강민서 / 분당 지점관리자')를 그렸다. 누구로 로그인하든
@@ -23,25 +23,18 @@ export function TopNav() {
   const scopeLabel = principal?.allAcademy
     ? '전 지점'
     : (me?.academyName ?? academies.find((a) => a.id === principal?.academyId)?.acadNm ?? '')
-  /* 이름 → 로그인 아이디 → 계정번호 순으로 물러선다.
-     배포 서버에 아직 /auth/me 가 없어서(404) 이름이 없는 구간이 실제로 있다. */
-  const who = me?.name ?? getLoginId() ?? `#${principal?.accountId ?? '?'}`
+  /* 이름 → **직전에 받아둔 이름** → 로그인 아이디 → 계정번호 순으로 물러선다.
+     ★ /auth/me 는 새로고침마다 다시 부른다. 그 사이 아이디를 그리면 응답이 온 순간
+       "viewer1님" → "조회 전용님" 으로 깜빡인다. 한 번 받은 이름을 먼저 쓴다.
+     ★ 저장된 이름은 로그아웃할 때 지운다(tokens.ts) — 앞사람 이름이 스치면 안 된다. */
+  const who = me?.name ?? getDisplayName() ?? getLoginId() ?? `#${principal?.accountId ?? '?'}`
 
   /* 임시 비밀번호로 들어온 사람은 바꾸기 전에는 못 빠져나간다.
      ★ 서버가 JWT 의 pcr 클레임으로 알려준다(/auth/me 에도 같은 값이 있다). 이걸 안 보면
        초기화를 받은 사람이 남도 아는 비밀번호를 계속 쓰게 된다.
      ★ 변경에 성공하면 서버가 새 토큰을 주고 AuthContext 가 그걸 다시 해석하므로
        `forced` 는 저절로 false 가 된다 — 여기서 따로 상태를 끌 필요가 없다. */
-  /**
-   * 「관리자」 메뉴를 감춘다.
-   *
-   * ★ 서버가 403 으로 막고 있어 자료가 새지는 않는다. 다만 행정·담임·조회전용 계정에
-   *   메뉴가 그대로 보이고 「계정 등록」이 초록색으로 활성인데 누르면 403만 돌아온다 —
-   *   "되는 기능인데 고장났다"로 읽힌다.
-   * ★ **여기까지만 막는다.** 담임이 상벌점을 줄 수 있는지 같은 것은 권한 매트릭스가 없어
-   *   정할 수 없다. 확정되면 화면별로 넓힌다.
-   */
-  const canSeeAdmin = roles.some((r) => r === 'SUPER_ADMIN' || r === 'BRANCH_ADMIN')
+  /* 판단은 AuthContext 가 한다 — 라우트에서도 같은 값을 써야 하기 때문이다 */
   const visibleNav = canSeeAdmin ? NAV : NAV.filter((c) => c.id !== 'admin')
 
   const forced = principal?.mustChangePassword === true
