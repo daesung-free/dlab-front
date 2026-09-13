@@ -2,6 +2,7 @@ import { Link, Navigate, useParams } from 'react-router-dom'
 import { findScreen } from '../data/menu'
 import { findNavCat, navItemCount, navPath } from '../data/nav'
 import { PageHead } from '../components/PageHead'
+import { useAuth } from '../auth/AuthContext'
 import { Icon } from '../components/Icon'
 import './screen.css'
 import './home.css'
@@ -13,8 +14,12 @@ import './home.css'
  */
 export function GroupPage() {
   const { groupId } = useParams()
+  const { canSeeAdmin } = useAuth()
   const cat = groupId ? findNavCat(groupId) : undefined
   if (!cat) return <Navigate to="/" replace />
+  /* ★ 메뉴에서 감추는 것만으로는 주소를 직접 친 사람을 못 막는다 — viewer1 으로 /g/admin 이
+       그대로 열렸다. 서버가 403 을 주므로 자료는 안 새지만 화면은 열린 채로 남는다. */
+  if (cat.id === 'admin' && !canSeeAdmin) return <Navigate to="/" replace />
 
   return (
     <>

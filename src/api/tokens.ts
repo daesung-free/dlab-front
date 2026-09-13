@@ -57,6 +57,8 @@ export function takeSignedOutReason(): SignedOutReason | null {
 export function clearTokens(reason?: SignedOutReason): void {
   localStorage.removeItem(ACCESS_KEY)
   localStorage.removeItem(REFRESH_KEY)
+  // 앞사람 이름이 다음 사람 화면에 스치지 않게 같이 지운다
+  localStorage.removeItem('dlab.displayName')
   if (reason) sessionStorage.setItem(REASON_KEY, reason)
   else sessionStorage.removeItem(REASON_KEY)
   notify()
@@ -84,4 +86,21 @@ export function setLoginId(loginId: string): void {
 
 export function getLoginId(): string | null {
   return localStorage.getItem(LOGIN_ID_KEY)
+}
+
+/* ── 표시 이름 ────────────────────────────────────────────────────────────────
+ *
+ * ★ `/auth/me` 는 새로고침마다 다시 부른다. 그동안 헤더가 로그인 아이디를 그리다가
+ *   응답이 오면 이름으로 바뀌어 **"viewer1님" → "조회 전용님" 으로 깜빡인다.**
+ *   한 번 받은 이름을 남겨두면 다음부터는 처음부터 맞는 값이 그려진다.
+ * ★ 로그아웃할 때 같이 지운다 — 안 지우면 다음 사람 화면에 앞사람 이름이 스친다.
+ */
+const NAME_KEY = 'dlab.displayName'
+
+export function setDisplayName(name: string): void {
+  localStorage.setItem(NAME_KEY, name)
+}
+
+export function getDisplayName(): string | null {
+  return localStorage.getItem(NAME_KEY)
 }
