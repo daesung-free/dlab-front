@@ -90,6 +90,8 @@ function savePresets(key: string, presets: Preset[]): void {
 export function SearchForm({ fields, onSearch, presetKey, headerRight, initial }: Props) {
   const [values, setValues] = useState<SearchValues>(() => initialValues(fields, initial))
   const [presets, setPresets] = useState<Preset[]>([])
+  /** 조건 저장 이름 입력. null 이면 닫힘 */
+  const [naming, setNaming] = useState<string | null>(null)
 
   useEffect(() => {
     if (presetKey) setPresets(loadPresets(presetKey))
@@ -105,13 +107,16 @@ export function SearchForm({ fields, onSearch, presetKey, headerRight, initial }
     onSearch(init)
   }
 
-  function addPreset() {
+  /* ★ window.prompt 를 쓰지 않는다. 값을 못 받는 환경에서는 즉시 null 이라 **눌러도 아무 일이
+       없고**, 대화상자가 떠 있는 동안 탭 전체가 멈춘다(Modal.tsx 주석). */
+  function addPreset(name: string) {
     if (!presetKey) return
-    const name = window.prompt('저장할 검색조건 이름을 입력하세요.')?.trim()
-    if (!name) return
-    const next = [...presets.filter((p) => p.name !== name), { name, values }]
+    const trimmed = name.trim()
+    if (!trimmed) return
+    const next = [...presets.filter((p) => p.name !== trimmed), { name: trimmed, values }]
     setPresets(next)
     savePresets(presetKey, next)
+    setNaming(null)
   }
 
   function removePreset(name: string) {
@@ -262,11 +267,37 @@ export function SearchForm({ fields, onSearch, presetKey, headerRight, initial }
           {presetKey ? '자주 쓰는 조건은 저장해두고 재사용할 수 있습니다.' : `검색 조건 ${fields.length}개`}
         </span>
         <div className="sf-btns">
-          {presetKey && (
-            <button type="button" className="btn" onClick={addPreset}>
-              조건 저장
-            </button>
-          )}
+          {presetKey &&
+            (naming === null ? (
+              <button type="button" className="btn" onClick={() => setNaming('')}>
+                조건 저장
+              </button>
+            ) : (
+              /* 이름을 그 자리에서 받는다. 별도 모달을 띄울 만큼 큰 일이 아니다 */
+              <>
+                <input
+                  className="inp"
+                  style={{ width: 160 }}
+                  autoFocus
+                  value={naming}
+                  placeholder="조건 이름"
+                  onChange={(e) => setNaming(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      addPreset(naming)
+                    }
+                    if (e.key === 'Escape') setNaming(null)
+                  }}
+                />
+                <button type="button" className="btn pri" disabled={naming.trim() === ''} onClick={() => addPreset(naming)}>
+                  저장
+                </button>
+                <button type="button" className="btn" onClick={() => setNaming(null)}>
+                  취소
+                </button>
+              </>
+            ))}
           <button type="button" className="btn" onClick={reset}>
             초기화
           </button>

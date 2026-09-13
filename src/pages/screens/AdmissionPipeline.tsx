@@ -9,7 +9,7 @@ import './admission.css'
  */
 
 const KPIS = [
-  { l: '신규 예약 (디멤버 폼)', v: '148', d: '▲ 오늘 +6', tone: 'up' },
+  { l: '신규 예약 (온라인 접수)', v: '148', d: '▲ 오늘 +6', tone: 'up' },
   { l: '방문상담 예정', v: '42', d: '이번 주 18건', tone: 'warn' },
   { l: '입학 확정', v: '89', d: '▲ 전환율 60%', tone: 'up' },
   { l: '입학불가', v: '11', d: '성적미달·검고졸', tone: 'mut' },
@@ -52,8 +52,8 @@ const COLUMNS: Column[] = [
             등원희망 <b>06/02</b> · 출신 기숙학원
           </>
         ),
-        autoNote: { icon: 'zap', text: '디멤버 폼 자동수집 · 개인정보 동의 완료' },
-        foot: { src: '디멤버 폼', srcIcon: 'clipboard-list', mini: { label: '방문예약 잡기', tone: 'book' } },
+        autoNote: { icon: 'zap', text: '온라인 접수 자동수집 · 개인정보 동의 완료' },
+        foot: { src: '온라인 접수', srcIcon: 'clipboard-list', mini: { label: '방문예약 잡기', tone: 'book' } },
       },
       {
         name: '김도윤',
@@ -66,7 +66,7 @@ const COLUMNS: Column[] = [
             등원희망 <b>06/02</b> · 출신 잇올
           </>
         ),
-        foot: { src: '디멤버 폼', srcIcon: 'clipboard-list', mini: { label: '방문예약 잡기', tone: 'book' } },
+        foot: { src: '온라인 접수', srcIcon: 'clipboard-list', mini: { label: '방문예약 잡기', tone: 'book' } },
       },
       {
         name: '강현준',
@@ -223,7 +223,7 @@ const COLUMNS: Column[] = [
 ]
 
 const BEFORE = [
-  '디멤버 폼 → 예약현황 → 좌석/장학/대기 시트로 사람이 반복 복사',
+  '온라인 접수 → 예약현황 → 좌석/장학/대기 시트로 사람이 반복 복사',
   '입학불가(성적미달·검고졸)를 연락처로 눈대조',
   '방문·좌석·장학·대기가 서로 다른 시트에 분리',
   '방문/예약/등원 안내 문자를 양식에서 복붙 발송',
@@ -231,7 +231,7 @@ const BEFORE = [
 ]
 
 const AFTER = [
-  '디멤버 입학예약폼 유입이 파이프라인 카드로 자동 생성',
+  '온라인 입학예약 유입이 파이프라인 카드로 자동 생성',
   '입학기준·검고졸 자동 크로스체크, 미달 시 자동 플래그',
   '좌석배치도·장학·대기가 한 화면에서 실시간 연동',
   '단계 전환 시 안내 문자 자동발송',

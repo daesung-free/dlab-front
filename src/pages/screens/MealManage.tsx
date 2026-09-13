@@ -446,7 +446,7 @@ function Content() {
             <Icon name="utensils" size={13} /> 월 총 식수
           </div>
           <div className="v">{totalOrders.toLocaleString()}</div>
-          <div className="d">2026-05</div>
+          <div className="d">{month}</div>
         </div>
         <div className="stat">
           <div className="l">

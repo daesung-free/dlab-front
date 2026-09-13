@@ -24,9 +24,8 @@ export function GroupPage() {
         icon={cat.icon}
         sub={cat.desc}
         actions={
-          <span className="sc-ref">
-            중분류 {cat.sections.length}개 · 기능 {navItemCount(cat)}개
-          </span>
+          /* '중분류'는 우리끼리 쓰는 말이다(CLAUDE.md 1-1) — 화면 개수만 남긴다 */
+          <span className="sc-ref">화면 {navItemCount(cat)}개</span>
         }
       />
 

@@ -16,14 +16,20 @@ export interface MockStudent {
   enrolledAt: string
   status: '재원' | '휴원' | '퇴원'
   teacher: string
-  branch: '분당' | '대치' | '평촌'
+  /**
+   * 목업 학생의 지점.
+   * ★ 예전에는 '대치'·'평촌'이었다 — **디랩에 없는 지점**이다. 화면 문자열은 걷어냈는데
+   *   목업 데이터에 남아 있어서, 지점을 고르면 목업 건수가 줄어드는 식으로 드러났다.
+   *   실재하는 지점만 쓴다(분당·일산·동탄).
+   */
+  branch: '분당' | '일산' | '동탄'
 }
 
 const SURNAMES = ['김', '이', '박', '최', '정', '강', '조', '윤', '장', '임', '한', '오', '서', '신', '권']
 const GIVEN = ['승민', '하윤', '서준', '민재', '유나', '도현', '지호', '채원', '수빈', '서연', '지우', '세훈', '하늘', '민주', '도윤', '현준', '예린', '태윤']
 const SCHOOLS = ['태원고', '송림고', '유신고', '분당고', '보평고', '낙생고', '한솔고', '이매고']
 const TEACHERS = ['이장원', '김유진', '최지원', '박서영', '정하람']
-const BRANCHES: MockStudent['branch'][] = ['분당', '대치', '평촌']
+const BRANCHES: MockStudent['branch'][] = ['분당', '일산', '동탄']
 
 function pad(n: number, len: number): string {
   return String(n).padStart(len, '0')

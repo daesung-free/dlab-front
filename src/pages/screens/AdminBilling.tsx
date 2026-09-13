@@ -8,6 +8,7 @@ import { GRADE_LABEL } from '../../api/students'
 import {
   PAYMENT_METHOD_LABEL,
   createBillingStandard,
+  deleteBillingStandard,
   listBillingStandards,
   listRefundRules,
   setBillingStandardActive,
@@ -56,6 +57,7 @@ const MONTHS_IN_YEAR = Array.from({ length: 12 }, (_, i) => i + 1)
 /** 청구 기준 — 목업의 코드·항목·기수·금액·결제경로·청구일이 그대로 대응한다 */
 function standardColumns(
   onToggle: (r: BillingStandard) => void,
+  onDelete: (r: BillingStandard) => void,
   busy: boolean,
 ): Column<BillingStandard>[] {
   return [
@@ -130,6 +132,26 @@ function standardColumns(
           onClick={() => onToggle(r)}
         >
           {shown}
+        </button>
+      ),
+    },
+    {
+      /* ★ '사용 중지'와 삭제는 다른 일이다. 중지는 과거 청구를 그대로 두고 앞으로만 안 쓰는
+           것이고, 삭제는 기준 자체를 없앤다. 잘못 만든 것을 치우려면 삭제가 필요하다 —
+           없으면 중지된 껍데기가 목록에 계속 쌓인다. */
+      key: 'del',
+      header: '',
+      width: '60px',
+      align: 'center',
+      value: () => '',
+      render: (r) => (
+        <button
+          className="btn"
+          style={{ padding: '4px 9px', fontSize: 11.5, color: 'var(--red)' }}
+          disabled={busy}
+          onClick={() => onDelete(r)}
+        >
+          삭제
         </button>
       ),
     },
@@ -290,6 +312,7 @@ function Content() {
   /* 청구 기준 등록. **코드·항목·금액 방식이 필수**라 이름만 받는 창으로는 못 만든다 */
   const [newStd, setNewStd] = useState<NewStandard | null>(null)
   const [newStdErr, setNewStdErr] = useState<string | null>(null)
+  const [delStd, setDelStd] = useState<BillingStandard | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -354,6 +377,23 @@ function Content() {
     }
   }
 
+  /** 청구 기준 삭제. 이미 청구가 나간 기준은 서버가 막는다 — 그 메시지를 모달 안에 띄운다 */
+  async function removeStandard() {
+    if (!delStd) return
+    setBusy(true)
+    setNewStdErr(null)
+    try {
+      await deleteBillingStandard(delStd.id)
+      await load()
+      setDelStd(null)
+      setNotice('청구 기준을 삭제했습니다.')
+    } catch (err) {
+      setNewStdErr(err instanceof ApiError ? err.message : '청구 기준을 삭제하지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const daysByMonth = useMemo(() => {
     const m = new Map<number, number>()
     for (const r of months) m.set(r.month, r.teachingDays)
@@ -406,6 +446,35 @@ function Content() {
 
   return (
     <>
+      {delStd && (
+        <Modal
+          title="청구 기준 삭제"
+          sub={`${delStd.name} (${delStd.code}) 을(를) 지웁니다.`}
+          confirmLabel="삭제"
+          danger
+          busy={busy}
+          error={newStdErr}
+          onConfirm={() => void removeStandard()}
+          onClose={() => {
+            setNewStdErr(null)
+            setDelStd(null)
+          }}
+        >
+          {/* ★ 중지와 삭제는 다르다. 쓰던 기준을 치우는 것이면 '사용' 을 중지로 두는 쪽이 맞다 */}
+          <div className="note-box warn">
+            <div className="ic">
+              <Icon name="alert-triangle" size={17} />
+            </div>
+            <div>
+              <div className="tt">쓰던 기준이면 '사용'을 중지로 두세요</div>
+              <div className="tx">
+                삭제는 기준을 <b>아예 없앱니다.</b> 이미 청구가 나간 기준은 지울 수 없습니다.
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {newStd && (
         <Modal
           title="청구 기준 등록"
@@ -617,7 +686,7 @@ function Content() {
           {tab === 'billing' ? (
             <>
               <DataTable
-                columns={standardColumns(toggleStandard, busy)}
+                columns={standardColumns(toggleStandard, setDelStd, busy)}
                 rows={standards}
                 rowKey={(r) => String(r.id)}
                 masked={false}
