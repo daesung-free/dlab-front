@@ -59,9 +59,9 @@ export const NAV: NavCat[] = [
         name: '학원생',
         items: [
           { screenId: 'student-search', label: '학원생' },
-          { screenId: 'student-enroll', label: '신규 접수 등록', added: true, note: '요구사항정의서 F-4.1-3' },
-          { screenId: 'waitlist', label: '대기자 관리', added: true, note: '디멤버 입학예약자 → 원생 전환. F-4.2' },
-          { screenId: 'profile-form', label: '신상기록부', added: true, note: '입학 필수 · 앱 학생 입력. F-4.11-9' },
+          { screenId: 'student-enroll', label: '신규 접수 등록', added: true },
+          { screenId: 'waitlist', label: '대기자 관리', added: true, note: '입학 예약자 → 원생 전환' },
+          { screenId: 'profile-form', label: '신상기록부', added: true, note: '입학 필수 · 앱 학생 입력' },
         ],
       },
       {
@@ -76,11 +76,11 @@ export const NAV: NavCat[] = [
             label: '알림 발송',
             note: 'SMS 제외 — 카카오 알림톡 + 앱 푸시 2종. 템플릿 관리 포함',
           },
-          { screenId: 'chat', label: '공지 · 1:1 채팅', added: true, note: '행정요청 수신함 포함. 가족채팅방 제외. F-4.11-3' },
+          { screenId: 'chat', label: '공지 · 1:1 채팅', added: true, note: '행정요청 수신함 포함. 가족채팅방 제외' },
         ],
       },
       {
-        name: '디멤버 급식신청',
+        name: '급식 신청',
         items: [
           {
             screenId: 'meal',
@@ -105,10 +105,10 @@ export const NAV: NavCat[] = [
       {
         name: '출결/자습/독서실',
         items: [
-          { screenId: 'attendance', label: '출결 관리', added: true, note: '키오스크 직접 연동. F-4.3' },
-          { screenId: 'student-absence', label: '사유 신청 관리', added: true, note: 'F-4.1-5' },
+          { screenId: 'attendance', label: '출결 관리', added: true, note: '키오스크 직접 연동' },
+          { screenId: 'student-absence', label: '사유 신청 관리', added: true },
           { screenId: 'reading-room', label: '독서실 좌석배치표' },
-          { screenId: 'seat-move', label: '좌석 이탈 · 복귀', added: true, note: '키오스크 대체 앱 신청. F-4.11-8' },
+          { screenId: 'seat-move', label: '좌석 이탈 · 복귀', added: true, note: '키오스크 대체 앱 신청' },
         ],
       },
       {
@@ -119,12 +119,12 @@ export const NAV: NavCat[] = [
         name: 'D.Lab',
         items: [
           { screenId: 'student-penalty', label: '상벌점 관리' },
-          { screenId: 'daily-routine', label: '데일리 루틴', added: true, note: 'F-4.11-1' },
-          { screenId: 'learning-plan', label: '주 · 일 학습계획', added: true, note: 'F-4.11-2' },
-          { screenId: 'score', label: '성적 관리', added: true, note: '더프리미엄 API 연동. F-4.6' },
-          { screenId: 'consult', label: '상담 일지 · 리포트', added: true, note: 'F-4.11-4' },
-          { screenId: 'daily-report', label: 'Daily Report', added: true, note: '앱 데이터 원천. F-4.11-6' },
-          { screenId: 'qna', label: '질의응답', added: true, note: '대면 운영 · 온라인은 기능만 준비. F-4.11-7' },
+          { screenId: 'daily-routine', label: '데일리 루틴', added: true },
+          { screenId: 'learning-plan', label: '주 · 일 학습계획', added: true },
+          { screenId: 'score', label: '성적 관리', added: true, note: '더프리미엄 API 연동' },
+          { screenId: 'consult', label: '상담 일지 · 리포트', added: true },
+          { screenId: 'daily-report', label: 'Daily Report', added: true, note: '앱 데이터 원천' },
+          { screenId: 'qna', label: '질의응답', added: true, note: '대면 운영 · 온라인은 기능만 준비' },
         ],
       },
       {
@@ -139,7 +139,7 @@ export const NAV: NavCat[] = [
         name: '앱 관련',
         items: [
           { screenId: 'app-manage', label: '앱과 관련된 기능' },
-          { screenId: 'approval', label: '승인 라우팅', added: true, note: '학부모/담임 자동 분기. F-4.11-5' },
+          { screenId: 'approval', label: '승인 라우팅', added: true, note: '학부모/담임 자동 분기' },
         ],
       },
     ],
@@ -157,7 +157,7 @@ export const NAV: NavCat[] = [
           { screenId: 'admin-basic', label: '학과 관리', tab: 'department', icon: 'graduation-cap' },
           { screenId: 'admin-basic', label: '학과계열 관리', tab: 'track', icon: 'git-compare' },
           { screenId: 'admin-basic', label: '그 외 기초 항목', tab: 'class_group', icon: 'sliders-horizontal' },
-          { screenId: 'annual-events', label: '연간 행사 마스터', added: true, note: '학습계획 자동 반영. F-4.11-10' },
+          { screenId: 'annual-events', label: '연간 행사 마스터', added: true, note: '학습계획 자동 반영' },
         ],
       },
       {
@@ -171,9 +171,9 @@ export const NAV: NavCat[] = [
       {
         name: '배정 · 특강 · 실적',
         items: [
-          { screenId: 'admin-assign', label: '배정 관리', added: true, note: '사물함·독서실. 기숙사 제외. F-4.10-3' },
-          { screenId: 'admin-lecture', label: '특강 기초 설정', added: true, note: 'F-4.10-4' },
-          { screenId: 'admin-result', label: '실적 관리', added: true, note: '합격 실적 입력·통계. F-4.10-6' },
+          { screenId: 'admin-assign', label: '배정 관리', added: true, note: '사물함·독서실. 기숙사 제외' },
+          { screenId: 'admin-lecture', label: '특강 기초 설정', added: true },
+          { screenId: 'admin-result', label: '실적 관리', added: true, note: '합격 실적 입력·통계' },
         ],
       },
     ],

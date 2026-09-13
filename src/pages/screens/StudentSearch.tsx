@@ -3,6 +3,7 @@ import {
   CopyButton,
   DataTable,
   MaskToggle,
+  Modal,
   PrintButton,
   SearchForm,
   useServerTable,
@@ -29,6 +30,7 @@ import {
   type TrackType,
 } from '../../api/students'
 import type { Mockup } from './types'
+import '../../styles/forms.css'
 
 /* F-4.1-1 학원생 검색·조회 — GET /api/v1/admin/students
  *
@@ -137,6 +139,10 @@ function Content() {
   const [exportError, setExportError] = useState<string | null>(null)
 
   const [changing, setChanging] = useState<number | null>(null)
+  /* 상태 변경 모달. 예전에는 window.prompt 두 번이었는데 값을 못 받는 환경이 있어
+     눌러도 아무 일이 없었다 — 무엇보다 이 레포는 prompt 를 전부 걷어낸 상태다 */
+  const [statusEdit, setStatusEdit] = useState<{ row: Student; next: EnrollmentStatus; reason: string } | null>(null)
+  const [statusErr, setStatusErr] = useState<string | null>(null)
 
   const table = useServerTable({
     fetcher: searchStudents,
@@ -163,7 +169,10 @@ function Content() {
             style={{ padding: '4px 9px', fontSize: 11.5 }}
             disabled={changing === r.enrollmentId}
             title="퇴원·제적·휴원으로 바꿉니다. 삭제는 이력 때문에 막혀 있습니다"
-            onClick={() => void changeStatus(r)}
+            onClick={() => {
+              setStatusErr(null)
+              setStatusEdit({ row: r, next: 'WITHDRAWN', reason: '' })
+            }}
           >
             상태 변경
           </button>
@@ -182,28 +191,28 @@ function Content() {
    * 이력이 붙은 학생은 서버가 삭제를 막는다(409 STUDENT_HAS_HISTORY). 잘못 만든 학생을
    * 되돌릴 수단이 이것뿐이라, 이 화면에 없으면 명단에 영구히 남는다.
    */
-  async function changeStatus(row: Student) {
-    const next = window.prompt(
-      `${row.name}(${row.studentNo ?? '-'}) 의 재원 상태를 바꿉니다.\n` +
-        `${(['LEAVE', 'WITHDRAWN', 'EXPELLED', 'GRADUATED'] as EnrollmentStatus[])
-          .map((v) => `${v} = ${STATUS_LABEL[v]}`)
-          .join(' · ')}`,
-      'WITHDRAWN',
-    )?.trim()
-    if (!next) return
-    if (!(['ENROLLED', 'LEAVE', 'WITHDRAWN', 'EXPELLED', 'GRADUATED'] as string[]).includes(next)) {
-      setExportError(`알 수 없는 상태입니다: ${next}`)
-      return
-    }
-    const reason = window.prompt('사유를 입력하세요. 이력에 남는 유일한 설명입니다.')?.trim()
-
+  /**
+   * 재원 상태 변경 — **삭제 대신 쓰는 경로다.**
+   *
+   * 이력이 붙은 학생은 서버가 삭제를 막는다(409 STUDENT_HAS_HISTORY). 잘못 만든 학생을
+   * 되돌릴 수단이 이것뿐이라, 이 화면에 없으면 명단에 영구히 남는다.
+   *
+   * ★ 예전에는 `window.prompt` 를 두 번 띄웠다. 값을 못 받는 환경에서는 즉시 null 이 되어
+   *   **눌러도 아무 일이 없다** — 요청도 안 나가고 화면도 안 바뀌어 고장으로 읽힌다.
+   *   이 레포는 같은 이유로 prompt·confirm 을 전부 모달로 걷어냈다(Modal.tsx 주석).
+   */
+  async function submitStatus() {
+    if (!statusEdit) return
+    const { row, next, reason } = statusEdit
     setChanging(row.enrollmentId)
-    setExportError(null)
+    setStatusErr(null)
     try {
-      await changeStudentStatus(row.enrollmentId, next as EnrollmentStatus, reason || undefined)
+      await changeStudentStatus(row.enrollmentId, next, reason.trim() || undefined)
       table.reload()
+      setStatusEdit(null)
     } catch (err) {
-      setExportError(err instanceof ApiError ? err.message : '상태를 바꾸지 못했습니다.')
+      /* 모달을 닫지 않는다 — 사유를 다시 쓰게 하면 안 된다 */
+      setStatusErr(err instanceof ApiError ? err.message : '상태를 바꾸지 못했습니다.')
     } finally {
       setChanging(null)
     }
@@ -223,6 +232,45 @@ function Content() {
 
   return (
     <>
+      {statusEdit && (
+        <Modal
+          title="재원 상태 변경"
+          sub={`${statusEdit.row.name}(${statusEdit.row.studentNo ?? '-'}) 의 상태를 바꿉니다.`}
+          confirmLabel="변경"
+          busy={changing !== null}
+          error={statusErr}
+          onConfirm={() => void submitStatus()}
+          onClose={() => setStatusEdit(null)}
+        >
+          <div className="frow">
+            <label className="req">바꿀 상태</label>
+            <select
+              className="sel"
+              value={statusEdit.next}
+              onChange={(e) => setStatusEdit({ ...statusEdit, next: e.target.value as EnrollmentStatus })}
+            >
+              {(['ENROLLED', 'LEAVE', 'WITHDRAWN', 'EXPELLED', 'GRADUATED'] as EnrollmentStatus[]).map((v) => (
+                <option key={v} value={v}>
+                  {STATUS_LABEL[v]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="frow">
+            <label>사유</label>
+            <div>
+              <input
+                className="inp"
+                value={statusEdit.reason}
+                placeholder="예: 타 지점 이동"
+                onChange={(e) => setStatusEdit({ ...statusEdit, reason: e.target.value })}
+              />
+              <div className="hint">이력에 남는 유일한 설명입니다.</div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       <SearchForm fields={FIELDS} onSearch={setQuery} presetKey="student-search" />
 
       {exportError && (

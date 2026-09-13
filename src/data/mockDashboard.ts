@@ -141,14 +141,38 @@ export const ACTIVITIES: Activity[] = [
   { at: '07:40', text: '키오스크 수신 시작', tone: 'sys' },
 ]
 
-/* ── 주간 출결 추이 ── */
-export const WEEKLY = [
-  { d: '05/22', dow: '금', arrived: 268, late: 16, absent: 5 },
-  { d: '05/25', dow: '월', arrived: 274, late: 11, absent: 4 },
-  { d: '05/26', dow: '화', arrived: 279, late: 9, absent: 3 },
-  { d: '05/27', dow: '수', arrived: 276, late: 12, absent: 4 },
-  { d: '05/28', dow: '목', arrived: 271, late: 14, absent: 7 },
+/* ── 주간 출결 추이 ──
+ *
+ * ★ 날짜를 박아두지 않는다. 전에는 05/22~05/28 이 고정돼 있었는데, 몇 달 뒤에 보면
+ *   '표시용 예시' 라벨이 붙어 있어도 **화면이 고장 난 것으로 읽힌다** — 실제로 그렇게
+ *   올라왔다(2026-09-13). 숫자는 예시라도 날짜는 오늘 기준이어야 한다.
+ * ★ 주말은 뺀다. 이 학원은 토요일에도 운영하지만 '주간 추이'의 가로축은 평일 5일이 읽기 쉽다. */
+const WEEKDAY_LABEL = ['일', '월', '화', '수', '목', '금', '토']
+
+function lastWeekdays(n: number): { d: string; dow: string }[] {
+  const out: { d: string; dow: string }[] = []
+  const cur = new Date()
+  while (out.length < n) {
+    if (cur.getDay() !== 0 && cur.getDay() !== 6) {
+      out.unshift({
+        d: `${String(cur.getMonth() + 1).padStart(2, '0')}/${String(cur.getDate()).padStart(2, '0')}`,
+        dow: WEEKDAY_LABEL[cur.getDay()],
+      })
+    }
+    cur.setDate(cur.getDate() - 1)
+  }
+  return out
+}
+
+const WEEKLY_COUNTS = [
+  { arrived: 268, late: 16, absent: 5 },
+  { arrived: 274, late: 11, absent: 4 },
+  { arrived: 279, late: 9, absent: 3 },
+  { arrived: 276, late: 12, absent: 4 },
+  { arrived: 271, late: 14, absent: 7 },
 ]
+
+export const WEEKLY = lastWeekdays(5).map((d, i) => ({ ...d, ...WEEKLY_COUNTS[i] }))
 
 /* ── 순공시간 랭킹 ── */
 export const RANKING = [

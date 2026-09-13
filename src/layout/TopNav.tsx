@@ -32,6 +32,18 @@ export function TopNav() {
        초기화를 받은 사람이 남도 아는 비밀번호를 계속 쓰게 된다.
      ★ 변경에 성공하면 서버가 새 토큰을 주고 AuthContext 가 그걸 다시 해석하므로
        `forced` 는 저절로 false 가 된다 — 여기서 따로 상태를 끌 필요가 없다. */
+  /**
+   * 「관리자」 메뉴를 감춘다.
+   *
+   * ★ 서버가 403 으로 막고 있어 자료가 새지는 않는다. 다만 행정·담임·조회전용 계정에
+   *   메뉴가 그대로 보이고 「계정 등록」이 초록색으로 활성인데 누르면 403만 돌아온다 —
+   *   "되는 기능인데 고장났다"로 읽힌다.
+   * ★ **여기까지만 막는다.** 담임이 상벌점을 줄 수 있는지 같은 것은 권한 매트릭스가 없어
+   *   정할 수 없다. 확정되면 화면별로 넓힌다.
+   */
+  const canSeeAdmin = roles.some((r) => r === 'SUPER_ADMIN' || r === 'BRANCH_ADMIN')
+  const visibleNav = canSeeAdmin ? NAV : NAV.filter((c) => c.id !== 'admin')
+
   const forced = principal?.mustChangePassword === true
   const [pwOpen, setPwOpen] = useState(false)
 
@@ -54,7 +66,7 @@ export function TopNav() {
           </span>
           대시보드
         </NavLink>
-        {NAV.map((c) => (
+        {visibleNav.map((c) => (
           <NavLink key={c.id} to={`/g/${c.id}`} className={({ isActive }) => `cat-tab${isActive ? ' on' : ''}`}>
             <span className="ico">
               <Icon name={c.icon} />

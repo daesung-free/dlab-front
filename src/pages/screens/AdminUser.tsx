@@ -586,9 +586,9 @@ function Content() {
             <div className="v" style={{ color: r.color }}>
               {roleCount(r.key)}
             </div>
-            <div className="d" style={{ fontFamily: 'ui-monospace, monospace', fontSize: 9.5 }}>
-              {r.key}
-            </div>
+            {/* 영문 코드(SUPER_ADMIN 등)는 뺀다 — 한글 라벨이 바로 위에 있고,
+                 클라이언트가 읽을 이유가 없는 말이다(CLAUDE.md 1-1) */}
+            <div className="d">{r.desc}</div>
           </div>
         ))}
       </div>
@@ -932,7 +932,6 @@ function Content() {
                     {ROLES.map((r) => (
                       <th key={r.key} style={{ color: r.color }}>
                         {r.label}
-                        <span className="rk">{r.key}</span>
                       </th>
                     ))}
                   </tr>
