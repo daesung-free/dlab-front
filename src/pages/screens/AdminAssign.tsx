@@ -343,7 +343,7 @@ function Content() {
           {blocks.length === 0 ? (
             <div className="dt-empty">
               {kind === 'reading'
-                ? '좌석 구역이 없습니다. 좌석 마스터를 만드는 관리자 API가 아직 없어 백엔드 시드가 필요합니다.'
+                ? '이 지점에 등록된 좌석 구역이 없습니다.'
                 : '등록된 사물함이 없습니다.'}
             </div>
           ) : (
