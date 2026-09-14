@@ -146,6 +146,10 @@ export function promoteApplicant(applicationId: number): Promise<void> {
 /**
  * 부분 수정. 보낸 항목만 바뀐다.
  *
+ * ★ **`null` 을 보내도 지워지지 않는다.** 서버가 null 을 "안 보낸 것"으로 보기 때문에,
+ *   한번 넣은 정원·설명·기간을 **비울 방법이 없다**(2026-09-14 확인). 값을 바꾸는 것만 된다.
+ *   화면에서 "정원 제한 없음"으로 되돌리려면 서버에 지우는 방법이 필요하다.
+ *
  * ★ 개설(POST)은 이름·종류만 받는다. 유형·담당·정원·비용·기간은 전부 이쪽이라
  *   등록 폼이 값을 채우려면 **2콜**이 된다 — 중간에 실패하면 이름만 있는 특강이 남는다.
  */
@@ -213,4 +217,53 @@ export function deleteLecture(lectureId: number): Promise<void> {
  */
 export function deleteLectureSession(sessionId: number): Promise<void> {
   return request<void>(`/api/v1/admin/lectures/sessions/${sessionId}`, { method: 'DELETE' })
+}
+
+/* ── 특강 출석부 ─────────────────────────────────────────────────────────────── */
+
+export type LectureAttendanceStatus = 'PRESENT' | 'ABSENT' | 'LATE'
+
+export const LECTURE_ATTENDANCE_LABEL: Record<LectureAttendanceStatus, string> = {
+  PRESENT: '출석',
+  LATE: '지각',
+  ABSENT: '결석',
+}
+
+export interface LectureAttendance {
+  applicationId: number
+  status: LectureAttendanceStatus
+  /** 서버가 안 줄 수도 있다 — 목록은 대상(applicants)과 맞춰 그린다 */
+  studentName?: string | null
+  memo?: string | null
+}
+
+/**
+ * 출석 대상 — `GET /lectures/{id}/attendance-targets`
+ *
+ * ★ 응답이 신청자 목록과 같은 모양이고 **확정자만** 온다(`waitlisted: false`).
+ *   대기자는 수업에 안 들어오므로 출석부에 없다.
+ */
+export function listAttendanceTargets(lectureId: number): Promise<LectureApplicant[]> {
+  return request<LectureApplicant[]>(`/api/v1/admin/lectures/${lectureId}/attendance-targets`)
+}
+
+/** 회차별 출결 — 아직 아무도 안 찍었으면 빈 배열이다(0건 = 미입력) */
+export function listSessionAttendances(sessionId: number): Promise<LectureAttendance[]> {
+  return request<LectureAttendance[]>(`/api/v1/admin/lectures/sessions/${sessionId}/attendances`)
+}
+
+/**
+ * 출결 입력 — `PUT /lectures/sessions/{id}/attendances`
+ *
+ * ★ **한 건씩 받는다.** `applicationId` + `status` 가 필수이고 배열이 아니다 —
+ *   여러 명을 찍으면 그 수만큼 호출된다. 중간에 실패하면 앞사람은 이미 저장돼 있으므로
+ *   호출부가 "몇 명 중 몇 명이 됐는지"를 알려야 한다.
+ * ★ 허용값은 `PRESENT · ABSENT · LATE` 뿐이다. 출결 관리(F-4.3)의 상태값과 다르다 —
+ *   그쪽은 조퇴·외출까지 있다.
+ */
+export function saveSessionAttendance(
+  sessionId: number,
+  body: { applicationId: number; status: LectureAttendanceStatus; memo?: string },
+): Promise<void> {
+  return request<void>(`/api/v1/admin/lectures/sessions/${sessionId}/attendances`, { method: 'PUT', body })
 }
