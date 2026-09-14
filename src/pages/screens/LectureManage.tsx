@@ -1251,6 +1251,26 @@ function Content() {
                     </tr>
                   </thead>
                   <tbody>
+                    {/* ★ 빈 표를 머리만 남기고 두지 않는다. 출석을 찍으러 온 사람이
+                           "칸이 어디 있냐"고 묻게 된다 — 실제로 그랬다(2026-09-14).
+                           비는 이유가 셋이라 무엇을 해야 하는지까지 갈라서 적는다. */}
+                    {applied.length === 0 && (
+                      <tr>
+                        <td colSpan={sessionList.length + 4} className="al-center" style={{ padding: '26px 12px' }}>
+                          {selectedLecture === null ? (
+                            <span style={{ color: 'var(--muted)' }}>위 목록에서 특강을 먼저 고르세요.</span>
+                          ) : sessionList.length === 0 ? (
+                            <span style={{ color: 'var(--muted)' }}>
+                              이 특강에 수업 회차가 없습니다. 회차를 만들어야 출석을 찍을 수 있습니다.
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--muted)' }}>
+                              확정된 신청자가 없습니다. <b>신청자</b> 탭에서 확정하면 여기에 줄이 생깁니다.
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    )}
                     {applied.map((a) => (
                       <tr key={a.applicationId}>
                         <td>{a.studentNo ?? '-'}</td>
@@ -1317,10 +1337,13 @@ function Content() {
           busy={detailBusy}
           error={detailErr}
           confirmDisabled={editing ? editing.name.trim() === '' : false}
+          wide
           onConfirm={() => (editing ? void saveDetail() : setDetail(null))}
           onClose={() => (editing ? setEditing(null) : setDetail(null))}
         >
-          <div style={{ minWidth: 520 }}>
+          {/* ★ 폭은 모달이 정한다(`wide`). 여기에 minWidth 를 박으면 바깥 .mo 가 440px 에
+                 묶여 있어 **내용이 그대로 잘린다** — 실제로 그렇게 잘려 있었다(2026-09-14) */}
+          <div>
             {editing ? (
               <>
                 <div className="frow">

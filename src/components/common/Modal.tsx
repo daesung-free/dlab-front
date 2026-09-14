@@ -31,6 +31,14 @@ interface Props {
    */
   danger?: boolean
   /**
+   * 넓은 모달. 기본 false(440px).
+   *
+   * ★ 기본 폭에 안 들어가는 내용을 넣을 때만 쓴다. 예전에는 호출부에서 안쪽 div 에
+   *   `minWidth` 를 박았는데, 바깥 `.mo` 가 440px 에 묶여 있어 **내용이 그대로 잘렸다.**
+   *   폭은 모달이 정해야 한다.
+   */
+  wide?: boolean
+  /**
    * 닫을 수 있는가. 기본 true.
    *
    * ★ false 면 X·취소 버튼이 사라지고 Esc·배경 클릭도 안 먹는다. 임시 비밀번호를 받은
@@ -63,6 +71,7 @@ export function Modal({
   busy = false,
   confirmDisabled = false,
   hideCancel = false,
+  wide = false,
   error,
   danger = false,
   dismissible = true,
@@ -91,7 +100,7 @@ export function Modal({
 
   return (
     <div className="mo-back" onMouseDown={(e) => e.target === e.currentTarget && !busy && dismissible && onClose()}>
-      <div className="mo" role="dialog" aria-modal="true" aria-label={title} ref={box}>
+      <div className={`mo${wide ? ' wide' : ''}`} role="dialog" aria-modal="true" aria-label={title} ref={box}>
         <form
           onSubmit={(e) => {
             e.preventDefault()

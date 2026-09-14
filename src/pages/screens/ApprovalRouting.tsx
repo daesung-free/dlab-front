@@ -519,10 +519,13 @@ function HistoryButton() {
           confirmLabel="닫기"
           /* 조회만 하는 모달이라 '취소'를 감춘다 — 되돌릴 것이 없다 */
           hideCancel
+          /* 폭은 모달이 정한다. 안쪽에 minWidth 를 박으면 바깥 .mo 가 440px 에 묶여 있어
+             내용이 잘린다 — 특강 상세에서 실제로 그렇게 잘려 있었다(2026-09-14) */
+          wide
           onConfirm={() => setOpen(false)}
           onClose={() => setOpen(false)}
         >
-          <div style={{ minWidth: 640 }}>
+          <div>
             <DataTable
               columns={HISTORY_COLUMNS}
               rows={rows}

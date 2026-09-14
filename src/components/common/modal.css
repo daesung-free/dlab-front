@@ -23,6 +23,11 @@
 @media (prefers-reduced-motion: reduce) {
   .mo { animation: none; }
 }
+/* 넓은 모달. 기본 440px 에 안 들어가는 내용(상세 폼·표)을 담을 때만 붙인다.
+   ★ max-width 만 키운다 — width:100% 는 그대로라 좁은 화면에서는 화면 폭을 따른다.
+     고정 폭으로 두면 노트북에서 좌우가 잘린다. */
+.mo.wide { max-width: 720px; }
+
 .mo-h {
   display: flex;
   align-items: flex-start;
