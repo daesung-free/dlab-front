@@ -37,6 +37,16 @@ import '../../styles/forms.css'
  *   첫 단계만 성공하면 중복 등록을 유발했다 — 백엔드가 상세 필드를 등록에 넣어줘서(2026-09-03)
  *   부분 실패 처리 자체가 없어졌다.
  *
+ * ★ **승인과 OT 가 한 목록에 못 있는다.** 서버의 승인 대기 목록은 *승인 전* 건만 준다 —
+ *   승인하는 순간 그 행이 목록에서 빠진다. 그런데 `onboardingStatus` 는 그 응답에만 있어서
+ *   승인된 학생이 OT 를 마쳤는지 볼 방법이 어디에도 없다(학생 상세에도 없다).
+ *   게다가 승인 전에 OT 를 누르면 403 이다. 그래서 **한 줄에 [승인][OT] 두 버튼을 두면
+ *   OT 는 영영 누를 수 없는 버튼이 된다** — 누르기 전엔 403, 누른 뒤엔 행이 사라진다.
+ *
+ *   그래서 승인한 건을 화면이 들고 있다가 아래쪽에 따로 보여준다. 서버가 안 주는 것을
+ *   화면 기억으로 메우는 것이라 **화면을 벗어나면 없어진다** — 그 사실을 화면에 적어둔다.
+ *   API_GAPS 24-8 에 승인분도 내려달라고 요청해 뒀다.
+ *
  * ★ 탭이 둘이다(2026-09-14 추가).
  *   · 합격생 등록 — 직원이 학생을 직접 만든다
  *   · 가입 승인   — **학생이 앱에서 가입한 건을 승인한다**
@@ -416,6 +426,9 @@ function SignupApproval() {
   /* 연락처를 기본으로 가린다. 이 응답에는 서버 마스킹 표시가 없어 원문이 그대로 온다 —
      다른 명단 화면과 같은 기본값이어야 여기만 뚫려 있지 않다 */
   const [masked, setMasked] = useState(true)
+  /* 방금 승인한 건. 서버 목록에서는 빠지지만 OT 를 눌러야 해서 화면이 들고 있는다
+     (머리 주석 ★ 참고). 새로고침하면 없어진다 — 그래서 안내 문구를 함께 둔다 */
+  const [approved, setApproved] = useState<PendingSignup[]>([])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -434,14 +447,29 @@ function SignupApproval() {
     void load()
   }, [load])
 
-  async function act(row: PendingSignup, kind: 'approve' | 'ot') {
+  async function doApprove(row: PendingSignup) {
     setBusyId(row.enrollmentId)
     setError(null)
     try {
-      if (kind === 'approve') await approveSignup(row.enrollmentId)
-      else await completeOt(row.enrollmentId)
-      setDone(kind === 'approve' ? `${row.name} 가입을 승인했습니다.` : `${row.name} OT 완료로 표시했습니다.`)
+      await approveSignup(row.enrollmentId)
+      /* 서버 목록에서 빠지므로 여기서 받아 둔다. 안 그러면 OT 를 누를 자리가 없어진다 */
+      setApproved((prev) => (prev.some((a) => a.enrollmentId === row.enrollmentId) ? prev : [...prev, row]))
+      setDone(`${row.name} 가입을 승인했습니다. 이제 앱에 로그인할 수 있습니다.`)
       await load()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '승인하지 못했습니다.')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function doOt(row: PendingSignup) {
+    setBusyId(row.enrollmentId)
+    setError(null)
+    try {
+      await completeOt(row.enrollmentId)
+      setApproved((prev) => prev.filter((a) => a.enrollmentId !== row.enrollmentId))
+      setDone(`${row.name} OT 완료로 표시했습니다.`)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '처리하지 못했습니다.')
     } finally {
@@ -474,33 +502,24 @@ function SignupApproval() {
       {
         key: 'act',
         header: '',
-        width: '170px',
+        width: '90px',
         align: 'center',
         value: () => '',
+        /* ★ 여기에 OT 버튼을 같이 두지 않는다. 승인 전 OT 는 403 이고, 승인하면 이 행이
+             목록에서 빠진다 — 어느 쪽으로도 누를 수 없는 버튼이 된다(머리 주석 ★) */
         render: (r) => (
-          <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-            <button
-              className="btn pri"
-              style={{ padding: '4px 9px', fontSize: 11.5 }}
-              disabled={busyId !== null}
-              onClick={() => void act(r, 'approve')}
-            >
-              승인
-            </button>
-            <button
-              className="btn"
-              style={{ padding: '4px 9px', fontSize: 11.5 }}
-              disabled={busyId !== null || r.onboardingStatus !== 'REGISTERED'}
-              title={r.onboardingStatus !== 'REGISTERED' ? '이미 OT를 마친 학생입니다' : undefined}
-              onClick={() => void act(r, 'ot')}
-            >
-              OT 완료
-            </button>
-          </div>
+          <button
+            className="btn pri"
+            style={{ padding: '4px 9px', fontSize: 11.5 }}
+            disabled={busyId !== null}
+            onClick={() => void doApprove(r)}
+          >
+            승인
+          </button>
         ),
       },
     ],
-    // act 는 매 렌더 새로 만들어지지만 rows 를 닫지 않으므로 busyId 만 보면 된다
+    // doApprove 는 매 렌더 새로 만들어지지만 rows 를 닫지 않으므로 busyId 만 보면 된다
     [busyId],
   )
 
@@ -552,6 +571,59 @@ function SignupApproval() {
         }
         emptyText="승인을 기다리는 가입 건이 없습니다."
       />
+
+      {/* ── 방금 승인한 건 — OT 를 여기서 처리한다 ── */}
+      {approved.length > 0 && (
+        <div className="card-sec" style={{ marginTop: 16 }}>
+          <div className="card-sec-h">
+            <div className="t">
+              <span className="ico">
+                <Icon name="clipboard-check" size={15} />
+              </span>
+              OT 대기 <span className="mk supplement">{approved.length}명</span>
+            </div>
+          </div>
+          <div className="card-sec-b">
+            {/* 서버가 승인된 건을 안 줘서 화면이 기억하는 목록이다. 그 사실을 숨기면
+                "아까 승인한 학생이 왜 없어졌냐"가 된다 — 대신 할 일로 바꿔 적는다 */}
+            <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
+              <div className="ic">
+                <Icon name="triangle-alert" size={17} />
+              </div>
+              <div>
+                <div className="tt">대면 OT를 마쳤으면 지금 눌러 주세요</div>
+                <div className="tx">
+                  이 목록은 <b>다른 화면으로 옮기면 사라집니다.</b> 나중에 처리하시려면 학생 이름을
+                  적어 두세요.
+                </div>
+              </div>
+            </div>
+            {approved.map((r) => (
+              <div
+                key={r.enrollmentId}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '9px 2px',
+                  borderBottom: '1px solid var(--line-2)',
+                }}
+              >
+                <b style={{ fontSize: 13 }}>{r.name}</b>
+                <span style={{ fontSize: 12, color: 'var(--muted)' }}>{r.studentNo ?? '-'}</span>
+                <button
+                  className="btn"
+                  style={{ marginLeft: 'auto' }}
+                  disabled={busyId !== null}
+                  onClick={() => void doOt(r)}
+                >
+                  OT 완료
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </>
   )
 }
