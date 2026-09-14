@@ -126,3 +126,94 @@ export function recalculateStudyTime(params: {
     query: { ...params },
   })
 }
+
+/* ── 출결 보정 ───────────────────────────────────────────────────────────────
+ *
+ * ★ 카드를 안 찍고 들어온 학생을 처리하는 경로다. 없으면 그 학생은 그날 결석으로 남는다.
+ * ★ 경로의 `{id}` 는 **`enrollmentId`** 다. 출결 행에는 자체 id 가 없다 —
+ *   행은 학생 × 날짜라 `date` 를 본문에 함께 보낸다.
+ * ★ **정정 사유가 필수다.** 나중에 왜 고쳤는지 아는 유일한 근거라 서버가 막는다.
+ */
+
+/** 태깅 종류. 출결 상태(AttendanceStatus)와 다른 축이다 — 이쪽은 '사건'이다 */
+export type TaggingEvent =
+  | 'CHECK_IN'
+  | 'CHECK_OUT'
+  | 'LATE'
+  | 'OUTING'
+  | 'EXCUSED_OUTING'
+  | 'EARLY_LEAVE'
+  | 'RETURN'
+
+export const TAGGING_EVENT_LABEL: Record<TaggingEvent, string> = {
+  CHECK_IN: '등원',
+  CHECK_OUT: '하원',
+  LATE: '지각',
+  OUTING: '외출',
+  EXCUSED_OUTING: '인정 외출',
+  EARLY_LEAVE: '조퇴',
+  RETURN: '복귀',
+}
+
+/**
+ * 상태 직접 정정으로 넣을 수 있는 값.
+ *
+ * ★ 조회 응답의 `AttendanceStatus` 와 **집합이 다르다.** `OUT`·`NOT_YET` 은 못 넣는다 —
+ *   외출은 태깅으로 생기는 것이고, '예정' 은 아직 안 온 날이라 사람이 정할 값이 아니다.
+ */
+export type FixableStatus = 'PRESENT' | 'LATE' | 'ABSENT' | 'EARLY_LEAVE'
+
+export const FIXABLE_STATUS_LABEL: Record<FixableStatus, string> = {
+  PRESENT: '정상 등원',
+  LATE: '지각',
+  ABSENT: '결석',
+  EARLY_LEAVE: '조퇴',
+}
+
+/**
+ * 정정 이력 한 줄.
+ *
+ * ★ 상태 정정과 태깅 추가가 **한 표에 섞여 온다.** 어느 쪽이냐에 따라 채워지는 칸이 다르다 —
+ *   상태 정정이면 before/afterStatus 가, 태깅 추가면 addedEvent·addedAt 이 찬다.
+ *   나머지는 null 이므로 화면이 그걸로 두 종류를 갈라야 한다.
+ */
+export interface AttendanceModification {
+  id: number
+  date: string
+  reason: string
+  modifiedAt: string
+  modifiedBy: number | null
+  beforeStatus: string | null
+  afterStatus: string | null
+  beforeExcused: boolean | null
+  afterExcused: boolean | null
+  /** 태깅 추가일 때만 찬다 */
+  addedEvent: TaggingEvent | null
+  addedAt: string | null
+}
+
+/** 태깅 누락 보정 — 찍히지 않은 등·하원을 사람이 넣는다. `at` 은 `HH:mm` */
+export function addTagging(
+  enrollmentId: number,
+  body: { date: string; at: string; eventType: TaggingEvent; reason: string },
+): Promise<void> {
+  return request<void>(`/api/v1/admin/attendance/${enrollmentId}/taggings`, { method: 'POST', body })
+}
+
+/** 상태 직접 정정 — 태깅과 무관하게 그날 상태를 못박는다 */
+export function fixAttendanceStatus(
+  enrollmentId: number,
+  body: { date: string; status: FixableStatus; reason: string },
+): Promise<void> {
+  return request<void>(`/api/v1/admin/attendance/${enrollmentId}/status`, { method: 'PUT', body })
+}
+
+/** 정정 이력 — `date` 가 필수다 */
+export function listAttendanceModifications(
+  enrollmentId: number,
+  date: string,
+): Promise<AttendanceModification[]> {
+  return request<AttendanceModification[]>(`/api/v1/admin/attendance/${enrollmentId}/modifications`, {
+    query: { date },
+  })
+}
