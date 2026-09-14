@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { ApiError } from '../api/client'
 import { takeSignedOutReason } from '../api/tokens'
+import logoUrl from '../assets/logo.png'
 import { useAuth } from './AuthContext'
 import './login.css'
 
@@ -34,7 +35,10 @@ export function LoginPage() {
   return (
     <div className="login-wrap">
       <form className="login-card" onSubmit={onSubmit}>
-        <h1 className="login-title">Dlab 통합관리</h1>
+        <h1 className="login-title">
+          <img src={logoUrl} alt="DLab" className="login-logo" />
+          <span>통합관리</span>
+        </h1>
         <p className="login-sub">관리자 계정으로 로그인하세요.</p>
 
         {signedOut === 'expired' && (

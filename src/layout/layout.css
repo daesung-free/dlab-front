@@ -19,13 +19,12 @@
   margin-right: 4px;
   border-right: 1px solid var(--line);
 }
+/* 로고 이미지(184×54). 높이만 맞추고 가로는 비율대로 둔다 */
 .topnav .brand .logo {
-  font-weight: 800;
-  font-size: 21px;
-  color: var(--mint);
-  letter-spacing: -0.03em;
+  height: 24px;
+  width: auto;
+  display: block;
 }
-.topnav .brand .logo b { font-size: 10px; vertical-align: top; font-weight: 800; }
 .topnav .brand .txt b {
   color: var(--ink);
   font-size: 13px;
