@@ -128,3 +128,105 @@ export function grantPenalties(body: {
 export function revokePenalty(penaltyPointId: number): Promise<void> {
   return request<void>(`/api/v1/admin/penalties/${penaltyPointId}`, { method: 'DELETE' })
 }
+
+/* ─────────── 항목 관리 (/penalty-items) ─────────── */
+
+/**
+ * 항목 마스터.
+ *
+ * ★ **부여용 `/penalties/items` 와 같은 표인데 점수 부호가 다르게 온다.**
+ *   부여용은 벌점을 항상 음수로 정규화해서 주고, 이 관리용은 **저장된 값을 그대로** 준다.
+ *   실제 응답(2026-09-14, 분당): 지각 `/penalty-items` +5 · `/penalties/items` -5,
+ *   무단조퇴는 양쪽 다 -3. 같은 DEMERIT 인데 행마다 부호가 제각각이다.
+ *
+ *   그래서 **화면은 절댓값으로 보여주고 절댓값으로 보낸다.** 부호는 `category` 가 갖는다 —
+ *   서버가 저장할 때도 부여할 때도 구분을 따라 정규화하므로(스펙 명시) 결과가 같다.
+ *   그대로 표시하면 "지각 5점 / 무단조퇴 -3점" 처럼 뒤죽박죽으로 보인다.
+ */
+export interface PenaltyItemRow {
+  id: number
+  itemName: string
+  category: PenaltyCategory
+  point: number
+}
+
+/** ★ `academyId` 가 **필수**다. 안 보내면 400("지점을 지정해야 합니다") — 부여용과 다르다 */
+export function listPenaltyItems(params: { academyId: number; year: number }): Promise<PenaltyItemRow[]> {
+  return request<PenaltyItemRow[]>('/api/v1/admin/penalty-items', { query: { ...params } })
+}
+
+export interface PenaltyItemBody {
+  academyId: number
+  year: number
+  itemName: string
+  /** 절댓값으로 보낸다. 저장은 `category` 를 따른다 */
+  point: number
+  category: PenaltyCategory
+}
+
+export function createPenaltyItem(body: PenaltyItemBody): Promise<PenaltyItemRow> {
+  return request<PenaltyItemRow>('/api/v1/admin/penalty-items', { method: 'POST', body })
+}
+
+export function updatePenaltyItem(itemId: number, body: PenaltyItemBody): Promise<PenaltyItemRow> {
+  return request<PenaltyItemRow>(`/api/v1/admin/penalty-items/${itemId}`, { method: 'PUT', body })
+}
+
+/**
+ * 항목 삭제.
+ *
+ * ★ 이미 부여된 이력은 **점수를 복사해 갖고 있어** 항목을 지워도 과거 내역이 바뀌지 않는다
+ *   (`PenaltyRow.point` 주석 참고). 다만 그 항목을 쓰는 **자동 규칙**은 같이 확인해야 한다.
+ */
+export function deletePenaltyItem(itemId: number): Promise<void> {
+  return request<void>(`/api/v1/admin/penalty-items/${itemId}`, { method: 'DELETE' })
+}
+
+/* ─────────── 자동 부여 규칙 (/penalty-rules) ─────────── */
+
+export type PenaltyTriggerType = 'ATTENDANCE' | 'DAILY_ROUTINE' | 'REGULAR_SCHEDULE'
+
+export const PENALTY_TRIGGER_LABEL: Record<PenaltyTriggerType, string> = {
+  ATTENDANCE: '출결',
+  DAILY_ROUTINE: '데일리 루틴',
+  REGULAR_SCHEDULE: '정기 일정',
+}
+
+export interface PenaltyRuleRow {
+  id: number
+  triggerType: PenaltyTriggerType
+  /**
+   * 어떤 상황에서 부여되는가.
+   *
+   * ⚠️ **허용값 목록을 아직 못 받았다.** 스펙에는 "출결이면 att_gn(A=지각 등)" 이라고만
+   *   적혀 있고 그 코드표가 없다. 시드도 섞여 있다 — `"A"`(지각)와 `"ABSENT"`(무단결석)가
+   *   같은 ATTENDANCE 규칙에 들어 있다.
+   *
+   * ⚠️ **서버가 값을 검증하지 않는다.** `"ZZZZ"` 를 보내도 200 으로 저장된다(2026-09-14 확인).
+   *   그래서 추측으로 드롭다운을 만들면 **영영 안 걸리는 규칙이 조용히 쌓인다.**
+   *   코드표를 받기 전까지 화면에서 규칙을 **새로 만들지 않는다**(API_GAPS 참고).
+   */
+  triggerCondition: string
+  penaltyItemId: number
+  itemName: string
+  point: number
+  /** 꺼져 있으면 자동 부여가 안 돈다. 새로 만들면 false 로 시작한다 */
+  active: boolean
+}
+
+/** ★ `year` 가 **필수**다. 안 보내면 400 */
+export function listPenaltyRules(params: { academyId?: number; year: number }): Promise<PenaltyRuleRow[]> {
+  return request<PenaltyRuleRow[]>('/api/v1/admin/penalty-rules', { query: { ...params } })
+}
+
+/** 규칙을 켜고 끈다. 지우지 않고 멈추는 수단이라 실수해도 되돌리기 쉽다 */
+export function setPenaltyRuleActive(ruleId: number, active: boolean): Promise<void> {
+  return request<void>(`/api/v1/admin/penalty-rules/${ruleId}/active`, {
+    method: 'PATCH',
+    query: { active },
+  })
+}
+
+export function deletePenaltyRule(ruleId: number): Promise<void> {
+  return request<void>(`/api/v1/admin/penalty-rules/${ruleId}`, { method: 'DELETE' })
+}
