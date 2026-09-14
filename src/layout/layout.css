@@ -13,6 +13,8 @@
 }
 .topnav .brand {
   display: flex;
+  /* ★ 여기는 center 다. 아래 '대성 · 관리형 독학재수' 까지 두 줄이라 baseline 으로 맞추면
+       로고가 윗줄에만 붙어 전체가 위로 쏠린다 — 로그인 화면(한 줄)과 사정이 다르다 */
   align-items: center;
   gap: 9px;
   padding-right: 16px;
