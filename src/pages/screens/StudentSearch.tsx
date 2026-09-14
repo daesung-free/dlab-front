@@ -141,7 +141,14 @@ function Content() {
   const [changing, setChanging] = useState<number | null>(null)
   /* 상태 변경 모달. 예전에는 window.prompt 두 번이었는데 값을 못 받는 환경이 있어
      눌러도 아무 일이 없었다 — 무엇보다 이 레포는 prompt 를 전부 걷어낸 상태다 */
-  const [statusEdit, setStatusEdit] = useState<{ row: Student; next: EnrollmentStatus; reason: string } | null>(null)
+  /* ★ `next` 가 처음에 비어 있다. 예전에는 'WITHDRAWN' 을 기본값으로 뒀는데, 아무것도 안
+       고르고 [변경] 을 누르면 **가장 위험한 퇴원이 그대로 저장됐다.** 퇴원은 되돌릴 수 없다 —
+       서버가 재원 복귀를 막고("재등록으로 처리하세요") 재등록하면 학번이 새로 매겨진다. */
+  const [statusEdit, setStatusEdit] = useState<{
+    row: Student
+    next: EnrollmentStatus | ''
+    reason: string
+  } | null>(null)
   const [statusErr, setStatusErr] = useState<string | null>(null)
 
   const table = useServerTable({
@@ -171,11 +178,7 @@ function Content() {
             title="퇴원·제적·휴원으로 바꿉니다. 삭제는 이력 때문에 막혀 있습니다"
             onClick={() => {
               setStatusErr(null)
-              setStatusEdit({
-                row: r,
-                next: r.enrollmentStatus === 'WITHDRAWN' ? 'ENROLLED' : 'WITHDRAWN',
-                reason: '',
-              })
+              setStatusEdit({ row: r, next: '', reason: '' })
             }}
           >
             상태 변경
@@ -208,10 +211,11 @@ function Content() {
   async function submitStatus() {
     if (!statusEdit) return
     const { row, next, reason } = statusEdit
+    if (!next || !reason.trim()) return
     setChanging(row.enrollmentId)
     setStatusErr(null)
     try {
-      await changeStudentStatus(row.enrollmentId, next, reason.trim() || undefined)
+      await changeStudentStatus(row.enrollmentId, next, reason.trim())
       table.reload()
       setStatusEdit(null)
     } catch (err) {
@@ -243,6 +247,10 @@ function Content() {
           confirmLabel="변경"
           busy={changing !== null}
           error={statusErr}
+          danger
+          /* 되돌릴 수 없는 동작이라 둘 다 받기 전에는 못 누른다.
+             사유는 이력에 남는 유일한 설명이라 비워두면 나중에 왜 바꿨는지 알 길이 없다 */
+          confirmDisabled={statusEdit.next === '' || statusEdit.reason.trim() === ''}
           onConfirm={() => void submitStatus()}
           onClose={() => setStatusEdit(null)}
         >
@@ -251,8 +259,9 @@ function Content() {
             <select
               className="sel"
               value={statusEdit.next}
-              onChange={(e) => setStatusEdit({ ...statusEdit, next: e.target.value as EnrollmentStatus })}
+              onChange={(e) => setStatusEdit({ ...statusEdit, next: e.target.value as EnrollmentStatus | '' })}
             >
+              <option value="">선택하세요</option>
               {/* ★ 지금과 같은 상태는 빼둔다. 서버가 "이미 같은 상태입니다"로 거절하는데,
                      고를 수 있게 두면 그 오류를 보고서야 안다. */}
               {(['ENROLLED', 'LEAVE', 'WITHDRAWN', 'EXPELLED', 'GRADUATED'] as EnrollmentStatus[])
@@ -265,7 +274,7 @@ function Content() {
             </select>
           </div>
           <div className="frow">
-            <label>사유</label>
+            <label className="req">사유</label>
             <div>
               <input
                 className="inp"
@@ -276,6 +285,23 @@ function Content() {
               <div className="hint">이력에 남는 유일한 설명입니다.</div>
             </div>
           </div>
+
+          {/* ★ 되돌릴 수 없다는 것을 고른 뒤에 알린다. 퇴원·제적은 서버가 재원 복귀를 막고,
+                 재등록하면 학번이 새로 매겨져 원래 학번이 사라진다. */}
+          {(statusEdit.next === 'WITHDRAWN' || statusEdit.next === 'EXPELLED') && (
+            <div className="note-box risk">
+              <div className="ic">
+                <Icon name="alert-triangle" size={17} />
+              </div>
+              <div>
+                <div className="tt">되돌릴 수 없습니다</div>
+                <div className="tx">
+                  재원으로 되돌릴 수 없고 <b>재등록해야 합니다.</b> 그러면 학번이 새로 매겨져 지금 학번은
+                  사라집니다.
+                </div>
+              </div>
+            </div>
+          )}
         </Modal>
       )}
 
