@@ -2,6 +2,17 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 /**
+ * 화면에 보여줄 버전. **`package.json` 이 유일한 출처다.**
+ *
+ * ★ 화면에 숫자를 직접 박으면 올릴 때 빠뜨린 자리가 생긴다 — 브랜드 표기가 네 군데로
+ *   갈려 있던 것과 같은 일이 벌어진다. 여기서 한 번 읽어 주입한다.
+ * ★ 사람에게 보여주는 것이라 `1.0.0` 이 아니라 `1.0` 으로 자른다.
+ */
+import pkg from './package.json' with { type: 'json' }
+
+const APP_VERSION = pkg.version.split('.').slice(0, 2).join('.')
+
+/**
  * mode = 'offline' 일 때는 웹서버 없이 index.html을 더블클릭해서 열 수 있는 번들을 만든다.
  *   · base './'  — file:// 에서 에셋 경로가 깨지지 않도록 상대경로
  *   · HashRouter — file:// 은 history API를 못 쓰므로 main.tsx가 라우터를 바꿔 끼운다
@@ -9,6 +20,7 @@ import react from '@vitejs/plugin-react'
  */
 export default defineConfig(({ mode }) => ({
   base: mode === 'offline' ? './' : '/',
+  define: { __APP_VERSION__: JSON.stringify(APP_VERSION) },
   plugins: [react()],
   /**
    * 내부 요구사항 명세 뷰(`/spec`)를 **개발 빌드에만** 남긴다.
