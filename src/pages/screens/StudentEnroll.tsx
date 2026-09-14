@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Icon } from '../../components/Icon'
-import { Unfilled } from '../../components/common'
+import { DataTable, MaskToggle, Unfilled, type Column } from '../../components/common'
+import { Tabs } from '../../components/Tabs'
 import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
 import {
@@ -12,6 +13,13 @@ import {
   type Student,
   type TrackType,
 } from '../../api/students'
+import {
+  ONBOARDING_LABEL,
+  approveSignup,
+  completeOt,
+  listPendingSignups,
+  type PendingSignup,
+} from '../../api/studentSignups'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
 
@@ -28,6 +36,17 @@ import '../../styles/forms.css'
  * ★ 저장이 **한 번에 끝난다.** 예전에는 Admit 이 얇아 POST 후 PATCH 로 두 번 나갔고,
  *   첫 단계만 성공하면 중복 등록을 유발했다 — 백엔드가 상세 필드를 등록에 넣어줘서(2026-09-03)
  *   부분 실패 처리 자체가 없어졌다.
+ *
+ * ★ 탭이 둘이다(2026-09-14 추가).
+ *   · 합격생 등록 — 직원이 학생을 직접 만든다
+ *   · 가입 승인   — **학생이 앱에서 가입한 건을 승인한다**
+ *
+ *   두 번째가 여기 붙는 이유: 학생이 앱에서 가입하면 '승인 대기' 로 남고, 승인 전에는
+ *   로그인이 아예 안 된다. 그런데 승인할 화면이 없어서 **가입한 학생이 영영 못 들어왔다.**
+ *   신규 학생을 다루는 화면이 여기라 탭으로 붙였다 — 메뉴를 늘리지 않는다.
+ *
+ *   ★ 관리자가 계정을 직접 만들어주는 API 를 요청하지 않는다. 승인 절차를 우회하는
+ *     두 번째 경로가 된다(api/studentSignups.ts 머리 주석).
  *
  * ★ 서버에 넣을 곳이 없는 폼 값 — docs/API_GAPS.md
  *   영문명 · 학부모 연락처 · 졸업연도 · 장학 · 좌석 · 사물함.
@@ -64,7 +83,8 @@ const EMPTY: FormState = {
 
 type Result = { kind: 'admitted'; student: Student } | { kind: 'failed'; message: string }
 
-function Content() {
+/** 합격생 등록 폼 — 원래 이 화면 전체였다. 탭이 생기면서 이름만 갈랐고 내용은 그대로다 */
+function EnrollForm() {
   const { academyId, academies } = useAcademy()
   const [form, setForm] = useState<FormState>(EMPTY)
   const [saving, setSaving] = useState(false)
@@ -372,6 +392,185 @@ function Content() {
           </div>
         </div>
       </div>
+    </>
+  )
+}
+
+/* ══ 가입 승인 ══ */
+
+/**
+ * 승인 대기 목록.
+ *
+ * ★ **승인과 OT 는 다른 축이다.** 승인은 "로그인을 열어주는 것", OT 는 "대면 안내를
+ *   끝냈다고 표시하는 것"이라 승인 직후에도 진행 단계는 `REGISTERED`(OT 전) 그대로다.
+ *   한 컬럼으로 합치면 "승인했는데 왜 안 끝났냐"는 질문이 나온다 — 열을 갈라 둔다.
+ */
+function SignupApproval() {
+  const { academyId } = useAcademy()
+  const [rows, setRows] = useState<PendingSignup[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  /** 처리 중인 행. 멱등이라 두 번 눌려도 안 깨지지만, 눌린 줄 모르고 또 누르는 걸 막는다 */
+  const [busyId, setBusyId] = useState<number | null>(null)
+  const [done, setDone] = useState<string | null>(null)
+  /* 연락처를 기본으로 가린다. 이 응답에는 서버 마스킹 표시가 없어 원문이 그대로 온다 —
+     다른 명단 화면과 같은 기본값이어야 여기만 뚫려 있지 않다 */
+  const [masked, setMasked] = useState(true)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      setRows(await listPendingSignups({ academyId: academyId ?? undefined }))
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '승인 대기 목록을 불러오지 못했습니다.')
+      setRows([])
+    } finally {
+      setLoading(false)
+    }
+  }, [academyId])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  async function act(row: PendingSignup, kind: 'approve' | 'ot') {
+    setBusyId(row.enrollmentId)
+    setError(null)
+    try {
+      if (kind === 'approve') await approveSignup(row.enrollmentId)
+      else await completeOt(row.enrollmentId)
+      setDone(kind === 'approve' ? `${row.name} 가입을 승인했습니다.` : `${row.name} OT 완료로 표시했습니다.`)
+      await load()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '처리하지 못했습니다.')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const columns: Column<PendingSignup>[] = useMemo(
+    () => [
+      {
+        key: 'studentNo',
+        header: '학번',
+        width: '110px',
+        /* 승인 전에는 학번이 없을 수 있다. 서버가 안 주는 게 아니라 아직 안 매겨진 것이라
+           Unfilled 가 아니라 '-' 다(CLAUDE.md 4) */
+        value: (r) => r.studentNo ?? '-',
+      },
+      { key: 'name', header: '이름', width: '100px', mask: 'name', value: (r) => r.name },
+      { key: 'phone', header: '연락처', width: '130px', mask: 'phone', value: (r) => r.phone ?? '-' },
+      {
+        key: 'onboardingStatus',
+        header: '진행 단계',
+        width: '110px',
+        align: 'center',
+        value: (r) => ONBOARDING_LABEL[r.onboardingStatus] ?? r.onboardingStatus,
+        render: (r, shown) => (
+          <span className={`mk ${r.onboardingStatus === 'ACTIVE' ? 'verified' : 'supplement'}`}>{shown}</span>
+        ),
+      },
+      {
+        key: 'act',
+        header: '',
+        width: '170px',
+        align: 'center',
+        value: () => '',
+        render: (r) => (
+          <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+            <button
+              className="btn pri"
+              style={{ padding: '4px 9px', fontSize: 11.5 }}
+              disabled={busyId !== null}
+              onClick={() => void act(r, 'approve')}
+            >
+              승인
+            </button>
+            <button
+              className="btn"
+              style={{ padding: '4px 9px', fontSize: 11.5 }}
+              disabled={busyId !== null || r.onboardingStatus !== 'REGISTERED'}
+              title={r.onboardingStatus !== 'REGISTERED' ? '이미 OT를 마친 학생입니다' : undefined}
+              onClick={() => void act(r, 'ot')}
+            >
+              OT 완료
+            </button>
+          </div>
+        ),
+      },
+    ],
+    // act 는 매 렌더 새로 만들어지지만 rows 를 닫지 않으므로 busyId 만 보면 된다
+    [busyId],
+  )
+
+  return (
+    <>
+      <div className="note-box">
+        <div className="ic">
+          <Icon name="user-check" size={17} />
+        </div>
+        <div>
+          <div className="tt">앱에서 가입한 학생을 승인합니다</div>
+          <div className="tx">
+            승인하기 전에는 <b>학생이 앱에 로그인할 수 없습니다.</b> 승인과 OT는 별개라,
+            승인해도 대면 안내를 마치기 전까지는 진행 단계가 <b>OT 전</b>으로 남습니다.
+          </div>
+        </div>
+      </div>
+
+      {error && (
+        <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+          {error}
+        </div>
+      )}
+
+      {done && (
+        <div className="note-box" style={{ borderColor: 'var(--mint)' }}>
+          <div className="ic">
+            <Icon name="check" size={17} />
+          </div>
+          <div style={{ flex: 1 }}>{done}</div>
+          <button className="btn" onClick={() => setDone(null)}>
+            닫기
+          </button>
+        </div>
+      )}
+
+      <DataTable
+        columns={columns}
+        rows={rows}
+        rowKey={(r) => String(r.enrollmentId)}
+        masked={masked}
+        loading={loading}
+        pageSize={12}
+        toolbar={<MaskToggle masked={masked} onChange={setMasked} />}
+        countLabel={
+          <>
+            승인 대기 <b>{rows.length}</b>명
+          </>
+        }
+        emptyText="승인을 기다리는 가입 건이 없습니다."
+      />
+    </>
+  )
+}
+
+function Content() {
+  const [tab, setTab] = useState('enroll')
+
+  return (
+    <>
+      <Tabs
+        items={[
+          { key: 'enroll', label: '합격생 등록' },
+          { key: 'signup', label: '가입 승인' },
+        ]}
+        active={tab}
+        onChange={setTab}
+        standalone
+      />
+      {tab === 'signup' ? <SignupApproval /> : <EnrollForm />}
     </>
   )
 }
