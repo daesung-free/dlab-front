@@ -307,7 +307,16 @@ function buildSessions(d: LectureDraft): string[] {
 function Content() {
   const [tab, setTab] = useState('list')
   const [masked, setMasked] = useState(true)
-  const [selected, setSelected] = useState<string[]>([])
+  /**
+   * 선택은 **탭마다 따로 갖는다.**
+   *
+   * ★ 예전에는 하나를 두 탭이 같이 썼다. 신청자 탭에서 한 명, 대기자 탭에서 한 명을 고른 뒤
+   *   「선택 확정」을 누르면 **신청자 탭에서 고른 사람까지 승격 대상에 들어가** 정원 경고가
+   *   '2명 추가'로 떴다. 이미 확정된 사람을 다시 올리는 셈이라 인원이 어긋난다(2026-09-14).
+   *   표는 탭마다 행이 다르므로 선택도 탭에 속한다.
+   */
+  const [selectedApply, setSelectedApply] = useState<string[]>([])
+  const [selectedWait, setSelectedWait] = useState<string[]>([])
   const [draft, setDraft] = useState<LectureDraft | null>(null)
 
   /* ── 실연동 ── */
@@ -432,6 +441,13 @@ function Content() {
     [applicants],
   )
 
+  /* ★ 특강을 바꾸면 선택을 비운다. 안 비우면 **앞 특강에서 고른 사람이 그대로 남아**
+       다음 특강의 「선택 확정」에 섞인다 — 표에는 안 보이는데 대상에는 들어간다 */
+  useEffect(() => {
+    setSelectedApply([])
+    setSelectedWait([])
+  }, [lectureId])
+
   const selectedLecture = lectures.find((l) => l.id === lectureId) ?? null
 
   /**
@@ -463,7 +479,7 @@ function Content() {
     if (lectureId !== null) setApplicants(await listLectureApplicants(lectureId))
     await loadLectures()
     setPromoteBusy(false)
-    setSelected([])
+    setSelectedWait([])
     setPromoting(null)
     if (failed.length > 0) {
       setError(`${ids.length}명 중 ${done}명만 확정됐습니다. 실패 ${failed.length}건 — ${failed[0]}`)
@@ -1162,8 +1178,8 @@ function Content() {
               rows={tab === 'apply' ? applied : waiting}
               rowKey={(r) => String(r.applicationId)}
               selectable
-              selected={selected}
-              onSelectedChange={setSelected}
+              selected={tab === 'apply' ? selectedApply : selectedWait}
+              onSelectedChange={tab === 'apply' ? setSelectedApply : setSelectedWait}
               masked={masked}
               pageSize={12}
               emptyText={selectedLecture ? '해당하는 인원이 없습니다.' : '특강 목록에서 특강을 먼저 선택하세요.'}
@@ -1178,13 +1194,14 @@ function Content() {
                   {/* 대기자 → 확정. 서버가 한 건씩 받으므로 순차로 보낸다 */}
                   <button
                     className="btn"
-                    disabled={selected.length === 0 || tab !== 'wait'}
+                    disabled={selectedWait.length === 0 || tab !== 'wait'}
                     title={tab === 'wait' ? '선택한 대기자를 확정으로 올립니다' : '대기자 탭에서 사용합니다'}
-                    onClick={() => setPromoting({ ids: selected.map(Number) })}
+                    onClick={() => setPromoting({ ids: selectedWait.map(Number) })}
                   >
                     <Icon name="arrow-right" size={14} /> 선택 확정
                   </button>
-                  <button className="btn" disabled={selected.length === 0}>
+                  {/* 누르면 아무 일도 안 하던 버튼이다 — 붙일 때까지 막아 둔다 */}
+                  <button className="btn" disabled data-soon title="준비 중입니다">
                     수납청구
                   </button>
                   <MaskToggle masked={masked} onChange={setMasked} />
@@ -1251,6 +1268,26 @@ function Content() {
                     </tr>
                   </thead>
                   <tbody>
+                    {/* ★ 빈 표를 머리만 남기고 두지 않는다. 출석을 찍으러 온 사람이
+                           "칸이 어디 있냐"고 묻게 된다 — 실제로 그랬다(2026-09-14).
+                           비는 이유가 셋이라 무엇을 해야 하는지까지 갈라서 적는다. */}
+                    {applied.length === 0 && (
+                      <tr>
+                        <td colSpan={sessionList.length + 4} className="al-center" style={{ padding: '26px 12px' }}>
+                          {selectedLecture === null ? (
+                            <span style={{ color: 'var(--muted)' }}>위 목록에서 특강을 먼저 고르세요.</span>
+                          ) : sessionList.length === 0 ? (
+                            <span style={{ color: 'var(--muted)' }}>
+                              이 특강에 수업 회차가 없습니다. 회차를 만들어야 출석을 찍을 수 있습니다.
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--muted)' }}>
+                              확정된 신청자가 없습니다. <b>신청자</b> 탭에서 확정하면 여기에 줄이 생깁니다.
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    )}
                     {applied.map((a) => (
                       <tr key={a.applicationId}>
                         <td>{a.studentNo ?? '-'}</td>
@@ -1317,10 +1354,13 @@ function Content() {
           busy={detailBusy}
           error={detailErr}
           confirmDisabled={editing ? editing.name.trim() === '' : false}
+          wide
           onConfirm={() => (editing ? void saveDetail() : setDetail(null))}
           onClose={() => (editing ? setEditing(null) : setDetail(null))}
         >
-          <div style={{ minWidth: 520 }}>
+          {/* ★ 폭은 모달이 정한다(`wide`). 여기에 minWidth 를 박으면 바깥 .mo 가 440px 에
+                 묶여 있어 **내용이 그대로 잘린다** — 실제로 그렇게 잘려 있었다(2026-09-14) */}
+          <div>
             {editing ? (
               <>
                 <div className="frow">

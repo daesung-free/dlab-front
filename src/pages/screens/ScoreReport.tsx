@@ -550,19 +550,23 @@ function Content() {
           onConfirm={() => void submitRecord()}
           onClose={() => setRecordEdit(null)}
         >
+          {/* ★ .frow 는 112px + 1fr 2열 그리드다. 안내문을 입력칸의 **형제**로 두면
+                 라벨 칸으로 떨어져 왼쪽에 눌려 붙는다 — 입력칸과 함께 한 칸에 묶는다 */}
           <div className="frow">
             <label>평균 등급</label>
-            <input
-              className="inp"
-              type="number"
-              step="0.01"
-              min={1}
-              max={9}
-              placeholder="예: 2.35"
-              value={recordEdit}
-              onChange={(e) => setRecordEdit(e.target.value)}
-            />
-            <div className="hint">비워 두면 &lsquo;아직 모름&rsquo; 으로 저장됩니다.</div>
+            <div>
+              <input
+                className="inp"
+                type="number"
+                step="0.01"
+                min={1}
+                max={9}
+                placeholder="예: 2.35"
+                value={recordEdit}
+                onChange={(e) => setRecordEdit(e.target.value)}
+              />
+              <div className="hint">비워 두면 &lsquo;아직 모름&rsquo; 으로 저장됩니다.</div>
+            </div>
           </div>
         </Modal>
       )}
@@ -649,8 +653,8 @@ function Content() {
               </tbody>
             </table>
           </div>
-          <div className="frow">
-            <div className="hint">빈 칸은 저장하지 않고 비워 둡니다. 다른 회차의 값은 그대로 남습니다.</div>
+          <div className="hint" style={{ marginTop: 10 }}>
+            빈 칸은 저장하지 않고 비워 둡니다. 다른 회차의 값은 그대로 남습니다.
           </div>
         </Modal>
       )}

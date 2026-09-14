@@ -790,53 +790,57 @@ function PenaltyActions() {
             </table>
           </div>
 
+          {/* ★ .frow 는 112px + 1fr 2열 그리드다. 안내문을 입력칸의 **형제**로 두면
+                 라벨 칸으로 떨어져 왼쪽에 눌려 붙는다 — 한 칸에 묶는다 */}
           <div className="frow">
             <label className="req">{draft.id === null ? '새 항목' : '항목 수정'}</label>
-            <input
-              className="inp"
-              placeholder="항목 이름"
-              value={draft.itemName}
-              onChange={(e) => setDraft({ ...draft, itemName: e.target.value })}
-            />
-            {nameTaken && <div className="hint bad">같은 이름의 항목이 이미 있습니다.</div>}
+            <div>
+              <input
+                className="inp"
+                placeholder="항목 이름"
+                value={draft.itemName}
+                onChange={(e) => setDraft({ ...draft, itemName: e.target.value })}
+              />
+              {nameTaken && <div className="hint bad">같은 이름의 항목이 이미 있습니다.</div>}
+            </div>
           </div>
           <div className="frow">
             <label className="req">구분 · 점수</label>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <select
-                className="sel"
-                value={draft.category}
-                onChange={(e) => setDraft({ ...draft, category: e.target.value as PenaltyCategory })}
-              >
-                <option value="DEMERIT">벌점</option>
-                <option value="MERIT">상점</option>
-              </select>
-              <input
-                className="inp"
-                type="number"
-                min={0}
-                placeholder="점수"
-                value={draft.point}
-                onChange={(e) => setDraft({ ...draft, point: e.target.value })}
-              />
+            <div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <select
+                  className="sel"
+                  value={draft.category}
+                  onChange={(e) => setDraft({ ...draft, category: e.target.value as PenaltyCategory })}
+                >
+                  <option value="DEMERIT">벌점</option>
+                  <option value="MERIT">상점</option>
+                </select>
+                <input
+                  className="inp"
+                  type="number"
+                  min={0}
+                  placeholder="점수"
+                  value={draft.point}
+                  onChange={(e) => setDraft({ ...draft, point: e.target.value })}
+                />
+              </div>
+              <div className="hint">점수는 부호 없이 적습니다. 벌점은 깎이는 점수로 들어갑니다.</div>
             </div>
-            <div className="hint">점수는 부호 없이 적습니다. 벌점은 깎이는 점수로 들어갑니다.</div>
           </div>
-          <div className="frow">
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                className="btn pri"
-                disabled={busy || nameTaken || draft.itemName.trim() === '' || draft.point.trim() === ''}
-                onClick={() => void saveDraft()}
-              >
-                {draft.id === null ? '추가' : '저장'}
+          <div style={{ display: 'flex', gap: 8, marginTop: 14, marginBottom: 14 }}>
+            <button
+              className="btn pri"
+              disabled={busy || nameTaken || draft.itemName.trim() === '' || draft.point.trim() === ''}
+              onClick={() => void saveDraft()}
+            >
+              {draft.id === null ? '추가' : '저장'}
+            </button>
+            {draft.id !== null && (
+              <button className="btn" disabled={busy} onClick={() => setDraft(EMPTY_DRAFT)}>
+                새 항목으로
               </button>
-              {draft.id !== null && (
-                <button className="btn" disabled={busy} onClick={() => setDraft(EMPTY_DRAFT)}>
-                  새 항목으로
-                </button>
-              )}
-            </div>
+            )}
           </div>
 
           {/* ── 자동 부여 규칙 ── */}

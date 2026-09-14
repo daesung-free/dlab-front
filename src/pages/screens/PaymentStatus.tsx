@@ -30,8 +30,8 @@ import {
   type ReceiptRow,
   type ReceiptSummary,
 } from '../../api/billing'
-import { SEAT_TYPE_LABEL, issueMonthlyBilling, type SeatType } from '../../api/tuition'
-import { searchStudents, type Student } from '../../api/students'
+import { SEAT_TYPE_LABEL, getFeeTable, issueMonthlyBilling, type FeeTableRow, type SeatType } from '../../api/tuition'
+import { GRADE_LABEL, searchStudents, type Student } from '../../api/students'
 import type { Mockup } from './types'
 import './payment.css'
 
@@ -506,6 +506,10 @@ function Content() {
   const [actBusy, setActBusy] = useState(false)
   const [actErr, setActErr] = useState<string | null>(null)
   const [actDone, setActDone] = useState<string | null>(null)
+  /* 교습비는 서버가 금액을 정한다. 그 값을 등록 전에 보여주지 않으면 얼마가 청구될지
+     모르고 누르게 된다 — 단가표를 미리 읽어 합계를 띄운다 */
+  const [fee, setFee] = useState<FeeTableRow[] | null>(null)
+  const [feeErr, setFeeErr] = useState<string | null>(null)
 
   /* 청구를 만들려면 학생을 골라야 한다. 재원생만 — 퇴원생에게 새 청구를 낼 일은 없다 */
   useEffect(() => {
@@ -521,6 +525,37 @@ function Content() {
       cancelled = true
     }
   }, [academyId])
+
+  const issueStudent = students.find((st) => String(st.enrollmentId) === issue.enrollmentId) ?? null
+
+  /* 학생·월·좌석이 정해지면 단가표를 읽는다. 학년에 따라 단가가 달라 학생이 먼저다 */
+  useEffect(() => {
+    if (!issueOpen || issue.mode !== 'monthly' || issueStudent === null || issue.month === '' || academyId === null) {
+      setFee(null)
+      setFeeErr(null)
+      return
+    }
+    let cancelled = false
+    setFeeErr(null)
+    getFeeTable(issue.month, issueStudent.grade, issue.seatType, academyId)
+      .then((r) => !cancelled && setFee(r))
+      .catch((err) => {
+        if (cancelled) return
+        setFee(null)
+        // 단가가 없는 달이 실제로 있다. 등록을 눌러보고 알게 하지 않는다
+        setFeeErr(err instanceof ApiError ? err.message : '단가표를 불러오지 못했습니다.')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [issueOpen, issue.mode, issue.month, issue.seatType, issueStudent, academyId])
+
+  /** 고른 할인율에 해당하는 줄. 없으면 할인 0% 줄을 쓴다 */
+  const feeRow = useMemo(() => {
+    if (fee === null || fee.length === 0) return null
+    const want = issue.discountRate.trim() === '' ? 0 : Number(issue.discountRate)
+    return fee.find((r) => r.discountRate === want) ?? null
+  }, [fee, issue.discountRate])
 
   async function submitIssue() {
     setActBusy(true)
@@ -990,26 +1025,30 @@ function Content() {
         >
           <div className="frow">
             <label className="req">청구 종류</label>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                type="button"
-                className={`btn${issue.mode === 'monthly' ? ' pri' : ''}`}
-                onClick={() => setIssue({ ...issue, mode: 'monthly' })}
-              >
-                교습비 (월)
-              </button>
-              <button
-                type="button"
-                className={`btn${issue.mode === 'etc' ? ' pri' : ''}`}
-                onClick={() => setIssue({ ...issue, mode: 'etc' })}
-              >
-                특강비 · 급식비 · 그 밖
-              </button>
-            </div>
-            <div className="hint">
-              {issue.mode === 'monthly'
-                ? '금액은 단가표와 그 달 교습일수로 자동 계산됩니다.'
-                : '금액을 직접 적습니다. 교습비는 위쪽으로 등록해야 단가표와 어긋나지 않습니다.'}
+            {/* ★ .frow 는 112px + 1fr 2열 그리드다. 안내문을 컨트롤의 **형제**로 두면
+                   라벨 칸으로 떨어져 왼쪽에 눌려 붙는다 — 한 칸에 묶는다 */}
+            <div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  className={`btn${issue.mode === 'monthly' ? ' pri' : ''}`}
+                  onClick={() => setIssue({ ...issue, mode: 'monthly' })}
+                >
+                  교습비 (월)
+                </button>
+                <button
+                  type="button"
+                  className={`btn${issue.mode === 'etc' ? ' pri' : ''}`}
+                  onClick={() => setIssue({ ...issue, mode: 'etc' })}
+                >
+                  특강비 · 급식비 · 그 밖
+                </button>
+              </div>
+              <div className="hint">
+                {issue.mode === 'monthly'
+                  ? '금액은 단가표와 그 달 교습일수로 계산됩니다. 아래에서 미리 확인하세요.'
+                  : '금액을 직접 적습니다. 교습비는 위쪽으로 등록해야 단가표와 어긋나지 않습니다.'}
+              </div>
             </div>
           </div>
 
@@ -1033,57 +1072,112 @@ function Content() {
             <>
               <div className="frow">
                 <label className="req">청구 월</label>
-                <input
-                  className="inp"
-                  type="month"
-                  value={issue.month}
-                  onChange={(e) => setIssue({ ...issue, month: e.target.value })}
-                />
-                <div className="hint">청구 한 건이 한 달분입니다. 같은 달을 두 번 등록할 수 없습니다.</div>
+                <div>
+                  <input
+                    className="inp"
+                    type="month"
+                    value={issue.month}
+                    onChange={(e) => setIssue({ ...issue, month: e.target.value })}
+                  />
+                  <div className="hint">청구 한 건이 한 달분입니다. 같은 달을 두 번 등록할 수 없습니다.</div>
+                </div>
               </div>
               <div className="frow">
                 <label className="req">좌석 · 할인율</label>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <select
-                    className="sel"
-                    value={issue.seatType}
-                    onChange={(e) => setIssue({ ...issue, seatType: e.target.value as SeatType })}
-                  >
-                    {(Object.keys(SEAT_TYPE_LABEL) as SeatType[]).map((t) => (
-                      <option key={t} value={t}>
-                        {SEAT_TYPE_LABEL[t]}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    className="inp"
-                    type="number"
-                    min={0}
-                    max={100}
-                    placeholder="할인율 %"
-                    value={issue.discountRate}
-                    onChange={(e) => setIssue({ ...issue, discountRate: e.target.value })}
-                  />
+                <div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <select
+                      className="sel"
+                      value={issue.seatType}
+                      onChange={(e) => setIssue({ ...issue, seatType: e.target.value as SeatType })}
+                    >
+                      {(Object.keys(SEAT_TYPE_LABEL) as SeatType[]).map((t) => (
+                        <option key={t} value={t}>
+                          {SEAT_TYPE_LABEL[t]}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      className="inp"
+                      type="number"
+                      min={0}
+                      max={100}
+                      placeholder="할인율 %"
+                      value={issue.discountRate}
+                      onChange={(e) => setIssue({ ...issue, discountRate: e.target.value })}
+                    />
+                  </div>
+                  {/* 월 청구는 율, 아래 그 밖 청구는 금액이다 — 서버 계약이 그렇게 갈려 있다 */}
+                  <div className="hint">할인율은 퍼센트로 적습니다. 비우면 할인 없이 청구됩니다.</div>
                 </div>
-                {/* 월 청구는 율, 아래 그 밖 청구는 금액이다 — 서버 계약이 그렇게 갈려 있다 */}
-                <div className="hint">할인율은 퍼센트로 적습니다. 비우면 할인 없이 청구됩니다.</div>
+              </div>
+
+              {/* ── 청구될 금액 ── */}
+              {/* ★ 금액을 서버가 정하므로, 안 보여주면 **얼마가 청구되는지 모르고 누르게 된다.**
+                     단가표를 읽어 미리 띄운다 — 등록 뒤에 알게 하지 않는다 */}
+              <div className="frow">
+                <label>청구될 금액</label>
+                <div>
+                  {feeErr !== null ? (
+                    <div className="hint bad">{feeErr}</div>
+                  ) : issueStudent === null ? (
+                    <div className="hint">학생을 고르면 금액이 나옵니다.</div>
+                  ) : fee === null ? (
+                    <div className="hint">불러오는 중…</div>
+                  ) : feeRow === null ? (
+                    <div className="hint bad">
+                      할인율 {issue.discountRate || 0}% 단가가 없습니다. 등록된 할인율:{' '}
+                      {fee.map((r) => `${r.discountRate}%`).join(' · ')}
+                    </div>
+                  ) : (
+                    <>
+                      <table className="dt">
+                        <tbody>
+                          <tr>
+                            <td>교습비</td>
+                            <td style={{ textAlign: 'right' }}>{wonOf(feeRow.monthlyTuition)}</td>
+                          </tr>
+                          <tr>
+                            <td>독서실비</td>
+                            <td style={{ textAlign: 'right' }}>{wonOf(feeRow.monthlyStudyRoom)}</td>
+                          </tr>
+                          <tr>
+                            <td>
+                              <b>합계</b>
+                            </td>
+                            <td style={{ textAlign: 'right' }}>
+                              <b>{wonOf(feeRow.monthlyTotal)}</b>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                      <div className="hint">
+                        {GRADE_LABEL[issueStudent.grade] ?? issueStudent.grade} ·{' '}
+                        {SEAT_TYPE_LABEL[issue.seatType]} · 교습일수 {feeRow.teachingDays}일 기준
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </>
           ) : (
             <>
               <div className="frow">
                 <label className="req">청구 이름</label>
-                <input
-                  className="inp"
-                  placeholder="예: 2026년 10월 급식비"
-                  value={issue.name}
-                  onChange={(e) => setIssue({ ...issue, name: e.target.value })}
-                />
-                <div className="hint">청구서에 그대로 찍힙니다.</div>
+                <div>
+                  <input
+                    className="inp"
+                    placeholder="예: 2026년 10월 급식비"
+                    value={issue.name}
+                    onChange={(e) => setIssue({ ...issue, name: e.target.value })}
+                  />
+                  <div className="hint">청구서에 그대로 찍힙니다.</div>
+                </div>
               </div>
               <div className="frow">
                 <label className="req">항목 · 금액</label>
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div>
+                  <div style={{ display: 'flex', gap: 8 }}>
                   <select
                     className="sel"
                     value={issue.billingType}
@@ -1111,21 +1205,24 @@ function Content() {
                     value={issue.discountAmount}
                     onChange={(e) => setIssue({ ...issue, discountAmount: e.target.value })}
                   />
+                  </div>
+                  <div className="hint">할인은 퍼센트가 아니라 금액으로 적습니다.</div>
                 </div>
-                <div className="hint">할인은 퍼센트가 아니라 금액으로 적습니다.</div>
               </div>
             </>
           )}
 
           <div className="frow">
             <label>납기일</label>
-            <input
-              className="inp"
-              type="date"
-              value={issue.dueDate}
-              onChange={(e) => setIssue({ ...issue, dueDate: e.target.value })}
-            />
-            <div className="hint">비워 두면 납기일 없이 등록됩니다.</div>
+            <div>
+              <input
+                className="inp"
+                type="date"
+                value={issue.dueDate}
+                onChange={(e) => setIssue({ ...issue, dueDate: e.target.value })}
+              />
+              <div className="hint">비워 두면 납기일 없이 등록됩니다.</div>
+            </div>
           </div>
         </Modal>
       )}
@@ -1144,15 +1241,19 @@ function Content() {
         >
           <div className="frow">
             <label className="req">금액</label>
-            <input
-              className="inp"
-              type="number"
-              min={1}
-              value={pay.amount}
-              onChange={(e) => setPay({ ...pay, amount: e.target.value })}
-            />
-            {/* 부분납이면 여러 건이 쌓인다. 미납액을 기본값으로 넣어 두고 고치게 한다 */}
-            <div className="hint">미납액 {pay.row.unpaid.toLocaleString()}원. 나눠 받으면 금액을 고쳐 적습니다.</div>
+            <div>
+              <input
+                className="inp"
+                type="number"
+                min={1}
+                value={pay.amount}
+                onChange={(e) => setPay({ ...pay, amount: e.target.value })}
+              />
+              {/* 부분납이면 여러 건이 쌓인다. 미납액을 기본값으로 넣어 두고 고치게 한다 */}
+              <div className="hint">
+                미납액 {pay.row.unpaid.toLocaleString()}원. 나눠 받으면 금액을 고쳐 적습니다.
+              </div>
+            </div>
           </div>
           <div className="frow">
             <label className="req">수단</label>
@@ -1207,9 +1308,7 @@ function Content() {
       {/* 결과는 모달을 닫은 뒤에도 보여야 한다 — 무엇이 됐는지 알려주지 않으면 다시 누른다 */}
       {actDone && (
         <Modal title="완료" hideCancel confirmLabel="닫기" onConfirm={() => setActDone(null)} onClose={() => setActDone(null)}>
-          <div className="frow">
-            <div className="hint">{actDone}</div>
-          </div>
+          <div style={{ fontSize: 13.5 }}>{actDone}</div>
         </Modal>
       )}
     </>
