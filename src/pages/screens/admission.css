@@ -116,7 +116,7 @@
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.03em;
-  text-transform: uppercase;
+  /* ★ uppercase 를 걸면 안 된다 — 브랜드명이 들어가는 자리라 DLab 이 DLAB 으로 그려진다 */
   margin-bottom: 9px;
 }
 .p-admission .ba-col.before .lab { color: var(--red); }
