@@ -312,7 +312,7 @@ function Content() {
               </ul>
             </div>
             <div className="ba-col after">
-              <div className="lab">DLab 통합관리 (To-Be)</div>
+              <div className="lab">Dlab 통합관리 (To-Be)</div>
               <ul>
                 {AFTER.map((a) => (
                   <li key={a}>{a}</li>

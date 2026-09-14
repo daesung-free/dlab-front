@@ -116,7 +116,7 @@ export const NAV: NavCat[] = [
         items: [{ screenId: 'lecture', label: '특강관리', note: '특강출석부 포함' }],
       },
       {
-        name: 'D.Lab',
+        name: 'Dlab',
         items: [
           { screenId: 'student-penalty', label: '상벌점 관리' },
           { screenId: 'daily-routine', label: '데일리 루틴', added: true },
