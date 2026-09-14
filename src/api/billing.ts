@@ -111,3 +111,98 @@ export function recordPayment(billingId: number, amount: number, method: PayMeth
     body: { amount, method },
   })
 }
+
+/* ─────────── 청구 생성·취소 (/billings) ─────────── */
+
+/**
+ * 청구 한 건.
+ *
+ * ★ `receipt-status` 의 `ReceiptRow` 와 **다른 표다.** 이쪽은 결제 거래(`payments[]`)가
+ *   없고 금액만 온다. 화면의 매출장은 여전히 `receipt-status` 를 본다 —
+ *   여기는 "방금 만든 것이 제대로 들어갔나"를 확인하는 용도다.
+ */
+export interface BillingRow {
+  id: number
+  studentNo: string | null
+  studentName: string
+  /** 청구서에 찍히는 이름. "2026년 9월 교습비" 처럼 사람이 읽는 문장이다 */
+  name: string
+  billingType: BillingType
+  suppliedAmount: number
+  discountAmount: number
+  /** 공급가 - 할인. 화면이 다시 계산하지 않는다 */
+  billedAmount: number
+  receivedAmount: number
+  unpaidAmount: number
+  dueDate: string | null
+  status: string
+}
+
+/**
+ * 연도별 청구 전량.
+ *
+ * ★ `year` 가 **필수**다. 안 보내면 400.
+ *
+ * ★ **취소분(`CANCELLED`)까지 들어온다.** `/billings/students/{id}` 와 `/receipt-status` 는
+ *   취소분을 빼고 주므로 같은 조건인데 건수가 다르다 — 실측 12건 / 2건 / 9건(2026-09-14).
+ *   매출 합계를 여기서 내면 취소한 청구가 섞인다.
+ */
+export function listBillings(params: { academyId?: number; year: number }): Promise<BillingRow[]> {
+  return request<BillingRow[]>('/api/v1/admin/billings', { query: { ...params } })
+}
+
+/** 한 학생의 청구 전체. 연도를 안 받는다 — 재등록 전 기수 것까지 다 온다 */
+export function listStudentBillings(enrollmentId: number): Promise<BillingRow[]> {
+  return request<BillingRow[]>(`/api/v1/admin/billings/students/${enrollmentId}`)
+}
+
+/**
+ * 청구를 직접 만든다.
+ *
+ * ★ **금액을 직접 적는 경로다.** 교습비는 단가표가 있으므로 `issueMonthlyBilling` 을 쓴다 —
+ *   이쪽으로 만들면 단가표와 어긋난 금액이 조용히 들어간다.
+ *   특강비·급식비처럼 단가표가 없는 것, 그리고 예외 청구에 쓴다.
+ *
+ * ★ `discountAmount` 는 **금액**이다(율이 아니다). 월 청구 쪽은 반대로 `discountRate` 가 율이다.
+ */
+export function createBilling(body: {
+  enrollmentId: number
+  /** 청구서에 찍히는 이름 */
+  name: string
+  billingType: BillingType
+  suppliedAmount: number
+  discountAmount?: number
+  /** yyyy-MM-dd. 비우면 납기일 없이 만들어진다 */
+  dueDate?: string
+}): Promise<BillingRow> {
+  return request<BillingRow>('/api/v1/admin/billings', { method: 'POST', body })
+}
+
+/**
+ * 청구 취소.
+ *
+ * ★ 지우는 게 아니라 **상태를 `CANCELLED` 로 바꾼다.** 행은 남는다.
+ *
+ * ⚠️ **수납이 들어 있어도 막지 않는다.** 400 을 기대했는데 200 이다. 그리고 취소된 청구는
+ *   `/receipt-status` 와 `/billings/students/{id}` 에서 **빠진다** — 실측: 5,000원이 수납된
+ *   청구를 취소했더니 매출장에서 사라졌고, 그 5,000원은 `/billings` 에만 남았다.
+ *   **돈은 받았는데 매출장 어디에도 안 보이는 상태**가 된다(2026-09-14 확인).
+ *
+ *   되돌리는 API 가 없다. 화면은 **수납이 있으면 금액을 보여주고 확인을 받아야 한다.**
+ */
+export function deleteBilling(billingId: number): Promise<void> {
+  return request<void>(`/api/v1/admin/billings/${billingId}`, { method: 'DELETE' })
+}
+
+/**
+ * 수납 취소.
+ *
+ * ★ 청구 id 가 아니라 **거래 id** 를 받는다 — `ReceiptRow.payments[].id` 다.
+ *   둘 다 작은 정수라 섞어 넣어도 200 이 날 수 있다. 남의 거래를 지우게 된다.
+ *
+ * ★ 취소하면 청구가 `PAID` → `PENDING` 으로 돌아가고 `receivedAmount` 가 0 이 된다
+ *   (2026-09-14 확인). 청구 자체는 남는다.
+ */
+export function deletePayment(transactionId: number): Promise<void> {
+  return request<void>(`/api/v1/admin/billings/payments/${transactionId}`, { method: 'DELETE' })
+}

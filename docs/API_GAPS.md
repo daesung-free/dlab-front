@@ -2331,3 +2331,51 @@ GET /penalties/items?academyId=8&year=2026   (부여용)  지각 -5 · 무단조
 
 요청: 관리용 응답도 부여용과 같은 규칙으로 정규화해 주시거나, 저장값 자체를 한쪽으로
 맞춰 주세요. 급하지 않습니다.
+
+---
+
+## 24-7. 청구 취소 — 수납이 들어 있어도 막지 않는다 ★ (F-4.8)
+
+**2026-09-14 · 로컬 서버 확인 · Phase 1-2 작업 중**
+
+`DELETE /api/v1/admin/billings/{id}` 는 **수납이 붙어 있어도 200** 이다. 그리고 취소된 청구는
+매출장에서 빠진다.
+
+```
+POST /billings            공급가 10,000 · 할인 1,000 → 청구 9,000     id=10
+POST /billings/10/payments  5,000 현금                             → 200
+DELETE /billings/10                                                → 200  ← 막힐 줄 알았다
+```
+
+그 결과가 이렇다.
+
+```
+GET /billings?academyId=8&year=2026        id=10  CANCELLED  받음 5,000   ← 여기에만 있다
+GET /billings/students/10                  없음
+GET /receipt-status?academyId=8&year=2026   없음
+```
+
+**돈은 5,000원 받았는데 매출장 어디에도 안 보이는 상태**가 된다. 되돌리는 API 도 없다.
+
+### 화면에서 막은 방법
+
+취소 모달이 수납액을 보여주고 확인을 받는다. 확인하면 **수납 거래부터 지우고(`DELETE
+/billings/payments/{거래id}`) 그다음 청구를 취소**한다. 이 순서로 하면 취소분의
+`receivedAmount` 가 0 으로 남아 금액이 붕 뜨지 않는다.
+
+### 요청
+
+수납이 남아 있는 청구의 취소는 **400 으로 막아 주세요.** 화면에서 순서를 지키고 있지만,
+다른 경로로 부르면 같은 일이 생깁니다. 되돌릴 수단이 없는 쪽이라 서버에서 막히는 게 맞습니다.
+
+### 덧 — 읽는 경로마다 건수가 다르다
+
+같은 조건인데 `/billings` 만 취소분을 포함한다. 매출 합계를 이쪽에서 내면 취소한 청구가 섞인다.
+
+```
+GET /billings              12건   (CANCELLED 3건 포함)
+GET /billings/students/10   2건
+GET /receipt-status         9건
+```
+
+의도한 것이면 그대로 두셔도 됩니다. 화면은 `/receipt-status` 를 봅니다.
