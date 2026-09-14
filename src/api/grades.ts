@@ -108,6 +108,9 @@ export function getStudentGrades(enrollmentId: number): Promise<GradeSubmission>
  * ★ **제출 이력이 없는 학생에게 보내면 새로 만든다.** 직전 조회가 404
  *   (`GRADE_SUBMISSION_NOT_FOUND`)여도 이 호출은 200이다 — 수정 경로가 생성도 겸한다.
  *   `null` 은 "아직 모른다"로 허용된다(모의고사만 먼저 내는 학생이 있다).
+ *
+ * ★ **`null` 이 실제로 지운다.** 학생 상태·특강의 `PATCH` 는 `null` 을 무시해서 한 번 넣은
+ *   값을 못 비우는데, 이쪽은 다르다 — 잘못 적은 내신을 되돌릴 수 있다(2026-09-14 확인).
  */
 export function updateSchoolRecord(
   enrollmentId: number,
@@ -124,6 +127,13 @@ export function updateSchoolRecord(
  *
  * ★ **보낸 회차만 교체된다.** 안 보낸 회차는 그대로 남으므로, 한 회차를 고치려고
  *   전 회차를 실어 보낼 필요가 없다. 반대로 **회차를 지우는 수단은 아니다.**
+ *
+ * ★ `examSubjectId` 는 **회차마다 새로 매겨진다.** HIGH2 는 6월이 1~5, 9월이 6~10 이다.
+ *   한 회차의 id 로 다른 회차를 건드릴 수 없고, 화면도 열을 id 로 맞추면 안 된다
+ *   (`ScoreReport.tsx` 상단 주석 참고).
+ *
+ * ★ 조회 응답의 `exams` 는 **그 학년 전 회차가 항상 들어온다.** 안 낸 회차는 점수가 전부
+ *   `null` 인 채로 온다 — 배열 길이로 "제출 여부"를 판단하면 안 된다.
  */
 export function updateExamScores(enrollmentId: number, scores: ScoreInput[]): Promise<GradeSubmission> {
   return request<GradeSubmission>(`/api/v1/admin/students/${enrollmentId}/grades/exam-scores`, {
