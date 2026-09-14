@@ -1,7 +1,7 @@
 {
   "name": "dlab-front",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "description": "DSA/D.Lab 통합관리프로그램 재구축 — 프론트엔드",
   "scripts": {

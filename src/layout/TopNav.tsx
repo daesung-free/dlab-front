@@ -49,7 +49,10 @@ export function TopNav() {
                배포되므로 쓰지 않는다(CLAUDE.md 2-1). */}
         <img className="logo" src={logoUrl} alt="DLab" />
         <div className="txt">
-          <b>통합관리</b>
+          {/* 버전은 package.json 에서 빌드 때 주입된다 — 화면에 숫자를 박지 않는다 */}
+          <b>
+            통합관리 <span className="ver">{__APP_VERSION__}</span>
+          </b>
           <span>대성 · 관리형 독학재수</span>
         </div>
       </NavLink>

@@ -27,6 +27,8 @@
   gap: 9px;
 }
 .login-logo { height: 26px; width: auto; }
+/* 굵기·크기·색을 아래 .login-sub('관리자 계정으로 로그인하세요') 와 맞춘다 */
+.login-title .ver { font-size: 12px; font-weight: 400; color: var(--muted); }
 .login-sub { margin: 0 0 12px; font-size: 12px; color: var(--muted); }
 .login-label { margin-top: 8px; font-size: 12px; font-weight: 600; }
 .login-submit { margin-top: 16px; justify-content: center; }
