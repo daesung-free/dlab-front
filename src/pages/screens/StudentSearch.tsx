@@ -44,6 +44,9 @@ import '../../styles/forms.css'
 
 const PAGE_SIZE = 20
 
+/** 기본 조회 조건. 폼과 조회가 같은 값을 써야 화면과 결과가 어긋나지 않는다 */
+const DEFAULT_QUERY: SearchValues = { status: 'ENROLLED' }
+
 const FIELDS: Field[] = [
   { type: 'text', name: 'keyword', label: '통합검색 (이름 · 학번 · 전화)', placeholder: '예: 임민주 / 2026-0001 / 8760', span: 2 },
   { type: 'select', name: 'year', label: '연도', options: [
@@ -114,7 +117,10 @@ function Content() {
   const { academyId } = useAcademy()
   /* 상태를 안 고르면 **재원생**이다. 비워두면 휴원·퇴원생이 첫 쪽에 섞여 들어와
    * "재원생 명부"를 뽑는 기본 용도와 어긋난다. 전체를 보려면 '전체'를 고르면 된다 */
-  const [query, setQuery] = useState<SearchValues>({ status: 'ENROLLED' })
+  /* 기본은 재원생만 본다 — 평소 명단에 휴원·퇴원이 섞이면 안 된다.
+     ★ 그 값을 **폼에도 채운다.** 예전에는 query 에만 넣어서, 검색 칸은 '전체'인데
+       실제로는 재원만 조회됐다 — 퇴원으로 바꾼 학생이 어디서도 안 보인다는 말이 나왔다. */
+  const [query, setQuery] = useState<SearchValues>(DEFAULT_QUERY)
   const [selected, setSelected] = useState<string[]>([])
   const [masked, setMasked] = useState(true)
 
@@ -305,7 +311,7 @@ function Content() {
         </Modal>
       )}
 
-      <SearchForm fields={FIELDS} onSearch={setQuery} presetKey="student-search" />
+      <SearchForm fields={FIELDS} onSearch={setQuery} initial={DEFAULT_QUERY} presetKey="student-search" />
 
       {exportError && (
         <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
