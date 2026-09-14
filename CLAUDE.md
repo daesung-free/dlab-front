@@ -58,7 +58,7 @@ DSA/D.Lab 통합관리 **웹 관리자 프론트엔드**. 백엔드(`dlab-api`, 
 | 파일 | 출처 |
 |---|---|
 | `docs/BACKEND_HANDOFF.md` · `ASKS.md` · `ASSUMPTIONS.md` | `src/data/menu.ts`·`issues.ts`·`assumptions.ts` → `npm run docs` |
-| `docs/API_GAPS.md` · `LOCAL_DEV.md` · `CONNECT_PLAN.md` | **수기 작성.** 여기에 적는다 |
+| `docs/API_GAPS.md` · `LOCAL_DEV.md` · `CONNECT_PLAN.md` · `REMAINING_PLAN.md` | **수기 작성.** 여기에 적는다 |
 | `notes/` | **깃에 안 올라간다**(.gitignore). 데모 체크리스트·시연 대본처럼 레포에 남기면 안 되는 것 |
 
 ## 2-1. 내부 문서를 프로덕션 번들에 넣지 않는다 ★
@@ -121,6 +121,9 @@ schema.d.ts npm run api:types 로 생성. 직접 수정 금지
 목록이 아닌 화면(좌우 분할 master-detail 등)은 `ConsultLog.tsx`를 본뜬다.
 
 화면별 연동 순서와 담당은 `docs/CONNECT_PLAN.md`에 있다. **작업 시작 전에 거기에 담당을 적는다.**
+
+남은 작업 전체는 `docs/REMAINING_PLAN.md`에 Phase 1~4로 나눠져 있다 — **서버가 없는 것(BE)과
+화면만 없는 것(FE)을 갈라 놨다.** 무엇부터 할지는 거기서 고른다.
 
 ### 목록 화면을 새로 붙일 때
 
