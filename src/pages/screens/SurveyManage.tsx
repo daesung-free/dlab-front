@@ -606,7 +606,7 @@ function Content() {
               <button
                 className="btn pri"
                 disabled={!draft.title.trim() || draft.questions.length === 0 || isTemplate}
-                title={isTemplate ? '템플릿 저장 API가 아직 없습니다' : undefined}
+                title={isTemplate ? '템플릿 저장은 아직 준비 중입니다' : undefined}
                 onClick={() => void saveSurvey(draft)}
               >
                 <Icon name="save" size={14} /> {isTemplate ? '템플릿 저장' : '저장'}

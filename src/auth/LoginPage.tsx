@@ -34,7 +34,7 @@ export function LoginPage() {
   return (
     <div className="login-wrap">
       <form className="login-card" onSubmit={onSubmit}>
-        <h1 className="login-title">D.Lab 통합관리</h1>
+        <h1 className="login-title">Dlab 통합관리</h1>
         <p className="login-sub">관리자 계정으로 로그인하세요.</p>
 
         {signedOut === 'expired' && (

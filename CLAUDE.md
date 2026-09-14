@@ -29,6 +29,16 @@ DSA/D.Lab 통합관리 **웹 관리자 프론트엔드**. 백엔드(`dlab-api`, 
 ✓ 학번은 저장할 때 자동으로 매겨집니다. 연도가 바뀌면 다시 1번부터 시작합니다
 ```
 
+**`title` 툴팁도 화면이다.** 버튼을 막아두고 이유를 적을 때 "API가 아직 없습니다"라고
+쓰기 쉬운데, 그건 우리 사정이다. 클라이언트는 **언제 되는지**만 알면 된다.
+
+```
+✗ 붙일 집계 API가 아직 없습니다      ✗ 좌석 마스터를 만드는 관리자 API가 없어 시드가 필요합니다
+✓ 준비 중입니다                     ✓ 이 지점에 등록된 좌석 구역이 없습니다
+```
+
+확인: `npm run build && grep -c "API가 아직\|엔드포인트\|시드" dist/assets/*.js` → 0
+
 ## 1-2. `window.prompt` · `confirm` 을 쓰지 않는다 ★
 
 값을 받아야 하면 `components/common/Modal` 을 쓴다. 예외 없다.
@@ -48,7 +58,7 @@ DSA/D.Lab 통합관리 **웹 관리자 프론트엔드**. 백엔드(`dlab-api`, 
 | 파일 | 출처 |
 |---|---|
 | `docs/BACKEND_HANDOFF.md` · `ASKS.md` · `ASSUMPTIONS.md` | `src/data/menu.ts`·`issues.ts`·`assumptions.ts` → `npm run docs` |
-| `docs/API_GAPS.md` · `LOCAL_DEV.md` · `CONNECT_PLAN.md` | **수기 작성.** 여기에 적는다 |
+| `docs/API_GAPS.md` · `LOCAL_DEV.md` · `CONNECT_PLAN.md` · `REMAINING_PLAN.md` | **수기 작성.** 여기에 적는다 |
 | `notes/` | **깃에 안 올라간다**(.gitignore). 데모 체크리스트·시연 대본처럼 레포에 남기면 안 되는 것 |
 
 ## 2-1. 내부 문서를 프로덕션 번들에 넣지 않는다 ★
@@ -111,6 +121,9 @@ schema.d.ts npm run api:types 로 생성. 직접 수정 금지
 목록이 아닌 화면(좌우 분할 master-detail 등)은 `ConsultLog.tsx`를 본뜬다.
 
 화면별 연동 순서와 담당은 `docs/CONNECT_PLAN.md`에 있다. **작업 시작 전에 거기에 담당을 적는다.**
+
+남은 작업 전체는 `docs/REMAINING_PLAN.md`에 Phase 1~4로 나눠져 있다 — **서버가 없는 것(BE)과
+화면만 없는 것(FE)을 갈라 놨다.** 무엇부터 할지는 거기서 고른다.
 
 ### 목록 화면을 새로 붙일 때
 
