@@ -211,7 +211,8 @@ export interface StatusLog {
   fromStatus: EnrollmentStatus | null
   toStatus: EnrollmentStatus
   reason: string | null
-  changedBy: string | null
+  /** 바꾼 사람의 **계정 id** 다. 이름이 아니다 — 화면에 그대로 쓰면 숫자가 보인다 */
+  changedBy: number | null
   /** ISO instant */
   changedAt: string
 }
@@ -234,4 +235,20 @@ export function changeStudentStatus(
 
 export function listStatusLogs(enrollmentId: number): Promise<StatusLog[]> {
   return request<StatusLog[]>(`/api/v1/admin/students/${enrollmentId}/status-logs`)
+}
+
+/**
+ * 재등록 — `POST /students/{enrollmentId}/re-enroll`
+ *
+ * ★ 퇴원한 학생을 **새 기수로 다시 들이는** 것이다. 상태를 재원으로 되돌리는 게 아니다 —
+ *   서버가 `WITHDRAWN → ENROLLED` 를 막고 "재등록으로 처리하세요"라고 답한다.
+ * ★ 그래서 **학번이 새로 매겨진다.** 지금 학번은 퇴원 이력으로 남는다.
+ *   되돌릴 수 없으므로 화면이 그 사실을 먼저 알려야 한다.
+ * ★ 연도·지점·학년이 필수다. 지난 기수의 값을 그대로 쓰는 게 아니라 새로 정한다.
+ */
+export function reEnrollStudent(
+  enrollmentId: number,
+  body: { academyId: number; year: number; grade: GradeType; track?: TrackType; admissionDate?: string },
+): Promise<{ enrollmentId: number; studentNo: string | null }> {
+  return request(`/api/v1/admin/students/${enrollmentId}/re-enroll`, { method: 'POST', body })
 }

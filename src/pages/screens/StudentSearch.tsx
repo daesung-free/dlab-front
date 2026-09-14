@@ -22,6 +22,9 @@ import {
   TRACK_LABEL,
   retakeLabel,
   changeStudentStatus,
+  listStatusLogs,
+  reEnrollStudent,
+  type StatusLog,
   exportStudents,
   searchStudents,
   type EnrollmentStatus,
@@ -45,6 +48,14 @@ import '../../styles/forms.css'
 const PAGE_SIZE = 20
 
 /** 기본 조회 조건. 폼과 조회가 같은 값을 써야 화면과 결과가 어긋나지 않는다 */
+/** UTC instant → 한국 날짜. 문자열을 자르면 자정 근처 기록이 하루 밀린다 */
+function logDay(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
 const DEFAULT_QUERY: SearchValues = { status: 'ENROLLED' }
 
 const FIELDS: Field[] = [
@@ -156,6 +167,42 @@ function Content() {
     reason: string
   } | null>(null)
   const [statusErr, setStatusErr] = useState<string | null>(null)
+  /* 지난 변경 기록. 모달을 열 때 같이 읽는다 — 왜 퇴원했는지 그 자리에서 봐야 판단이 된다 */
+  const [logs, setLogs] = useState<StatusLog[] | null>(null)
+
+  /**
+   * 재등록 — 퇴원한 학생을 **새 기수로 다시 들인다.**
+   *
+   * ★ 상태를 재원으로 되돌리는 게 아니다. 서버가 `WITHDRAWN → ENROLLED` 를 막고
+   *   "재등록으로 처리하세요"라고 답한다.
+   * ★ **학번이 새로 매겨진다.** 지금 학번은 퇴원 이력으로 남는다 — 되돌릴 수 없으므로
+   *   모달에서 먼저 알린다.
+   */
+  const [reEnroll, setReEnroll] = useState<{ row: Student; year: string; grade: GradeType } | null>(null)
+  const [reBusy, setReBusy] = useState(false)
+  const [reErr, setReErr] = useState<string | null>(null)
+  const [reDone, setReDone] = useState<string | null>(null)
+
+  async function submitReEnroll() {
+    if (!reEnroll || academyId === null) return
+    setReBusy(true)
+    setReErr(null)
+    try {
+      const res = await reEnrollStudent(reEnroll.row.enrollmentId, {
+        academyId,
+        year: Number(reEnroll.year),
+        grade: reEnroll.grade,
+      })
+      table.reload()
+      setReEnroll(null)
+      /* 새 학번을 알려준다 — 바뀐 값을 모르면 목록에서 못 찾는다 */
+      setReDone(`재등록했습니다. 새 학번은 ${res.studentNo ?? '(발급 중)'} 입니다.`)
+    } catch (err) {
+      setReErr(err instanceof ApiError ? err.message : '재등록하지 못했습니다.')
+    } finally {
+      setReBusy(false)
+    }
+  }
 
   const table = useServerTable({
     fetcher: searchStudents,
@@ -185,11 +232,38 @@ function Content() {
             onClick={() => {
               setStatusErr(null)
               setStatusEdit({ row: r, next: '', reason: '' })
+              setLogs(null)
+              void listStatusLogs(r.enrollmentId)
+                .then(setLogs)
+                /* 이력을 못 읽어도 상태 변경 자체는 되게 둔다 — 빈 배열로 넘긴다 */
+                .catch(() => setLogs([]))
             }}
           >
             상태 변경
           </button>
         ),
+      },
+      {
+        /* ★ 퇴원·제적한 학생에게만 뜬다. 상태를 되돌리는 게 아니라 새 기수로 다시 들이는 것이다 */
+        key: 're',
+        header: '',
+        width: '76px',
+        align: 'center',
+        value: () => '',
+        render: (r) =>
+          r.enrollmentStatus === 'WITHDRAWN' || r.enrollmentStatus === 'EXPELLED' ? (
+            <button
+              className="btn"
+              style={{ padding: '4px 9px', fontSize: 11.5 }}
+              onClick={() => {
+                setReErr(null)
+                setReDone(null)
+                setReEnroll({ row: r, year: String(new Date().getFullYear()), grade: r.grade })
+              }}
+            >
+              재등록
+            </button>
+          ) : null,
       },
     ],
     [changing],
@@ -308,7 +382,108 @@ function Content() {
               </div>
             </div>
           )}
+
+          {/* ★ 지난 기록을 같이 보여준다. 왜 휴원했는지 모르면 무엇으로 바꿀지 판단할 수 없다 */}
+          <div style={{ marginTop: 14 }}>
+            <div className="fs-title" style={{ marginBottom: 6 }}>
+              지난 변경 기록
+            </div>
+            {logs === null ? (
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>불러오는 중…</div>
+            ) : logs.length === 0 ? (
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>변경된 적이 없습니다.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {logs.map((g) => (
+                  <div
+                    key={g.id}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '96px 132px 1fr',
+                      gap: 8,
+                      fontSize: 12,
+                      alignItems: 'baseline',
+                    }}
+                  >
+                    <span style={{ color: 'var(--muted)' }}>{logDay(g.changedAt)}</span>
+                    <span>
+                      {g.fromStatus ? (STATUS_LABEL[g.fromStatus] ?? g.fromStatus) : '신규'}
+                      {' → '}
+                      <b>{STATUS_LABEL[g.toStatus] ?? g.toStatus}</b>
+                    </span>
+                    <span style={{ color: 'var(--ink-2)' }}>
+                      {g.reason || <span style={{ color: 'var(--muted)' }}>사유 없음</span>}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </Modal>
+      )}
+
+      {reEnroll && (
+        <Modal
+          title="재등록"
+          sub={`${reEnroll.row.name}(${reEnroll.row.studentNo ?? '-'}) 을(를) 새 기수로 다시 등록합니다.`}
+          confirmLabel="재등록"
+          danger
+          busy={reBusy}
+          error={reErr}
+          confirmDisabled={academyId === null || reEnroll.year.trim() === ''}
+          onConfirm={() => void submitReEnroll()}
+          onClose={() => setReEnroll(null)}
+        >
+          {/* ★ 되돌릴 수 없다. 학번이 바뀌는 것을 누르기 전에 알아야 한다 */}
+          <div className="note-box risk">
+            <div className="ic">
+              <Icon name="alert-triangle" size={17} />
+            </div>
+            <div>
+              <div className="tt">학번이 새로 매겨집니다</div>
+              <div className="tx">
+                지금 학번 <b>{reEnroll.row.studentNo ?? '-'}</b> 은 퇴원 이력으로 남고, 새 학번을 받습니다.
+                되돌릴 수 없습니다.
+              </div>
+            </div>
+          </div>
+
+          <div className="frow">
+            <label className="req">연도</label>
+            <input
+              className="inp"
+              type="number"
+              value={reEnroll.year}
+              onChange={(e) => setReEnroll({ ...reEnroll, year: e.target.value })}
+            />
+          </div>
+          <div className="frow">
+            <label className="req">학년 구분</label>
+            <select
+              className="sel"
+              value={reEnroll.grade}
+              onChange={(e) => setReEnroll({ ...reEnroll, grade: e.target.value as GradeType })}
+            >
+              {(Object.keys(GRADE_LABEL) as GradeType[]).map((g) => (
+                <option key={g} value={g}>
+                  {GRADE_LABEL[g]}
+                </option>
+              ))}
+            </select>
+          </div>
+        </Modal>
+      )}
+
+      {reDone && (
+        <div className="note-box plain" role="status">
+          <div className="ic">
+            <Icon name="check" size={17} />
+          </div>
+          <div style={{ flex: 1 }}>{reDone}</div>
+          <button className="btn" onClick={() => setReDone(null)}>
+            닫기
+          </button>
+        </div>
       )}
 
       <SearchForm fields={FIELDS} onSearch={setQuery} initial={DEFAULT_QUERY} presetKey="student-search" />
