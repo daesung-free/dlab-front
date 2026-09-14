@@ -10,6 +10,10 @@ import {
   LECTURE_TYPE_LABEL,
   listLectureApplicants,
   listLectureSessions,
+  listSessionAttendances,
+  saveSessionAttendance,
+  LECTURE_ATTENDANCE_LABEL,
+  type LectureAttendanceStatus,
   listLectures,
   changeLectureStatus,
   createLecture,
@@ -44,6 +48,9 @@ import '../../styles/forms.css'
  * ⚠ 개설 후 정원을 줄이는 것은 막아야 한다.
  *   이미 신청한 인원보다 적게 줄이면 누구를 대기자로 밀어낼지 결정할 수 없다.
  *   서버에서 capacity >= applied 제약을 걸고, 줄이려면 개별 취소를 먼저 하게 한다. */
+
+/** 출결 배지 색. 미입력은 아무 색도 안 준다 — 결석과 구분해야 한다 */
+const ATT_TONE: Record<string, string> = { PRESENT: 'verified', LATE: 'supplement', ABSENT: 'brandnew' }
 
 const won = (n: number) => `${n.toLocaleString()}원`
 
@@ -342,6 +349,18 @@ function Content() {
   const [detailBusy, setDetailBusy] = useState(false)
   const [detailErr, setDetailErr] = useState<string | null>(null)
 
+  /**
+   * 출석부 — 회차별 출결.
+   *
+   * ★ 회차마다 따로 조회한다(`sessions/{id}/attendances`). 한 번에 받는 경로가 없다.
+   * ★ 아직 아무도 안 찍은 회차는 **빈 배열**이다 — 0건은 "결석"이 아니라 "미입력"이다.
+   *   표에서도 그 둘을 구분해야 한다.
+   * ★ `Map<sessionId, Map<applicationId, status>>` 로 들고 있다. 표가 학생 × 회차라
+   *   셀 하나를 그릴 때 두 키로 바로 찾아야 한다.
+   */
+  const [attendance, setAttendance] = useState<Map<number, Map<number, LectureAttendanceStatus>>>(new Map())
+  const [attBusy, setAttBusy] = useState<string | null>(null)
+
   /** ★ 목록을 돌려준다 — 저장 뒤 상세 모달을 새 값으로 갈아끼우는 데 쓴다 */
   const loadLectures = useCallback(async (): Promise<ApiLecture[]> => {
     if (academyId === null) {
@@ -565,6 +584,58 @@ function Content() {
       setDeleteErr(err instanceof ApiError ? err.message : '특강을 삭제하지 못했습니다.')
     } finally {
       setDeleteBusy(false)
+    }
+  }
+
+  /* 회차가 바뀌면 출결을 다시 읽는다. 회차마다 따로 조회해야 해서 한 번에 모은다 */
+  useEffect(() => {
+    if (sessionList.length === 0) {
+      setAttendance(new Map())
+      return
+    }
+    let cancelled = false
+    void Promise.all(
+      sessionList.map((se) =>
+        listSessionAttendances(se.id)
+          .then((rows) => [se.id, new Map(rows.map((r) => [r.applicationId, r.status]))] as const)
+          /* 한 회차가 실패해도 나머지는 보여준다 — 표 전체가 비는 것보다 낫다 */
+          .catch(() => [se.id, new Map<number, LectureAttendanceStatus>()] as const),
+      ),
+    ).then((pairs) => {
+      if (!cancelled) setAttendance(new Map(pairs))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [sessionList])
+
+  /**
+   * 출결 한 칸을 찍는다.
+   *
+   * ★ 서버가 **한 건씩** 받는다(lectures.ts 주석). 셀을 누를 때마다 한 번 나간다.
+   * ★ 출석 → 지각 → 결석 → 미입력 순으로 돈다. 잘못 찍었을 때 되돌릴 방법이 그것뿐이다
+   *   — 서버에 "지우기"가 없어 미입력으로는 못 돌아간다. 그래서 세 값만 순환한다.
+   */
+  async function toggleAttendance(sessionId: number, applicationId: number) {
+    const key = `${sessionId}:${applicationId}`
+    const cur = attendance.get(sessionId)?.get(applicationId)
+    const next: LectureAttendanceStatus =
+      cur === 'PRESENT' ? 'LATE' : cur === 'LATE' ? 'ABSENT' : 'PRESENT'
+    setAttBusy(key)
+    setError(null)
+    try {
+      await saveSessionAttendance(sessionId, { applicationId, status: next })
+      setAttendance((prev) => {
+        const copy = new Map(prev)
+        const row = new Map(copy.get(sessionId) ?? [])
+        row.set(applicationId, next)
+        copy.set(sessionId, row)
+        return copy
+      })
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '출결을 저장하지 못했습니다.')
+    } finally {
+      setAttBusy(null)
     }
   }
 
@@ -1187,14 +1258,39 @@ function Content() {
                           {masked ? `${a.studentName[0]}*${a.studentName.slice(2)}` : a.studentName}
                         </td>
                         <td className="al-center">{a.className ?? '-'}</td>
-                        {/* 출결 표시는 회차별 조회(sessions/{id}/attendances)를 붙여야 한다 */}
-                        {sessionList.map((se) => (
-                          <td key={se.id} className="al-center">
-                            <Unfilled reason="회차별 출결 조회 연동 전" />
-                          </td>
-                        ))}
+                        {/* ★ 눌러서 찍는다. 출석 → 지각 → 결석 순으로 돈다 —
+                               서버에 '지우기' 가 없어 미입력으로는 못 돌아간다 */}
+                        {sessionList.map((se) => {
+                          const st = attendance.get(se.id)?.get(a.applicationId)
+                          const busy = attBusy === `${se.id}:${a.applicationId}`
+                          return (
+                            <td key={se.id} className="al-center">
+                              <button
+                                type="button"
+                                className={`mk ${ATT_TONE[st ?? ''] ?? ''}`}
+                                style={{ border: 'none', cursor: 'pointer', font: 'inherit', opacity: busy ? 0.5 : 1 }}
+                                disabled={busy}
+                                title={st ? '눌러서 바꿉니다' : '아직 입력하지 않았습니다'}
+                                onClick={() => void toggleAttendance(se.id, a.applicationId)}
+                              >
+                                {st ? LECTURE_ATTENDANCE_LABEL[st] : '—'}
+                              </button>
+                            </td>
+                          )
+                        })}
                         <td className="al-center">
-                          <Unfilled reason="출석률은 회차 출결이 있어야 계산된다" />
+                          {/* ★ 미입력을 결석으로 세지 않는다. 찍은 회차만 분모에 넣는다 —
+                                 안 그러면 아직 안 한 수업 때문에 출석률이 떨어져 보인다 */}
+                          {(() => {
+                            const marked = sessionList.filter((se) =>
+                              attendance.get(se.id)?.has(a.applicationId),
+                            )
+                            if (marked.length === 0) return <span style={{ color: 'var(--muted)' }}>-</span>
+                            const ok = marked.filter(
+                              (se) => attendance.get(se.id)?.get(a.applicationId) !== 'ABSENT',
+                            ).length
+                            return `${Math.round((ok / marked.length) * 100)}% (${marked.length}회)`
+                          })()}
                         </td>
                       </tr>
                     ))}
