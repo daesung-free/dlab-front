@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
+import logoUrl from '../assets/logo.png'
 import { NAV, navItemCount } from '../data/nav'
 import { useAuth } from '../auth/AuthContext'
 import { ROLE_LABEL, type Role } from '../api/accounts'
@@ -43,8 +44,10 @@ export function TopNav() {
   return (
     <header className="topnav">
       <NavLink to="/" className="brand">
-        {/* 표기는 Dlab 으로 통일한다 — D.Lab · D'Lab · DLab 이 섞여 있었다 */}
-        <div className="logo">Dlab</div>
+        {/* ★ 로고는 이미지다. 예전에는 글자로 흉내 냈는데(D + 작은 따옴표 + Lab) 폰트에 따라
+               모양이 달라졌다. `src/assets` 에 두고 번들에 태운다 — `public/` 은 통째로
+               배포되므로 쓰지 않는다(CLAUDE.md 2-1). */}
+        <img className="logo" src={logoUrl} alt="DLab" />
         <div className="txt">
           <b>통합관리</b>
           <span>대성 · 관리형 독학재수</span>

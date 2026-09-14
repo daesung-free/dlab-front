@@ -18,7 +18,15 @@
   background: var(--card);
 }
 
-.login-title { margin: 0; font-size: 19px; font-weight: 700; }
+.login-title {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.login-logo { height: 26px; width: auto; }
 .login-sub { margin: 0 0 12px; font-size: 12px; color: var(--muted); }
 .login-label { margin-top: 8px; font-size: 12px; font-weight: 600; }
 .login-submit { margin-top: 16px; justify-content: center; }

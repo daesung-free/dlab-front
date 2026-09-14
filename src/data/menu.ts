@@ -155,7 +155,7 @@ export const SCREENS: Screen[] = [
     phase: 1,
     feOrder: 2,
     summary:
-      'Dlab 사이트 입학예약자 → 대기자 자동 등록, 순번 처리 알림 자동 발송, 대기자→원생 원클릭 전환 + 앱 초대 알림',
+      'DLab 사이트 입학예약자 → 대기자 자동 등록, 순번 처리 알림 자동 발송, 대기자→원생 원클릭 전환 + 앱 초대 알림',
     refHtml: 'design/02_admin_ipsi.html',
   },
 
@@ -210,7 +210,7 @@ export const SCREENS: Screen[] = [
     phase: 3,
     feOrder: 4,
     summary:
-      '더프리미엄모의고사 성적 자동 조회·저장, 성적표 PDF→Dlab 사이트 업로드, 가채점 설문, 상세 엑셀 업로드 → 상담 리포트 결합',
+      '더프리미엄모의고사 성적 자동 조회·저장, 성적표 PDF→DLab 사이트 업로드, 가채점 설문, 상세 엑셀 업로드 → 상담 리포트 결합',
     refHtml: 'design/03_admin_seongjeok.html',
   },
   {
