@@ -13,6 +13,8 @@
 }
 .topnav .brand {
   display: flex;
+  /* ★ 여기는 center 다. 아래 '대성 · 관리형 독학재수' 까지 두 줄이라 baseline 으로 맞추면
+       로고가 윗줄에만 붙어 전체가 위로 쏠린다 — 로그인 화면(한 줄)과 사정이 다르다 */
   align-items: center;
   gap: 9px;
   padding-right: 16px;
@@ -25,6 +27,8 @@
   width: auto;
   display: block;
 }
+/* ★ 아래 `.txt span { display: block }` 보다 뒤에 와야 한다 — 그 규칙을 맞으면
+     버전이 줄바꿈돼 '통합관리' 아래로 내려간다. 제목 옆에 붙어야 하는 값이다 */
 .topnav .brand .txt b {
   color: var(--ink);
   font-size: 13px;
@@ -34,6 +38,14 @@
   line-height: 1.15;
 }
 .topnav .brand .txt span { display: block; font-size: 10.5px; color: var(--muted); font-weight: 500; }
+.topnav .brand .txt b .ver {
+  display: inline;
+  /* 굵기·색은 아래 '대성 · 관리형 독학재수' 와 맞춘다 — 제목 옆 보조 정보끼리 같아야 한다 */
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--muted);
+  margin-left: 3px;
+}
 
 .cat-tabs {
   display: flex;

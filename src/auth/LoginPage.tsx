@@ -37,7 +37,9 @@ export function LoginPage() {
       <form className="login-card" onSubmit={onSubmit}>
         <h1 className="login-title">
           <img src={logoUrl} alt="DLab" className="login-logo" />
-          <span>통합관리</span>
+          <span>
+            통합관리 <span className="ver">{__APP_VERSION__}</span>
+          </span>
         </h1>
         <p className="login-sub">관리자 계정으로 로그인하세요.</p>
 
