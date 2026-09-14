@@ -844,45 +844,49 @@ function PenaltyActions() {
           </div>
 
           {/* ── 자동 부여 규칙 ── */}
+          {/* ★ .frow 는 112px + 1fr 2열이다. 라벨 말고는 **한 칸**에 담는다 —
+                 셋째 자식부터 라벨 칸으로 떨어져 글자가 세로로 눌린다(2026-09-14) */}
           <div className="frow">
             <label>자동 부여 규칙</label>
-            {rules === null || rules.length === 0 ? (
-              <div className="hint">등록된 자동 부여 규칙이 없습니다.</div>
-            ) : (
-              <table className="dt">
-                <thead>
-                  <tr>
-                    <th>상황</th>
-                    <th>항목</th>
-                    <th>사용</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {rules.map((r) => (
-                    <tr key={r.id}>
-                      <td>{PENALTY_TRIGGER_LABEL[r.triggerType] ?? r.triggerType}</td>
-                      <td>
-                        {r.itemName} {Math.abs(r.point)}점
-                      </td>
-                      <td>{r.active ? '켜짐' : '꺼짐'}</td>
-                      <td style={{ whiteSpace: 'nowrap' }}>
-                        <button className="btn" disabled={busy} onClick={() => void toggleRule(r)}>
-                          {r.active ? '끄기' : '켜기'}
-                        </button>{' '}
-                        <button className="btn" disabled={busy} onClick={() => void removeRule(r)}>
-                          삭제
-                        </button>
-                      </td>
+            <div>
+              {rules === null || rules.length === 0 ? (
+                <div className="hint">등록된 자동 부여 규칙이 없습니다.</div>
+              ) : (
+                <table className="dt">
+                  <thead>
+                    <tr>
+                      <th>상황</th>
+                      <th>항목</th>
+                      <th>사용</th>
+                      <th />
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-            {/* ⚠️ 규칙을 새로 만드는 칸은 일부러 없다. 어떤 상황 코드가 실제로 걸리는지
-                   서버에서 못 받았고, 서버가 값을 검증하지도 않는다 — 틀린 값으로 만들면
-                   영영 안 걸리는 규칙이 조용히 쌓인다(api/penalties.ts triggerCondition 주석). */}
-            <div className="hint">새 규칙 추가는 준비 중입니다.</div>
+                  </thead>
+                  <tbody>
+                    {rules.map((r) => (
+                      <tr key={r.id}>
+                        <td>{PENALTY_TRIGGER_LABEL[r.triggerType] ?? r.triggerType}</td>
+                        <td>
+                          {r.itemName} {Math.abs(r.point)}점
+                        </td>
+                        <td>{r.active ? '켜짐' : '꺼짐'}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}>
+                          <button className="btn" disabled={busy} onClick={() => void toggleRule(r)}>
+                            {r.active ? '끄기' : '켜기'}
+                          </button>{' '}
+                          <button className="btn" disabled={busy} onClick={() => void removeRule(r)}>
+                            삭제
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              {/* ⚠️ 규칙을 새로 만드는 칸은 일부러 없다. 어떤 상황 코드가 실제로 걸리는지
+                     서버에서 못 받았고, 서버가 값을 검증하지도 않는다 — 틀린 값으로 만들면
+                     영영 안 걸리는 규칙이 조용히 쌓인다(api/penalties.ts triggerCondition 주석). */}
+              <div className="hint">새 규칙 추가는 준비 중입니다.</div>
+            </div>
           </div>
         </Modal>
       )}
@@ -896,16 +900,11 @@ function PenaltyActions() {
           onConfirm={() => void copyLastYear()}
           onClose={() => setCopyOpen(false)}
         >
-          <div className="frow">
-            <div className="hint">
-              이름이 같은 항목은 건너뜁니다. 여러 번 눌러도 같은 항목이 두 벌 생기지 않습니다.
-            </div>
+          {/* 라벨이 없으면 .frow 를 쓰지 않는다 — 2열 그리드라 글이 112px 칸에 갇힌다 */}
+          <div className="hint">
+            이름이 같은 항목은 건너뜁니다. 여러 번 눌러도 같은 항목이 두 벌 생기지 않습니다.
           </div>
-          {copyMsg && (
-            <div className="frow">
-              <div className="hint">{copyMsg}</div>
-            </div>
-          )}
+          {copyMsg && <div className="hint" style={{ marginTop: 10 }}>{copyMsg}</div>}
         </Modal>
       )}
     </>

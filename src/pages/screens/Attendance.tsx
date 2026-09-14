@@ -420,7 +420,7 @@ function Content() {
                 placeholder="예: 카드 인식 오류로 수기 등원 처리"
                 onChange={(e) => setFixing({ ...fixing, reason: e.target.value })}
               />
-              <div className="hint">나중에 왜 고쳤는지 아는 유일한 기록입니다.</div>
+              <div className="hint">정정 이력에 함께 남습니다.</div>
             </div>
           </div>
         </Modal>

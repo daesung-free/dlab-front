@@ -197,6 +197,41 @@ Daily Report 집계(F-4.11-6) · 결제 관리(F-C-5)
 로컬 백엔드 기동과 시드 계정은 `docs/LOCAL_DEV.md`. 계정 2개(`admin` 전 지점 / `branch` 분당)를
 쓰는 이유가 위 1번(지점 스코프)이다.
 
+## 5-1. 폼·표에서 조용히 깨지는 두 가지 ★
+
+둘 다 **오류가 안 나고 화면만 이상해져서** 늦게 발견된다. 확인: `npm run check:frow`
+
+### `.frow` 는 2열 그리드다 — 라벨 + **한 칸**
+
+`grid-template-columns: 112px 1fr`. 자식이 셋이면 셋째가 **라벨 칸으로 떨어져**
+112px 안에서 글자가 세로로 눌린다. 라벨 없이 `.frow` 만 쓰면 첫 자식이 그 칸에 들어가
+왼쪽으로 치우친다. 안내문은 컨트롤과 **한 칸에 묶는다.**
+
+```tsx
+✗ <div className="frow">                    ✗ <div className="frow">
+    <label>금액</label>                         <div className="hint">…</div>
+    <input className="inp" />                 </div>
+    <div className="hint">…</div>
+  </div>                                    ✓ <div className="hint">…</div>
+
+✓ <div className="frow">
+    <label>금액</label>
+    <div>
+      <input className="inp" />
+      <div className="hint">…</div>
+    </div>
+  </div>
+```
+
+### `DataTable` 의 체크박스는 `selectable` 만으로 안 켜진다
+
+제어 컴포넌트다. `selected` 와 `onSelectedChange` 를 같이 줘야 한다. 안 주면
+체크박스가 **그려지기만 하고 눌러도 안 찍힌다** — 미납자 관리에서 실제로 그랬다.
+
+**탭이 바뀌면서 행이 바뀌는 표는 선택 상태를 탭마다 따로 갖는다.** 하나를 같이 쓰면
+다른 탭에서 고른 사람이 그대로 남아 일괄 처리에 섞인다(특강 대기자 확정이 그랬다).
+목록이 바뀌는 다른 계기(특강 변경 등)에도 비운다.
+
 ## 6. 코드 스타일
 
 - 주석은 **왜**를 적는다. 무엇을 하는지는 코드가 말한다.
