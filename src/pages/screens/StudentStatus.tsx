@@ -248,7 +248,7 @@ function Content() {
           </button>
         ))}
         <span style={{ marginLeft: 'auto', fontSize: 11.5, color: 'var(--muted)', alignSelf: 'center' }}>
-          지점 접근 범위는 서버 RBAC이 최종 결정합니다
+          볼 수 있는 지점은 계정 권한에 따라 다릅니다
         </span>
       </div>
 

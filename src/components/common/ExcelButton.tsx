@@ -85,7 +85,7 @@ export function MaskToggle({ masked, onChange }: { masked: boolean; onChange: (v
       type="button"
       className={`mask-toggle${masked ? ' on' : ''}`}
       onClick={() => onChange(!masked)}
-      title="개인정보 마스킹 — 해제 권한은 서버 RBAC이 결정합니다"
+      title="개인정보 가리기 — 해제할 수 있는지는 계정 권한에 따라 다릅니다"
     >
       <Icon name={masked ? 'shield-check' : 'shield-off'} size={14} />
       마스킹 {masked ? 'ON' : 'OFF'}
