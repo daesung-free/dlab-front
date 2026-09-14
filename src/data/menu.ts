@@ -169,7 +169,7 @@ export const SCREENS: Screen[] = [
     kind: 'supplement',
     phase: 1,
     feOrder: 2,
-    summary: '키오스크 실시간 수신(대성전산 API 경유 제거, 직접 연동), 일별 현황(담당 반 필터), 사유 실시간 수신·승인',
+    summary: '키오스크 실시간 수신, 일별 현황(담당 반 필터), 사유 실시간 수신·승인',
   },
 
   /* ─────────────── 4.4 메시지 / 알림 ─────────────── */
@@ -210,7 +210,7 @@ export const SCREENS: Screen[] = [
     phase: 3,
     feOrder: 4,
     summary:
-      '더프리미엄모의고사 API 자동 조회·저장, 성적표 PDF→D.Lab 사이트 업로드, 가채점 설문, 상세 엑셀 업로드 → 상담 리포트 결합',
+      '더프리미엄모의고사 성적 자동 조회·저장, 성적표 PDF→D.Lab 사이트 업로드, 가채점 설문, 상세 엑셀 업로드 → 상담 리포트 결합',
     refHtml: 'design/03_admin_seongjeok.html',
   },
   {

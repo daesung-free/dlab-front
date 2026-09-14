@@ -98,7 +98,7 @@ function DashboardSide() {
                  없으면 바로 위 실제 출결 숫자와 나란히 보여 둘 다 진짜로 읽힌다. */}
           <div className="lt" style={{ color: 'var(--red)', display: 'flex', alignItems: 'center', gap: 6 }}>
             즉시 확인
-            <span className="mk supplement" title="붙일 집계 API가 아직 없습니다">
+            <span className="mk supplement" title="집계 기능이 준비되면 실제 숫자로 바뀝니다">
               표시용 예시
             </span>
           </div>

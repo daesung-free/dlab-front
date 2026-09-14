@@ -154,7 +154,9 @@ export async function requestEnvelope<T>(path: string, opts: RequestOptions = {}
     if (err instanceof ApiError) throw err
     // fetch 자체가 실패 — 서버가 안 떠 있거나 CORS에 막혔다.
     // CORS는 브라우저가 응답을 안 넘겨줘서 여기서 구분이 안 된다(콘솔에만 보인다).
-    throw new ApiError(0, 'NETWORK', 'API 서버에 연결할 수 없습니다. 백엔드(:8080) 기동 상태와 CORS 허용 origin을 확인하세요.')
+    /* ★ 화면에 그대로 뜨는 문구다. 포트·CORS 는 우리 사정이라 쓰지 않는다(CLAUDE.md 1-1).
+         원인은 콘솔과 서버 로그로 본다 — 사용자는 다시 시도할지만 정하면 된다. */
+    throw new ApiError(0, 'NETWORK', '서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.')
   }
 
   if (res.status === 401 && !opts.anonymous && !opts.keepSessionOn401 && (await refreshTokens())) {
@@ -239,7 +241,7 @@ export async function downloadFile(path: string, fallbackName: string, opts: Req
     res = await send(path, opts)
   } catch (err) {
     if (err instanceof ApiError) throw err
-    throw new ApiError(0, 'NETWORK', 'API 서버에 연결할 수 없습니다.')
+    throw new ApiError(0, 'NETWORK', '서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.')
   }
 
   if (res.status === 401 && !opts.anonymous && (await refreshTokens())) {

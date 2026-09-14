@@ -121,7 +121,7 @@ export const NAV: NavCat[] = [
           { screenId: 'student-penalty', label: '상벌점 관리' },
           { screenId: 'daily-routine', label: '데일리 루틴', added: true },
           { screenId: 'learning-plan', label: '주 · 일 학습계획', added: true },
-          { screenId: 'score', label: '성적 관리', added: true, note: '더프리미엄 API 연동' },
+          { screenId: 'score', label: '성적 관리', added: true, note: '더프리미엄 성적 연동' },
           { screenId: 'consult', label: '상담 일지 · 리포트', added: true },
           { screenId: 'daily-report', label: 'Daily Report', added: true, note: '앱 데이터 원천' },
           { screenId: 'qna', label: '질의응답', added: true, note: '대면 운영 · 온라인은 기능만 준비' },

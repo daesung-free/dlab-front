@@ -51,7 +51,11 @@ function Card({
         </div>
         {(right || mock) && (
           <div className="r">
-            {mock && <span className="mk supplement" title="붙일 집계 API가 아직 없습니다">표시용 예시</span>}
+            {mock && (
+              <span className="mk supplement" title="집계 기능이 준비되면 실제 숫자로 바뀝니다">
+                표시용 예시
+              </span>
+            )}
             {right}
           </div>
         )}
