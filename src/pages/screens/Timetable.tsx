@@ -192,6 +192,8 @@ interface RoomRow {
 
 function Content() {
   const [tab, setTab] = useState('grid')
+  /* selectable 만으로는 체크박스가 안 눌린다 — DataTable 이 제어 컴포넌트다 */
+  const [sel, setSel] = useState<string[]>([])
   const [classNo, setClassNo] = useState('1반')
   const [subject, setSubject] = useState('전체')
 
@@ -432,6 +434,8 @@ function Content() {
             rows={moveRows}
             rowKey={(r) => r.id}
             selectable
+            selected={sel}
+            onSelectedChange={setSel}
             pageSize={15}
             countLabel={
               <>
