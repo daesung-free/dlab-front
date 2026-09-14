@@ -175,6 +175,20 @@ const ROOMS = ['201호', '202호', '301호', '302호', '401호']
 const TRACK_TARGETS = ['전체', '자연계열', '인문계열']
 const DOW_LABELS = ['월', '화', '수', '목', '금', '토']
 
+/** 상세 모달의 수정 폼. 서버가 PATCH 로 받는 것만 든다 */
+interface LectureEdit {
+  name: string
+  description: string
+  capacity: string
+  fee: string
+  startDate: string
+  endDate: string
+  /** 접수 기간은 **날짜가 아니라 시점**이다 — 저장할 때 변환한다 */
+  applyFrom: string
+  applyTo: string
+  teacherId: number | null
+}
+
 interface LectureDraft {
   name: string
   month: string
@@ -219,6 +233,35 @@ const EMPTY_DRAFT: LectureDraft = {
   allowWaiting: true,
   withBriefing: false,
   memo: '',
+}
+
+/**
+ * UTC 시점 → 한국 날짜 `yyyy-MM-dd`.
+ *
+ * ★ 문자열을 그냥 자르면 UTC 날짜가 나온다. 접수 시작이 한국 09-20 00:00 이면 서버에는
+ *   `09-19T15:00Z` 로 있어서, 자르면 **하루 전으로 보인다.**
+ */
+function localDay(iso: string): string {
+  if (!iso) return '-'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+/** 상세(서버 값) → 수정 폼. 접수 기간은 시점이라 날짜만 떼어 입력칸에 넣는다 */
+function toEdit(l: ApiLecture): LectureEdit {
+  return {
+    name: l.name,
+    description: l.description ?? '',
+    capacity: l.capacity === null ? '' : String(l.capacity),
+    fee: String(l.fee ?? 0),
+    startDate: l.startDate ?? '',
+    endDate: l.endDate ?? '',
+    applyFrom: l.applyFrom ? localDay(l.applyFrom) : '',
+    applyTo: l.applyTo ? localDay(l.applyTo) : '',
+    teacherId: l.teacherId,
+  }
 }
 
 /**
@@ -285,10 +328,25 @@ function Content() {
   /** 회차 삭제. 출석부의 열이 하나 사라지는 것이라 먼저 묻는다 */
   const [deletingSession, setDeletingSession] = useState<LectureSession | null>(null)
 
-  const loadLectures = useCallback(async () => {
+  /**
+   * 특강 상세.
+   *
+   * ★ 목록 행을 눌러도 아무 일이 없었다. 수정·상태·노출을 부르는 코드는 있었는데
+   *   **들어갈 입구가 없어** 닫혀 있었다. 목록에 보이는 것이 기간·이름·구분·정원·금액·
+   *   상태·노출뿐이라 어떤 특강인지 볼 방법도 없었다.
+   * ★ 단건 조회 API 는 쓰지 않는다 — `GET /lectures` 목록이 설명·담당교사·분류·확정/대기
+   *   인원까지 다 내려준다(2026-09-14 확인). 목록에서 받은 값으로 채운다.
+   */
+  const [detail, setDetail] = useState<ApiLecture | null>(null)
+  const [editing, setEditing] = useState<LectureEdit | null>(null)
+  const [detailBusy, setDetailBusy] = useState(false)
+  const [detailErr, setDetailErr] = useState<string | null>(null)
+
+  /** ★ 목록을 돌려준다 — 저장 뒤 상세 모달을 새 값으로 갈아끼우는 데 쓴다 */
+  const loadLectures = useCallback(async (): Promise<ApiLecture[]> => {
     if (academyId === null) {
       setLoading(false)
-      return
+      return []
     }
     setLoading(true)
     try {
@@ -296,9 +354,11 @@ function Content() {
       setLectures(list)
       setLectureId((prev) => (list.some((l) => l.id === prev) ? prev : (list[0]?.id ?? null)))
       setError(null)
+      return list
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '특강 목록을 불러오지 못했습니다.')
       setLectures([])
+      return []
     } finally {
       setLoading(false)
     }
@@ -505,6 +565,58 @@ function Content() {
       setDeleteErr(err instanceof ApiError ? err.message : '특강을 삭제하지 못했습니다.')
     } finally {
       setDeleteBusy(false)
+    }
+  }
+
+  /** 목록을 다시 읽고 열려 있는 상세도 새 값으로 바꾼다 — 안 그러면 고친 값이 안 보인다 */
+  async function refreshDetail() {
+    const next = await loadLectures()
+    setDetail((cur) => (cur ? (next.find((x) => x.id === cur.id) ?? cur) : cur))
+  }
+
+  /** 상세에서 고친 것을 저장한다. 접수 기간만 시점이라 따로 변환한다(lectures.ts 주석) */
+  async function saveDetail() {
+    if (!detail || !editing) return
+    setDetailBusy(true)
+    setDetailErr(null)
+    try {
+      await updateLecture(detail.id, {
+        name: editing.name.trim(),
+        description: editing.description.trim() || undefined,
+        capacity: editing.capacity === '' ? undefined : Number(editing.capacity),
+        fee: editing.fee === '' ? undefined : Number(editing.fee),
+        startDate: editing.startDate || undefined,
+        endDate: editing.endDate || undefined,
+        applyFrom: toInstant(editing.applyFrom, '00:00'),
+        applyTo: toInstant(editing.applyTo, '23:59'),
+        teacherId: editing.teacherId ?? undefined,
+      })
+      await refreshDetail()
+      setEditing(null)
+    } catch (err) {
+      /* 모달을 닫지 않는다 — 고친 값을 다시 치게 하면 안 된다 */
+      setDetailErr(err instanceof ApiError ? err.message : '특강을 수정하지 못했습니다.')
+    } finally {
+      setDetailBusy(false)
+    }
+  }
+
+  /**
+   * 상태·노출 전환.
+   *
+   * ★ 둘은 **별개 축이다.** 접수를 열어도(OPEN) 노출을 안 켜면 앱에 안 보인다 —
+   *   "왜 신청이 안 들어오지"의 흔한 원인이라 상세에서 둘을 따로 보여준다.
+   */
+  async function changeDetail(fn: () => Promise<unknown>) {
+    setDetailBusy(true)
+    setDetailErr(null)
+    try {
+      await fn()
+      await refreshDetail()
+    } catch (err) {
+      setDetailErr(err instanceof ApiError ? err.message : '바꾸지 못했습니다.')
+    } finally {
+      setDetailBusy(false)
     }
   }
 
@@ -946,7 +1058,13 @@ function Content() {
               masked={false}
               loading={loading}
               pageSize={10}
-              onRowClick={(r) => setLectureId(r.id)}
+              /* 행을 누르면 상세를 열고, 아래 탭(신청자·대기자·출석부)도 그 특강으로 맞춘다 */
+              onRowClick={(r) => {
+                setLectureId(r.id)
+                setDetailErr(null)
+                setEditing(null)
+                setDetail(r)
+              }}
               emptyText={academyId === null ? '지점을 먼저 선택하세요.' : '등록된 특강이 없습니다.'}
               countLabel={
                 <>
@@ -1087,6 +1205,228 @@ function Content() {
           )}
         </div>
       </div>
+
+      {detail && (
+        <Modal
+          title={detail.name}
+          sub={
+            editing
+              ? '고친 내용을 저장합니다.'
+              : `${LECTURE_TYPE_LABEL[detail.lectureType] ?? detail.lectureType} · ${
+                  LECTURE_STATUS_LABEL[detail.status] ?? detail.status
+                } · ${detail.visible ? '앱에 노출 중' : '앱에 안 보임'}`
+          }
+          confirmLabel={editing ? '저장' : '닫기'}
+          hideCancel={!editing}
+          busy={detailBusy}
+          error={detailErr}
+          confirmDisabled={editing ? editing.name.trim() === '' : false}
+          onConfirm={() => (editing ? void saveDetail() : setDetail(null))}
+          onClose={() => (editing ? setEditing(null) : setDetail(null))}
+        >
+          <div style={{ minWidth: 520 }}>
+            {editing ? (
+              <>
+                <div className="frow">
+                  <label className="req">특강명</label>
+                  <input
+                    className="inp"
+                    value={editing.name}
+                    onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+                  />
+                </div>
+                <div className="frow">
+                  <label>설명</label>
+                  <textarea
+                    className="ta"
+                    rows={3}
+                    value={editing.description}
+                    onChange={(e) => setEditing({ ...editing, description: e.target.value })}
+                  />
+                </div>
+                <div className="frow">
+                  <label>담당 강사</label>
+                  <select
+                    className="sel"
+                    value={editing.teacherId ?? ''}
+                    onChange={(e) =>
+                      setEditing({ ...editing, teacherId: e.target.value ? Number(e.target.value) : null })
+                    }
+                  >
+                    <option value="">{teachers.length === 0 ? '등록된 강사가 없습니다' : '미지정'}</option>
+                    {teachers.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="frow">
+                  <label>정원 · 특강비</label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input
+                      className="inp"
+                      type="number"
+                      min={0}
+                      style={{ width: 110 }}
+                      value={editing.capacity}
+                      placeholder="정원"
+                      onChange={(e) => setEditing({ ...editing, capacity: e.target.value })}
+                    />
+                    <input
+                      className="inp"
+                      type="number"
+                      min={0}
+                      value={editing.fee}
+                      placeholder="특강비"
+                      onChange={(e) => setEditing({ ...editing, fee: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="frow">
+                  <label>수업 기간</label>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input
+                      className="inp"
+                      type="date"
+                      value={editing.startDate}
+                      onChange={(e) => setEditing({ ...editing, startDate: e.target.value })}
+                    />
+                    <span style={{ color: 'var(--muted)' }}>~</span>
+                    <input
+                      className="inp"
+                      type="date"
+                      value={editing.endDate}
+                      onChange={(e) => setEditing({ ...editing, endDate: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="frow">
+                  <label>접수 기간</label>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input
+                      className="inp"
+                      type="date"
+                      value={editing.applyFrom}
+                      onChange={(e) => setEditing({ ...editing, applyFrom: e.target.value })}
+                    />
+                    <span style={{ color: 'var(--muted)' }}>~</span>
+                    <input
+                      className="inp"
+                      type="date"
+                      value={editing.applyTo}
+                      onChange={(e) => setEditing({ ...editing, applyTo: e.target.value })}
+                    />
+                  </div>
+                </div>
+                {/* ★ 회차는 여기서 못 고친다. 기간·요일을 바꿔도 이미 만들어진 회차는 그대로다 —
+                       출결이 그 회차에 붙어 있기 때문이다. 회차는 출석부에서 하나씩 지운다. */}
+                <div className="hint">수업 기간을 바꿔도 이미 만들어진 회차는 그대로입니다.</div>
+              </>
+            ) : (
+              <>
+                <div className="kv">
+                  <div className="row">
+                    <span className="k">설명</span>
+                    <span className="v">
+                      {detail.description || <span style={{ color: 'var(--muted)' }}>-</span>}
+                    </span>
+                  </div>
+                  <div className="row">
+                    <span className="k">담당 강사</span>
+                    <span className="v">
+                      {detail.teacherName || <span style={{ color: 'var(--muted)' }}>미지정</span>}
+                    </span>
+                  </div>
+                  <div className="row">
+                    <span className="k">세부 유형</span>
+                    <span className="v">
+                      {detail.categoryName || <span style={{ color: 'var(--muted)' }}>-</span>}
+                    </span>
+                  </div>
+                  <div className="row">
+                    <span className="k">정원</span>
+                    <span className="v">
+                      확정 {detail.confirmedCount}명
+                      {detail.capacity !== null && ` / 정원 ${detail.capacity}명`}
+                      {detail.waitlistedCount > 0 && ` · 대기 ${detail.waitlistedCount}명`}
+                    </span>
+                  </div>
+                  <div className="row">
+                    <span className="k">특강비</span>
+                    <span className="v">{won(detail.fee ?? 0)}</span>
+                  </div>
+                  <div className="row">
+                    <span className="k">수업 기간</span>
+                    <span className="v">
+                      {detail.startDate ? `${detail.startDate} ~ ${detail.endDate ?? ''}` : '-'}
+                    </span>
+                  </div>
+                  <div className="row">
+                    <span className="k">접수 기간</span>
+                    <span className="v">
+                      {detail.applyFrom ? `${localDay(detail.applyFrom)} ~ ${localDay(detail.applyTo ?? '')}` : '-'}
+                    </span>
+                  </div>
+                  <div className="row">
+                    <span className="k">회차</span>
+                    <span className="v">
+                      {sessionList.length > 0 ? (
+                        `${sessionList.length}회차 · ${sessionList[0].sessionDate} ~ ${
+                          sessionList[sessionList.length - 1].sessionDate
+                        }`
+                      ) : (
+                        <span style={{ color: 'var(--red)' }}>회차가 없습니다 — 출석부를 만들 수 없습니다</span>
+                      )}
+                    </span>
+                  </div>
+                </div>
+
+                {/* ★ 상태와 노출은 별개 축이다. 접수를 열어도 노출을 안 켜면 앱에 안 보인다 */}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
+                  <button
+                    className="btn"
+                    disabled={detailBusy}
+                    onClick={() => setEditing(toEdit(detail))}
+                  >
+                    <Icon name="pencil" size={14} /> 수정
+                  </button>
+                  <button
+                    className="btn"
+                    disabled={detailBusy}
+                    onClick={() =>
+                      void changeDetail(() =>
+                        changeLectureStatus(detail.id, detail.status === 'OPEN' ? 'CLOSED' : 'OPEN'),
+                      )
+                    }
+                  >
+                    {detail.status === 'OPEN' ? '접수 마감' : '접수 열기'}
+                  </button>
+                  <button
+                    className="btn"
+                    disabled={detailBusy}
+                    onClick={() => void changeDetail(() => setLectureVisible(detail.id, !detail.visible))}
+                  >
+                    {detail.visible ? '앱에서 숨기기' : '앱에 노출'}
+                  </button>
+                  <button
+                    className="btn"
+                    style={{ color: 'var(--red)', marginLeft: 'auto' }}
+                    disabled={detailBusy}
+                    onClick={() => {
+                      setDeleteErr(null)
+                      setDeleting(detail)
+                      setDetail(null)
+                    }}
+                  >
+                    삭제
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </Modal>
+      )}
 
       {deletingSession && (
         <Modal
