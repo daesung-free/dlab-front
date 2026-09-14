@@ -43,9 +43,8 @@ export function TopNav() {
   return (
     <header className="topnav">
       <NavLink to="/" className="brand">
-        <div className="logo">
-          D<b>'</b>Lab
-        </div>
+        {/* 표기는 Dlab 으로 통일한다 — D.Lab · D'Lab · DLab 이 섞여 있었다 */}
+        <div className="logo">Dlab</div>
         <div className="txt">
           <b>통합관리</b>
           <span>대성 · 관리형 독학재수</span>
