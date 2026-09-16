@@ -21,6 +21,7 @@ import {
   deleteLectureSession,
   createLectureSession,
   setLectureVisible,
+  cancelApplication,
   promoteApplicant,
   updateLecture,
   type Lecture as ApiLecture,
@@ -432,13 +433,48 @@ function Content() {
     }
   }, [lectureId])
 
+  /* ★ 취소는 행을 지우지 않고 status 만 CANCELED 로 바꾼다. **waitlisted 는 false 로 남는다** —
+       `!waitlisted` 만 보면 취소자가 확정자에 섞여 서버 집계와 어긋나고 출석부에도 줄이 생긴다
+       (api/lectures.ts LectureApplicant 주석). */
   const applied: ApplicantRow[] = useMemo(
-    () => applicants.filter((a) => !a.waitlisted).map((a, i) => ({ ...a, seq: i + 1 })),
+    () =>
+      applicants
+        .filter((a) => !a.waitlisted && a.status !== 'CANCELED')
+        .map((a, i) => ({ ...a, seq: i + 1 })),
     [applicants],
   )
   const waiting: ApplicantRow[] = useMemo(
-    () => applicants.filter((a) => a.waitlisted).map((a, i) => ({ ...a, seq: i + 1 })),
+    () =>
+      applicants
+        .filter((a) => a.waitlisted && a.status !== 'CANCELED')
+        .map((a, i) => ({ ...a, seq: i + 1 })),
     [applicants],
+  )
+  /** 취소된 신청. 명단에 남아 있으므로 섞지 않고 따로 센다 */
+  const canceled = useMemo(() => applicants.filter((a) => a.status === 'CANCELED'), [applicants])
+
+  /** 모듈 상수 APPLICANT_COLUMNS 는 그대로 두고 행 액션만 더한다 */
+  const applicantColumns: Column<ApplicantRow>[] = useMemo(
+    () => [
+      ...APPLICANT_COLUMNS,
+      {
+        key: 'cancel',
+        header: '',
+        width: '72px',
+        align: 'center',
+        value: () => '',
+        render: (r) => (
+          <button
+            className="btn"
+            style={{ padding: '4px 9px', fontSize: 11.5, color: 'var(--red)' }}
+            onClick={() => setCanceling(r)}
+          >
+            취소
+          </button>
+        ),
+      },
+    ],
+    [],
   )
 
   /* ★ 특강을 바꾸면 선택을 비운다. 안 비우면 **앞 특강에서 고른 사람이 그대로 남아**
@@ -449,6 +485,25 @@ function Content() {
   }, [lectureId])
 
   const selectedLecture = lectures.find((l) => l.id === lectureId) ?? null
+
+  /* 신청 취소. 확정자를 취소하면 정원이 하나 비고 자동 승격이 그때 돈다 */
+  const [canceling, setCanceling] = useState<ApplicantRow | null>(null)
+  const [cancelBusy, setCancelBusy] = useState(false)
+
+  async function runCancel(row: ApplicantRow) {
+    setCancelBusy(true)
+    setError(null)
+    try {
+      await cancelApplication(row.applicationId)
+      if (lectureId !== null) setApplicants(await listLectureApplicants(lectureId))
+      await loadLectures()
+      setCanceling(null)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '취소하지 못했습니다.')
+    } finally {
+      setCancelBusy(false)
+    }
+  }
 
   /**
    * 대기자 → 확정.
@@ -1174,7 +1229,7 @@ function Content() {
 
           {(tab === 'apply' || tab === 'wait') && (
             <DataTable
-              columns={APPLICANT_COLUMNS}
+              columns={applicantColumns}
               rows={tab === 'apply' ? applied : waiting}
               rowKey={(r) => String(r.applicationId)}
               selectable
@@ -1187,6 +1242,10 @@ function Content() {
                 <>
                   {selectedLecture?.name ?? '특강 미선택'} · {tab === 'apply' ? '신청자' : '대기자'}{' '}
                   <b>{(tab === 'apply' ? applied : waiting).length}</b>명
+                  {/* 취소분은 명단에 남지만 세지 않는다 — 안 적으면 "아까 그 학생 어디 갔냐"가 된다 */}
+                  {canceled.length > 0 && (
+                    <span style={{ color: 'var(--muted)' }}> · 취소 {canceled.length}명</span>
+                  )}
                 </>
               }
               toolbar={
@@ -1338,6 +1397,37 @@ function Content() {
           )}
         </div>
       </div>
+
+      {canceling && (
+        <Modal
+          title="신청 취소"
+          sub={`${canceling.studentName}(${canceling.studentNo ?? '-'}) 의 신청을 취소합니다.`}
+          confirmLabel="취소 처리"
+          danger
+          busy={cancelBusy}
+          onConfirm={() => void runCancel(canceling)}
+          onClose={() => setCanceling(null)}
+        >
+          <div className="note-box risk">
+            <div className="ic">
+              <Icon name="alert-triangle" size={17} />
+            </div>
+            <div>
+              <div className="tt">되돌릴 수 없습니다</div>
+              <div className="tx">
+                {canceling.waitlisted ? (
+                  <>대기 명단에서 빠집니다.</>
+                ) : (
+                  <>
+                    확정 인원이 하나 줄고 <b>출석부에서도 빠집니다.</b> 자리가 비면 대기자가 자동으로
+                    올라올 수 있습니다.
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {detail && (
         <Modal

@@ -53,9 +53,16 @@ import './score.css'
  * ★ 코드는 **서버가 주는 그대로** 써야 한다. 예전에는 `KOR`·`INQ1`·`INQ2` 로 찾았는데
  *   서버는 `KOREAN`·`INQUIRY1`·`INQUIRY2` 다. `MATH` 하나만 겹쳐서 **수학 백분위가
  *   곧 합계로 나왔다** — 72×4과목인 학생의 합이 72 였다. 틀린 줄 모르고 상담에 쓰인다.
- *   실제 코드: KOREAN MATH ENGLISH INQUIRY1 INQUIRY2 HISTORY SOCIAL SCIENCE (2026-09-11)
+ *
+ * ★ **탐구 과목 코드가 학년마다 다르다.** 고3·N수는 `INQUIRY1`·`INQUIRY2` 인데
+ *   고2는 `SOCIAL`·`SCIENCE`(통합사회·통합과학)다. 둘을 빼놓으면 **고2만 국어+수학
+ *   두 과목만 더한 값**이 '국수탐 합계'로 나온다 — 실측: 국60 수61 사63 과64 인 학생의
+ *   합이 121 이었다(2026-09-16). 같은 표에서 학년만 다르면 기준이 달라지는 셈이다.
+ *
+ * ★ 영어·한국사는 뺀다. 절대평가라 백분위가 아예 없다(`hasPercentile: false`).
+ *   실제 코드: KOREAN MATH ENGLISH INQUIRY1 INQUIRY2 HISTORY SOCIAL SCIENCE
  */
-const SUM_CODES = ['KOREAN', 'MATH', 'INQUIRY1', 'INQUIRY2']
+const SUM_CODES = ['KOREAN', 'MATH', 'INQUIRY1', 'INQUIRY2', 'SOCIAL', 'SCIENCE']
 
 /** 입력 중인 한 과목 칸. 숫자가 아니라 문자열로 들고 있어야 지우는 중간 상태가 표현된다 */
 interface ScoreCell {
@@ -423,7 +430,16 @@ function Content() {
                     <th>
                       국수탐
                       <br />
-                      <small style={{ fontWeight: 500, color: 'var(--muted)' }}>백분위합</small>
+                      {/* 어느 과목을 더했는지 적는다. 학년마다 탐구 과목이 달라서
+                             '국수탐'만 쓰면 무엇이 들어갔는지 알 수 없다 */}
+                      <small style={{ fontWeight: 500, color: 'var(--muted)' }}>
+                        {subjects.filter((s) => SUM_CODES.includes(s.subjectCode)).length > 0
+                          ? subjects
+                              .filter((s) => SUM_CODES.includes(s.subjectCode))
+                              .map((s) => s.subjectName)
+                              .join('+')
+                          : '백분위합'}
+                      </small>
                     </th>
                   </tr>
                 </thead>
