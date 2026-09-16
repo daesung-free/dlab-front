@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { DataTable, ExcelButton, MaskToggle, SearchForm, useServerData, type Column, type DateRangeValue, type Field, type SearchValues, Modal } from '../../components/common'
 import { Icon } from '../../components/Icon'
 import { useAcademy } from '../../auth/AcademyContext'
@@ -29,6 +29,7 @@ import {
   type RuleConditionGroup,
 } from '../../api/penalties'
 import type { EnrollmentStatus } from '../../api/students'
+import { createScreenSignal } from './screenSignal'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
 
@@ -71,29 +72,9 @@ const CHIP_TO_ENROLLMENT: Record<string, EnrollmentStatus> = {
 /** 조건이 비었을 때 매번 새 배열을 만들면 params 의존성이 매 렌더 바뀌어 무한 요청이 된다 */
 const NO_CHIPS: string[] = []
 
-/* 항목을 고치면 아래 표의 부여 드롭다운도 같이 바뀌어야 한다. 그런데 헤더 액션(`actions`)과
- * 본문(`Content`)은 ScreenPage 가 **따로 렌더**해서 상태를 공유할 수 없다 —
- * props 로 내릴 자리가 없다. 그래서 모듈 안에 작은 신호를 두고 본문이 구독한다.
- * 이게 없으면 항목을 추가한 직후 부여 드롭다운에 그 항목이 안 보인다. */
-let itemsVersion = 0
-const itemsListeners = new Set<() => void>()
-
-function bumpItems(): void {
-  itemsVersion += 1
-  for (const fn of itemsListeners) fn()
-}
-
-function useItemsVersion(): number {
-  return useSyncExternalStore(
-    (cb) => {
-      itemsListeners.add(cb)
-      return () => {
-        itemsListeners.delete(cb)
-      }
-    },
-    () => itemsVersion,
-  )
-}
+/* 항목을 고치면 아래 표의 부여 드롭다운도 같이 바뀌어야 한다. 헤더 액션과 본문은
+ * ScreenPage 가 따로 렌더해 상태를 공유할 수 없다 — screenSignal.ts 주석 참고 */
+const itemsSignal = createScreenSignal()
 
 /** 모듈 최상위에 둔다 — 인라인으로 넘기면 매 렌더 새 참조가 된다(Attendance.tsx 주석 참고) */
 const fetchClasses = ({ year }: { year: number }) => listClasses(year)
@@ -156,7 +137,7 @@ function Content() {
 
   /* 헤더의 항목 관리에서 항목이 바뀌면 부여 드롭다운을 다시 읽는다.
      첫 렌더의 0 은 건너뛴다 — 방금 읽은 것을 한 번 더 읽을 이유가 없다 */
-  const itemsVer = useItemsVersion()
+  const itemsVer = itemsSignal.useVersion()
   const reloadItems = items.reload
   useEffect(() => {
     if (itemsVer > 0) reloadItems()
@@ -611,7 +592,7 @@ function PenaltyActions() {
       else await updatePenaltyItem(draft.id, body)
       setDraft(EMPTY_DRAFT)
       await load()
-      bumpItems()
+      itemsSignal.bump()
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : '저장하지 못했습니다.')
     } finally {
@@ -626,7 +607,7 @@ function PenaltyActions() {
       await deletePenaltyItem(row.id)
       if (draft.id === row.id) setDraft(EMPTY_DRAFT)
       await load()
-      bumpItems()
+      itemsSignal.bump()
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : '삭제하지 못했습니다.')
     } finally {
@@ -730,7 +711,7 @@ function PenaltyActions() {
           ? `${ok}개를 가져왔습니다. 이미 있던 ${prev.length - todo.length}개는 건너뛰었습니다.`
           : `${todo.length}개 중 ${ok}개만 가져왔습니다. 실패: ${failed.join(' · ')}`,
       )
-      bumpItems()
+      itemsSignal.bump()
     } catch (e) {
       setCopyMsg(e instanceof ApiError ? e.message : '가져오지 못했습니다.')
     } finally {

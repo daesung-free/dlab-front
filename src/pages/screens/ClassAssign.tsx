@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { DataTable, Modal, useServerTable, type Column } from '../../components/common'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
@@ -13,30 +13,12 @@ import {
 } from '../../api/classes'
 import { useAcademy } from '../../auth/AcademyContext'
 import { SORTABLE, TRACK_LABEL, retakeLabel, searchStudents, type Student } from '../../api/students'
+import { createScreenSignal } from './screenSignal'
 import type { Mockup } from './types'
 
-/* 반을 만들면 아래 목록이 바로 바뀌어야 한다. 그런데 헤더 액션과 본문은 ScreenPage 가
- * 따로 렌더해 상태를 공유할 수 없다 — props 로 내릴 자리가 없다. 모듈 안에 작은 신호를
- * 두고 본문이 구독한다. 이게 없으면 방금 만든 반이 배정 드롭다운에 안 보인다. */
-let classesVersion = 0
-const classesListeners = new Set<() => void>()
-
-function bumpClasses(): void {
-  classesVersion += 1
-  for (const fn of classesListeners) fn()
-}
-
-function useClassesVersion(): number {
-  return useSyncExternalStore(
-    (cb) => {
-      classesListeners.add(cb)
-      return () => {
-        classesListeners.delete(cb)
-      }
-    },
-    () => classesVersion,
-  )
-}
+/* 반을 만들면 아래 목록과 배정 드롭다운이 바로 바뀌어야 한다. 헤더 액션과 본문은
+ * ScreenPage 가 따로 렌더해 상태를 공유할 수 없다 — screenSignal.ts 주석 참고 */
+const classesSignal = createScreenSignal()
 
 /* F-4.1-4 반 배정(고정반 관리) — /api/v1/admin/classes
  *
@@ -111,7 +93,7 @@ function Content() {
   }, [loadClasses])
 
   /* 헤더에서 반을 만들면 목록을 다시 읽는다. 첫 렌더의 0 은 건너뛴다 */
-  const classesVer = useClassesVersion()
+  const classesVer = classesSignal.useVersion()
   useEffect(() => {
     if (classesVer > 0) void loadClasses()
   }, [classesVer, loadClasses])
@@ -355,7 +337,7 @@ function ClassActions() {
       })
       setDraft(null)
       setDone(`${r.name} 을(를) 만들었습니다. 담임은 아직 지정되지 않았습니다.`)
-      bumpClasses()
+      classesSignal.bump()
     } catch (e) {
       /* 같은 해 같은 이름은 서버가 400 으로 막는다 — 문구가 그대로 쓸 만하다 */
       setErr(e instanceof ApiError ? e.message : '반을 만들지 못했습니다.')

@@ -18,6 +18,7 @@ import {
   type SurveyResult,
   type SurveySummary,
 } from '../../api/surveys'
+import { createScreenSignal } from './screenSignal'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
 
@@ -243,14 +244,31 @@ function emptyDraft(mode: 'survey' | 'template'): Draft {
 }
 
 /* ── 가채점 결과 집계 예시 ── */
+/* 헤더 버튼 → 본문. 「설문 생성」은 본문 편집기를 열고, 「템플릿에서 생성」은 템플릿 탭으로 보낸다 */
+const newSurveySignal = createScreenSignal()
+const fromTemplateSignal = createScreenSignal()
+
 function Content() {
   const [tab, setTab] = useState('list')
+
+  /* 헤더 액션은 본문과 따로 렌더돼 상태를 공유할 수 없다(screenSignal.ts 주석).
+     헤더에서 누른 것을 본문이 받아 처리한다 */
+  const newSurveyVer = newSurveySignal.useVersion()
+  const fromTemplateVer = fromTemplateSignal.useVersion()
   const [draft, setDraft] = useState<Draft | null>(null)
 
   /* ── 편집기 열기 ── */
 
   const createSurvey = useCallback(() => setDraft(emptyDraft('survey')), [])
   const createTemplate = useCallback(() => setDraft(emptyDraft('template')), [])
+
+  /* 첫 렌더의 0 은 건너뛴다 — 화면에 들어오자마자 편집기가 열리면 안 된다 */
+  useEffect(() => {
+    if (newSurveyVer > 0) createSurvey()
+  }, [newSurveyVer, createSurvey])
+  useEffect(() => {
+    if (fromTemplateVer > 0) setTab('template')
+  }, [fromTemplateVer])
 
 
   const editTemplate = useCallback((t: Template) => {
@@ -1132,12 +1150,14 @@ function Content() {
 
 export const surveyMockup: Mockup = {
   Content,
+  /* 본문에 같은 기능이 이미 있었고 헤더 것만 막혀 있었다 — 중복된 채로 눌리지 않으면
+     고장으로 읽힌다. 본문으로 신호를 보내 같은 동작을 하게 한다 */
   actions: (
     <>
-      <button className="btn" disabled data-soon title="준비 중입니다">
+      <button className="btn" onClick={() => fromTemplateSignal.bump()}>
         <Icon name="copy" size={14} /> 템플릿에서 생성
       </button>
-      <button className="btn pri" disabled data-soon title="준비 중입니다">
+      <button className="btn pri" onClick={() => newSurveySignal.bump()}>
         <Icon name="plus" size={14} /> 설문 생성
       </button>
     </>
