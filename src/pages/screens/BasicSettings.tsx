@@ -36,6 +36,7 @@ import {
 } from '../../api/schoolMasters'
 import {
   copyMastersToYear,
+  describeCopied,
   createCourseType,
   createCurriculum,
   createDepartment,
@@ -770,10 +771,7 @@ function Content() {
     void (async () => {
       try {
         const res = await copyMastersToYear({ academyId, fromYear: from, toYear: year })
-        const summary = Object.entries(res.copied ?? {})
-          .filter(([, n]) => n > 0)
-          .map(([k, n]) => `${k} ${n}건`)
-          .join(' · ')
+        const summary = describeCopied(res.copied)
         setNotice(summary === '' ? `${from} → ${year} 복사했지만 넘어온 것이 없습니다.` : `${from} → ${year} 복사 — ${summary}`)
         await load()
       } catch (err) {

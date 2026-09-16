@@ -156,6 +156,36 @@ export interface YearlyCopyResult {
   copied: Record<string, number>
 }
 
+/**
+ * `copied` 의 키는 **서버 표 이름**이다. 그대로 그리면 화면에 `courseType 5건` 이 찍힌다 —
+ * 행정 선생님이 읽을 말이 아니다(CLAUDE.md 1-1). 모르는 키는 그대로 두고 넘긴다.
+ *
+ * ★ 반만 복사하는 경로는 없다. 이 호출 하나가 아래 표를 **전부** 만든다 —
+ *   "전년도 반 구성 복사" 버튼을 누른 사람에게 그걸 먼저 알려야 한다.
+ */
+export const COPIED_LABEL: Record<string, string> = {
+  department: '학과',
+  curriculum: '학과계열',
+  courseType: '과정',
+  class: '반',
+  period: '교시',
+  approvalItem: '승인 항목',
+  penaltyItem: '상벌점 항목',
+  penaltyRule: '상벌점 규칙',
+  tuition: '교습비',
+  scholarshipMaster: '장학',
+  billingStandard: '청구 기준',
+  staff: '직원',
+}
+
+/** `{ class: 4, period: 34 }` → `반 4건 · 교시 34건`. 0 건은 뺀다 */
+export function describeCopied(copied: Record<string, number>): string {
+  return Object.entries(copied ?? {})
+    .filter(([, n]) => n > 0)
+    .map(([k, n]) => `${COPIED_LABEL[k] ?? k} ${n}건`)
+    .join(' · ')
+}
+
 export function copyMastersToYear(body: {
   academyId: number
   fromYear: number

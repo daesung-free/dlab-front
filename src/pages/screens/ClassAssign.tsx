@@ -11,6 +11,7 @@ import {
   type ClassGroup,
   type ClassType,
 } from '../../api/classes'
+import { copyMastersToYear, describeCopied } from '../../api/masters'
 import { useAcademy } from '../../auth/AcademyContext'
 import { SORTABLE, TRACK_LABEL, retakeLabel, searchStudents, type Student } from '../../api/students'
 import { createScreenSignal } from './screenSignal'
@@ -319,7 +320,42 @@ function ClassActions() {
   const [draft, setDraft] = useState<{ name: string; classType: ClassType; capacity: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-  const [done, setDone] = useState<string | null>(null)
+  /** 끝났다고 알리는 모달. 반 등록·전년도 복사 둘이 같이 쓴다 — 제목까지 함께 담는다 */
+  const [done, setDone] = useState<{ title: string; text: string } | null>(null)
+  /** 전년도 복사 확인. 되돌릴 수 없어서 한 번 묻는다 */
+  const [copyOpen, setCopyOpen] = useState(false)
+
+  /**
+   * 전년도 복사.
+   *
+   * ★ **반만 복사하는 경로가 없다.** 이 호출 하나가 학과·과정·교시·상벌점 항목까지
+   *   전부 만든다. 버튼 이름이 '반 구성 복사' 라 모달에서 그걸 먼저 말한다 —
+   *   모르고 누르면 기초 관리 전체가 한 해 치 생긴다.
+   * ★ 되돌릴 수 없다. 대상 연도에 이미 자료가 있으면 서버가 409 로 막으므로 덮어쓰진 않는다.
+   */
+  async function copyLastYear() {
+    if (academyId === null) return
+    setBusy(true)
+    setErr(null)
+    try {
+      const res = await copyMastersToYear({ academyId, fromYear: year - 1, toYear: year })
+      const summary = describeCopied(res.copied)
+      setCopyOpen(false)
+      setDone({
+        title: summary === '' ? '넘어온 자료가 없습니다' : `${year - 1}년 자료를 복사했습니다`,
+        text:
+          summary === ''
+            ? `${year - 1}년에 복사할 자료가 없었습니다.`
+            : `${year - 1} → ${year} · ${summary}`,
+      })
+      classesSignal.bump()
+    } catch (e) {
+      /* "2026년에 이미 기초 데이터가 있습니다" 처럼 서버 문구가 그대로 쓸 만하다 */
+      setErr(e instanceof ApiError ? e.message : '복사하지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function submit() {
     if (!draft || academyId === null) return
@@ -336,7 +372,7 @@ function ClassActions() {
         capacity: cap === '' ? undefined : Number(cap),
       })
       setDraft(null)
-      setDone(`${r.name} 을(를) 만들었습니다. 담임은 아직 지정되지 않았습니다.`)
+      setDone({ title: '반을 만들었습니다', text: `${r.name} · 담임은 아직 지정되지 않았습니다.` })
       classesSignal.bump()
     } catch (e) {
       /* 같은 해 같은 이름은 서버가 400 으로 막는다 — 문구가 그대로 쓸 만하다 */
@@ -348,7 +384,15 @@ function ClassActions() {
 
   return (
     <>
-      <button className="btn" disabled data-soon title="준비 중입니다">
+      <button
+        className="btn"
+        disabled={busy || academyId === null}
+        title={academyId === null ? '지점을 먼저 선택하세요' : `${year - 1}년 자료를 ${year}년으로 복사합니다`}
+        onClick={() => {
+          setErr(null)
+          setCopyOpen(true)
+        }}
+      >
         <Icon name="history" size={14} /> 전년도 반 구성 복사
       </button>
       <button
@@ -362,6 +406,30 @@ function ClassActions() {
       >
         <Icon name="plus" size={14} /> 반 등록
       </button>
+
+      {copyOpen && (
+        <Modal
+          title={`${year - 1}년 자료를 ${year}년으로 복사할까요?`}
+          sub={`되돌릴 수 없습니다. ${year}년에 이미 자료가 있으면 복사되지 않습니다.`}
+          confirmLabel="복사"
+          danger
+          busy={busy}
+          error={err}
+          onConfirm={() => void copyLastYear()}
+          onClose={() => setCopyOpen(false)}
+        >
+          {/* ★ 이름은 '반 구성 복사' 지만 실제로는 기초 자료가 통째로 넘어간다.
+                 안 적으면 반만 생길 줄 알고 누른다 */}
+          <div className="note-box">
+            {/* ★ `.note-box` 는 flex 다. 글자와 <b> 를 나란히 두면 **각각이 칸이 되어**
+                   가운데가 세로로 눌린다(.frow 와 같은 함정) — 한 칸에 묶는다 */}
+            <div className="tx">
+              반만 따로 복사할 수는 없습니다. <b>학과 · 과정 · 반 · 교시 · 상벌점 항목 · 교습비</b>가
+              함께 넘어갑니다. 무엇이 몇 건 넘어갔는지는 복사한 뒤 알려드립니다.
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {draft && (
         <Modal
@@ -422,8 +490,8 @@ function ClassActions() {
       )}
 
       {done && (
-        <Modal title="반을 만들었습니다" hideCancel confirmLabel="닫기" onConfirm={() => setDone(null)} onClose={() => setDone(null)}>
-          <div style={{ fontSize: 13.5 }}>{done}</div>
+        <Modal title={done.title} hideCancel confirmLabel="닫기" onConfirm={() => setDone(null)} onClose={() => setDone(null)}>
+          <div style={{ fontSize: 13.5 }}>{done.text}</div>
         </Modal>
       )}
     </>
