@@ -158,6 +158,13 @@ export const NAV: NavCat[] = [
           { screenId: 'admin-basic', label: '학과계열 관리', tab: 'track', icon: 'git-compare' },
           { screenId: 'admin-basic', label: '그 외 기초 항목', tab: 'class_group', icon: 'sliders-horizontal' },
           { screenId: 'annual-events', label: '연간 행사 마스터', added: true, note: '학습계획 자동 반영' },
+          {
+            screenId: 'admin-meal-vendor',
+            label: '급식 업체 관리',
+            icon: 'utensils',
+            added: true,
+            note: '지점별 업체 · 1식 단가. 해마다 새로 정한다',
+          },
         ],
       },
       {

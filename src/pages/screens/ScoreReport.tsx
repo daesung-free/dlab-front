@@ -574,7 +574,10 @@ function Content() {
               <input
                 className="inp"
                 type="number"
-                step="0.01"
+                /* ★ 배수를 걸지 않는다. Modal 안이라 확인이 submit 인데, step 배수가 아닌
+                      값(2.355 처럼 소수 셋째 자리)은 브라우저가 제출을 막아 **버튼이 안 먹는
+                      것처럼** 보인다. 범위(1~9)는 그대로 둔다 */
+                step="any"
                 min={1}
                 max={9}
                 placeholder="예: 2.35"

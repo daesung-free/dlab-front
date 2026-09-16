@@ -52,6 +52,8 @@ export const SCREEN_MENU_CODES: Record<string, string[]> = {
 
   /* 급식 */
   meal: ['meal'],
+  /* 업체·단가는 급식 신청과 코드가 다르다 — 서버도 meal-vendor 로 따로 막는다 */
+  'admin-meal-vendor': ['meal-vendor'],
 
   /* 알림 */
   chat: ['notice'],

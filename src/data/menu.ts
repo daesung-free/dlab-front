@@ -309,6 +309,17 @@ export const SCREENS: Screen[] = [
     summary: '특강·설명회 기초 설정, 설명회 신청 항목 추가',
   },
   {
+    id: 'admin-meal-vendor',
+    code: 'F-4.5-부속',
+    groupId: 'admin',
+    name: '급식 업체 · 지점 배정',
+    icon: 'utensils',
+    kind: 'verified',
+    phase: 2,
+    feOrder: 3,
+    summary: '급식 업체 등록, 지점별 업체·1식 단가 배정(연도별)',
+  },
+  {
     id: 'admin-billing',
     code: 'F-4.10-5',
     groupId: 'admin',
