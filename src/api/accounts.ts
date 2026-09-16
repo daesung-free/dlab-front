@@ -124,15 +124,31 @@ export function listAccountHistory(accountId: number): Promise<AccountHistory[]>
   return request<AccountHistory[]>(`/api/v1/admin/staff/accounts/${accountId}/history`)
 }
 
-/** 잠금 해제. 로그인 5회 실패로 잠긴 계정은 이걸 부르기 전까지 자동으로 안 풀린다 */
+/**
+ * 잠금 해제. 로그인 5회 실패로 잠긴 계정은 이걸 부르기 전까지 자동으로 안 풀린다.
+ *
+ * ★ **직원 계정 경로를 쓴다.** 2026-09-16 에 생겼다 — 그전에는 앱 계정 경로
+ *   (`/app-accounts/{id}/unlock`)뿐이라 그걸 쓰고 있었다.
+ *   계정 번호는 한 공간이라 앱 경로로 불러도 직원 계정이 풀리기는 한다(확인함).
+ *   그래도 직원 화면은 직원 경로를 쓴다 — 두 경로의 권한 검사와 감사 기록 주체가
+ *   갈라지는 날 앱 경로가 조용히 어긋난다.
+ * ★ 잠겨 있지 않아도 성공이다(멱등). 그 사이 다른 관리자가 먼저 풀었다고 오류를 내지 않는다.
+ */
 export function unlockAccount(accountId: number): Promise<void> {
-  return request<void>(`/api/v1/admin/app-accounts/${accountId}/unlock`, { method: 'POST' })
+  return request<void>(`/api/v1/admin/staff/accounts/${accountId}/unlock`, { method: 'POST' })
 }
 
-/** 임시 비밀번호 발급. 응답으로 오는 비밀번호는 **다시 볼 수 없다** */
+/**
+ * 임시 비밀번호 발급. 응답으로 오는 비밀번호는 **다시 볼 수 없다**.
+ *
+ * ★ 잠금 해제와 같은 이유로 **직원 경로**를 쓴다(2026-09-16 생김). 앱 경로도 같은 계정을
+ *   집지만, 화면이 직원 목록을 그리는 한 경로도 직원이어야 한다.
+ * ★ 이건 **되돌릴 수 없다.** 기존 비밀번호가 즉시 못 쓰게 되므로, 엉뚱한 줄에서 누르면
+ *   그 사람은 로그인이 막힌 뒤에야 안다 — 확인 모달을 반드시 거친다.
+ */
 export function issueTemporaryPassword(accountId: number): Promise<{ temporaryPassword: string }> {
   return request<{ temporaryPassword: string }>(
-    `/api/v1/admin/app-accounts/${accountId}/temporary-password`,
+    `/api/v1/admin/staff/accounts/${accountId}/temporary-password`,
     { method: 'POST' },
   )
 }
