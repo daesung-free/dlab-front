@@ -164,7 +164,10 @@ export function Dashboard() {
            ★ 집계 전(attendanceRate === null)과 0을 구분한다. 0%로 그리면 전원 결석으로 보인다 */}
       {canStats && !stats.loading && !counted && (
         <div className="note-box">
-          오늘({today}) 출결이 <b>아직 집계되지 않았습니다.</b> 등원 태깅이 들어오면 채워집니다.
+          {/* ★ note-box 는 flex 다 — 글자와 <b> 를 형제로 두면 각각이 칸이 되어 눌린다 */}
+          <div>
+            오늘({today}) 출결이 <b>아직 집계되지 않았습니다.</b> 등원 태깅이 들어오면 채워집니다.
+          </div>
         </div>
       )}
       {/* 집계 메뉴가 없는 계정에는 0 을 그리지 않는다 — 실제 0 과 구분이 안 된다 */}

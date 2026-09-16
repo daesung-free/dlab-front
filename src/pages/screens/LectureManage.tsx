@@ -1771,7 +1771,9 @@ function PromoteConfirm({
         /* ★ risk 클래스를 쓴다. 인라인으로 빨갛게 칠하면 <b> 는 `.note-box b`(민트)를 그대로
              받아서, 경고 상자 안에서 정작 강조한 숫자만 초록으로 나온다. 실제로 그랬다. */
         <div className="note-box risk" role="alert">
-          정원 {capacity}명을 <b>{after - capacity}명 넘깁니다.</b> 그래도 확정하시겠습니까?
+          <div>
+            정원 {capacity}명을 <b>{after - capacity}명 넘깁니다.</b> 그래도 확정하시겠습니까?
+          </div>
         </div>
       )}
     </Modal>
