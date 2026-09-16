@@ -8,6 +8,7 @@ import {
   createBuilding,
   createSeatArea,
   createSeatGrid,
+  createSeatMaster,
   deleteBuilding,
   deleteSeatArea,
   deleteSeatMaster,
@@ -69,7 +70,9 @@ export function SeatSetup({ onChanged }: Props) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [modal, setModal] = useState<null | 'building' | 'area' | 'grid'>(null)
+  const [modal, setModal] = useState<null | 'building' | 'area' | 'grid' | 'seat'>(null)
+  /** 단건 등록이 채울 빈칸. 배치도에서 그 자리를 눌러서 정한다 */
+  const [spot, setSpot] = useState<{ xPos: number; yPos: number } | null>(null)
   const [modalError, setModalError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -220,6 +223,11 @@ export function SeatSetup({ onChanged }: Props) {
             setModalError(null)
             setModal('grid')
           }}
+          onPickSpot={(xPos, yPos) => {
+            setModalError(null)
+            setSpot({ xPos, yPos })
+            setModal('seat')
+          }}
           onDelete={(s) => act(() => deleteSeatMaster(s.id))}
         />
       )}
@@ -240,6 +248,17 @@ export function SeatSetup({ onChanged }: Props) {
           error={modalError}
           onClose={() => setModal(null)}
           onSubmit={(body) => submit(() => createSeatArea({ academyId: academyId ?? undefined, ...body }))}
+        />
+      )}
+
+      {modal === 'seat' && areaId !== null && spot && (
+        <SeatModal
+          area={area}
+          spot={spot}
+          busy={busy}
+          error={modalError}
+          onClose={() => setModal(null)}
+          onSubmit={(body) => submit(() => createSeatMaster({ studyAreaId: areaId, ...body }))}
         />
       )}
 
@@ -583,6 +602,7 @@ function SeatTab({
   busy,
   onPickArea,
   onAdd,
+  onPickSpot,
   onDelete,
 }: {
   areas: SeatArea[]
@@ -592,6 +612,7 @@ function SeatTab({
   busy: boolean
   onPickArea: (id: number) => void
   onAdd: () => void
+  onPickSpot: (xPos: number, yPos: number) => void
   onDelete: (s: SeatMaster) => void
 }) {
   const columns: Column<SeatMaster>[] = [
@@ -654,6 +675,15 @@ function SeatTab({
         </div>
       </div>
       <div className="card-sec-b">
+        {seats.length > 0 && (
+          <>
+            <p className="note-box">
+              <b>빈 칸을 누르면 그 자리에 좌석을 만듭니다.</b> 잘못 지운 자리를 되돌릴 때 쓰세요 — 지웠던 번호를
+              그대로 넣으면 <b>그 좌석이 되살아나</b> 예전 배정 이력이 이어집니다.
+            </p>
+            <SeatSpotMap seats={seats} busy={busy} onPickSpot={onPickSpot} />
+          </>
+        )}
         <DataTable
           columns={columns}
           rows={seats}
@@ -663,6 +693,118 @@ function SeatTab({
         />
       </div>
     </div>
+  )
+}
+
+/**
+ * 좌석 자리표 — <b>빈 칸을 눌러 채운다.</b>
+ *
+ * ★ 이게 없으면 지운 좌석을 되돌릴 방법이 화면에 없었다. 격자는 전부-아니면-전무라
+ *   20석 중 17번만 다시 만들려고 1~20 을 넣으면 나머지 19개가 겹쳐서 거부된다.
+ *   "17번 하나를 원래 자리에" 가 실제로 자주 생기는 일이다.
+ *
+ * ★ 좌표 범위는 <b>있는 좌석에서 뽑는다.</b> 격자 크기를 따로 저장하지 않기 때문인데,
+ *   그래서 <b>맨 끝 줄·열을 통째로 지우면 그 자리는 표에서 사라진다</b> — 그때는
+ *   「격자로 만들기」로 이어붙이는 쪽이 맞다(시작 번호를 지정할 수 있다).
+ */
+function SeatSpotMap({
+  seats,
+  busy,
+  onPickSpot,
+}: {
+  seats: SeatMaster[]
+  busy: boolean
+  onPickSpot: (xPos: number, yPos: number) => void
+}) {
+  const maxX = Math.max(...seats.map((s) => s.xPos))
+  const maxY = Math.max(...seats.map((s) => s.yPos))
+  const byPos = new Map(seats.map((s) => [`${s.xPos}:${s.yPos}`, s]))
+
+  const rows = []
+  for (let y = 1; y <= maxY; y++) {
+    const cells = []
+    for (let x = 1; x <= maxX; x++) {
+      const seat = byPos.get(`${x}:${y}`)
+      cells.push(
+        seat ? (
+          <div key={x} className="sgp-cell taken" title={seat.seatNm ?? seat.seatCd}>
+            {seat.seatCd}
+          </div>
+        ) : (
+          <button
+            key={x}
+            type="button"
+            className="sgp-cell empty"
+            disabled={busy}
+            onClick={() => onPickSpot(x, y)}
+            title={`${x}, ${y} 자리에 좌석 만들기`}
+          >
+            +
+          </button>
+        ),
+      )
+    }
+    rows.push(
+      <div className="sgp-row" key={y}>
+        {cells}
+      </div>,
+    )
+  }
+  return <div className="sgp">{rows}</div>
+}
+
+/**
+ * 좌석 단건 등록.
+ *
+ * <p>자리(좌표)는 이미 정해져 있고 <b>번호만 받는다</b> — 빈 칸을 눌러서 들어왔기 때문이다.
+ * 좌표까지 입력하게 하면 배치도에서 고른 의미가 없어진다.
+ */
+function SeatModal({
+  area,
+  spot,
+  busy,
+  error,
+  onClose,
+  onSubmit,
+}: {
+  area: SeatArea | null
+  spot: { xPos: number; yPos: number }
+  busy: boolean
+  error: string | null
+  onClose: () => void
+  onSubmit: (body: { seatCd: string; seatNm?: string; xPos: number; yPos: number }) => void
+}) {
+  const [seatCd, setSeatCd] = useState('')
+
+  return (
+    <Modal
+      title="좌석 만들기"
+      sub={`${area ? `${area.buildingName} ${area.areaNm} · ` : ''}${spot.yPos}행 ${spot.xPos}열 자리`}
+      confirmLabel="등록"
+      busy={busy}
+      error={error}
+      confirmDisabled={!seatCd.trim()}
+      onClose={onClose}
+      onConfirm={() =>
+        onSubmit({ seatCd: seatCd.trim(), xPos: spot.xPos, yPos: spot.yPos })
+      }
+    >
+      <div className="frow">
+        <label className="req">좌석번호</label>
+        <input
+          className="inp"
+          value={seatCd}
+          onChange={(e) => setSeatCd(e.target.value)}
+          maxLength={50}
+          placeholder="예: 17"
+          autoFocus
+        />
+      </div>
+      <p className="note-box">
+        <b>지웠던 번호를 그대로 넣으면 그 좌석이 되살아납니다.</b> 새로 만들지 않고 예전 행을 되살리기 때문에
+        그 자리에 앉았던 배정 이력이 끊기지 않습니다.
+      </p>
+    </Modal>
   )
 }
 

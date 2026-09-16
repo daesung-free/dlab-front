@@ -65,3 +65,36 @@
   border-style: dashed;
   color: var(--muted);
 }
+
+/* ── 자리표(빈칸 클릭으로 좌석 만들기) ───────────────────────
+ *
+ * 격자 미리보기(.sgp)와 같은 틀을 쓰되, 여기는 **이미 있는 좌석 / 빈 자리**를 가른다.
+ * 미리보기의 「통로」와 색을 나눠야 한다 — 통로는 "만들지 않을 칸"이고
+ * 여기 빈칸은 "만들 수 있는 칸"이라 반대 의미다.
+ */
+
+/* 이미 있는 좌석. 버튼이 아니라서 커서도 바뀌지 않는다 */
+.sgp-cell.taken {
+  cursor: default;
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+/* 빈 자리 — 누를 수 있다는 게 보여야 한다 */
+.sgp-cell.empty {
+  border-style: dashed;
+  color: var(--muted);
+  background: transparent;
+}
+
+.sgp-cell.empty:hover:not(:disabled) {
+  border-style: solid;
+  border-color: var(--mint);
+  background: var(--mint-wash);
+  color: var(--mint);
+}
+
+.sgp-cell.empty:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
