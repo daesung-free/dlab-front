@@ -333,6 +333,19 @@ export const SCREENS: Screen[] = [
     summary: '장학 취소 기준 등록, 학기별 판정과 건별 취소·예외 인정',
   },
   {
+    /* 2026-09-16 추가. 사용자 관리(F-4.10-2)와 다른 축이다 — 저쪽은 "웹에 로그인하는 계정",
+       이쪽은 "키오스크에 카드를 찍는 사람"이다. 계정 없이 카드만 쓰는 직원이 있다. */
+    id: 'admin-staff-card',
+    code: 'F-4.10-8',
+    groupId: 'admin',
+    name: '직원 카드 · 출퇴근',
+    icon: 'id-card',
+    kind: 'verified',
+    phase: 2,
+    feOrder: 3,
+    summary: '직원 카드 발급·교체, 키오스크 출퇴근 기록 조회',
+  },
+  {
     id: 'admin-result',
     code: 'F-4.10-6',
     groupId: 'admin',
