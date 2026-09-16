@@ -284,7 +284,12 @@ function MenuModal({ row, onClose, onSaved }: { row: AccountRow; onClose: () => 
 
           <div style={{ display: 'grid', gap: 10, maxHeight: 420, overflow: 'auto' }}>
             {groups.map(({ top, children }) => (
-              <div key={top.code} className="note-box" style={{ padding: '9px 11px' }}>
+              <div
+                key={top.code}
+                className="note-box"
+                /* ★ flex 라서 기본은 가로다 — 부모 라벨과 자식 목록이 좌우로 갈라진다 */
+                style={{ padding: '9px 11px', display: 'block' }}
+              >
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
                   <input type="checkbox" checked={picked.has(top.code)} onChange={() => toggle(top, children)} />
                   <b>{top.name}</b>
@@ -306,7 +311,10 @@ function MenuModal({ row, onClose, onSaved }: { row: AccountRow; onClose: () => 
           </div>
 
           <div className="note-box" style={{ marginTop: 10 }}>
-            체크한 메뉴는 <b>다음 로그인부터</b> 반영됩니다. 이미 접속해 있는 사람은 새로고침하면 바뀝니다.
+            {/* ★ note-box 는 flex 다 — 글자와 <b> 를 형제로 두면 각각이 칸이 되어 눌린다 */}
+            <div>
+              체크한 메뉴는 <b>다음 로그인부터</b> 반영됩니다. 이미 접속해 있는 사람은 새로고침하면 바뀝니다.
+            </div>
           </div>
         </>
       )}
