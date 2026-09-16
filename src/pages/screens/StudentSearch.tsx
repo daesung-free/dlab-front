@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   CopyButton,
@@ -33,6 +33,12 @@ import {
   type Student,
   type TrackType,
 } from '../../api/students'
+import {
+  assignStudentsToClass,
+  listClasses,
+  type BulkAssignResult,
+  type ClassGroup,
+} from '../../api/classes'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
 
@@ -134,6 +140,62 @@ function Content() {
        실제로는 재원만 조회됐다 — 퇴원으로 바꾼 학생이 어디서도 안 보인다는 말이 나왔다. */
   const [query, setQuery] = useState<SearchValues>(DEFAULT_QUERY)
   const [selected, setSelected] = useState<string[]>([])
+
+  /* ── 선택 건 반 배정 ── */
+  const [classes, setClasses] = useState<ClassGroup[]>([])
+  const [assign, setAssign] = useState<{ classId: string } | null>(null)
+  const [assignBusy, setAssignBusy] = useState(false)
+  const [assignErr, setAssignErr] = useState<string | null>(null)
+  const [assignResult, setAssignResult] = useState<BulkAssignResult | null>(null)
+
+  /**
+   * 반 목록은 배정 모달의 드롭다운에 쓴다. 지점이 바뀌면 다시 읽는다.
+   *
+   * ★ **연도를 반드시 넘긴다.** 안 넘기면 전 연도가 섞여 와서 「고3 1반」이 두 번 뜨고,
+   *   다음 해 반을 고르면 **전원이 실패한다** — 서버가 "학생의 등록 연도와 반의 연도가
+   *   다릅니다" 로 건별로 거절한다. 실측으로 3명 모두 실패했다(2026-09-16).
+   */
+  useEffect(() => {
+    if (academyId === null) {
+      setClasses([])
+      return
+    }
+    let cancelled = false
+    listClasses(new Date().getFullYear(), academyId)
+      .then((l) => !cancelled && setClasses(l))
+      .catch(() => !cancelled && setClasses([]))
+    return () => {
+      cancelled = true
+    }
+  }, [academyId])
+
+  /**
+   * 선택한 학생을 한 반에 넣는다.
+   *
+   * ★ 서버가 **건별 결과**를 준다. 한 명이 틀렸다고 전부 되돌리지 않으므로
+   *   "몇 명이 됐고 누가 안 됐는지"를 그대로 보여준다 — 뭉뚱그리면 다시 눌러
+   *   이미 들어간 학생을 또 넣으려 한다.
+   *
+   * ★ **정원을 넘겨도 배정된다.** 정원 초과가 필요한 운영이 실제로 있어 서버가 막지 않고
+   *   `overCapacity` 로 알린다. 경고는 화면이 띄운다.
+   */
+  async function runAssign() {
+    if (!assign) return
+    setAssignBusy(true)
+    setAssignErr(null)
+    try {
+      const res = await assignStudentsToClass(Number(assign.classId), selected.map(Number))
+      setAssign(null)
+      setAssignResult(res)
+      /* 배정된 학생은 더 이상 그 선택으로 할 일이 없다 — 남겨두면 또 누르게 된다 */
+      setSelected([])
+      table.reload()
+    } catch (err) {
+      setAssignErr(err instanceof ApiError ? err.message : '배정하지 못했습니다.')
+    } finally {
+      setAssignBusy(false)
+    }
+  }
   const [masked, setMasked] = useState(true)
 
   // ★ useMemo 필수 — 매 렌더 새 객체를 넘기면 useServerTable 이 무한 요청한다
@@ -515,7 +577,15 @@ function Content() {
         toolbar={
           <>
             {selected.length > 0 && (
-              <button className="btn" disabled data-soon title="준비 중입니다">
+              <button
+                className="btn"
+                disabled={academyId === null}
+                title={academyId === null ? '지점을 먼저 선택하세요' : undefined}
+                onClick={() => {
+                  setAssignErr(null)
+                  setAssign({ classId: String(classes[0]?.id ?? '') })
+                }}
+              >
                 <Icon name="users" size={14} /> 선택 {selected.length}건 반 배정
               </button>
             )}
@@ -537,6 +607,103 @@ function Content() {
           </>
         }
       />
+
+      {/* ── 선택 건 반 배정 ── */}
+      {assign && (
+        <Modal
+          title="선택한 학생 반 배정"
+          sub={`${selected.length}명을 한 반에 넣습니다.`}
+          confirmLabel="배정"
+          busy={assignBusy}
+          error={assignErr}
+          confirmDisabled={assign.classId === ''}
+          onConfirm={() => void runAssign()}
+          onClose={() => setAssign(null)}
+        >
+          <div className="frow">
+            <label className="req">반</label>
+            <div>
+              <select
+                className="sel"
+                value={assign.classId}
+                onChange={(e) => setAssign({ classId: e.target.value })}
+              >
+                {classes.length === 0 && <option value="">등록된 반이 없습니다</option>}
+                {classes.map((c) => (
+                  <option key={c.id} value={String(c.id)}>
+                    {c.name} ({c.memberCount ?? 0}/{c.capacity ?? '정원 없음'})
+                  </option>
+                ))}
+              </select>
+              {/* 서버가 정원 초과를 막지 않는다. 미리 알려 두면 결과 화면에서 덜 놀란다 */}
+              <div className="hint">정원을 넘겨도 배정됩니다. 넘기면 결과에 알려 드립니다.</div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── 배정 결과 ── */}
+      {/* ★ 건별 결과를 그대로 보여준다. "3명 배정" 만 쓰면 못 들어간 학생을 모른 채
+             다시 눌러 이미 들어간 학생을 또 넣으려 한다 */}
+      {assignResult && (
+        <Modal
+          title="배정 결과"
+          hideCancel
+          confirmLabel="닫기"
+          onConfirm={() => setAssignResult(null)}
+          onClose={() => setAssignResult(null)}
+        >
+          {assignResult.overCapacity && (
+            <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
+              <div className="ic">
+                <Icon name="triangle-alert" size={17} />
+              </div>
+              <div>
+                <div className="tt">정원을 넘겼습니다</div>
+                <div className="tx">
+                  지금 <b>{assignResult.memberCount}명</b>
+                  {assignResult.capacity !== null && <> / 정원 {assignResult.capacity}명</>}. 배정은 됐습니다.
+                </div>
+              </div>
+            </div>
+          )}
+          <div className="frow">
+            <label>결과</label>
+            <div style={{ fontSize: 13.5 }}>
+              <b>{assignResult.assignedCount}명</b> 배정
+              {assignResult.failedCount > 0 && (
+                <span style={{ color: 'var(--red)' }}> · {assignResult.failedCount}명 실패</span>
+              )}
+            </div>
+          </div>
+          {assignResult.results.some((r) => r.status !== 'ASSIGNED') && (
+            <div style={{ overflowX: 'auto' }}>
+              <table className="dt">
+                <thead>
+                  <tr>
+                    <th>학생</th>
+                    <th>사유</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {assignResult.results
+                    .filter((r) => r.status !== 'ASSIGNED')
+                    .map((r) => (
+                      <tr key={r.enrollmentId}>
+                        {/* 서버가 이름을 주지만 없을 때가 있다. 학번 대신 등록 id 를 보이면
+                               누구인지 못 알아본다 — 그래도 아무것도 안 쓰는 것보단 낫다 */}
+                        <td>{r.studentName ?? `등록 ${r.enrollmentId}`}</td>
+                        <td style={{ color: 'var(--red)' }}>
+                          {r.message ?? (r.status === 'DUPLICATE' ? '같은 요청에 두 번 들어왔습니다' : r.status)}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Modal>
+      )}
     </>
   )
 }

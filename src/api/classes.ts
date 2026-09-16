@@ -46,6 +46,14 @@ export interface ClassMember {
 }
 
 /** `academyId` 는 좁히는 용도다. 안 보내면 계정 스코프 그대로다 */
+/**
+ * 반 목록.
+ *
+ * ★ `year` 는 선택이지만 **사실상 필수다.** 안 넘기면 전 연도가 섞여 와서 같은 이름의 반이
+ *   여러 번 나오고(반 이름은 해마다 재사용된다 — 'N수 1반' 이 2026·2027 양쪽에 있다),
+ *   드롭다운에서 다음 해 반을 고르면 **학생 배정이 전원 실패한다** —
+ *   서버가 "학생의 등록 연도와 반의 연도가 다릅니다" 로 건별로 거절한다(2026-09-16 실측).
+ */
 export function listClasses(year?: number, academyId?: number): Promise<ClassGroup[]> {
   return request<ClassGroup[]>('/api/v1/admin/classes', { query: { year, academyId } })
 }
