@@ -8,12 +8,14 @@ import {
   PENALTY_CATEGORY_LABEL,
   PENALTY_TRIGGER_LABEL,
   createPenaltyItem,
+  createPenaltyRule,
   deletePenaltyItem,
   deletePenaltyRule,
   fetchPenaltyBoard,
   fetchPenaltyItems,
   grantPenalties,
   listPenaltyItems,
+  listRuleConditions,
   listPenaltyRules,
   revokePenalty,
   setPenaltyRuleActive,
@@ -23,6 +25,8 @@ import {
   type PenaltyRow,
   type PenaltyRuleRow,
   type PenaltySource,
+  type PenaltyTriggerType,
+  type RuleConditionGroup,
 } from '../../api/penalties'
 import type { EnrollmentStatus } from '../../api/students'
 import type { Mockup } from './types'
@@ -35,10 +39,10 @@ import '../../styles/forms.css'
  * ★ point 는 부호가 이미 들어 있다 — 벌점이 음수다. 화면이 category 를 보고 부호를
  *   다시 만들면 항목 점수를 음수로 등록한 지점에서 부호가 뒤집힌다.
  *
- * ★ **내역의 point 와 항목 관리의 point 는 규칙이 다르다.** 내역은 서버가 항상 음수로
- *   정규화해 주지만, 항목 마스터(`/penalty-items`)는 저장된 값을 그대로 준다 —
- *   같은 DEMERIT 인데 '지각'은 +5, '무단조퇴'는 -3 으로 온다. 그래서 **항목 관리 화면은
- *   절댓값으로 보여주고 절댓값으로 보낸다.** 부호는 구분(상점/벌점)이 갖는다.
+ * ★ **점수는 서버 값을 그대로 보여준다** — 벌점 음수, 상점 양수(2026-09-16 정리 후).
+ *   한동안 화면이 절댓값으로 덮어 표시했는데, 그때 **저장값 자체가 틀려 있었다** —
+ *   벌점 55건이 양수라 합계에서 상점으로 잡히고 있었다. 화면이 가려서 안 보였을 뿐이다.
+ *   **덮어 그리면 틀린 데이터를 못 찾는다.** 입력만 절댓값으로 받고 부호는 서버가 붙인다.
  *
  * ★ '방식'은 화면과 서버의 축이 다르다. 서버 source 는 KIOSK·ROUTINE·MANUAL 이고
  *   화면은 수기(MANUAL) / 자동(KIOSK+ROUTINE) 둘로 묶는다. 반복 파라미터를 받아주므로
@@ -550,6 +554,13 @@ function PenaltyActions() {
   const [items, setItems] = useState<PenaltyItemRow[] | null>(null)
   const [rules, setRules] = useState<PenaltyRuleRow[] | null>(null)
   const [draft, setDraft] = useState<ItemDraft>(EMPTY_DRAFT)
+  /* 조건 코드표. **하드코딩하지 않는다** — triggerType 마다 다르고 서버가 늘릴 수 있다 */
+  const [conds, setConds] = useState<RuleConditionGroup[] | null>(null)
+  const [rule, setRule] = useState<{ triggerType: PenaltyTriggerType; condition: string; itemId: string }>({
+    triggerType: 'ATTENDANCE',
+    condition: '',
+    itemId: '',
+  })
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
@@ -561,13 +572,15 @@ function PenaltyActions() {
     if (academyId === null) return
     setErr(null)
     try {
-      const [i, r] = await Promise.all([
+      const [i, r, c] = await Promise.all([
         listPenaltyItems({ academyId, year }),
         /* 규칙을 못 읽어도 항목 관리는 되게 둔다 — 둘은 독립이다 */
         listPenaltyRules({ academyId, year }).catch(() => [] as PenaltyRuleRow[]),
+        listRuleConditions().catch(() => [] as RuleConditionGroup[]),
       ])
       setItems(i)
       setRules(r)
+      setConds(c)
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : '항목을 불러오지 못했습니다.')
     }
@@ -616,6 +629,28 @@ function PenaltyActions() {
       bumpItems()
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : '삭제하지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function addRule() {
+    if (academyId === null || rule.condition === '' || rule.itemId === '') return
+    setBusy(true)
+    setErr(null)
+    try {
+      await createPenaltyRule({
+        academyId,
+        year,
+        triggerType: rule.triggerType,
+        triggerCondition: rule.condition,
+        penaltyItemId: Number(rule.itemId),
+      })
+      setRule({ ...rule, condition: '', itemId: '' })
+      await load()
+    } catch (e) {
+      /* 허용값 밖이면 서버가 가능한 값을 메시지에 붙여 준다 — 그대로 보여준다 */
+      setErr(e instanceof ApiError ? e.message : '규칙을 만들지 못했습니다.')
     } finally {
       setBusy(false)
     }
@@ -763,8 +798,10 @@ function PenaltyActions() {
                   <tr key={it.id}>
                     <td>{it.itemName}</td>
                     <td>{PENALTY_CATEGORY_LABEL[it.category]}</td>
-                    {/* 저장된 부호가 제각각이라 절댓값으로 보여준다 — 머리 주석 참고 */}
-                    <td>{Math.abs(it.point)}점</td>
+                    {/* 서버 값 그대로. 덮어 그리면 저장값이 틀려도 화면은 멀쩡해 보인다 */}
+                    <td style={{ color: it.point < 0 ? 'var(--red)' : 'var(--green)', fontWeight: 700 }}>
+                      {it.point > 0 ? `+${it.point}` : it.point}점
+                    </td>
                     <td style={{ whiteSpace: 'nowrap' }}>
                       <button
                         className="btn"
@@ -866,7 +903,10 @@ function PenaltyActions() {
                       <tr key={r.id}>
                         <td>{PENALTY_TRIGGER_LABEL[r.triggerType] ?? r.triggerType}</td>
                         <td>
-                          {r.itemName} {Math.abs(r.point)}점
+                          {r.itemName}{' '}
+                        <b style={{ color: r.point < 0 ? 'var(--red)' : 'var(--green)' }}>
+                          {r.point > 0 ? `+${r.point}` : r.point}점
+                        </b>
                         </td>
                         <td>{r.active ? '켜짐' : '꺼짐'}</td>
                         <td style={{ whiteSpace: 'nowrap' }}>
@@ -882,10 +922,59 @@ function PenaltyActions() {
                   </tbody>
                 </table>
               )}
-              {/* ⚠️ 규칙을 새로 만드는 칸은 일부러 없다. 어떤 상황 코드가 실제로 걸리는지
-                     서버에서 못 받았고, 서버가 값을 검증하지도 않는다 — 틀린 값으로 만들면
-                     영영 안 걸리는 규칙이 조용히 쌓인다(api/penalties.ts triggerCondition 주석). */}
-              <div className="hint">새 규칙 추가는 준비 중입니다.</div>
+              {/* 조건 목록은 서버가 준다(`/penalty-rules/conditions`). 화면이 코드를 외우지 않는다 —
+                   ATTENDANCE 는 한 글자 코드(A=지각)라 코드를 그대로 내보이면 아무도 못 읽는다 */}
+              <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
+                <select
+                  className="sel"
+                  style={{ width: 'auto' }}
+                  value={rule.triggerType}
+                  onChange={(e) =>
+                    setRule({ ...rule, triggerType: e.target.value as PenaltyTriggerType, condition: '' })
+                  }
+                >
+                  {(Object.keys(PENALTY_TRIGGER_LABEL) as PenaltyTriggerType[]).map((t) => (
+                    <option key={t} value={t}>
+                      {PENALTY_TRIGGER_LABEL[t]}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="sel"
+                  style={{ width: 'auto' }}
+                  value={rule.condition}
+                  onChange={(e) => setRule({ ...rule, condition: e.target.value })}
+                >
+                  <option value="">어떤 상황에</option>
+                  {(conds?.find((g) => g.triggerType === rule.triggerType)?.conditions ?? []).map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="sel"
+                  style={{ width: 'auto' }}
+                  value={rule.itemId}
+                  onChange={(e) => setRule({ ...rule, itemId: e.target.value })}
+                >
+                  <option value="">어떤 항목을</option>
+                  {(items ?? []).map((it) => (
+                    <option key={it.id} value={String(it.id)}>
+                      {it.itemName} {it.point > 0 ? `+${it.point}` : it.point}점
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="btn"
+                  disabled={busy || rule.condition === '' || rule.itemId === ''}
+                  onClick={() => void addRule()}
+                >
+                  규칙 추가
+                </button>
+              </div>
+              {/* 만들자마자 돌면 모르는 사이에 점수가 붙는다 — 서버가 꺼진 상태로 만든다 */}
+              <div className="hint">새 규칙은 <b>꺼진 채</b>로 만들어집니다. 확인하고 켜 주세요.</div>
             </div>
           </div>
         </Modal>

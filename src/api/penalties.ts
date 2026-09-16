@@ -134,14 +134,17 @@ export function revokePenalty(penaltyPointId: number): Promise<void> {
 /**
  * 항목 마스터.
  *
- * ★ **부여용 `/penalties/items` 와 같은 표인데 점수 부호가 다르게 온다.**
- *   부여용은 벌점을 항상 음수로 정규화해서 주고, 이 관리용은 **저장된 값을 그대로** 준다.
- *   실제 응답(2026-09-14, 분당): 지각 `/penalty-items` +5 · `/penalties/items` -5,
- *   무단조퇴는 양쪽 다 -3. 같은 DEMERIT 인데 행마다 부호가 제각각이다.
+ * ★ **점수 부호는 구분을 따른다** — 벌점 음수, 상점 양수. 두 조회 경로가 같은 값을 준다
+ *   (2026-09-16 백엔드 정리 후 확인).
  *
- *   그래서 **화면은 절댓값으로 보여주고 절댓값으로 보낸다.** 부호는 `category` 가 갖는다 —
- *   서버가 저장할 때도 부여할 때도 구분을 따라 정규화하므로(스펙 명시) 결과가 같다.
- *   그대로 표시하면 "지각 5점 / 무단조퇴 -3점" 처럼 뒤죽박죽으로 보인다.
+ *   그 전에는 경로마다 달랐고, 더 나쁘게는 **저장값 자체가 틀려 있었다** — 벌점 55건이
+ *   양수로 들어가 있어 합계에서 상점으로 잡히고 있었다. 화면에서 절댓값으로 덮어
+ *   표시만 맞춰뒀던 것이라, 보이는 곳은 멀쩡한데 **합계가 틀리는** 상태였다.
+ *   마이그레이션으로 저장값까지 정리됐다.
+ *
+ * ★ 그래서 **표시는 서버 값을 그대로 쓴다.** 화면이 부호를 다시 만들지 않는다.
+ *   입력만 절댓값으로 받는다 — 벌점을 고르고 5를 적는 게 -5를 적는 것보다 낫고,
+ *   서버가 구분을 보고 부호를 붙인다.
  */
 export interface PenaltyItemRow {
   id: number
@@ -198,13 +201,11 @@ export interface PenaltyRuleRow {
   /**
    * 어떤 상황에서 부여되는가.
    *
-   * ⚠️ **허용값 목록을 아직 못 받았다.** 스펙에는 "출결이면 att_gn(A=지각 등)" 이라고만
-   *   적혀 있고 그 코드표가 없다. 시드도 섞여 있다 — `"A"`(지각)와 `"ABSENT"`(무단결석)가
-   *   같은 ATTENDANCE 규칙에 들어 있다.
+   * ★ 허용값은 `listRuleConditions()` 로 받는다. **하드코딩하지 않는다** —
+   *   `triggerType` 마다 다르고 서버가 늘릴 수 있다.
    *
-   * ⚠️ **서버가 값을 검증하지 않는다.** `"ZZZZ"` 를 보내도 200 으로 저장된다(2026-09-14 확인).
-   *   그래서 추측으로 드롭다운을 만들면 **영영 안 걸리는 규칙이 조용히 쌓인다.**
-   *   코드표를 받기 전까지 화면에서 규칙을 **새로 만들지 않는다**(API_GAPS 참고).
+   * ★ 허용값 밖은 400 이고 메시지에 가능한 값이 붙는다(2026-09-16). 그 전에는 `"ZZZZ"` 도
+   *   200 으로 저장돼서, 틀린 값으로 만든 **영영 안 걸리는 규칙**이 조용히 쌓일 수 있었다.
    */
   triggerCondition: string
   penaltyItemId: number
@@ -229,4 +230,39 @@ export function setPenaltyRuleActive(ruleId: number, active: boolean): Promise<v
 
 export function deletePenaltyRule(ruleId: number): Promise<void> {
   return request<void>(`/api/v1/admin/penalty-rules/${ruleId}`, { method: 'DELETE' })
+}
+
+/**
+ * 규칙 조건 코드표.
+ *
+ * ★ `value` 는 서버에 보내는 코드, `label` 은 화면에 쓰는 말이다.
+ *   ATTENDANCE 는 한 글자 코드(`A`=지각)라 **코드를 화면에 내보이면 아무도 못 읽는다.**
+ *   `ABSENT`(결석·미태깅)만 예외로 긴 이름인데, 그건 태깅이 아니라 없음을 가리켜서다.
+ */
+export interface RuleConditionGroup {
+  triggerType: PenaltyTriggerType
+  conditions: { value: string; label: string }[]
+}
+
+export function listRuleConditions(): Promise<RuleConditionGroup[]> {
+  return request<RuleConditionGroup[]>('/api/v1/admin/penalty-rules/conditions')
+}
+
+/**
+ * 자동 부여 규칙 생성.
+ *
+ * ★ **꺼진 상태로 만들어진다**(`active: false`). 만들자마자 점수가 붙지 않는다 —
+ *   확인하고 켜는 순서다.
+ *
+ * ★ 같은 `triggerType` + `triggerCondition` 이 이미 있으면 400 "이미 등록된 값입니다".
+ *   한 상황에 규칙 둘이 걸려 점수가 두 번 붙는 일이 없다.
+ */
+export function createPenaltyRule(body: {
+  academyId: number
+  year: number
+  triggerType: PenaltyTriggerType
+  triggerCondition: string
+  penaltyItemId: number
+}): Promise<PenaltyRuleRow> {
+  return request<PenaltyRuleRow>('/api/v1/admin/penalty-rules', { method: 'POST', body })
 }

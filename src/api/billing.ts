@@ -183,12 +183,13 @@ export function createBilling(body: {
  *
  * ★ 지우는 게 아니라 **상태를 `CANCELLED` 로 바꾼다.** 행은 남는다.
  *
- * ⚠️ **수납이 들어 있어도 막지 않는다.** 400 을 기대했는데 200 이다. 그리고 취소된 청구는
- *   `/receipt-status` 와 `/billings/students/{id}` 에서 **빠진다** — 실측: 5,000원이 수납된
- *   청구를 취소했더니 매출장에서 사라졌고, 그 5,000원은 `/billings` 에만 남았다.
- *   **돈은 받았는데 매출장 어디에도 안 보이는 상태**가 된다(2026-09-14 확인).
+ * ★ **수납이 남아 있으면 400** (`BILLING_HAS_PAYMENT`, "수납 3,000원이 남아 있어 청구를
+ *   취소할 수 없습니다"). 2026-09-16 에 서버가 막아줬다.
  *
- *   되돌리는 API 가 없다. 화면은 **수납이 있으면 금액을 보여주고 확인을 받아야 한다.**
+ *   그 전에는 200 이었고, 취소된 청구는 `/receipt-status` 에서 빠지므로 **돈은 받았는데
+ *   매출장 어디에도 안 보이는 상태**가 만들어졌다. 되돌리는 API 는 여전히 없다.
+ *
+ *   화면은 수납 거래를 먼저 지우고 청구를 취소한다 — 이제 서버도 같은 순서를 강제한다.
  */
 export function deleteBilling(billingId: number): Promise<void> {
   return request<void>(`/api/v1/admin/billings/${billingId}`, { method: 'DELETE' })
