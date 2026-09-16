@@ -97,7 +97,7 @@ const COLUMNS: Column[] = [
           <>
             삼수 · 상담예약 <b>05/26 09:10</b>
             <br />
-            담당 김유진
+            담당 담임 B
           </>
         ),
         autoNote: { icon: 'mail', text: '방문안내 문자 자동발송됨' },
@@ -111,7 +111,7 @@ const COLUMNS: Column[] = [
           <>
             재수 · 상담예약 <b>05/26 10:30</b>
             <br />
-            담당 최지원
+            담당 담임 A
           </>
         ),
         foot: { src: '홈페이지', mini: { label: '장학상담', tone: 'jang' } },
@@ -192,7 +192,7 @@ const COLUMNS: Column[] = [
     count: '89',
     leads: [
       {
-        name: '이승민',
+        name: '학생 F',
         cat: 'na',
         catLabel: '자연',
         meta: (

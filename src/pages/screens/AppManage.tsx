@@ -93,7 +93,7 @@ const PUSH_ROWS: PushRow[] = Array.from({ length: 28 }, (_, i) => {
     received,
     opened: Math.round(received * 0.61),
     status,
-    by: ['강민서', '이장원', '시스템(자동)'][i % 3],
+    by: ['담임 E', '담임 C', '시스템(자동)'][i % 3],
   }
 })
 
@@ -555,7 +555,7 @@ function Content() {
             </div>
           </div>
           {/* ★ 표를 비운다. 배너로 "예시"라고 적어도 **12행이 차 있으면 사람은 실데이터로 읽는다** —
-              발송자 이름(강민서·이장원)과 수신률 93%까지 들어 있어 더 그렇다.
+              발송자 이름과 수신률 93%까지 들어 있어 더 그렇다.
               발송 자체가 E-5(문구 심사)·E-7(FCM 자격증명) 대기라 채울 값이 없다 */}
           <DataTable
             columns={PUSH_COLUMNS}

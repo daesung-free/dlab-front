@@ -291,7 +291,7 @@ function Content() {
         ) : (
           <div className="card-sec-b">
             <div style={{ fontSize: 12.5, marginBottom: 12, color: 'var(--muted)' }}>
-              학생 1명(이승민)의 2026-05 일자별 집계 — 앱 Daily Report 달력이 그리는 데이터입니다.
+              학생 1명의 2026-05 일자별 집계 — 앱 Daily Report 달력이 그리는 데이터입니다.
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 5 }}>
               {DOW.map((d, i) => (

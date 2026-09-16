@@ -3,7 +3,7 @@
 export const TODAY = '2026-05-28'
 export const TODAY_LABEL = '2026년 5월 28일 목요일'
 
-export const ME = { name: '강민서', role: '분당 지점관리자', branch: '분당', initial: '강' }
+export const ME = { name: '관리자', role: '분당 지점관리자', branch: '분당', initial: '관' }
 
 /* ── 오늘 출결 ── */
 export const ATTENDANCE = {
@@ -116,13 +116,16 @@ export const PLAN = {
 }
 
 export const PLAN_BY_CLASS = [
-  { classNo: '1반', teacher: '최지원', o: 312, x: 41, unwritten: 1 },
-  { classNo: '2반', teacher: '김유진', o: 338, x: 36, unwritten: 2 },
-  { classNo: '3반', teacher: '이장원', o: 291, x: 74, unwritten: 5 },
-  { classNo: '4반', teacher: '박서영', o: 343, x: 62, unwritten: 3 },
+  { classNo: '1반', teacher: '담임 A', o: 312, x: 41, unwritten: 1 },
+  { classNo: '2반', teacher: '담임 B', o: 338, x: 36, unwritten: 2 },
+  { classNo: '3반', teacher: '담임 C', o: 291, x: 74, unwritten: 5 },
+  { classNo: '4반', teacher: '담임 D', o: 343, x: 62, unwritten: 3 },
 ]
 
 /* ── 실시간 활동 ── */
+/* ★ 사람 이름을 실명처럼 짓지 않는다. '최지원'·'김하윤' 처럼 그럴듯하면 클라이언트가
+     **자기 학생인 줄 안다** — 「표시용 예시」 라벨이 붙어 있어도 이름은 이름으로 읽힌다.
+     집계 API 가 붙으면 이 배열은 통째로 없어진다(2026-09-16). */
 export interface Activity {
   at: string
   text: string
@@ -131,13 +134,13 @@ export interface Activity {
 }
 
 export const ACTIVITIES: Activity[] = [
-  { at: '09:34', text: '지각 등원 · 알림톡 발송', who: '김하윤', tone: 'late' },
-  { at: '09:21', text: '결석 사유 신청 (병원 진료)', who: '박서준', tone: 'req' },
-  { at: '09:05', text: '외출 신청 승인', who: '정민재', tone: 'out' },
-  { at: '08:47', text: '등원', who: '최유나', tone: 'in' },
-  { at: '08:31', text: '학부모 승인 완료 · 조퇴', who: '강도현', tone: 'req' },
+  { at: '09:34', text: '지각 등원 · 알림톡 발송', who: '학생 A', tone: 'late' },
+  { at: '09:21', text: '결석 사유 신청 (병원 진료)', who: '학생 B', tone: 'req' },
+  { at: '09:05', text: '외출 신청 승인', who: '학생 C', tone: 'out' },
+  { at: '08:47', text: '등원', who: '학생 D', tone: 'in' },
+  { at: '08:31', text: '학부모 승인 완료 · 조퇴', who: '학생 E', tone: 'req' },
   { at: '08:12', text: '등원 알림톡 271건 자동 발송', tone: 'sys' },
-  { at: '07:58', text: '등원', who: '이승민', tone: 'in' },
+  { at: '07:58', text: '등원', who: '학생 F', tone: 'in' },
   { at: '07:40', text: '키오스크 수신 시작', tone: 'sys' },
 ]
 
@@ -176,28 +179,46 @@ export const WEEKLY = lastWeekdays(5).map((d, i) => ({ ...d, ...WEEKLY_COUNTS[i]
 
 /* ── 순공시간 랭킹 ── */
 export const RANKING = [
-  { rank: 1, name: '이승민', classNo: '3반', min: 812 },
-  { rank: 2, name: '최유나', classNo: '1반', min: 794 },
-  { rank: 3, name: '강도현', classNo: '3반', min: 771 },
-  { rank: 4, name: '김하윤', classNo: '1반', min: 748 },
-  { rank: 5, name: '정민재', classNo: '2반', min: 736 },
+  { rank: 1, name: '학생 F', classNo: '3반', min: 812 },
+  { rank: 2, name: '학생 D', classNo: '1반', min: 794 },
+  { rank: 3, name: '학생 E', classNo: '3반', min: 771 },
+  { rank: 4, name: '학생 A', classNo: '1반', min: 748 },
+  { rank: 5, name: '학생 C', classNo: '2반', min: 736 },
 ]
 
 /* ── 요약 카드 ── */
-export const MEAL = { today: 241, month: 4820, unpaid: 6, deadline: '05/31' }
+export const MEAL = { today: 241, month: 4820, unpaid: 6, deadline: inDays(9).date }
 export const PAYMENT = { collected: 41_280, target: 46_500, unpaidCount: 12, unpaidAmount: 1_840 }
-export const SCORE = { round: 'THE PREMIUM 05/20', synced: 289, total: 296, avgDelta: +2.4 }
+/* ★ 회차 이름에 날짜를 박아두면 철 지난 값이 된다 — 회차 이름만 쓴다 */
+export const SCORE = { round: '최근 모의고사', synced: 289, total: 296, avgDelta: +2.4 }
 
 /* ── 최근 공지 ── */
 export const NOTICES = [
-  { title: '6월 평가원 모의고사 응시 안내', scope: '전체', at: '오늘 09:00', read: 281, total: 296 },
-  { title: '분당지점 6월 급식 신청 마감 안내', scope: '지점', at: '어제 17:30', read: 96, total: 104 },
+  { title: '평가원 모의고사 응시 안내', scope: '전체', at: '오늘 09:00', read: 281, total: 296 },
+  { title: '다음 달 급식 신청 마감 안내', scope: '지점', at: '어제 17:30', read: 96, total: 104 },
   { title: '3반 주간 학습계획 제출 요청', scope: '반', at: '어제 08:15', read: 13, total: 14 },
 ]
 
 /* ── 다가오는 일정 (연간 행사 마스터) ── */
+
+/**
+ * 오늘로부터 며칠 뒤.
+ *
+ * ★ 날짜를 문자열로 박아두면 안 된다. `06/04 · D-7` 이 9월에도 그대로 떠서
+ *   **예시가 아니라 고장으로 읽혔다** — 「표시용 예시」 라벨을 붙여도 지난 날짜가
+ *   D-7 로 남아 있으면 그 라벨까지 못 미덥게 만든다(2026-09-16).
+ */
+function inDays(n: number): { date: string; dday: string } {
+  const d = new Date()
+  d.setDate(d.getDate() + n)
+  return {
+    date: `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`,
+    dday: `D-${n}`,
+  }
+}
+
 export const UPCOMING = [
-  { date: '06/04', dday: 'D-7', title: '6월 평가원 모의고사', type: '모의고사' },
-  { date: '06/13', dday: 'D-16', title: '2027학년도 입학 설명회 (1차)', type: '설명회' },
-  { date: '06/22', dday: 'D-25', title: '6월 단과 특강 주간', type: '특강' },
+  { ...inDays(7), title: '평가원 모의고사', type: '모의고사' },
+  { ...inDays(16), title: '입학 설명회 (1차)', type: '설명회' },
+  { ...inDays(25), title: '단과 특강 주간', type: '특강' },
 ]

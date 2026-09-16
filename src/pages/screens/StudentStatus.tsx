@@ -20,10 +20,10 @@ import './matrix.css'
  *   현재는 목데이터라 화면에서 계산하고 있고, 연동 시 이 useMemo 들이 통째로 교체된다. */
 
 const CLASS_META: Record<string, { teacher: string; capacity: number; track: string }> = {
-  '1반': { teacher: '최지원', capacity: 14, track: '인문' },
-  '2반': { teacher: '김유진', capacity: 14, track: '자연' },
-  '3반': { teacher: '이장원', capacity: 14, track: '자연' },
-  '4반': { teacher: '박서영', capacity: 14, track: '자연' },
+  '1반': { teacher: '담임 A', capacity: 14, track: '인문' },
+  '2반': { teacher: '담임 B', capacity: 14, track: '자연' },
+  '3반': { teacher: '담임 C', capacity: 14, track: '자연' },
+  '4반': { teacher: '담임 D', capacity: 14, track: '자연' },
 }
 
 const TABS = [
