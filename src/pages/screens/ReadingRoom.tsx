@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DataTable, ExcelButton, MaskToggle, PrintButton, Unfilled, type Column } from '../../components/common'
+import { DataTable, ExcelButton, MaskToggle, Modal, PrintButton, Unfilled, type Column } from '../../components/common'
 import { Icon } from '../../components/Icon'
 import { Tabs } from '../../components/Tabs'
 import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
 import {
+  assignSeatsBulk,
   getSeatLayout,
   listSeatAreas,
   releaseSeatOfStudent,
@@ -109,6 +110,11 @@ function Content() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [masked, setMasked] = useState(true)
+  /** 재배치할 학생(배정 목록의 체크박스). 키는 좌석 id 문자열이다 */
+  const [picked, setPicked] = useState<string[]>([])
+  /** 재배치 모달 — 좌석 id → 옮길 좌석 id */
+  const [moving, setMoving] = useState<Record<number, number> | null>(null)
+  const [moveErr, setMoveErr] = useState<string | null>(null)
 
   // 구역 목록
   useEffect(() => {
@@ -151,6 +157,12 @@ function Content() {
     void loadLayout()
   }, [loadLayout])
 
+  /* ★ 구역을 바꾸면 목록이 통째로 바뀐다. 선택을 안 비우면 **안 보이는 구역의 학생이
+       그대로 남아** 재배치에 섞인다(특강 대기자에서 같은 일이 있었다) */
+  useEffect(() => {
+    setPicked([])
+  }, [areaId])
+
   const seats = useMemo<Seat[]>(
     () =>
       cells.map((c) => ({
@@ -191,6 +203,41 @@ function Content() {
         })),
     [seats],
   )
+
+  /** 옮겨 갈 수 있는 자리 — 사용중지(off)는 뺀다 */
+  const freeSeats = useMemo(() => seats.filter((s) => s.state === 'free').sort((a, b) => a.seatCd.localeCompare(b.seatCd)), [seats])
+
+  /**
+   * 좌석 재배치.
+   *
+   * ★ 한 번에 보낸다. 단건을 N번 부르면 중간에 실패했을 때 일부만 옮겨진 채 남는데,
+   *   좌석은 **되돌릴 기준이 화면에 없다** — 서버가 전부-아니면-전무로 처리한다.
+   * ★ 옮기면 원래 자리는 서버가 알아서 비운다. 먼저 해제할 필요가 없다(확인함 09-16).
+   */
+  async function submitMove() {
+    if (!moving) return
+    const items = Object.entries(moving)
+      .filter(([from, to]) => Number(from) !== to)
+      .map(([from, to]) => {
+        const row = seats.find((x) => x.seatId === Number(from))
+        return { seatId: to, enrollmentId: row?.enrollmentId ?? 0 }
+      })
+      .filter((x) => x.enrollmentId !== 0)
+    if (items.length === 0) return
+    setBusy(true)
+    setMoveErr(null)
+    try {
+      await assignSeatsBulk(items)
+      setMoving(null)
+      setPicked([])
+      await loadLayout()
+    } catch (err) {
+      /* "A01: 이미 2026-0002 학생이 배정돼 있습니다" 처럼 서버 문구가 그대로 쓸 만하다 */
+      setMoveErr(err instanceof ApiError ? err.message : '좌석을 옮기지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const sel = selectedSeatId === null ? undefined : seats.find((s) => s.seatId === selectedSeatId)
   const area = areas.find((a) => a.id === areaId)
@@ -442,6 +489,9 @@ function Content() {
           masked={false}
           loading={loading}
           pageSize={15}
+          selectable
+          selected={picked}
+          onSelectedChange={setPicked}
           countLabel={
             <>
               {area?.areaNm ?? '독서실'} 배정 <b>{assignRows.length}</b>명
@@ -450,8 +500,18 @@ function Content() {
           emptyText="배정된 좌석이 없습니다."
           toolbar={
             <>
-              <button className="btn" disabled data-soon title="준비 중입니다">
+              <button
+                className="btn"
+                disabled={busy || picked.length === 0}
+                title={picked.length === 0 ? '옮길 학생을 먼저 고르세요' : `${picked.length}명의 자리를 옮깁니다`}
+                onClick={() => {
+                  setMoveErr(null)
+                  // 처음에는 지금 자리 그대로 둔다 — 실수로 전원이 움직이지 않게
+                  setMoving(Object.fromEntries(picked.map((k) => [Number(k), Number(k)])))
+                }}
+              >
                 <Icon name="refresh-cw" size={14} /> 좌석 재배치
+                {picked.length > 0 && ` ${picked.length}`}
               </button>
               <ExcelButton
                 filename={`독서실_${area?.areaNm ?? ''}_배정`}
@@ -463,7 +523,102 @@ function Content() {
           }
         />
       )}
+
+      {moving && (
+        <MoveModal
+          moving={moving}
+          setMoving={setMoving}
+          seats={seats}
+          freeSeats={freeSeats}
+          busy={busy}
+          error={moveErr}
+          onConfirm={() => void submitMove()}
+          onClose={() => setMoving(null)}
+        />
+      )}
     </div>
+  )
+}
+
+/**
+ * 좌석 재배치 모달.
+ *
+ * ★ 한 자리에 두 명을 고를 수 있다 — 서버도 막지만(전체 취소) **저장을 눌러 보고서야
+ *   알면 늦다.** 고르는 동안 화면에서 먼저 짚어준다.
+ */
+function MoveModal({
+  moving,
+  setMoving,
+  seats,
+  freeSeats,
+  busy,
+  error,
+  onConfirm,
+  onClose,
+}: {
+  moving: Record<number, number>
+  setMoving: (v: Record<number, number>) => void
+  seats: Seat[]
+  freeSeats: Seat[]
+  busy: boolean
+  error: string | null
+  onConfirm: () => void
+  onClose: () => void
+}) {
+  const entries = Object.entries(moving).map(([from, to]) => ({ from: Number(from), to }))
+  const changed = entries.filter((e) => e.from !== e.to)
+  const targets = entries.map((e) => e.to)
+  const dup = targets.filter((t, i) => targets.indexOf(t) !== i)
+
+  return (
+    <Modal
+      wide
+      title={`${entries.length}명의 자리를 옮깁니다`}
+      sub="옮기면 원래 자리는 비워집니다. 하나라도 안 되면 전부 취소됩니다."
+      confirmLabel={`${changed.length}명 옮기기`}
+      busy={busy}
+      confirmDisabled={changed.length === 0 || dup.length > 0}
+      error={error}
+      onConfirm={onConfirm}
+      onClose={onClose}
+    >
+      <div style={{ display: 'grid', gap: 8 }}>
+        {entries.map(({ from, to }) => {
+          const row = seats.find((s) => s.seatId === from)
+          const conflict = dup.includes(to)
+          return (
+            <div key={from} className="frow">
+              <label>
+                {row?.studentName ?? '-'}
+                <span style={{ color: 'var(--muted)', fontWeight: 400 }}> {row?.seatCd}</span>
+              </label>
+              <div>
+                <select
+                  className="sel"
+                  style={{ width: 190, borderColor: conflict ? 'var(--red)' : undefined }}
+                  value={to}
+                  onChange={(e) => setMoving({ ...moving, [from]: Number(e.target.value) })}
+                >
+                  <option value={from}>{row?.seatCd} (그대로)</option>
+                  {freeSeats.map((f) => (
+                    <option key={f.seatId} value={f.seatId}>
+                      {f.seatCd}
+                    </option>
+                  ))}
+                </select>
+                {conflict && <div className="hint" style={{ color: 'var(--red)' }}>같은 자리를 두 명이 골랐습니다.</div>}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {freeSeats.length === 0 && (
+        <div className="note-box" style={{ marginTop: 10 }}>
+          <div>이 구역에 빈 자리가 없습니다. 먼저 배정을 해제하거나 다른 구역을 쓰세요.</div>
+        </div>
+      )}
+    </Modal>
   )
 }
 

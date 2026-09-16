@@ -99,6 +99,12 @@ export function assignSeat(seatId: number, enrollmentId: number): Promise<void> 
  * ★ **전부-아니면-전무다.** 반 일괄 배정(건별 결과)과 응답 형태가 다른데, 좌석은
  *   절반만 반영되면 배치가 뒤죽박죽 되기 때문이다. 실패하면 아무것도 안 들어간 상태다.
  */
+/**
+ * ★ 자리를 옮길 때도 이걸 쓴다. **먼저 해제할 필요가 없다** — 이미 자리가 있는 학생을
+ *   빈 자리로 보내면 서버가 원래 자리를 비운다(2026-09-16 확인).
+ * ★ 같은 좌석을 두 번 넣거나 이미 찬 자리를 고르면 **전체가 취소된다.** 실패 문구가
+ *   자리 번호까지 들어 있어 그대로 보여주면 된다 — "A01: 이미 2026-0002 학생이 배정돼 있습니다".
+ */
 export function assignSeatsBulk(items: { seatId: number; enrollmentId: number }[]): Promise<SeatCell[]> {
   return request<SeatCell[]>('/api/v1/admin/seats/bulk', { method: 'POST', body: { items } })
 }
