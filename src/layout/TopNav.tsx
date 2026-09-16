@@ -96,9 +96,11 @@ export function TopNav() {
           </select>
         )}
 
-        <button className="icon-btn" title="알림 3건">
+        {/* ★ 빨간 배지와 '3건'은 **가짜였다.** 서버에 "나에게 온 알림" 이 없다 —
+               /notices 는 공지 발행이고 /notification-logs 는 발송 이력이다.
+               읽지 않은 알림이 있는 것처럼 보이면 눌러보게 되고, 눌러도 아무 일이 없다. */}
+        <button className="icon-btn" disabled data-soon title="준비 중입니다">
           <Icon name="bell" size={17} />
-          <span className="badge" />
         </button>
         <div className="av">{who.slice(0, 1).toUpperCase()}</div>
         <div className="wt">

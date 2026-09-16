@@ -81,7 +81,20 @@ export interface LectureSession {
   room: string | null
 }
 
-/** 신청자 한 명. 대기자도 같은 구조이고 waitlisted 로 갈린다 */
+/** 신청 상태. **취소는 행이 지워지지 않고 이 값이 바뀐다** — 아래 ★ 참고 */
+export type ApplicationStatus = 'APPLIED' | 'WAITLISTED' | 'CANCELED'
+
+/**
+ * 신청자 한 명. 대기자도 같은 구조이고 `waitlisted` 로 갈린다.
+ *
+ * ★ **`waitlisted` 만 보고 확정자를 세면 안 된다.** 취소된 신청은 `status: 'CANCELED'` 가
+ *   되는데 `waitlisted` 는 **false 로 남는다.** 그래서 `!waitlisted` 로 거르면 취소자가
+ *   확정자에 섞인다 — 실측: 대기자 1명을 취소했더니 서버 확정 4명 / 화면 5명이 됐고,
+ *   출석부에도 줄이 생겼다(2026-09-16).
+ *
+ *   확정자는 `!waitlisted && status !== 'CANCELED'` 다. `/attendance-targets` 는
+ *   서버가 같은 기준으로 걸러 준다.
+ */
 export interface LectureApplicant {
   applicationId: number
   studentId: number
@@ -89,7 +102,8 @@ export interface LectureApplicant {
   studentName: string
   className: string | null
   phone: string | null
-  status: string
+  status: ApplicationStatus
+  /** ★ 취소돼도 false 다. 확정자 판정에 이것만 쓰지 않는다 — 위 ★ 참고 */
   waitlisted: boolean
   appliedAt: string | null
   memo: string | null
@@ -266,4 +280,16 @@ export function saveSessionAttendance(
   body: { applicationId: number; status: LectureAttendanceStatus; memo?: string },
 ): Promise<void> {
   return request<void>(`/api/v1/admin/lectures/sessions/${sessionId}/attendances`, { method: 'PUT', body })
+}
+
+/**
+ * 관리자 신청 취소.
+ *
+ * ★ **행이 지워지지 않는다.** `status` 가 `CANCELED` 로 바뀌고 명단에 남는다 —
+ *   누가 취소했는지가 남아야 해서다. 화면은 취소자를 확정자에서 빼고 따로 표시한다.
+ *
+ * ★ 확정자를 취소하면 정원이 하나 빈다. 자동 승격은 그때 돈다(수동 승격과 다르다).
+ */
+export function cancelApplication(applicationId: number): Promise<void> {
+  return request<void>(`/api/v1/admin/lectures/applications/${applicationId}`, { method: 'DELETE' })
 }
