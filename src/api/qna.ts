@@ -65,6 +65,18 @@ export function listQnaSlotsBetween(academyId: number, from: string, to: string)
   return request<QnaSlot[]>('/api/v1/admin/qna/offline/slots', { query: { academyId, from, to } })
 }
 
+/**
+ * 가능 타임 일괄 개설.
+ *
+ * ★ **이미 있는 시각은 건너뛴다.** 오전을 열어둔 뒤 오후를 더하는 흐름이 있는데, 중복이라고
+ *   통째로 거절하면 그때마다 시각을 손으로 맞춰야 한다(서버 주석).
+ *
+ * ★ 응답은 **새로 만든 것만** 온다. 18~20시를 연 뒤 19~21시를 요청하면 2개가 온다 —
+ *   화면이 "6개 열었습니다" 라고 쓰면 틀린다(2026-09-16 실측).
+ *
+ * ★ **슬롯은 지울 수 없다.** `DELETE` 가 없고 `PUT /{id}/closed` 로 닫기만 된다 —
+ *   지우면 이미 예약한 학생 기록이 사라지기 때문이다.
+ */
 export function openQnaSlots(body: QnaOpenSlots): Promise<QnaSlot[]> {
   return request<QnaSlot[]>('/api/v1/admin/qna/offline/slots', { method: 'POST', body })
 }
