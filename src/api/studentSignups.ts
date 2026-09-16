@@ -29,7 +29,17 @@ export const ONBOARDING_LABEL: Record<OnboardingStatus, string> = {
   ACTIVE: '이용 중',
 }
 
+/**
+ * 계정 상태. **승인 여부가 이 값이다.**
+ *
+ * ★ `onboardingStatus` 와 다른 축이다 — 승인해도(`ACTIVE`) 온보딩은 `REGISTERED`(OT 전)
+ *   그대로다. 둘을 한 칸에 합치면 "승인했는데 왜 안 끝났냐"가 된다.
+ */
+export type AccountStatus = 'PENDING' | 'ACTIVE'
+
 export interface PendingSignup {
+  /** `PENDING` 이면 승인 대기, `ACTIVE` 면 승인됨 */
+  accountStatus: AccountStatus
   /** 등록 건 id. 승인·OT 처리에 이 값을 쓴다 */
   enrollmentId: number
   /** 계정 id. 화면에서 쓸 일은 없지만 문의가 오면 이걸로 찾는다 */
@@ -40,8 +50,18 @@ export interface PendingSignup {
   onboardingStatus: OnboardingStatus
 }
 
-/** 승인 대기 목록. 지점 스코프가 걸린다 */
-export function listPendingSignups(params: { academyId?: number }): Promise<PendingSignup[]> {
+/**
+ * 가입 목록. 지점 스코프가 걸린다.
+ *
+ * ★ 기본은 **승인 대기만** 준다. `includeApproved` 를 켜면 승인된 건도 함께 온다 —
+ *   **OT 대기자를 보려면 켜야 한다.** 승인하는 순간 기본 목록에서 빠지기 때문이다.
+ *
+ * ★ 온보딩이 끝난(`ACTIVE`) 학생은 켜도 안 나온다. 목록이 무한정 늘지 않는다.
+ */
+export function listPendingSignups(params: {
+  academyId?: number
+  includeApproved?: boolean
+}): Promise<PendingSignup[]> {
   return request<PendingSignup[]>('/api/v1/admin/student-signups', { query: { ...params } })
 }
 
