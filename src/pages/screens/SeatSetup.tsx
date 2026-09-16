@@ -99,19 +99,34 @@ export function SeatSetup({ onChanged }: Props) {
     void load()
   }, [load])
 
-  useEffect(() => {
+  /**
+   * 좌석 목록.
+   *
+   * ★ **`load()` 안에 두지 않고 따로 뺐다가 사고가 났다.** 삭제 후 `load()` 만 부르면
+   *   관·구역만 새로 읽고 좌석은 그대로 남아, **지운 좌석이 표에 계속 보였다.**
+   *   지웠는데 안 없어지니 한 번 더 누르게 되고, 그때는 404 가 뜬다.
+   *   그래서 쓰기 동작은 이 둘을 **항상 같이** 부른다({@link reload}).
+   */
+  const loadSeats = useCallback(async () => {
     if (areaId === null) {
       setSeats([])
       return
     }
-    let cancelled = false
-    listSeatMasters(areaId)
-      .then((list) => !cancelled && setSeats(list))
-      .catch((err) => !cancelled && setError(err instanceof ApiError ? err.message : '좌석을 불러오지 못했습니다.'))
-    return () => {
-      cancelled = true
+    try {
+      setSeats(await listSeatMasters(areaId))
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '좌석을 불러오지 못했습니다.')
     }
   }, [areaId])
+
+  useEffect(() => {
+    void loadSeats()
+  }, [loadSeats])
+
+  /** 쓰기 뒤에는 이걸 부른다 — 한쪽만 부르면 화면이 서로 어긋난다 */
+  const reload = useCallback(async () => {
+    await Promise.all([load(), loadSeats()])
+  }, [load, loadSeats])
 
   /** 모달 저장 공통 — 실패 메시지는 **모달 안에** 띄운다. 뒤 배너는 안 보인다 */
   const submit = async (fn: () => Promise<unknown>) => {
@@ -120,7 +135,7 @@ export function SeatSetup({ onChanged }: Props) {
     try {
       await fn()
       setModal(null)
-      await load()
+      await reload()
       onChanged?.()
     } catch (err) {
       setModalError(err instanceof ApiError ? err.message : '저장하지 못했습니다.')
@@ -134,7 +149,7 @@ export function SeatSetup({ onChanged }: Props) {
     try {
       await fn()
       setError(null)
-      await load()
+      await reload()
       onChanged?.()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '처리하지 못했습니다.')

@@ -438,9 +438,16 @@ function Content() {
         </div>
       )}
 
-      {/* 등록이 끝나면 구역 목록·배치도를 다시 불러야 한다 — 안 그러면 방금 만든
-          구역이 칩에 안 뜨고 "저장이 안 됐나" 하게 된다 */}
-      {tab === 'setup' && <SeatSetup onChanged={() => void reloadAreas()} />}
+      {/* ★ 구역 목록과 배치도를 **둘 다** 다시 읽는다. 구역만 읽으면 방금 지운 좌석이
+          배치도에 그대로 남고, 배치도만 읽으면 새 구역이 칩에 안 뜬다 */}
+      {tab === 'setup' && (
+        <SeatSetup
+          onChanged={() => {
+            void reloadAreas()
+            void loadLayout()
+          }}
+        />
+      )}
 
       {tab === 'list' && (
         <DataTable
