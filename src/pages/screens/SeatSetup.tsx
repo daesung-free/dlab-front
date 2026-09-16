@@ -354,10 +354,15 @@ function BuildingTab({
         </div>
       </div>
       <div className="card-sec-b">
-        <p className="note-box">
-          별관은 본관과 <b>같은 구역명·좌석번호</b>를 쓸 수 있습니다. 키오스크에 내려갈 때만 번호대가 밀립니다 —
-          데스크는 본래 번호로 보고 말하면 됩니다.
-        </p>
+        <div className="note-box">
+          <div className="ic">
+            <Icon name="info" size={17} />
+          </div>
+          <div>
+            별관은 본관과 <b>같은 구역명·좌석번호</b>를 쓸 수 있습니다. 키오스크에 내려갈 때만 번호대가 밀립니다 —
+            데스크는 본래 번호로 보고 말하면 됩니다.
+          </div>
+        </div>
         <DataTable
           columns={columns}
           rows={buildings}
@@ -428,12 +433,17 @@ function BuildingModal({
               onChange={(e) => setOffset(Number(e.target.value))}
             />
           </div>
-          <p className="note-box">
-            이 관의 <b>1번 좌석</b>이 키오스크에서 <b>{offset + 1}번</b>이 됩니다. 데스크 화면에는 계속 1번으로
-            보입니다.
-            <br />
-            1000 미만은 받지 않습니다 — 100이면 본관 101번과 곧바로 겹칩니다.
-          </p>
+          <div className="note-box">
+            <div className="ic">
+              <Icon name="info" size={17} />
+            </div>
+            <div>
+              이 관의 <b>1번 좌석</b>이 키오스크에서 <b>{offset + 1}번</b>이 됩니다. 데스크 화면에는 계속 1번으로
+              보입니다.
+              <br />
+              1000 미만은 받지 않습니다 — 100이면 본관 101번과 곧바로 겹칩니다.
+            </div>
+          </div>
         </>
       )}
     </Modal>
@@ -516,10 +526,15 @@ function AreaTab({
         </div>
       </div>
       <div className="card-sec-b">
-        <p className="note-box">
-          <b>좌석이 남아 있는 구역은 지울 수 없습니다.</b> 좌석을 먼저 지우세요 — 구역만 지우면 화면에서는 사라지는데
-          키오스크에는 계속 뜹니다.
-        </p>
+        <div className="note-box">
+          <div className="ic">
+            <Icon name="info" size={17} />
+          </div>
+          <div>
+            <b>좌석이 남아 있는 구역은 지울 수 없습니다.</b> 좌석을 먼저 지우세요 — 구역만 지우면 화면에서는 사라지는데
+            키오스크에는 계속 뜹니다.
+          </div>
+        </div>
         <DataTable
           columns={columns}
           rows={areas}
@@ -583,10 +598,15 @@ function AreaModal({
         <input className="inp" value={areaNm} onChange={(e) => setAreaNm(e.target.value)} maxLength={100} placeholder="예: A구역" />
       </div>
       {picked && !picked.main && (
-        <p className="note-box">
-          별관이라 키오스크에는 <b>{picked.code}-{areaCd || 'A'}</b> 로 내려갑니다. 화면에는 <b>{areaCd || 'A'}</b> 로
-          보입니다.
-        </p>
+        <div className="note-box">
+          <div className="ic">
+            <Icon name="info" size={17} />
+          </div>
+          <div>
+            별관이라 키오스크에는 <b>{picked.code}-{areaCd || 'A'}</b> 로 내려갑니다. 화면에는 <b>{areaCd || 'A'}</b> 로
+            보입니다.
+          </div>
+        </div>
       )}
     </Modal>
   )
@@ -677,10 +697,15 @@ function SeatTab({
       <div className="card-sec-b">
         {seats.length > 0 && (
           <>
-            <p className="note-box">
-              <b>빈 칸을 누르면 그 자리에 좌석을 만듭니다.</b> 잘못 지운 자리를 되돌릴 때 쓰세요 — 지웠던 번호를
-              그대로 넣으면 <b>그 좌석이 되살아나</b> 예전 배정 이력이 이어집니다.
-            </p>
+            <div className="note-box">
+              <div className="ic">
+                <Icon name="info" size={17} />
+              </div>
+              <div>
+                <b>빈 칸을 누르면 그 자리에 좌석을 만듭니다.</b> 잘못 지운 자리를 되돌릴 때 쓰세요 — 지웠던 번호를
+                그대로 넣으면 <b>그 좌석이 되살아나</b> 예전 배정 이력이 이어집니다.
+              </div>
+            </div>
             <SeatSpotMap seats={seats} busy={busy} onPickSpot={onPickSpot} />
           </>
         )}
@@ -800,10 +825,15 @@ function SeatModal({
           autoFocus
         />
       </div>
-      <p className="note-box">
-        <b>지웠던 번호를 그대로 넣으면 그 좌석이 되살아납니다.</b> 새로 만들지 않고 예전 행을 되살리기 때문에
-        그 자리에 앉았던 배정 이력이 끊기지 않습니다.
-      </p>
+      <div className="note-box">
+        <div className="ic">
+          <Icon name="info" size={17} />
+        </div>
+        <div>
+          <b>지웠던 번호를 그대로 넣으면 그 좌석이 되살아납니다.</b> 새로 만들지 않고 예전 행을 되살리기 때문에
+          그 자리에 앉았던 배정 이력이 끊기지 않습니다.
+        </div>
+      </div>
     </Modal>
   )
 }
@@ -952,9 +982,14 @@ function GridModal({
         </select>
       </div>
 
-      <p className="note-box">
-        <b>통로는 눌러서 빼세요.</b> 뺀 칸은 좌석을 만들지 않고 번호는 그 칸을 건너뛰고 이어집니다.
-      </p>
+      <div className="note-box">
+        <div className="ic">
+          <Icon name="info" size={17} />
+        </div>
+        <div>
+          <b>통로는 눌러서 빼세요.</b> 뺀 칸은 좌석을 만들지 않고 번호는 그 칸을 건너뛰고 이어집니다.
+        </div>
+      </div>
       <div className="sgp">
         {preview.map((row, ri) => (
           <div className="sgp-row" key={ri}>
