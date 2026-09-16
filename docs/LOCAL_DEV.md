@@ -56,6 +56,29 @@ npm run dev     # http://localhost:5173
 `.env.development`의 `VITE_API_BASE_URL`이 백엔드 주소다(기본 `http://localhost:8080`).
 개인 설정으로 덮으려면 `.env.local`을 만든다(`.gitignore`의 `*.local` 대상).
 
+### ⚠️ `.env.local` 이 있으면 `.env.development` 는 **안 읽힌다**
+
+Vite 우선순위가 `.env.local` > `.env.development` 다. 그리고 `.env.local` 은 깃에 안
+올라가서 **남의 화면에는 안 보인다.** 실제로 이렇게 하루를 날렸다(2026-09-16) —
+
+```
+.env.development   VITE_API_BASE_URL=http://localhost:8080   ← 고쳐 놓고
+.env.local         VITE_API_BASE_URL=https://api.d-dlab.link  ← 이게 이기고 있었다
+```
+
+"로컬 백엔드로 바꿨다"고 믿고 작업했는데 화면은 **운영**을 보고 있었다. 로컬 시드가
+안 나오니 "실행이 안 된다"로 보인다. 어느 쪽을 보는지 헷갈리면 **먼저 이것부터 확인한다.**
+
+```
+cat .env.local 2>/dev/null; cat .env.development
+```
+
+**`.env` 는 HMR 로 안 먹는다.** 고쳤으면 dev 서버를 껐다 켠다.
+
+★ 운영 백엔드를 볼 때는 **포트를 3000 으로** 띄운다. 운영 `cors.allowed-origins` 에
+`http://localhost:3000` 만 들어 있어서 5173 이면 preflight 가 403 인데, 서버 로그에는
+아무것도 안 남아 **"화면이 그냥 빈다"** 로만 보인다.
+
 **dev 프록시를 쓰지 않는다.** 브라우저가 백엔드를 직접 호출하므로 **CORS 목록이 곧 접속 조건**이다.
 백엔드 `application-local.yml`의 `cors.allowed-origins`에는 `5173`·`3000`만 있다.
 Vite가 5173을 이미 누가 쓰고 있어 **5174로 밀려 뜨면** 그 origin을 백엔드 목록에 추가해야 한다.

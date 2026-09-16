@@ -508,6 +508,9 @@ function Content() {
   const [actDone, setActDone] = useState<string | null>(null)
   /* 교습비는 서버가 금액을 정한다. 그 값을 등록 전에 보여주지 않으면 얼마가 청구될지
      모르고 누르게 된다 — 단가표를 미리 읽어 합계를 띄운다 */
+  /* 미납자 표의 체크박스. DataTable 은 selectable 만으로는 못 켜진다 —
+     selected/onSelectedChange 를 안 주면 값이 undefined 로 고정돼 **눌러도 안 찍힌다** */
+  const [unpaidSel, setUnpaidSel] = useState<string[]>([])
   const [fee, setFee] = useState<FeeTableRow[] | null>(null)
   const [feeErr, setFeeErr] = useState<string | null>(null)
 
@@ -982,6 +985,8 @@ function Content() {
               rows={unpaid}
               rowKey={(r) => String(r.billingId)}
               selectable
+              selected={unpaidSel}
+              onSelectedChange={setUnpaidSel}
               masked={masked}
               loading={loading}
               pageSize={12}
@@ -989,6 +994,9 @@ function Content() {
                 <>
                   미납 <b>{sum.unpaidCount}</b>건 · {sum.due.toLocaleString()}원
                   <span style={{ color: 'var(--muted)' }}> (학생 수가 아니라 건수)</span>
+                  {unpaidSel.length > 0 && (
+                    <span style={{ color: 'var(--mint-d)', fontWeight: 700 }}> · {unpaidSel.length}건 선택</span>
+                  )}
                 </>
               }
               toolbar={
