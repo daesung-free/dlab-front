@@ -320,6 +320,19 @@ export const SCREENS: Screen[] = [
     summary: '교습비·특강비·환불 기준 관리, 4.8 수납현황과 연계',
   },
   {
+    /* 2026-09-16 추가. 요구사항정의서 36개 화면에 없다 — 기초 관리의 '장학 종류'(종류·할인율)와
+       다른 축이라 탭으로 못 넣는다. 저쪽은 "어떤 장학이 있는가", 이쪽은 "언제 취소하는가"다. */
+    id: 'admin-scholarship',
+    code: 'F-4.10-7',
+    groupId: 'admin',
+    name: '장학 관리(취소 기준·검토)',
+    icon: 'award',
+    kind: 'verified',
+    phase: 2,
+    feOrder: 3,
+    summary: '장학 취소 기준 등록, 학기별 판정과 건별 취소·예외 인정',
+  },
+  {
     id: 'admin-result',
     code: 'F-4.10-6',
     groupId: 'admin',

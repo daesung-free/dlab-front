@@ -315,6 +315,11 @@ function Content() {
               <>
                 {period.from} ~ {period.to} · {TABS.includes(tab) ? APPROVAL_STATUS_LABEL[tab] : '취소'}{' '}
                 <b>{rows.length}</b>건
+                {/* 이 화면에는 마스킹 토글이 없다(서버가 가려서 줄 때도 있고 권한에 달렸다).
+                    표가 가리고 있다는 것을 여기서 적는다 — 예전에는 DataTable 이 대신 적었다 */}
+                {!(board.data?.masked ?? false) && (
+                  <span style={{ color: 'var(--muted)' }}> · 이름·연락처는 가려서 보입니다</span>
+                )}
               </>
             }
           />

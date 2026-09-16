@@ -164,11 +164,11 @@ export function DataTable<T>({
           {countLabel ?? <>전체 <b>{serverPaging ? serverPaging.totalElements : rows.length}</b>건</>}
         </span>
         {selectable && (selected?.length ?? 0) > 0 && <span className="dt-sel">{selected!.length}건 선택</span>}
-        {masked && (
-          <span className="dt-count" style={{ color: 'var(--muted)' }}>
-            · 개인정보 마스킹 <b style={{ color: 'var(--mint-d)' }}>ON</b>
-          </span>
-        )}
+        {/* ★ 예전에는 여기서 '· 개인정보 마스킹 ON' 을 따로 그렸다. 두 가지가 문제였다 —
+               ① 앞에 붙은 `·` 가 **뒤에 아무것도 없을 때도** 떠서 점 하나가 떠 있었고,
+               ② `MaskToggle` 을 함께 쓰는 화면 20곳에서 **같은 말이 두 번** 나왔다.
+               상태는 툴바의 토글이 말한다. 토글이 없는 화면(서버가 이미 가려서 보낸 경우)은
+               그 화면이 직접 적는다 — 사유 신청·수납현황이 그렇게 한다. */}
         {toolbar && <div className="dt-right">{toolbar}</div>}
       </div>
 
