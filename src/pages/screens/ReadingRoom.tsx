@@ -13,6 +13,7 @@ import {
   type SeatArea,
   type SeatCell as ApiSeatCell,
 } from '../../api/facility'
+import { SeatSetup } from './SeatSetup'
 import type { Mockup } from './types'
 import './reading-room.css'
 
@@ -116,24 +117,24 @@ function Content() {
   const [moving, setMoving] = useState<Record<number, number> | null>(null)
   const [moveErr, setMoveErr] = useState<string | null>(null)
 
-  // 구역 목록
-  useEffect(() => {
+  // 구역 목록. 등록 탭에서 구역을 만든 뒤에도 불러야 해서 함수로 뺐다
+  const reloadAreas = useCallback(async () => {
     if (academyId === null) {
       setLoading(false)
       return
     }
-    let cancelled = false
-    listSeatAreas(academyId)
-      .then((list) => {
-        if (cancelled) return
-        setAreas(list)
-        setAreaId((prev) => (list.some((a) => a.id === prev) ? prev : (list[0]?.id ?? null)))
-      })
-      .catch((err) => !cancelled && setError(err instanceof ApiError ? err.message : '좌석 구역을 불러오지 못했습니다.'))
-    return () => {
-      cancelled = true
+    try {
+      const list = await listSeatAreas(academyId)
+      setAreas(list)
+      setAreaId((prev) => (list.some((a) => a.id === prev) ? prev : (list[0]?.id ?? null)))
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '좌석 구역을 불러오지 못했습니다.')
     }
   }, [academyId])
+
+  useEffect(() => {
+    void reloadAreas()
+  }, [reloadAreas])
 
   const loadLayout = useCallback(async () => {
     if (areaId === null) {
@@ -325,6 +326,8 @@ function Content() {
         items={[
           { key: 'map', label: '좌석배치표' },
           { key: 'list', label: '배정 명단', count: assignRows.length },
+          /* ★ 구역·좌석을 만드는 경로가 없어서 이 화면이 늘 시드에 기대고 있었다 */
+          { key: 'setup', label: '구역·좌석 등록' },
         ]}
         active={tab}
         onChange={setTab}
@@ -339,7 +342,7 @@ function Content() {
                 <span className="ico">
                   <Icon name="layout-grid" size={15} />
                 </span>
-                {area?.areaNm ?? '독서실'} 배치도
+                {area ? `${area.buildingName} ${area.areaNm}` : '독서실'} 배치도
               </div>
               <div className="r">
                 {areas.map((a) => (
@@ -352,7 +355,8 @@ function Content() {
                       setSelectedSeatId(null)
                     }}
                   >
-                    {a.areaNm}
+                    {/* 관을 빼면 본관 A 와 별관 A 가 화면에서 구분되지 않는다 */}
+                    {a.buildingName} {a.areaNm}
                   </button>
                 ))}
                 <PrintButton label="도면 인쇄" />
@@ -479,6 +483,17 @@ function Content() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ★ 구역 목록과 배치도를 **둘 다** 다시 읽는다. 구역만 읽으면 방금 지운 좌석이
+          배치도에 그대로 남고, 배치도만 읽으면 새 구역이 칩에 안 뜬다 */}
+      {tab === 'setup' && (
+        <SeatSetup
+          onChanged={() => {
+            void reloadAreas()
+            void loadLayout()
+          }}
+        />
       )}
 
       {tab === 'list' && (
