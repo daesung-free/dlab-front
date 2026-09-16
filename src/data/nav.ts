@@ -203,8 +203,10 @@ export const navSectionOfScreen = (screenId: string): string | undefined => {
 }
 
 /** 대분류 하위 기능 개수 */
-export const navItemCount = (cat: NavCat): number =>
-  cat.sections.reduce((n, s) => n + s.items.length, 0)
+/** ★ `can` 을 넘기면 **보이는 것만** 센다. 계정별 메뉴 노출로 항목을 감추면서 숫자를
+ *   그대로 두면 상단 탭이 '12' 인데 열어보니 3개인 상태가 된다 — 누락으로 읽힌다 */
+export const navItemCount = (cat: NavCat, can?: (item: NavItem) => boolean): number =>
+  cat.sections.reduce((n, s) => n + (can ? s.items.filter(can).length : s.items.length), 0)
 
 /** 메뉴에 걸린 고유 화면 id 집합 — 배치 누락 검증용 */
 export const navScreenIds = (): string[] => [

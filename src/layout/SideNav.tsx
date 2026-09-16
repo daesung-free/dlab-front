@@ -5,6 +5,8 @@ import { NAV, findNavCat, navCatOfScreen, navItemCount, navPath, type NavItem } 
 import { TODOS } from '../data/mockDashboard'
 import { Icon } from '../components/Icon'
 import { useAcademy } from '../auth/AcademyContext'
+import { useAuth } from '../auth/AuthContext'
+import { canSeeScreen, hasMenuCode } from '../data/menuCodes'
 import { useServerData } from '../components/common'
 import { fetchAttendanceBoard } from '../api/attendance'
 
@@ -27,6 +29,7 @@ const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토']
  */
 function DashboardSide() {
   const { academyId, academies } = useAcademy()
+  const { allowedMenus } = useAuth()
   const urgent = TODOS.filter((t) => t.tone === 'urgent')
 
   const now = today()
@@ -37,14 +40,19 @@ function DashboardSide() {
     () => ({ academyId: academyId ?? undefined, date: ymd(today()) }),
     [academyId],
   )
+  /* ★ 출결 메뉴가 안 열린 계정이면 부르지 않는다 — 403 이 나서 요약이 통째로 '-' 가 되는데,
+        그건 "오늘 집계가 없다" 와 구분이 안 된다 */
+  const canAtt = allowedMenus !== null && hasMenuCode('attendance', allowedMenus)
   const board = useServerData({
     fetcher: fetchAttendanceBoard,
     params,
     // 지점을 못 고른 상태로 부르면 전 지점 권한 계정이 400을 받는다
-    enabled: academyId !== null,
+    enabled: academyId !== null && canAtt,
     errorMessage: '오늘 출결을 불러오지 못했습니다.',
   })
   const summary = board.data?.summary
+  /* ★ 바로가기도 같이 거른다. 좌측 메뉴에서만 감추면 대시보드에는 남아 있어,
+        눌렀을 때 대시보드로 되튕긴다(ScreenPage 가 막는다) */
   const quick = [
     { id: 'student-search', icon: 'search', label: '학생 검색' },
     { id: 'attendance', icon: 'scan-line', label: '출결 현황' },
@@ -52,7 +60,7 @@ function DashboardSide() {
     { id: 'consult', icon: 'message-square', label: '상담일지' },
     { id: 'message-send', icon: 'send', label: '알림 발송' },
     { id: 'payment', icon: 'receipt', label: '수납현황' },
-  ]
+  ].filter((q) => canSeeScreen(q.id, allowedMenus))
 
   return (
     <>
@@ -67,6 +75,12 @@ function DashboardSide() {
         {academyName ? ` · ${academyName}지점` : ''}
       </div>
 
+      {/* 출결 메뉴가 없는 계정에는 '-명' 네 줄을 남기지 않는다 — 값이 있는 척이 된다 */}
+      {allowedMenus !== null && !canAtt ? (
+        <div className="side-desc" style={{ marginTop: 6 }}>
+          출결 메뉴가 열려 있지 않아 오늘 요약은 보이지 않습니다.
+        </div>
+      ) : (
       <div className="side-summary">
         <div className="ss-row">
           <span className="k">재원생</span>
@@ -91,6 +105,7 @@ function DashboardSide() {
           </span>
         </div>
       </div>
+      )}
 
       {urgent.length > 0 && (
         <div className="legend-block" style={{ background: 'var(--red-wash)' }}>
@@ -143,6 +158,7 @@ function DashboardSide() {
  * 클라이언트 메뉴표(대분류 > 중분류 > 기능) 3단 구조를 그대로 편다.
  */
 function CatSide({ catId, here }: { catId: string; here: string }) {
+  const { allowedMenus } = useAuth()
   const cat = findNavCat(catId)
   if (!cat) return null
 
@@ -156,21 +172,27 @@ function CatSide({ catId, here }: { catId: string; here: string }) {
       </div>
       <div className="side-desc">{cat.desc}</div>
 
-      {cat.sections.map((sec) => (
-        <div className="nav-sec" key={sec.name}>
-          <div className="nav-sec-t">{sec.name}</div>
-          <nav className="nav">
-            {sec.items.map((item) => (
-              <NavItemLink key={`${item.screenId}-${item.tab ?? ''}`} item={item} here={here} />
-            ))}
-          </nav>
-        </div>
-      ))}
+      {/* ★ 계정별 메뉴 노출. 섹션이 통째로 비면 제목만 남으므로 **섹션도 함께 감춘다** —
+             빈 제목만 떠 있으면 "여기 뭐가 있었는데 사라졌나" 가 된다 */}
+      {cat.sections.map((sec) => {
+        const items = sec.items.filter((i) => canSeeScreen(i.screenId, allowedMenus))
+        if (items.length === 0) return null
+        return (
+          <div className="nav-sec" key={sec.name}>
+            <div className="nav-sec-t">{sec.name}</div>
+            <nav className="nav">
+              {items.map((item) => (
+                <NavItemLink key={`${item.screenId}-${item.tab ?? ''}`} item={item} here={here} />
+              ))}
+            </nav>
+          </div>
+        )
+      })}
 
       {/* ★ '중분류'·'기획 신규 도메인'은 우리끼리 쓰는 말이다(CLAUDE.md 1-1). 행정 선생님이
              읽고 할 일이 달라지지 않는다 — 화면 개수만 남긴다. */}
       <div className="side-foot">
-        <b style={{ color: 'var(--ink-2)' }}>{cat.name}</b> · 화면 {navItemCount(cat)}개
+        <b style={{ color: 'var(--ink-2)' }}>{cat.name}</b> · 화면 {navItemCount(cat, (i) => canSeeScreen(i.screenId, allowedMenus))}개
       </div>
     </>
   )

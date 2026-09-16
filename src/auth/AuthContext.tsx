@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { decodePrincipal, getMe, login as loginApi, logout as logoutApi, type Me, type Principal } from '../api/auth'
 import { getAccessToken, setDisplayName, subscribeTokens } from '../api/tokens'
 import { setReadOnlyMode } from '../api/client'
+import { listMyMenus } from '../api/menus'
 
 interface AuthState {
   principal: Principal | null
@@ -30,6 +31,15 @@ interface AuthState {
    *   정할 수 없다 — 서버는 이미 403 으로 막고 있다.
    */
   canSeeAdmin: boolean
+  /**
+   * 이 계정이 볼 수 있는 메뉴 코드. **`null` 이면 아직 못 읽었다**는 뜻이고
+   * 빈 Set 이면 제한 없음이다(서버가 설정 없는 계정에 전체를 내려준다).
+   *
+   * ★ `null` 과 빈 Set 을 같게 다루면 **읽는 동안 메뉴가 깜빡였다가 나타난다.**
+   *   둘 다 "다 보여준다" 로 처리해 그 깜빡임을 없앤다 — 숨기는 쪽으로 기울면
+   *   로그인 직후 메뉴가 통째로 사라져 보인다.
+   */
+  allowedMenus: Set<string> | null
 }
 
 const Ctx = createContext<AuthState | null>(null)
@@ -72,6 +82,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await logoutApi()
   }, [])
 
+  /* 계정별 메뉴 노출. 로그인해야 부를 수 있으므로 토큰이 생긴 뒤에 읽는다 */
+  /** null = 아직 못 읽음. 빈 Set = 제한 없음. 이 둘을 섞으면 첫 렌더에 403 을 부른다 */
+  const [allowedMenus, setAllowedMenus] = useState<Set<string> | null>(null)
+  useEffect(() => {
+    if (token === null) {
+      setAllowedMenus(null)
+      return
+    }
+    let alive = true
+    listMyMenus()
+      .then((list) => alive && setAllowedMenus(new Set(list.map((m) => m.code))))
+      /* 못 읽으면 **막지 않는다.** 여기서 실패했다고 메뉴를 감추면 서버 문제로
+         아무것도 못 쓰게 된다 — 서버가 API 단에서 이미 403 으로 막는다.
+         ★ null 이 아니라 **빈 Set**(= 제한 없음)으로 끝낸다. null 을 "아직 안 읽음" 으로만
+           쓰기 위해서다 — 요약 패널이 그 값을 보고 호출을 미루는데, 실패해도 null 로 두면
+           영영 안 부른다 */
+      .catch(() => alive && setAllowedMenus(new Set<string>()))
+    return () => {
+      alive = false
+    }
+  }, [token])
+
   const value = useMemo<AuthState>(() => {
     const principal = decodePrincipal(token)
     const roles = me?.roles ?? principal?.roles ?? []
@@ -79,8 +111,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // 하나라도 다른 역할이 섞이면 그쪽 권한으로 쓰기가 가능하다
     const readOnly = roles.length > 0 && roles.every((r) => r === 'READONLY')
     const canSeeAdmin = roles.some((r) => r === 'SUPER_ADMIN' || r === 'BRANCH_ADMIN')
-    return { principal, me, signedIn: principal !== null, readOnly, canSeeAdmin, login, logout }
-  }, [token, me, login, logout])
+    return { principal, me, signedIn: principal !== null, readOnly, canSeeAdmin, allowedMenus, login, logout }
+  }, [token, me, allowedMenus, login, logout])
 
   /* API 클라이언트에도 알려준다 — 쓰기를 **보내기 전에** 막기 위해서다.
      쓰기 버튼이 188개라 화면마다 막으면 반드시 빠뜨린다(client.ts 주석 참고) */

@@ -96,3 +96,14 @@ export function canSeeScreen(screenId: string, allowed: Set<string> | null): boo
   if (!codes) return true
   return codes.some((c) => allowed.has(c))
 }
+
+/**
+ * 코드 하나를 직접 본다. 화면이 아니라 **요약 패널처럼 남의 도메인 API 를 부르는 곳**에 쓴다.
+ *
+ * ★ 이걸 안 보고 부르면 서버가 403 을 주고, 화면에는 빨간 "접근이 허용되지 않은 메뉴입니다"
+ *   가 뜬다 — 열어준 적이 없을 뿐인데 사용자는 **고장으로 읽는다.** 부르기 전에 거른다.
+ */
+export function hasMenuCode(code: string, allowed: Set<string> | null): boolean {
+  if (allowed === null || allowed.size === 0) return true
+  return allowed.has(code)
+}
