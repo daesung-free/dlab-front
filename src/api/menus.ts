@@ -11,6 +11,8 @@ export interface MenuNode {
   name: string
   /** 상위 코드. 없으면 최상위다 */
   parentCode: string | null
+  /** 카탈로그 정렬용. 서버가 내려주는 순서와 같다 */
+  sortOrder: number
   /**
    * 서버가 실제로 막을 수 있는가.
    *
@@ -35,6 +37,22 @@ export function listMyMenus(): Promise<MenuNode[]> {
 }
 
 /**
+ * 계정에 지금 걸린 설정.
+ *
+ * ★ `restricted: false` 면 `menus` 는 **빈 배열**이다 — "볼 수 있는 메뉴가 없다" 가 아니라
+ *   "제한이 없다" 다. 이 둘을 구분하지 않으면 설정 화면이 전부 해제된 것처럼 보인다.
+ */
+export interface AccountMenus {
+  accountId: number
+  restricted: boolean
+  menus: MenuNode[]
+}
+
+export function getAccountMenus(accountId: number): Promise<AccountMenus> {
+  return request<AccountMenus>(`/api/v1/admin/staff/accounts/${accountId}/menus`)
+}
+
+/**
  * 계정의 메뉴 노출 설정.
  *
  * ★ **통째로 보낸다.** 더하기·빼기가 아니라 교체다 — 보낸 목록이 곧 전부다.
@@ -44,8 +62,8 @@ export function listMyMenus(): Promise<MenuNode[]> {
  *   "수납현황만 보여주려 했는데 청구기준 편집까지 열리는" 것을 막을 수 없다.
  * ★ 최고관리자만 호출된다.
  */
-export function setAccountMenus(accountId: number, menuCodes: string[]): Promise<void> {
-  return request<void>(`/api/v1/admin/staff/accounts/${accountId}/menus`, {
+export function setAccountMenus(accountId: number, menuCodes: string[]): Promise<AccountMenus> {
+  return request<AccountMenus>(`/api/v1/admin/staff/accounts/${accountId}/menus`, {
     method: 'PUT',
     body: { menuCodes },
   })

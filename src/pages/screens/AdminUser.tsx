@@ -4,6 +4,14 @@ import { DataTable, ExcelButton, MaskToggle, useServerData, type Column, Modal }
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { useAcademy } from '../../auth/AcademyContext'
+import { useAuth } from '../../auth/AuthContext'
+import { SCREEN_MENU_CODES } from '../../data/menuCodes'
+import {
+  getAccountMenus,
+  listMenuCatalog,
+  setAccountMenus,
+  type MenuNode,
+} from '../../api/menus'
 import { ApiError } from '../../api/client'
 import {
   ACCOUNT_STATUS_LABEL,
@@ -157,8 +165,170 @@ const EMPTY_FORM = {
   positionName: '',
 }
 
+
+/* 화면에 걸리지 않은 코드. 서버 API 만 막는 용도라 설정할 때 알고 골라야 한다 —
+   체크해도 좌측 메뉴에 새로 생기는 것이 없다 */
+const SCREEN_CODES = new Set(Object.values(SCREEN_MENU_CODES).flat())
+
+/**
+ * 계정별 메뉴 노출 설정.
+ *
+ * ★ 저장은 **통째로 교체**다(PUT). 빈 목록으로 저장하면 제한이 풀려 전부 보인다 —
+ *   "아무것도 못 보게" 가 아니다. 그래서 해제 버튼을 따로 두고 문구로 갈라 놨다.
+ * ★ 부모를 체크해도 서버가 자식을 자동으로 넣어주지 않는다. 화면에서 같이 실어 보낸다.
+ */
+function MenuModal({ row, onClose, onSaved }: { row: AccountRow; onClose: () => void; onSaved: (msg: string) => void }) {
+  const [catalog, setCatalog] = useState<MenuNode[] | null>(null)
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [restricted, setRestricted] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    Promise.all([listMenuCatalog(), getAccountMenus(row.accountId)])
+      .then(([all, mine]) => {
+        if (!alive) return
+        setCatalog(all)
+        setRestricted(mine.restricted)
+        setPicked(new Set(mine.menus.map((m) => m.code)))
+      })
+      .catch((e) => alive && setErr(e instanceof ApiError ? e.message : '메뉴 목록을 불러오지 못했습니다.'))
+    return () => {
+      alive = false
+    }
+  }, [row.accountId])
+
+  const groups = useMemo(() => {
+    const all = catalog ?? []
+    return all
+      .filter((m) => m.parentCode === null)
+      .map((top) => ({ top, children: all.filter((m) => m.parentCode === top.code) }))
+  }, [catalog])
+
+  /** 부모를 켜면 자식까지, 끄면 자식까지 — 각 코드가 독립이라 화면이 묶어준다 */
+  function toggle(node: MenuNode, children: MenuNode[]) {
+    const next = new Set(picked)
+    const on = !picked.has(node.code)
+    const codes = [node.code, ...children.map((c) => c.code)]
+    for (const c of codes) {
+      if (on) next.add(c)
+      else next.delete(c)
+    }
+    setPicked(next)
+  }
+
+  function toggleOne(code: string) {
+    const next = new Set(picked)
+    if (next.has(code)) next.delete(code)
+    else next.add(code)
+    setPicked(next)
+  }
+
+  async function save(codes: string[]) {
+    setSaving(true)
+    setErr(null)
+    try {
+      const res = await setAccountMenus(row.accountId, codes)
+      onSaved(
+        res.restricted
+          ? `${row.loginId} 에게 메뉴 ${res.menus.length}개만 보이도록 저장했습니다. 다음 로그인부터 적용됩니다.`
+          : `${row.loginId} 의 메뉴 제한을 풀었습니다. 전체 메뉴가 보입니다.`,
+      )
+      return true
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : '저장하지 못했습니다.')
+      return false
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal
+      wide
+      title={`${row.loginId} 에게 보여줄 메뉴`}
+      sub={
+        restricted
+          ? '지금 아래 체크된 메뉴만 보입니다. 체크를 전부 풀고 저장하면 제한이 풀려 전체가 보입니다.'
+          : '지금은 제한이 없어 전체 메뉴가 보입니다. 필요한 것만 체크해 저장하세요.'
+      }
+      confirmLabel="저장"
+      busy={saving}
+      error={err}
+      onConfirm={() => void save([...picked]).then((ok) => ok && onClose())}
+      onClose={onClose}
+    >
+      {catalog === null ? (
+        <div style={{ padding: 18, color: 'var(--muted)' }}>불러오는 중…</div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+            <button className="btn" type="button" disabled={saving} onClick={() => setPicked(new Set(catalog.map((m) => m.code)))}>
+              전체 선택
+            </button>
+            <button className="btn" type="button" disabled={saving} onClick={() => setPicked(new Set())}>
+              전체 해제
+            </button>
+            <button
+              className="btn"
+              type="button"
+              style={{ marginLeft: 'auto' }}
+              disabled={saving || !restricted}
+              title={restricted ? '제한을 풀어 전체 메뉴를 보여줍니다' : '지금도 제한이 없습니다'}
+              onClick={() => void save([]).then((ok) => ok && onClose())}
+            >
+              제한 해제
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gap: 10, maxHeight: 420, overflow: 'auto' }}>
+            {groups.map(({ top, children }) => (
+              <div
+                key={top.code}
+                className="note-box"
+                /* ★ flex 라서 기본은 가로다 — 부모 라벨과 자식 목록이 좌우로 갈라진다 */
+                style={{ padding: '9px 11px', display: 'block' }}
+              >
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                  <input type="checkbox" checked={picked.has(top.code)} onChange={() => toggle(top, children)} />
+                  <b>{top.name}</b>
+                  {!SCREEN_CODES.has(top.code) && <span className="mk">서버 API 전용</span>}
+                </label>
+                {children.length > 0 && (
+                  <div style={{ display: 'grid', gap: 6, marginTop: 7, paddingLeft: 22 }}>
+                    {children.map((c) => (
+                      <label key={c.code} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
+                        <input type="checkbox" checked={picked.has(c.code)} onChange={() => toggleOne(c.code)} />
+                        {c.name}
+                        {!SCREEN_CODES.has(c.code) && <span className="mk">서버 API 전용</span>}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="note-box" style={{ marginTop: 10 }}>
+            {/* ★ note-box 는 flex 다 — 글자와 <b> 를 형제로 두면 각각이 칸이 되어 눌린다 */}
+            <div>
+              체크한 메뉴는 <b>다음 로그인부터</b> 반영됩니다. 이미 접속해 있는 사람은 새로고침하면 바뀝니다.
+            </div>
+          </div>
+        </>
+      )}
+    </Modal>
+  )
+}
+
 function Content() {
   const { academies } = useAcademy()
+  /* 메뉴 노출 설정은 최고관리자만 저장할 수 있다(서버도 같다). 지점관리자에게는
+     눌러놓고 403 을 받는 버튼 대신 이유를 붙여 막아둔다 */
+  const { principal, me } = useAuth()
+  const isSuper = (me?.roles ?? principal?.roles ?? []).some((r) => r === 'SUPER_ADMIN')
+  const [menuEdit, setMenuEdit] = useState<AccountRow | null>(null)
   const [tab, setTab] = useState('users')
   const [masked, setMasked] = useState(true)
   const [branch, setBranch] = useState('')
@@ -431,7 +601,7 @@ function Content() {
       {
         key: 'lastRoleChange',
         header: '권한 수정시간',
-        width: '146px',
+        width: '104px',
         // 목록 응답에는 안 실려 온다 — 계정별 이력 조회를 눌러서 본다
         value: () => '',
         render: (r) => (
@@ -449,14 +619,16 @@ function Content() {
       {
         key: 'act',
         header: '',
-        width: '160px',
+        /* ★ 버튼 5개가 들어간다. 좁히면 글자가 **세로로 눌린다** — 메뉴 버튼을 넣고
+             160px 그대로 뒀다가 '비/밀/번/호' 가 됐다 */
+        width: '286px',
         align: 'center',
         value: () => '',
         render: (r) => (
           <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
             <button
               className="btn"
-              style={{ padding: '4px 9px', fontSize: 11.5 }}
+              style={{ padding: '4px 9px', fontSize: 11.5, whiteSpace: 'nowrap' }}
               disabled={busy === r.accountId}
               onClick={() => setRoleEdit({ row: r, picked: [...r.roles] })}
             >
@@ -464,7 +636,16 @@ function Content() {
             </button>
             <button
               className="btn"
-              style={{ padding: '4px 9px', fontSize: 11.5 }}
+              style={{ padding: '4px 9px', fontSize: 11.5, whiteSpace: 'nowrap' }}
+              disabled={busy === r.accountId || !isSuper || r.status === 'WITHDRAWN'}
+              title={isSuper ? '이 계정에 보여줄 메뉴를 고릅니다' : '최고관리자만 설정할 수 있습니다'}
+              onClick={() => setMenuEdit(r)}
+            >
+              메뉴
+            </button>
+            <button
+              className="btn"
+              style={{ padding: '4px 9px', fontSize: 11.5, whiteSpace: 'nowrap' }}
               disabled={busy === r.accountId || r.status === 'WITHDRAWN'}
               title="새 임시 비밀번호를 발급합니다. 한 번만 보여집니다"
               onClick={() => setConfirm({ kind: 'password', row: r })}
@@ -474,7 +655,7 @@ function Content() {
             {r.locked ? (
               <button
                 className="btn pri"
-                style={{ padding: '4px 9px', fontSize: 11.5 }}
+                style={{ padding: '4px 9px', fontSize: 11.5, whiteSpace: 'nowrap' }}
                 disabled={busy === r.accountId}
                 onClick={() => void unlock(r)}
               >
@@ -483,7 +664,7 @@ function Content() {
             ) : (
               <button
                 className="btn pri"
-                style={{ padding: '4px 9px', fontSize: 11.5 }}
+                style={{ padding: '4px 9px', fontSize: 11.5, whiteSpace: 'nowrap' }}
                 disabled={busy === r.accountId || r.status !== 'PENDING'}
                 title={r.status === 'PENDING' ? '가입을 승인해 로그인을 연다' : '승인 대기 상태에서만 누를 수 있습니다'}
                 onClick={() => void approve(r)}
@@ -493,7 +674,7 @@ function Content() {
             )}
             <button
               className="btn"
-              style={{ padding: '4px 9px', fontSize: 11.5, color: 'var(--red)' }}
+              style={{ padding: '4px 9px', fontSize: 11.5, whiteSpace: 'nowrap', color: 'var(--red)' }}
               disabled={busy === r.accountId || r.status === 'WITHDRAWN'}
               onClick={() => setConfirm({ kind: 'withdraw', row: r })}
             >
@@ -503,11 +684,22 @@ function Content() {
         ),
       },
     ],
-    [busy],
+    [busy, isSuper],
   )
 
   return (
     <div className="p-matrix">
+      {menuEdit && (
+        <MenuModal
+          row={menuEdit}
+          onClose={() => setMenuEdit(null)}
+          onSaved={(msg) => {
+            setActionMsg(msg)
+            setMenuEdit(null)
+          }}
+        />
+      )}
+
       {roleEdit && (
         <Modal
           title={`${roleEdit.row.loginId} 의 역할`}
@@ -971,9 +1163,10 @@ function Content() {
                 <span className="pm p-none">없음</span> 메뉴 미노출
               </span>
               {/* 서버에 역할 × 기능영역 권한이 아직 없다. "이 표대로 제한된다"고 쓰면
-                  화면이 거짓말을 하게 된다 — 확정 전이라는 것을 그대로 적는다 */}
+                  화면이 거짓말을 하게 된다 — 확정 전이라는 것을 그대로 적는다.
+                  ★ 계정별 메뉴 노출은 따로 생겼다. 안 적으면 "아직 아무것도 안 된다" 로 읽힌다 */}
               <span style={{ marginLeft: 'auto', color: 'var(--muted)' }}>
-                확정 전 초안입니다. 실제 메뉴 노출·기능 제한은 아직 이 표를 따르지 않습니다
+                확정 전 초안입니다. 실제 메뉴 노출은 계정 목록의 <b>메뉴</b> 버튼에서 계정마다 정합니다
               </span>
             </div>
           </div>
