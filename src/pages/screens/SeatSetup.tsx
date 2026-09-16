@@ -234,6 +234,7 @@ export function SeatSetup({ onChanged }: Props) {
 
       {modal === 'building' && (
         <BuildingModal
+          buildings={buildings}
           busy={busy}
           error={modalError}
           onClose={() => setModal(null)}
@@ -377,11 +378,13 @@ function BuildingTab({
 }
 
 function BuildingModal({
+  buildings,
   busy,
   error,
   onClose,
   onSubmit,
 }: {
+  buildings: Building[]
   busy: boolean
   error: string | null
   onClose: () => void
@@ -390,7 +393,17 @@ function BuildingModal({
   const [code, setCode] = useState('')
   const [name, setName] = useState('')
   const [annex, setAnnex] = useState(false)
-  const [offset, setOffset] = useState(1000)
+
+  /* ★ 번호대는 **기존 별관을 보고** 정해야 한다. 늘 1000 으로 두면 별관을 두 개 만들었을 때
+   *   둘 다 1000 이 되고, 두 번째 별관에는 좌석을 한 자리도 못 만든다 —
+   *   키오스크 번호가 겹쳐 UNIQUE (academy_id, kiosk_seat_cd) 에 걸린다.
+   *   등록 후에는 못 바꾸는 값이라(facility.ts 주석) 그때 가서 고칠 수도 없다. */
+  const annexes = buildings.filter((b) => !b.main)
+  const nextOffset = Math.max(0, ...annexes.map((b) => b.seatCdOffset)) + 1000
+  const [offset, setOffset] = useState(nextOffset)
+
+  /** 이미 쓰는 번호대인가 — 등록을 막고 어느 관이 쓰는지 알려준다 */
+  const taken = annexes.find((b) => b.seatCdOffset === offset)
 
   return (
     <Modal
@@ -399,7 +412,7 @@ function BuildingModal({
       confirmLabel="등록"
       busy={busy}
       error={error}
-      confirmDisabled={!code.trim() || !name.trim() || (annex && offset < 1000)}
+      confirmDisabled={!code.trim() || !name.trim() || (annex && (offset < 1000 || taken !== undefined))}
       onClose={onClose}
       onConfirm={() =>
         onSubmit({ code: code.trim(), name: name.trim(), seatCdOffset: annex ? offset : 0 })
@@ -442,6 +455,14 @@ function BuildingModal({
               보입니다.
               <br />
               1000 미만은 받지 않습니다 — 100이면 본관 101번과 곧바로 겹칩니다.
+              {taken && (
+                <>
+                  <br />
+                  <b style={{ color: 'var(--red)' }}>
+                    {taken.name}이(가) 쓰고 있는 번호대입니다. 다른 번호대를 쓰세요.
+                  </b>
+                </>
+              )}
             </div>
           </div>
         </>
