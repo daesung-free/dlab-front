@@ -20,6 +20,7 @@ import { affairsMockup } from './AffairsRoster'
 import { adminAssignMockup } from './AdminAssign'
 import { adminLectureMockup } from './AdminLecture'
 import { scholarshipRulesMockup } from './ScholarshipRules'
+import { staffCardsMockup } from './StaffCards'
 import { adminBillingMockup } from './AdminBilling'
 import { adminResultMockup } from './AdminResult'
 import { seatMoveMockup } from './SeatMove'
@@ -71,6 +72,7 @@ export const MOCKUPS: Record<string, Mockup> = {
   'admin-assign': adminAssignMockup, // F-4.10-3 배정 관리
   'admin-lecture': adminLectureMockup, // F-4.10-4 특강 기초 설정
   'admin-scholarship': scholarshipRulesMockup, // F-4.10-7 장학 취소 기준 · 검토
+  'admin-staff-card': staffCardsMockup, // F-4.10-8 직원 카드 · 출퇴근
   'admin-billing': adminBillingMockup, // F-4.10-5 수납 관리(청구기준)
   'admin-result': adminResultMockup, // F-4.10-6 실적 관리
   'seat-move': seatMoveMockup, // F-4.11-8 좌석 이탈/복귀
