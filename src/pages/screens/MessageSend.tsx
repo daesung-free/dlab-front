@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DataTable, Unfilled, type Column, Modal } from '../../components/common'
+import { DataTable, Unfilled, useServerData, type Column, Modal } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
@@ -16,6 +16,9 @@ import {
   updateTemplateContent,
   type NotificationTemplate,
 } from '../../api/notifications'
+import { useAcademy } from '../../auth/AcademyContext'
+import { getNotificationSummary, type NotificationSummaryRow } from '../../api/notifications'
+import { createScreenSignal } from './screenSignal'
 import { MOCK_STUDENTS } from './mockStudents'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
@@ -296,53 +299,76 @@ function blockedReason(t: NotificationTemplate): string {
 
 /* ── 발송 이력 ── */
 
-interface SendLog {
-  id: string
-  sentAt: string
-  template: string
-  channel: Channel
-  scope: string
-  targets: number
-  success: number
-  by: string
+/* 헤더 「발송 이력」 → 본문 탭. 헤더는 본문과 상태를 공유하지 못한다(screenSignal.ts) */
+const logTab = createScreenSignal()
+
+/** 오늘 기준 n일 전. 기본 조회 기간을 만든다 */
+function daysAgo(n: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() - n)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-const LOGS: SendLog[] = [
-  { id: 'l1', sentAt: '2026-05-28 08:12', template: '등원 확인', channel: 'ALIMTALK', scope: '출결 자동', targets: 271, success: 269, by: '시스템' },
-  { id: 'l2', sentAt: '2026-05-28 09:34', template: '지각 안내', channel: 'ALIMTALK', scope: '출결 자동', targets: 14, success: 14, by: '시스템' },
-  { id: 'l3', sentAt: '2026-05-27 18:00', template: '성적 리포트 등록', channel: 'FCM', scope: '전체', targets: 296, success: 288, by: '담임 C' },
-  { id: 'l4', sentAt: '2026-05-27 11:20', template: '직접 입력 (자유 문안)', channel: 'FCM', scope: '3반', targets: 42, success: 39, by: '담임 B' },
-  { id: 'l5', sentAt: '2026-05-26 16:45', template: '대기자 순번 안내', channel: 'ALIMTALK', scope: '개별', targets: 7, success: 6, by: '담임 A' },
-  { id: 'l6', sentAt: '2026-05-26 08:11', template: '등원 확인', channel: 'ALIMTALK', scope: '출결 자동', targets: 268, success: 268, by: '시스템' },
-]
+function hhmm(iso: string): string {
+  const d = new Date(iso)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
 
-const LOG_COLUMNS: Column<SendLog>[] = [
-  { key: 'sentAt', header: '발송일시', width: '140px', sortable: true, value: (r) => r.sentAt },
-  { key: 'template', header: '템플릿', width: '176px', value: (r) => r.template },
+const LOG_COLUMNS: Column<NotificationSummaryRow>[] = [
+  {
+    key: 'sentAt',
+    header: '발송일시',
+    width: '150px',
+    sortable: true,
+    value: (r) => `${r.date} ${hhmm(r.firstAt)}`,
+  },
+  { key: 'template', header: '템플릿', width: '176px', value: (r) => EVENT_LABEL[r.event] ?? r.event },
   {
     key: 'channel',
     header: '채널',
     width: '120px',
     align: 'center',
-    value: (r) => CHANNEL_META[r.channel].label,
-    render: (r) => <span className={`mk ${CHANNEL_META[r.channel].cls}`}>{CHANNEL_META[r.channel].label}</span>,
-  },
-  { key: 'scope', header: '범위', width: '90px', align: 'center', value: (r) => r.scope },
-  { key: 'targets', header: '대상', width: '72px', align: 'right', sortable: true, value: (r) => r.targets },
-  {
-    key: 'success',
-    header: '성공',
-    width: '110px',
-    align: 'right',
-    value: (r) => r.success,
+    value: (r) => CHANNEL_LABEL[r.channel] ?? r.channel,
     render: (r) => (
-      <span style={{ color: r.success === r.targets ? 'var(--green)' : 'var(--amber)', fontWeight: 700 }}>
-        {r.success}
-        {r.success !== r.targets && ` (-${r.targets - r.success})`}
+      <span className={`mk ${r.channel === 'KAKAO_ALIMTALK' ? 'brandnew' : 'supplement'}`}>
+        {CHANNEL_LABEL[r.channel] ?? r.channel}
       </span>
     ),
   },
-  { key: 'by', header: '발송자', width: '84px', value: (r) => r.by },
+  {
+    key: 'scope',
+    header: '범위',
+    width: '90px',
+    align: 'center',
+    /* 자동 발송이라 범위를 사람이 고르지 않는다 — 사유가 대상을 정한다.
+       컬럼을 지우면 "원래 없던 항목"이 되므로 비워둔 채로 남긴다(CLAUDE.md 4) */
+    value: () => '',
+    render: () => <Unfilled reason="자동 발송이라 범위를 고르지 않는다" />,
+  },
+  { key: 'targets', header: '대상', width: '72px', align: 'right', sortable: true, value: (r) => r.total },
+  {
+    key: 'success',
+    header: '성공',
+    width: '150px',
+    align: 'right',
+    value: (r) => r.sent,
+    /* ★ 실패와 보류를 갈라 쓴다. 합쳐서 "-6" 으로만 보이면 발송이 죽은 것처럼 읽히는데,
+         보류는 알림톡 템플릿 심사가 안 끝난 것이라 **심사가 통과되면 그대로 나간다.** */
+    render: (r) => (
+      <span style={{ color: r.sent === r.total ? 'var(--green)' : 'var(--amber)', fontWeight: 700 }}>
+        {r.sent}
+        {r.failed > 0 && <span style={{ color: 'var(--red)' }}> · 실패 {r.failed}</span>}
+        {r.skipped > 0 && <span style={{ color: 'var(--muted)' }}> · 보류 {r.skipped}</span>}
+      </span>
+    ),
+  },
+  {
+    key: 'by',
+    header: '발송자',
+    width: '84px',
+    /* 사건이 생기면 서버가 보낸다 — 누른 사람이 없다 */
+    value: () => '자동',
+  },
 ]
 
 const SCOPES = [
@@ -354,6 +380,34 @@ const SCOPES = [
 
 function Content() {
   const [tab, setTab] = useState('send')
+  const { academyId } = useAcademy()
+
+  /* 헤더 「발송 이력」을 누르면 그 탭으로 옮긴다. 첫 렌더의 0 은 건너뛴다 */
+  const logSignal = logTab.useVersion()
+  useEffect(() => {
+    if (logSignal > 0) setTab('log')
+  }, [logSignal])
+
+  /* 발송 이력 탭 — 기본 30일. 기간을 안 좁히면 집계가 통째로 온다(페이징이 없다) */
+  const [logFrom, setLogFrom] = useState(() => daysAgo(30))
+  const [logTo, setLogTo] = useState(() => daysAgo(0))
+  const logParams = useMemo(
+    () => ({ academyId: academyId ?? undefined, from: logFrom, to: logTo }),
+    [academyId, logFrom, logTo],
+  )
+  const logs = useServerData({
+    fetcher: getNotificationSummary,
+    params: logParams,
+    // 지점을 못 고른 상태로 부르면 전 지점 권한 계정이 400을 받는다
+    enabled: academyId !== null,
+    errorMessage: '발송 이력을 불러오지 못했습니다.',
+  })
+  /* ★ 서버는 날짜 desc 안에서 사유 순으로 준다 — 시각이 16:24 · 16:42 · 16:25 로 섞여
+       "정렬이 안 된 표" 로 보인다. 최근 것이 위로 오게 화면에서 다시 세운다 */
+  const logRows = useMemo(
+    () => [...(logs.data ?? [])].sort((a, b) => b.firstAt.localeCompare(a.firstAt)),
+    [logs.data],
+  )
 
   /* 발송 탭 */
   const [scope, setScope] = useState('CLASS')
@@ -579,7 +633,7 @@ function Content() {
         items={[
           { key: 'send', label: '메시지 발송' },
           { key: 'tpl', label: '템플릿 관리', count: rows.length },
-          { key: 'log', label: '발송 이력', count: LOGS.length },
+          { key: 'log', label: '발송 이력', count: logRows.length },
         ]}
         active={tab}
         onChange={setTab}
@@ -587,8 +641,9 @@ function Content() {
       />
 
       {/* ═══ 메시지 발송 ═══ */}
-      {/* 발송·이력은 서버에 대응 API가 없다. 화면은 그대로 두되 예시임을 밝힌다 */}
-      {(tab === 'send' || tab === 'log') && (
+      {/* 발송(사람이 골라 보내기)은 아직 API 가 없다. 화면은 그대로 두되 예시임을 밝힌다.
+          ★ 발송 이력은 실연동됐다 — 배너를 같이 씌우면 진짜 기록을 예시로 읽게 된다 */}
+      {tab === 'send' && (
         <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
           <div className="ic">
             <Icon name="triangle-alert" size={17} />
@@ -1056,18 +1111,58 @@ function Content() {
 
       {/* ═══ 발송 이력 ═══ */}
       {tab === 'log' && (
-        <DataTable
-          columns={LOG_COLUMNS}
-          rows={LOGS}
-          rowKey={(r) => r.id}
-          masked={false}
-          pageSize={12}
-          countLabel={
-            <>
-              발송 이력 <b>{LOGS.length}</b>건
-            </>
-          }
-        />
+        <>
+          {/* 사람이 골라 보내는 발송이 아직 없다는 것을 여기서 한 번 짚는다 —
+              표에 '발송자: 자동'만 늘어서면 "내가 보낸 건 왜 없지" 가 된다 */}
+          <div className="note-box">
+            등원·승인·상담 같은 <b>사건이 일어날 때 자동으로 나간 알림</b>이 날짜·사유별로 묶여 있습니다.
+            보류는 카카오 템플릿 심사가 끝나지 않은 건으로, 심사가 통과되면 그대로 나갑니다.
+          </div>
+
+          {logs.error && (
+            <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+              {logs.error}
+            </div>
+          )}
+
+          <DataTable
+            columns={LOG_COLUMNS}
+            rows={logRows}
+            rowKey={(r) => `${r.date}-${r.event}-${r.channel}`}
+            masked={false}
+            loading={logs.loading}
+            pageSize={12}
+            countLabel={
+              <>
+                발송 묶음 <b>{logRows.length}</b>건 · 총{' '}
+                <b>{logRows.reduce((n, r) => n + r.total, 0).toLocaleString()}</b>통
+              </>
+            }
+            toolbar={
+              <>
+                <input
+                  className="inp"
+                  style={{ width: 138 }}
+                  type="date"
+                  value={logFrom}
+                  max={logTo}
+                  onChange={(e) => setLogFrom(e.target.value)}
+                  aria-label="조회 시작일"
+                />
+                <span style={{ color: 'var(--muted)' }}>~</span>
+                <input
+                  className="inp"
+                  style={{ width: 138 }}
+                  type="date"
+                  value={logTo}
+                  min={logFrom}
+                  onChange={(e) => setLogTo(e.target.value)}
+                  aria-label="조회 종료일"
+                />
+              </>
+            }
+          />
+        </>
       )}
     </>
   )
@@ -1077,7 +1172,7 @@ export const messageMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled data-soon title="준비 중입니다">
+      <button className="btn" onClick={() => logTab.bump()} title="발송 이력 탭으로 이동합니다">
         <Icon name="history" size={14} /> 발송 이력
       </button>
       <button className="btn pri" disabled data-soon title="준비 중입니다">

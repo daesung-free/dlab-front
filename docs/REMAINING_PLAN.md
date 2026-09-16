@@ -257,7 +257,7 @@ PUT /admin/staff/accounts/{id}/menus   { menuCodes: [...] } — 통째로 교체
 | 설문 관리 | 설문 생성 | `POST /surveys` | ✅ 09-16 — **본문엔 이미 있었고 헤더만 막혀 있었다** |
 | 질의응답 | 타임 개설 | `POST /qna/offline/slots` | ✅ 09-16 — 간격을 직원이 고른다(회신 오면 기본값만 바꾸면 됨) |
 | 독서실 | 좌석 재배치 | `POST /seats/bulk` | |
-| 문자 발송 | 발송 이력 | `GET /notification-logs` | |
+| 문자 발송 | 발송 이력 | `GET /notification-logs` | ✅ 09-16 — **묶음 집계**로 그린다. 건별은 하루 200줄이 된다 |
 | 반 배정·기초 관리 | 전년도 복사 | `POST /masters/yearly-copy` | |
 
 **못 여는 것**
