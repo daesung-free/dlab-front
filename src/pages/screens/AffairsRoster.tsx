@@ -162,7 +162,7 @@ function Content() {
   // 반 드롭다운. 실패해도 화면은 살려둔다 — 나머지 조건으로는 조회할 수 있다
   useEffect(() => {
     let cancelled = false
-    listClasses()
+    listClasses(new Date().getFullYear())
       .then((list) => !cancelled && setClasses(list))
       .catch(() => undefined)
     return () => {

@@ -90,7 +90,7 @@ function Content() {
   const loadClasses = useCallback(async () => {
     try {
       // memberCount 가 목록에 실려 와서 반마다 명단을 부르지 않아도 된다
-      const list = await listClasses(undefined, academyId ?? undefined)
+      const list = await listClasses(new Date().getFullYear(), academyId ?? undefined)
       setClasses(list)
       setTarget((prev) => prev ?? list[0]?.id ?? null)
       setLoadError(null)
