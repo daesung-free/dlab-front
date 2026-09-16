@@ -1,17 +1,42 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DataTable, useServerTable, type Column } from '../../components/common'
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { DataTable, Modal, useServerTable, type Column } from '../../components/common'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
 import {
   assignStudentsToClass,
+  createClass,
   listClasses,
   releaseStudentFromClass,
   type BulkAssignResult,
   type ClassGroup,
+  type ClassType,
 } from '../../api/classes'
 import { useAcademy } from '../../auth/AcademyContext'
 import { SORTABLE, TRACK_LABEL, retakeLabel, searchStudents, type Student } from '../../api/students'
 import type { Mockup } from './types'
+
+/* 반을 만들면 아래 목록이 바로 바뀌어야 한다. 그런데 헤더 액션과 본문은 ScreenPage 가
+ * 따로 렌더해 상태를 공유할 수 없다 — props 로 내릴 자리가 없다. 모듈 안에 작은 신호를
+ * 두고 본문이 구독한다. 이게 없으면 방금 만든 반이 배정 드롭다운에 안 보인다. */
+let classesVersion = 0
+const classesListeners = new Set<() => void>()
+
+function bumpClasses(): void {
+  classesVersion += 1
+  for (const fn of classesListeners) fn()
+}
+
+function useClassesVersion(): number {
+  return useSyncExternalStore(
+    (cb) => {
+      classesListeners.add(cb)
+      return () => {
+        classesListeners.delete(cb)
+      }
+    },
+    () => classesVersion,
+  )
+}
 
 /* F-4.1-4 반 배정(고정반 관리) — /api/v1/admin/classes
  *
@@ -84,6 +109,12 @@ function Content() {
   useEffect(() => {
     void loadClasses()
   }, [loadClasses])
+
+  /* 헤더에서 반을 만들면 목록을 다시 읽는다. 첫 렌더의 0 은 건너뛴다 */
+  const classesVer = useClassesVersion()
+  useEffect(() => {
+    if (classesVer > 0) void loadClasses()
+  }, [classesVer, loadClasses])
 
   // 재원생 중 반이 없는 학생만. 서버가 걸러주므로 전체 명단이 맞다
   const params = useMemo(
@@ -169,11 +200,24 @@ function Content() {
             <div className="l">
               <Icon name="layout-grid" size={13} /> {c.name}
             </div>
-            <div className="v" style={c.capacity !== null && c.memberCount > c.capacity ? { color: 'var(--red)' } : undefined}>
-              {c.memberCount}
+            {/* ★ memberCount 는 목록에서만 채워진다(단건 응답은 null). capacity 도 null 이면
+                   "정원 없는 반" 이지 0 이 아니다 — 둘 다 없을 때 초과로 칠하면 안 된다 */}
+            <div
+              className="v"
+              style={
+                c.capacity !== null && c.memberCount !== null && c.memberCount > c.capacity
+                  ? { color: 'var(--red)' }
+                  : undefined
+              }
+            >
+              {c.memberCount ?? '-'}
               <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 700 }}> / {c.capacity ?? '-'}</span>
             </div>
-            <div className={`d${c.capacity !== null && c.memberCount > c.capacity ? ' down' : ''}`}>
+            <div
+              className={`d${
+                c.capacity !== null && c.memberCount !== null && c.memberCount > c.capacity ? ' down' : ''
+              }`}
+            >
               담임 {c.homeroomTeacherName ?? '미지정'}
               {/* 강의실은 아직 응답에 없다 — 반 홈룸인지 시간표 소속인지 확인 중 */}
             </div>
@@ -281,16 +325,130 @@ function Content() {
   )
 }
 
-export const classAssignMockup: Mockup = {
-  Content,
-  actions: (
+/**
+ * 헤더 우측 액션 — 반 등록.
+ *
+ * ★ 본문(`Content`)과 따로 렌더되어 상태를 공유할 수 없다. 반을 만들면 아래 목록이
+ *   바뀌어야 하므로 모듈 안에 작은 신호를 두고 본문이 구독한다(PenaltyManage 와 같은 방식).
+ */
+function ClassActions() {
+  const { academyId } = useAcademy()
+  const year = new Date().getFullYear()
+  const [draft, setDraft] = useState<{ name: string; classType: ClassType; capacity: string } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const [done, setDone] = useState<string | null>(null)
+
+  async function submit() {
+    if (!draft || academyId === null) return
+    setBusy(true)
+    setErr(null)
+    try {
+      const cap = draft.capacity.trim()
+      const r = await createClass({
+        academyId,
+        year,
+        name: draft.name.trim(),
+        classType: draft.classType,
+        /* 비우면 **정원 없는 반**이 된다. 0 을 보내면 아무도 못 들어가는 반이 된다 */
+        capacity: cap === '' ? undefined : Number(cap),
+      })
+      setDraft(null)
+      setDone(`${r.name} 을(를) 만들었습니다. 담임은 아직 지정되지 않았습니다.`)
+      bumpClasses()
+    } catch (e) {
+      /* 같은 해 같은 이름은 서버가 400 으로 막는다 — 문구가 그대로 쓸 만하다 */
+      setErr(e instanceof ApiError ? e.message : '반을 만들지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
     <>
       <button className="btn" disabled data-soon title="준비 중입니다">
         <Icon name="history" size={14} /> 전년도 반 구성 복사
       </button>
-      <button className="btn pri" disabled data-soon title="반 등록 폼은 다음 단계입니다">
+      <button
+        className="btn pri"
+        disabled={academyId === null}
+        title={academyId === null ? '지점을 먼저 선택하세요' : undefined}
+        onClick={() => {
+          setErr(null)
+          setDraft({ name: '', classType: 'FIXED', capacity: '' })
+        }}
+      >
         <Icon name="plus" size={14} /> 반 등록
       </button>
+
+      {draft && (
+        <Modal
+          title="반 등록"
+          sub={`${year}년 이 지점 기준으로 만듭니다.`}
+          confirmLabel="등록"
+          busy={busy}
+          error={err}
+          confirmDisabled={draft.name.trim() === ''}
+          onConfirm={() => void submit()}
+          onClose={() => setDraft(null)}
+        >
+          <div className="frow">
+            <label className="req">반 이름</label>
+            <div>
+              <input
+                className="inp"
+                placeholder="예: N수 1반"
+                maxLength={30}
+                value={draft.name}
+                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+              />
+              <div className="hint">같은 해에 같은 이름은 만들 수 없습니다.</div>
+            </div>
+          </div>
+          <div className="frow">
+            <label className="req">반 종류</label>
+            <div>
+              <select
+                className="sel"
+                value={draft.classType}
+                onChange={(e) => setDraft({ ...draft, classType: e.target.value as ClassType })}
+              >
+                <option value="FIXED">고정반</option>
+                <option value="MOVING">이동반</option>
+              </select>
+              <div className="hint">
+                학생이 소속되는 반은 <b>고정반</b>입니다. 이동반은 과목별로 옮겨 다니는 반입니다.
+              </div>
+            </div>
+          </div>
+          <div className="frow">
+            <label>정원</label>
+            <div>
+              <input
+                className="inp"
+                type="number"
+                min={1}
+                placeholder="비우면 정원 없음"
+                value={draft.capacity}
+                onChange={(e) => setDraft({ ...draft, capacity: e.target.value })}
+              />
+              {/* 0 을 넣으면 아무도 못 들어가는 반이 된다 — 비우는 것과 다르다 */}
+              <div className="hint">비워 두면 정원을 두지 않습니다. 정원을 넘겨 배정하는 것도 됩니다.</div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {done && (
+        <Modal title="반을 만들었습니다" hideCancel confirmLabel="닫기" onConfirm={() => setDone(null)} onClose={() => setDone(null)}>
+          <div style={{ fontSize: 13.5 }}>{done}</div>
+        </Modal>
+      )}
     </>
-  ),
+  )
+}
+
+export const classAssignMockup: Mockup = {
+  Content,
+  actions: <ClassActions />,
 }

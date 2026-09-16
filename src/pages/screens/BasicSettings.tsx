@@ -215,7 +215,8 @@ const MASTERS: MasterDef[] = [
     copyOrder: 4,
     load: async (a, y) => {
       const list = await listClasses(y, a)
-      return list.map((c) => ({ id: c.id, name: c.name, memberCount: c.memberCount }))
+      /* memberCount 는 목록에서만 채워진다. 단건 응답은 null 이라 undefined 로 맞춰 둔다 */
+      return list.map((c) => ({ id: c.id, name: c.name, memberCount: c.memberCount ?? undefined }))
     },
     extra: {
       key: 'memberCount',
