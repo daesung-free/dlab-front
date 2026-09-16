@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, NavLink, useLocation, useParams } from 'react-router-dom'
 import { findScreen } from '../data/menu'
 import { NAV, findNavCat, navCatOfScreen, navItemCount, navPath, type NavItem } from '../data/nav'
@@ -6,9 +6,12 @@ import { TODOS } from '../data/mockDashboard'
 import { Icon } from '../components/Icon'
 import { useAcademy } from '../auth/AcademyContext'
 import { useAuth } from '../auth/AuthContext'
-import { canSeeScreen, hasMenuCode } from '../data/menuCodes'
+import { canSeeScreen, hasMenuCode, screenOfMenuCode } from '../data/menuCodes'
+import { listMyFavorites, saveMyFavorites, listMenuCatalog, type MenuNode } from '../api/menus'
+import { Modal } from '../components/common'
 import { useServerData } from '../components/common'
 import { fetchAttendanceBoard } from '../api/attendance'
+import { ApiError } from '../api/client'
 
 /** UTC 로 만들면 오전에 하루가 밀린다 — 오늘 요약이라 로컬 날짜여야 한다 */
 function today(): Date {
@@ -27,6 +30,122 @@ const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토']
  * ★ 요약 숫자는 **실제 출결**이다. 전에는 목업(재원생 296명·5월 28일)이 박혀 있었는데,
  *   사이드바라 전 화면에 같이 떠서 실데이터 옆에 가짜 숫자가 나란히 보였다.
  */
+
+/** 자주 쓰는 메뉴는 최대 8개다(서버 제약) */
+const FAVORITE_MAX = 8
+
+/**
+ * 자주 쓰는 메뉴 고르기.
+ *
+ * ★ **화면이 아니라 업무 영역(코드) 단위다.** 서버가 코드로 저장하기 때문이다 —
+ *   그래서 '학생 검색' 과 '신규 접수 등록' 을 따로 담을 수 없고 '학생 관리' 하나가 된다.
+ *   화면이 없는 코드(서버 API 전용)는 아예 안 보여준다 — 눌러도 갈 데가 없다.
+ * ★ **고른 순서가 화면 순서다.** 그래서 목록이 아니라 고른 차례를 그대로 보여준다.
+ */
+function FavoriteModal({
+  current,
+  allowedMenus,
+  onClose,
+  onSaved,
+}: {
+  current: MenuNode[]
+  allowedMenus: Set<string> | null
+  onClose: () => void
+  onSaved: (next: MenuNode[]) => void
+}) {
+  const [catalog, setCatalog] = useState<MenuNode[] | null>(null)
+  const [picked, setPicked] = useState<string[]>(current.map((m) => m.code))
+  const [err, setErr] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    listMenuCatalog()
+      .then((list) => alive && setCatalog(list))
+      .catch(() => alive && setErr('메뉴 목록을 불러오지 못했습니다.'))
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  /* 갈 수 있는 곳만 남긴다 — 화면이 있는 코드 + 내 권한으로 볼 수 있는 것 */
+  const options = (catalog ?? []).filter((m) => {
+    const id = screenOfMenuCode(m.code)
+    return id !== null && canSeeScreen(id, allowedMenus)
+  })
+  const byCode = new Map(options.map((m) => [m.code, m]))
+
+  function toggle(code: string) {
+    setErr(null)
+    if (picked.includes(code)) {
+      setPicked(picked.filter((c) => c !== code))
+      return
+    }
+    if (picked.length >= FAVORITE_MAX) {
+      setErr(`최대 ${FAVORITE_MAX}개까지 고를 수 있습니다. 하나를 빼고 다시 고르세요.`)
+      return
+    }
+    setPicked([...picked, code])
+  }
+
+  return (
+    <Modal
+      wide
+      title="자주 쓰는 메뉴"
+      sub={`대시보드 왼쪽에 둘 메뉴를 고릅니다. 고른 순서대로 놓입니다 (최대 ${FAVORITE_MAX}개).`}
+      confirmLabel="저장"
+      busy={busy}
+      error={err}
+      onConfirm={() => {
+        setBusy(true)
+        setErr(null)
+        void saveMyFavorites(picked)
+          .then((next) => onSaved(next))
+          .catch((e) => setErr(e instanceof ApiError ? e.message : '저장하지 못했습니다.'))
+          .finally(() => setBusy(false))
+      }}
+      onClose={onClose}
+    >
+      {catalog === null ? (
+        <div style={{ padding: 18, color: 'var(--muted)' }}>불러오는 중…</div>
+      ) : (
+        <>
+          <div className="note-box" style={{ marginBottom: 10 }}>
+            <div>
+              {picked.length === 0 ? (
+                <>하나도 안 고르면 <b>기본 목록</b>이 그대로 보입니다.</>
+              ) : (
+                <>
+                  {/* HTML 은 연속 공백을 하나로 줄인다 — 가운뎃점으로 끊어야 항목이 안 붙는다 */}
+                  고른 순서: {picked.map((c, i) => `${i + 1}. ${byCode.get(c)?.name ?? c}`).join(' · ')}
+                </>
+              )}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 360, overflow: 'auto' }}>
+            {options.map((m) => {
+              const at = picked.indexOf(m.code)
+              return (
+                <button
+                  key={m.code}
+                  type="button"
+                  className={`btn${at >= 0 ? ' pri' : ''}`}
+                  style={{ fontSize: 12, padding: '5px 10px' }}
+                  onClick={() => toggle(m.code)}
+                >
+                  {at >= 0 && <b style={{ marginRight: 4 }}>{at + 1}</b>}
+                  {m.name}
+                </button>
+              )
+            })}
+          </div>
+        </>
+      )}
+    </Modal>
+  )
+}
+
 function DashboardSide() {
   const { academyId, academies } = useAcademy()
   const { allowedMenus } = useAuth()
@@ -51,16 +170,42 @@ function DashboardSide() {
     errorMessage: '오늘 출결을 불러오지 못했습니다.',
   })
   const summary = board.data?.summary
-  /* ★ 바로가기도 같이 거른다. 좌측 메뉴에서만 감추면 대시보드에는 남아 있어,
-        눌렀을 때 대시보드로 되튕긴다(ScreenPage 가 막는다) */
-  const quick = [
+  /* 아직 안 고른 사람에게 보여줄 기본값. 서버에 저장된 것이 없으면 이걸 쓴다 —
+     빈 칸으로 두면 "고장난 것" 으로 읽힌다 */
+  const DEFAULT_QUICK = [
     { id: 'student-search', icon: 'search', label: '학생 검색' },
     { id: 'attendance', icon: 'scan-line', label: '출결 현황' },
     { id: 'student-absence', icon: 'check-check', label: '사유 승인' },
     { id: 'consult', icon: 'message-square', label: '상담일지' },
     { id: 'message-send', icon: 'send', label: '알림 발송' },
     { id: 'payment', icon: 'receipt', label: '수납현황' },
-  ].filter((q) => canSeeScreen(q.id, allowedMenus))
+  ]
+
+  /* 자주 쓰는 메뉴 — 본인이 고른다. 못 읽으면 null 로 두고 기본값을 쓴다 */
+  const [favorites, setFavorites] = useState<MenuNode[] | null>(null)
+  const [editing, setEditing] = useState(false)
+  useEffect(() => {
+    let alive = true
+    listMyFavorites()
+      .then((list) => alive && setFavorites(list))
+      .catch(() => alive && setFavorites(null))
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  /* ★ 바로가기도 같이 거른다. 좌측 메뉴에서만 감추면 대시보드에는 남아 있어,
+        눌렀을 때 대시보드로 되튕긴다(ScreenPage 가 막는다) */
+  const quick = (
+    favorites !== null && favorites.length > 0
+      ? favorites
+          .map((m) => {
+            const id = screenOfMenuCode(m.code)
+            return id === null ? null : { id, icon: findScreen(id)?.icon ?? 'circle-dot', label: m.name }
+          })
+          .filter((q): q is { id: string; icon: string; label: string } => q !== null)
+      : DEFAULT_QUICK
+  ).filter((q) => canSeeScreen(q.id, allowedMenus))
 
   return (
     <>
@@ -135,9 +280,42 @@ function DashboardSide() {
       )}
 
       <div style={{ marginTop: 14 }}>
-        <div className="lt" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--muted)', padding: '0 8px 8px' }}>
+        <div
+          className="lt"
+          style={{
+            fontSize: 10.5,
+            fontWeight: 700,
+            color: 'var(--muted)',
+            padding: '0 8px 8px',
+            display: 'flex',
+            alignItems: 'center',
+          }}
+        >
           자주 쓰는 메뉴
+          {favorites !== null && favorites.length === 0 && (
+            <span style={{ marginLeft: 5, fontWeight: 400 }}>(기본)</span>
+          )}
+          <button
+            className="icon-btn"
+            style={{ marginLeft: 'auto', width: 20, height: 20 }}
+            title="자주 쓰는 메뉴 고르기"
+            onClick={() => setEditing(true)}
+          >
+            <Icon name="sliders-horizontal" size={12} />
+          </button>
         </div>
+        {editing && (
+          <FavoriteModal
+            current={favorites ?? []}
+            allowedMenus={allowedMenus}
+            onClose={() => setEditing(false)}
+            onSaved={(next) => {
+              setFavorites(next)
+              setEditing(false)
+            }}
+          />
+        )}
+
         <nav className="nav">
           {quick.map((q) => (
             <NavLink key={q.id} to={`/s/${q.id}`} className={({ isActive }) => (isActive ? 'on' : undefined)}>
