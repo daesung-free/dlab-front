@@ -123,7 +123,7 @@ const TEMPLATES: Template[] = [
     body: '[DLab] {학생명} 학생 등록이 가능합니다. {일자} {시각}까지 방문해 주세요.',
     vars: ['학생명', '일자', '시각'],
     updatedAt: '2026-05-22',
-    updatedBy: '최지원',
+    updatedBy: '담임 A',
   },
   {
     id: 't5',
@@ -147,7 +147,7 @@ const TEMPLATES: Template[] = [
     body: '{회차} 성적 리포트가 등록되었습니다. 앱에서 확인하세요.',
     vars: ['회차'],
     updatedAt: '2026-05-11',
-    updatedBy: '이장원',
+    updatedBy: '담임 C',
   },
   {
     id: 't7',
@@ -159,7 +159,7 @@ const TEMPLATES: Template[] = [
     body: '{반} 주간 학습계획이 아직 작성되지 않았습니다.',
     vars: ['반'],
     updatedAt: '2026-05-11',
-    updatedBy: '이장원',
+    updatedBy: '담임 C',
   },
   {
     id: 't8',
@@ -175,7 +175,7 @@ const TEMPLATES: Template[] = [
 ]
 
 const SAMPLE: Record<string, string> = {
-  학생명: '이승민',
+  학생명: '학생 F',
   시각: '08:12',
   일자: '2026-05-29',
   반: '3반',
@@ -310,9 +310,9 @@ interface SendLog {
 const LOGS: SendLog[] = [
   { id: 'l1', sentAt: '2026-05-28 08:12', template: '등원 확인', channel: 'ALIMTALK', scope: '출결 자동', targets: 271, success: 269, by: '시스템' },
   { id: 'l2', sentAt: '2026-05-28 09:34', template: '지각 안내', channel: 'ALIMTALK', scope: '출결 자동', targets: 14, success: 14, by: '시스템' },
-  { id: 'l3', sentAt: '2026-05-27 18:00', template: '성적 리포트 등록', channel: 'FCM', scope: '전체', targets: 296, success: 288, by: '이장원' },
-  { id: 'l4', sentAt: '2026-05-27 11:20', template: '직접 입력 (자유 문안)', channel: 'FCM', scope: '3반', targets: 42, success: 39, by: '김유진' },
-  { id: 'l5', sentAt: '2026-05-26 16:45', template: '대기자 순번 안내', channel: 'ALIMTALK', scope: '개별', targets: 7, success: 6, by: '최지원' },
+  { id: 'l3', sentAt: '2026-05-27 18:00', template: '성적 리포트 등록', channel: 'FCM', scope: '전체', targets: 296, success: 288, by: '담임 C' },
+  { id: 'l4', sentAt: '2026-05-27 11:20', template: '직접 입력 (자유 문안)', channel: 'FCM', scope: '3반', targets: 42, success: 39, by: '담임 B' },
+  { id: 'l5', sentAt: '2026-05-26 16:45', template: '대기자 순번 안내', channel: 'ALIMTALK', scope: '개별', targets: 7, success: 6, by: '담임 A' },
   { id: 'l6', sentAt: '2026-05-26 08:11', template: '등원 확인', channel: 'ALIMTALK', scope: '출결 자동', targets: 268, success: 268, by: '시스템' },
 ]
 

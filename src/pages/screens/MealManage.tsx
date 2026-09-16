@@ -197,7 +197,7 @@ interface TagLog {
   handledBy?: string
 }
 
-const STAFF = ['강민서', '정하람', '박서영']
+const STAFF = ['담임 E', '정하람', '담임 D']
 
 const TAG_LOGS: TagLog[] = MOCK_STUDENTS.filter((s) => s.status === '재원')
   .slice(0, 38)

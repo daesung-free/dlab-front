@@ -936,8 +936,9 @@ function Content() {
           <div className="l">
             <Icon name="line-chart" size={13} /> 성적 연동
           </div>
+          {/* ★ 'F-4.6' 은 우리 문서 번호다 — 통계 칸에 화면 코드가 값처럼 들어가 있었다 */}
           <div className="v" style={{ fontSize: 15, paddingTop: 6 }}>
-            F-4.6
+            성적 관리
           </div>
           <div className="d">가채점 → 리포트</div>
         </div>
