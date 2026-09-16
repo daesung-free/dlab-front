@@ -89,12 +89,36 @@ export function Modal({
       if (e.key === 'Escape' && !busy && dismissible) onClose()
     }
     document.addEventListener('keydown', onKey)
-    // 뒤 화면이 같이 스크롤되면 모달이 떠 있는 동안 위치를 잃는다
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+
+    /* 뒤 화면이 같이 스크롤되면 모달이 떠 있는 동안 위치를 잃는다.
+     *
+     * ★ `overflow: hidden` **만** 걸면 안 된다. 문서가 스크롤을 못 하게 되는 순간
+     *   브라우저가 스크롤 위치를 0 으로 깎아버려 **뒤 화면이 맨 위로 튄다** — 표 열 번째
+     *   줄에서 버튼을 눌렀는데 모달 뒤가 갑자기 첫 줄이 되고, 닫아도 안 돌아온다.
+     *   목록이 긴 화면(급식 업체 배정·사용자 관리)에서 눈에 띈다.
+     *   그래서 위치를 음수 top 으로 붙잡아 둔 뒤 닫을 때 그대로 되돌린다.
+     * ★ `overflowY: scroll` 은 스크롤바 자리를 남겨 둔다. 막대가 사라지면서 본문이
+     *   그 너비만큼 옆으로 밀리는 것을 막는다(막대를 항상 띄워 쓰는 환경). */
+    const y = window.scrollY
+    const b = document.body
+    const prev = {
+      position: b.style.position,
+      top: b.style.top,
+      width: b.style.width,
+      overflowY: b.style.overflowY,
+    }
+    b.style.position = 'fixed'
+    b.style.top = `-${y}px`
+    b.style.width = '100%'
+    b.style.overflowY = 'scroll'
+
     return () => {
       document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = prev
+      b.style.position = prev.position
+      b.style.top = prev.top
+      b.style.width = prev.width
+      b.style.overflowY = prev.overflowY
+      window.scrollTo(0, y)
     }
   }, [busy, dismissible, onClose])
 
