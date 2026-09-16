@@ -1,0 +1,67 @@
+/* 독서실 관·구역·좌석 등록 (SeatSetup)
+ *
+ * ★ 상태 뱃지를 meal.css 의 .tag-r 로 쓰지 않는다 — 그쪽은 `.p-meal` 아래로 스코프가
+ *   잡혀 있어 여기서는 아무 스타일도 안 먹는다. 스코프를 풀어 공용으로 올리면
+ *   급식 화면 쪽이 같이 흔들리므로 이 화면 것만 따로 둔다.
+ */
+
+.seat-setup .st-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: var(--line-2);
+  color: var(--muted);
+}
+
+.seat-setup .st-tag.on {
+  background: var(--green-wash);
+  color: var(--green);
+}
+
+/* ── 격자 미리보기 ─────────────────────────────────────────
+ *
+ * ★ 번호가 실제로 어떻게 붙는지 만들기 전에 보여준다. 만든 뒤에 알면
+ *   40석을 지우고 다시 만들어야 한다 — 통로 위치를 한 번에 맞추기는 어렵다.
+ */
+
+.sgp {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-2, #fafbfc);
+  overflow-x: auto;
+}
+
+.sgp-row {
+  display: flex;
+  gap: 4px;
+}
+
+.sgp-cell {
+  flex: 0 0 auto;
+  min-width: 46px;
+  padding: 7px 4px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.sgp-cell:hover {
+  border-color: var(--mint);
+}
+
+/* 통로 — 좌석을 만들지 않는 칸. 눌러서 되돌릴 수 있다는 게 보여야 한다 */
+.sgp-cell.off {
+  background: var(--line-2);
+  border-style: dashed;
+  color: var(--muted);
+}

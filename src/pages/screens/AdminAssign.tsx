@@ -128,7 +128,10 @@ function Content() {
         return
       }
       const layout = await getSeatLayout(target)
-      const areaNm = list.find((a) => a.id === target)?.areaNm ?? '좌석'
+      // ★ 관을 빼면 본관 A 와 별관 A 가 똑같은 이름으로 보인다 — 어느 관에 배정하는지
+      //   모른 채 좌석을 주게 된다
+      const picked = list.find((a) => a.id === target)
+      const areaNm = picked ? `${picked.buildingName} ${picked.areaNm}` : '좌석'
       setBlocks([
         {
           name: areaNm,
@@ -328,7 +331,7 @@ function Content() {
               <select className="sel" style={{ width: 160 }} value={areaId ?? ''} onChange={(e) => setAreaId(Number(e.target.value))}>
                 {areas.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.areaNm}
+                    {a.buildingName} {a.areaNm}
                   </option>
                 ))}
               </select>
