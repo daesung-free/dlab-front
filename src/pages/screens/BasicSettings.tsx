@@ -7,6 +7,34 @@ import { useAcademy } from '../../auth/AcademyContext'
 import { listClasses } from '../../api/classes'
 import { fetchPenaltyItems } from '../../api/penalties'
 import {
+  createSeatArea,
+  createSeatGrid,
+  deleteSeatArea,
+  deleteSeatMaster,
+  listSeatAreas,
+  listSeatMasters,
+  renameSeatArea,
+} from '../../api/facility'
+import {
+  CONSULT_TYPE_LABEL,
+  DAY_TYPE_LABEL,
+  PERIOD_TYPE_LABEL,
+  createAbsenceCategory,
+  createConsultTag,
+  createPeriod,
+  deleteAbsenceCategory,
+  deletePeriod,
+  listAbsenceCategories,
+  listConsultTags,
+  listPeriods,
+  updateAbsenceCategory,
+  updateConsultTag,
+  updatePeriod,
+  type ConsultType,
+  type DayType,
+  type PeriodType,
+} from '../../api/schoolMasters'
+import {
   copyMastersToYear,
   createCourseType,
   createCurriculum,
@@ -105,7 +133,23 @@ interface MasterDef {
    * ★ 예전에는 이걸 `window.prompt` 로 되물었다 — 이름 묻고, 코드 묻고, 할인율 묻고.
    *   대화상자가 뜨는 동안 탭이 멈추고, 마지막에서 취소하면 앞 입력이 통째로 날아갔다.
    */
-  createExtra?: { key: string; label: string; placeholder?: string; required?: boolean; numeric?: boolean }[]
+  createExtra?: {
+    key: string
+    label: string
+    placeholder?: string
+    required?: boolean
+    /** @deprecated `kind: 'number'` 를 쓴다. 기존 선언을 안 깨려고 남겨 둔다 */
+    numeric?: boolean
+    /**
+     * 칸의 종류. 기본은 글자.
+     *
+     * ★ 교시처럼 **시각과 선택값**이 필요한 마스터가 생겨서 더했다. 글자 칸으로 받으면
+     *   `09:00` 을 `9시` 로 적는 사람이 나오고, 서버 enum 은 오타를 400 으로 되돌린다.
+     */
+    kind?: 'text' | 'number' | 'time' | 'select'
+    /** `kind: 'select'` 일 때의 선택지 */
+    options?: { value: string; label: string }[]
+  }[]
   /**
    * 이름(과 `createExtra` 로 선언한 값들)을 고친다.
    *
@@ -358,6 +402,215 @@ const MASTERS: MasterDef[] = [
     remove: deleteLectureCategory,
     has: { memo: true, active: true },
     note: '특강의 세부 유형입니다. 설명회에는 붙지 않습니다. 지점을 비우고 만들면 전 지점 공통이 되는데 본사만 가능합니다.',
+  },
+  {
+    key: 'seat_area',
+    label: '독서실 구역',
+    icon: 'layout-grid',
+    load: async (a) => {
+      const list = await listSeatAreas(a)
+      return list.map((x) => ({ id: x.id, name: x.areaNm, code: x.areaCd, sortOrder: x.sortOrder ?? undefined }))
+    },
+    /* ★ 구역만 만들면 좌석이 0개라 배치도가 빈 채로 남는다 — "등록했는데 아무것도 없다"가
+         된다. 그래서 행·열을 함께 받아 좌석 격자까지 이어 만든다.
+       ★ 좌석 생성이 실패해도 구역은 이미 생겼다. 뭉뚱그리면 다시 눌러 **구역이 두 개**
+         생기므로, 무엇이 됐고 무엇이 안 됐는지 그대로 알린다(CLAUDE.md 4). */
+    create: async (academyId, _y, name, extra) => {
+      const areaCd = (extra?.areaCd ?? '').trim()
+      const rows = Number(extra?.rows ?? '')
+      const columns = Number(extra?.columns ?? '')
+      const prefix = (extra?.seatCdPrefix ?? '').trim()
+      if (!areaCd) throw new Error('구역 코드를 입력하세요.')
+      if (!Number.isInteger(rows) || rows < 1) throw new Error('행 수를 1 이상으로 입력하세요.')
+      if (!Number.isInteger(columns) || columns < 1) throw new Error('열 수를 1 이상으로 입력하세요.')
+      const area = await createSeatArea({ academyId, areaCd, areaNm: name })
+      try {
+        await createSeatGrid({
+          studyAreaId: area.id,
+          rows,
+          columns,
+          seatCdPrefix: prefix || `${areaCd}-`,
+        })
+      } catch (err) {
+        throw new Error(
+          `구역은 만들어졌지만 좌석 ${rows * columns}개를 만들지 못했습니다. ` +
+            `좌석배치 화면에서 이어서 만들어 주세요. (${err instanceof Error ? err.message : ''})`,
+        )
+      }
+      return area
+    },
+    createExtra: [
+      { key: 'areaCd', label: '구역 코드', placeholder: 'A', required: true },
+      { key: 'rows', label: '행 수', placeholder: '5', required: true, kind: 'number' },
+      { key: 'columns', label: '열 수', placeholder: '8', required: true, kind: 'number' },
+      { key: 'seatCdPrefix', label: '좌석번호 접두어', placeholder: 'A-' },
+    ],
+    /* 이름만 고친다. **구역 코드는 등록 후 못 바꾼다** — 키오스크가 그 코드로 좌석을 찾는다 */
+    rename: (id, name) => renameSeatArea(id, name),
+    /* ★ 좌석이 남아 있으면 구역 삭제가 409 다. 격자로 만든 구역은 늘 좌석이 있으므로
+         그냥 부르면 **반드시 실패한다** — 좌석부터 지운다.
+       ★ 일괄 삭제 API 가 없어 한 건씩 나간다. 중간에 끊기면 좌석이 일부만 남으므로
+         몇 개를 못 지웠는지 그대로 알린다(CLAUDE.md 4). */
+    remove: async (id) => {
+      const seats = await listSeatMasters(id)
+      let failed = 0
+      for (const st of seats) {
+        try {
+          await deleteSeatMaster(st.id)
+        } catch {
+          failed += 1
+        }
+      }
+      if (failed > 0) {
+        throw new Error(
+          `좌석 ${seats.length}개 중 ${failed}개를 지우지 못해 구역을 삭제하지 않았습니다. 배정된 학생이 있는지 확인해 주세요.`,
+        )
+      }
+      return deleteSeatArea(id)
+    },
+    has: { code: true },
+    note: '구역 코드는 등록 후 바꿀 수 없습니다 — 키오스크가 이 코드로 좌석을 찾습니다. 구역을 지우면 그 안의 좌석도 함께 사라집니다. 잠시 못 쓰는 자리는 좌석배치 화면에서 사용중지로 두세요.',
+  },
+  {
+    key: 'period',
+    label: '교시',
+    icon: 'clock',
+    load: async (a, y) => {
+      const list = await listPeriods({ academyId: a, year: y })
+      /* ★ 교시 번호는 **요일 구분마다 따로** 매겨진다(평일 1교시와 일요일 1교시가 공존).
+           번호만으로 늘어놓으면 세 요일이 뒤섞여 읽을 수 없다 — 요일을 먼저 묶는다 */
+      const dayOrder: Record<string, number> = { WEEKDAY: 0, SATURDAY: 1, SUNDAY: 2 }
+      const sorted = [...list].sort(
+        (p1, p2) => (dayOrder[p1.dayType] ?? 9) - (dayOrder[p2.dayType] ?? 9) || p1.periodNo - p2.periodNo,
+      )
+      return sorted.map((x) => ({
+        id: x.id,
+        name: x.name ?? `${x.periodNo}교시`,
+        sortOrder: x.periodNo,
+        periodText: `${DAY_TYPE_LABEL[x.dayType]} · ${x.startTime}~${x.endTime} · ${PERIOD_TYPE_LABEL[x.periodType]}`,
+      }))
+    },
+    create: async (academyId, year, name, extra) => {
+      const no = Number(extra?.periodNo ?? '')
+      if (!Number.isInteger(no) || no < 1) throw new Error('교시 번호를 1 이상으로 입력하세요.')
+      const startTime = (extra?.startTime ?? '').trim()
+      const endTime = (extra?.endTime ?? '').trim()
+      if (!startTime || !endTime) throw new Error('시작·종료 시각을 입력하세요.')
+      /* 겹침은 서버가 409 로 막는다(PERIOD_TIME_OVERLAPPED). 화면이 다시 계산하지 않는다 */
+      return createPeriod({
+        academyId,
+        year,
+        dayType: (extra?.dayType || 'WEEKDAY') as DayType,
+        periodNo: no,
+        name,
+        periodType: (extra?.periodType || 'CLASS') as PeriodType,
+        startTime,
+        endTime,
+        /* 0723 확정으로 점심·저녁도 학습계획을 넣을 수 있다 */
+        planable: true,
+        mandatory: false,
+      })
+    },
+    createExtra: [
+      { key: 'periodNo', label: '교시 번호', placeholder: '1', required: true, kind: 'number' },
+      {
+        key: 'dayType',
+        label: '요일 구분',
+        required: true,
+        kind: 'select',
+        options: (Object.keys(DAY_TYPE_LABEL) as DayType[]).map((k) => ({ value: k, label: DAY_TYPE_LABEL[k] })),
+      },
+      {
+        key: 'periodType',
+        label: '종류',
+        required: true,
+        kind: 'select',
+        options: (Object.keys(PERIOD_TYPE_LABEL) as PeriodType[]).map((k) => ({
+          value: k,
+          label: PERIOD_TYPE_LABEL[k],
+        })),
+      },
+      { key: 'startTime', label: '시작 시각', required: true, kind: 'time' },
+      { key: 'endTime', label: '종료 시각', required: true, kind: 'time' },
+    ],
+    rename: (id, name, _row, extra) =>
+      updatePeriod(id, {
+        year: Number(extra?.year ?? new Date().getFullYear()),
+        dayType: (extra?.dayType || 'WEEKDAY') as DayType,
+        periodNo: Number(extra?.periodNo ?? 1),
+        name,
+        periodType: (extra?.periodType || 'CLASS') as PeriodType,
+        startTime: (extra?.startTime ?? '').trim(),
+        endTime: (extra?.endTime ?? '').trim(),
+        planable: true,
+        mandatory: false,
+      }),
+    remove: deletePeriod,
+    extra: {
+      key: 'periodText',
+      header: '시간 · 종류',
+      width: '230px',
+      value: (r) => (r as { periodText?: string }).periodText ?? '-',
+    },
+    note: '식사·휴식으로 등록한 시간은 순공시간에서 빠집니다. 시각이 아니라 이 종류가 기준입니다. 시간이 겹치면 등록되지 않습니다.',
+  },
+  {
+    key: 'absence_category',
+    label: '사유 분류',
+    icon: 'file-text',
+    load: async (a, y) => {
+      const list = await listAbsenceCategories({ academyId: a, year: y })
+      return list.map((x) => ({ id: x.id, name: x.name, sortOrder: x.sortOrder }))
+    },
+    create: (academyId, year, name) => createAbsenceCategory({ academyId, year, name }),
+    rename: (id, name) => updateAbsenceCategory(id, { name }),
+    remove: deleteAbsenceCategory,
+    note: '사유 신청 화면에서 고르는 분류입니다. 병결·가정사처럼 결석을 인정할 근거가 됩니다.',
+  },
+  {
+    key: 'consult_tag',
+    label: '상담 태그',
+    icon: 'tags',
+    load: async (a, y) => {
+      const list = await listConsultTags({ academyId: a, year: y })
+      return list.map((x) => ({
+        id: x.id,
+        name: x.name,
+        active: x.active,
+        sortOrder: x.sortOrder,
+        consultTypeText: x.consultType ? CONSULT_TYPE_LABEL[x.consultType] : '전체',
+      }))
+    },
+    create: (academyId, year, name, extra) =>
+      createConsultTag(academyId, {
+        year,
+        name,
+        consultType: (extra?.consultType || undefined) as ConsultType | undefined,
+      }),
+    createExtra: [
+      {
+        key: 'consultType',
+        label: '상담 종류',
+        kind: 'select',
+        options: (Object.keys(CONSULT_TYPE_LABEL) as ConsultType[]).map((k) => ({
+          value: k,
+          label: CONSULT_TYPE_LABEL[k],
+        })),
+      },
+    ],
+    rename: (id, name, row) => updateConsultTag(id, { name, active: row?.active ?? true }),
+    /* ★ 삭제가 없다(405). 끄기로 대신한다 — 이미 붙은 상담 기록의 태그가 사라지면 안 된다.
+         목록은 기본이 활성만이라, 끄면 화면에서도 사라진다. */
+    remove: async (id) => updateConsultTag(id, { name: '', active: false }),
+    has: { active: true },
+    extra: {
+      key: 'consultTypeText',
+      header: '상담 종류',
+      width: '96px',
+      align: 'center',
+      value: (r) => (r as { consultTypeText?: string }).consultTypeText ?? '-',
+    },
+    note: '태그는 지워지지 않고 꺼집니다 — 이미 붙은 상담 기록에서 사라지면 안 되기 때문입니다.',
   },
 ]
 
@@ -665,16 +918,33 @@ function Content() {
           {(active.createExtra ?? []).map((f) => (
             <div className="frow" key={f.key}>
               <label className={f.required ? 'req' : undefined}>{f.label}</label>
-              <input
-                className="inp"
-                type={f.numeric ? 'number' : 'text'}
-                value={renaming.extra[f.key] ?? ''}
-                placeholder={f.placeholder}
-                maxLength={30}
-                onChange={(e) =>
-                  setRenaming({ ...renaming, extra: { ...renaming.extra, [f.key]: e.target.value } })
-                }
-              />
+              {f.kind === 'select' ? (
+                <select
+                  className="sel"
+                  value={renaming.extra[f.key] ?? ''}
+                  onChange={(e) =>
+                    setRenaming({ ...renaming, extra: { ...renaming.extra, [f.key]: e.target.value } })
+                  }
+                >
+                  <option value="">선택하세요</option>
+                  {(f.options ?? []).map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  className="inp"
+                  type={f.kind === 'time' ? 'time' : f.kind === 'number' || f.numeric ? 'number' : 'text'}
+                  value={renaming.extra[f.key] ?? ''}
+                  placeholder={f.placeholder}
+                  maxLength={f.kind === 'time' ? undefined : 30}
+                  onChange={(e) =>
+                    setRenaming({ ...renaming, extra: { ...renaming.extra, [f.key]: e.target.value } })
+                  }
+                />
+              )}
             </div>
           ))}
         </Modal>
@@ -720,14 +990,29 @@ function Content() {
           {(active.createExtra ?? []).map((f) => (
             <div className="frow" key={f.key}>
               <label className={f.required ? 'req' : undefined}>{f.label}</label>
-              <input
-                className="inp"
-                type={f.numeric ? 'number' : 'text'}
-                value={draft.extra[f.key] ?? ''}
-                placeholder={f.placeholder}
-                maxLength={30}
-                onChange={(e) => setDraft({ ...draft, extra: { ...draft.extra, [f.key]: e.target.value } })}
-              />
+              {f.kind === 'select' ? (
+                <select
+                  className="sel"
+                  value={draft.extra[f.key] ?? ''}
+                  onChange={(e) => setDraft({ ...draft, extra: { ...draft.extra, [f.key]: e.target.value } })}
+                >
+                  <option value="">선택하세요</option>
+                  {(f.options ?? []).map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  className="inp"
+                  type={f.kind === 'time' ? 'time' : f.kind === 'number' || f.numeric ? 'number' : 'text'}
+                  value={draft.extra[f.key] ?? ''}
+                  placeholder={f.placeholder}
+                  maxLength={f.kind === 'time' ? undefined : 30}
+                  onChange={(e) => setDraft({ ...draft, extra: { ...draft.extra, [f.key]: e.target.value } })}
+                />
+              )}
             </div>
           ))}
         </Modal>
