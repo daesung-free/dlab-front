@@ -231,8 +231,8 @@ PATCH /admin/branch-configs/{id}/nebula-device-id   장비 ID 변경     ← 방
 |---|---|---|---|
 | 반 배정 | **반 등록** | `POST /classes` | ✅ 09-16 |
 | 학원생 검색 | 선택 건 반 배정 | `POST /classes/{id}/students/bulk` | ✅ 09-16 |
-| 학원생 검색 | + 신규 접수 등록 | 화면 이동만 | |
-| 설문 관리 | 설문 생성 | `POST /surveys` | |
+| 학원생 검색 | + 신규 접수 등록 | 화면 이동만 | ✅ 09-16 |
+| 설문 관리 | 설문 생성 | `POST /surveys` | ✅ 09-16 — **본문엔 이미 있었고 헤더만 막혀 있었다** |
 | 질의응답 | 타임 개설 | `POST /qna/offline/slots` | |
 | 독서실 | 좌석 재배치 | `POST /seats/bulk` | |
 | 문자 발송 | 발송 이력 | `GET /notification-logs` | |
