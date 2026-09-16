@@ -68,3 +68,19 @@ export function setAccountMenus(accountId: number, menuCodes: string[]): Promise
     body: { menuCodes },
   })
 }
+
+/* ── 자주 쓰는 메뉴 (대시보드 좌측) ─────────────────────────────
+ *
+ * ★ 노출 설정과 **다른 개념이다.** 저건 최고관리자가 정하는 권한이고 이건 본인이 고르는
+ *   편의다. 비어 있으면 아직 안 고른 것이지 "볼 게 없다" 가 아니다.
+ * ★ **보낸 순서가 화면 순서**이고 통째로 교체다. 최대 8개.
+ * ★ 볼 수 없는 메뉴는 서버가 안 담는다 — 눌렀을 때 403 이 나는 칸을 대시보드에 두지 않는다.
+ */
+
+export function listMyFavorites(): Promise<MenuNode[]> {
+  return request<MenuNode[]>('/api/v1/admin/menus/favorites')
+}
+
+export function saveMyFavorites(menuCodes: string[]): Promise<MenuNode[]> {
+  return request<MenuNode[]>('/api/v1/admin/menus/favorites', { method: 'PUT', body: { menuCodes } })
+}

@@ -4,10 +4,14 @@ bad=[]
 for p in sorted(glob.glob('src/**/*.tsx', recursive=True)):
     src=io.open(p,encoding='utf-8').read()
     for m in re.finditer(r'<button\b', src):
-        # 태그 끝까지
+        # 태그 끝까지. ★ `>` 가 JSX 식 안에 있을 수 있다(`at >= 0`, `a > b`) —
+        #   중괄호 깊이를 세지 않으면 거기서 태그가 끊겨 뒤에 있는 onClick 을 못 본다
         i=m.start(); depth=0; j=i
         while j < len(src):
-            if src[j]=='>' and src[j-1]!='=':
+            c=src[j]
+            if c=='{': depth+=1
+            elif c=='}': depth-=1
+            elif c=='>' and depth==0:
                 break
             j+=1
         tag=src[i:j+1]
