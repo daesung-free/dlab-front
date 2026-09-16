@@ -103,6 +103,17 @@ function codesToText(codes: string | null, dict: Record<string, string>): string
     .join(' + ')
 }
 
+/**
+ * 숫자 뒤에 붙는 목적격 조사.
+ *
+ * ★ 숫자를 **소리 내어 읽은 끝소리**로 갈린다 — 2(이)·4(사)·5(오)·9(구)는 받침이 없어 '를',
+ *   나머지는 '을'이다. 0 으로 끝나면 십·백·천이라 받침이 있어 '을'.
+ *   고정으로 '을'을 쓰면 "등급합이 **4을** 넘으면" 처럼 어색해진다(실제로 그랬다).
+ */
+function objParticle(n: number): string {
+  return [2, 4, 5, 9].includes(Math.abs(n) % 10) ? '를' : '을'
+}
+
 /** 기준 한 줄을 사람이 읽는 문장으로. 종류마다 단위가 달라 숫자만으로는 못 읽는다 */
 function ruleText(r: ScholarshipRule): string {
   if (r.ruleType === 'PENALTY_POINT') return `벌점이 ${r.threshold}점을 넘으면`
@@ -113,7 +124,7 @@ function ruleText(r: ScholarshipRule): string {
     r.extraSubjectCode && r.extraMaxGrade != null
       ? ` · ${SUBJECT_LABEL[r.extraSubjectCode] ?? r.extraSubjectCode} ${r.extraMaxGrade}등급 이내`
       : ''
-  return `${subj}${elective} 등급합이 ${r.threshold}을 넘으면${extra}`
+  return `${subj}${elective} 등급합이 ${r.threshold}${objParticle(r.threshold)} 넘으면${extra}`
 }
 
 function Content() {
@@ -150,26 +161,31 @@ function Content() {
     }
     setLoading(true)
     setError(null)
-    try {
-      const [mine, common, ms, rv] = await Promise.all([
-        listScholarshipRules({ academyId, year }),
-        /* 공통 기준은 academyId 를 빼고 부른다 — 지점 것과 다른 목록이다 */
-        listScholarshipRules({ year }),
-        /* ★ `/scholarship-masters?academyId=8` 은 **그 지점이 직접 만든 것만** 준다 —
-             전 지점 공통 장학이 빠져서 실측 0건이었다. `/selectable` 이 "그 지점에서
-             고를 수 있는" 목록이고 공통까지 포함한다. 드롭다운은 이쪽을 쓴다. */
-        listSelectableScholarships(year, academyId),
-        listScholarshipReviews({ academyId, year }),
-      ])
-      setRules(mine)
-      setCommonRules(common)
-      setMasters(ms)
-      setReviews(rv)
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : '장학 기준을 불러오지 못했습니다.')
-    } finally {
-      setLoading(false)
+    /* ★ `Promise.all` 로 묶으면 **하나만 실패해도 넷 다 날아간다.** 검토 목록이 안 와도
+         기준은 보여줄 수 있어야 한다 — 서로 다른 엔드포인트다. allSettled 로 받는다. */
+    const [mine, common, ms, rv] = await Promise.allSettled([
+      listScholarshipRules({ academyId, year }),
+      /* 공통 기준은 academyId 를 빼고 부른다 — 지점 것과 다른 목록이다 */
+      listScholarshipRules({ year }),
+      /* ★ `/scholarship-masters?academyId=8` 은 **그 지점이 직접 만든 것만** 준다 —
+           전 지점 공통 장학이 빠져서 실측 0건이었다. `/selectable` 이 "그 지점에서
+           고를 수 있는" 목록이고 공통까지 포함한다. 드롭다운은 이쪽을 쓴다. */
+      listSelectableScholarships(year, academyId),
+      listScholarshipReviews({ academyId, year }),
+    ])
+    setRules(mine.status === 'fulfilled' ? mine.value : [])
+    setCommonRules(common.status === 'fulfilled' ? common.value : [])
+    setMasters(ms.status === 'fulfilled' ? ms.value : [])
+    setReviews(rv.status === 'fulfilled' ? rv.value : [])
+
+    /* 실패한 것이 있으면 첫 이유를 그대로 띄운다. 서버가 안 떠 있으면
+       "서버에 연결하지 못했습니다" 가 나와 **빈 목록과 구분된다** */
+    const failed = [mine, common, ms, rv].find((r) => r.status === 'rejected')
+    if (failed && failed.status === 'rejected') {
+      const e = failed.reason
+      setError(e instanceof ApiError ? e.message : '장학 기준을 불러오지 못했습니다.')
     }
+    setLoading(false)
   }, [academyId, year])
 
   useEffect(() => {
@@ -419,6 +435,12 @@ function Content() {
         </div>
       </div>
 
+      {/* 지점을 못 고른 상태를 먼저 말한다. 다른 화면과 같은 문구를 쓴다 —
+          이 상태에서는 목록이 비는 것이 정상이고, 버튼이 잠긴 것도 그래서다 */}
+      {academyId === null && (
+        <div className="note-box">지점을 먼저 선택하세요. 장학 기준은 지점 단위로 관리합니다.</div>
+      )}
+
       {error && (
         <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
           {error}
@@ -450,43 +472,89 @@ function Content() {
         <div className="card-sec-b">
           {tab === 'rules' ? (
             <>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
-                <button
-                  className="btn pri"
-                  disabled={academyId === null}
-                  onClick={() => {
-                    setDraftErr(null)
-                    setDraft(EMPTY_RULE)
-                  }}
-                >
-                  <Icon name="plus" size={14} /> 기준 추가
-                </button>
+              {/* 다른 화면의 표 머리(.dt-toolbar)와 같은 줄을 쓴다 — 버튼만 오른쪽에 띄워 두면
+                   왼쪽이 비어 한 줄이 통째로 빈 띠처럼 보이고, 아래 목록과 선이 안 맞는다 */}
+              {/* ★ `.dt-toolbar` 는 아래 테두리를 긋는다. 바로 밑 제목 줄도 긋고 있어서
+                     선이 둘 겹쳐 보였다 — 여기서는 지운다 */}
+              <div
+                className="dt-toolbar"
+                style={{ padding: '0 0 12px', marginBottom: 18, borderBottomColor: 'var(--line)' }}
+              >
+                <span className="dt-count">
+                  기준 <b>{rules.length + commonRules.length}</b>건 · 켜짐{' '}
+                  <b>{[...rules, ...commonRules].filter((r) => r.active).length}</b>건
+                </span>
+                <div className="dt-right">
+                  {/* ★ 막아두면 **왜 막혔는지 함께 적는다**(CLAUDE.md 5-1). 이유 없이 회색이면
+                         고장으로 읽힌다 — 실제로 "기준 추가가 꺼져 있다"는 지적을 받았다 */}
+                  <button
+                    className="btn pri"
+                    disabled={academyId === null}
+                    title={academyId === null ? '지점을 먼저 선택하세요' : undefined}
+                    onClick={() => {
+                      setDraftErr(null)
+                      setDraft(EMPTY_RULE)
+                    }}
+                  >
+                    <Icon name="plus" size={14} /> 기준 추가
+                  </button>
+                </div>
               </div>
 
               {loading && <div className="hint">불러오는 중…</div>}
-              {!loading && grouped.length === 0 && <div className="hint">등록된 취소 기준이 없습니다.</div>}
 
-              {grouped.map((g) => (
-                <div key={g.key} className="card-sec" style={{ marginBottom: 14 }}>
-                  <div className="card-sec-h">
-                    <div className="t">
-                      <span className="ico">
-                        <Icon name="award" size={15} />
-                      </span>
-                      {g.name}
+              {/* ★ 빈 목록에 "없습니다" 한 줄만 두지 않는다. 처음 여는 사람은 **무엇을 해야
+                     하는지** 모르고, 서버가 안 뜬 것인지 정말 없는 것인지도 구분이 안 된다.
+                     오류가 났으면 위 배너가 이미 말하므로 여기서는 할 일만 적는다. */}
+              {!loading && grouped.length === 0 && error === null && academyId !== null && (
+                <div className="note-box" style={{ marginTop: 4 }}>
+                  <div className="ic">
+                    <Icon name="award" size={17} />
+                  </div>
+                  <div>
+                    <div className="tt">아직 취소 기준이 없습니다</div>
+                    <div className="tx">
+                      기준을 만들어 두면 학기마다 <b>판정 실행</b>으로 대상을 찾을 수 있습니다.
+                      보통 이렇게 씁니다 —
+                      <br />
+                      <b>벌점 누적</b> 40점을 넘으면 · <b>등급합</b>이 기준을 넘으면 ·{' '}
+                      <b>모의고사</b>를 몇 회 결시하면
+                      <br />
+                      만든 기준은 <b>꺼진 채</b>로 시작하니, 확인하고 켜면 됩니다.
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ★ 카드(.card-sec)를 쓰지 않는다. 이 블록 자체가 이미 카드 안이라 카드 속 카드가
+                     되어 그림자·모서리가 겹치고 들여쓰기가 어긋나 보였다 — 제목 줄 + 목록으로 둔다 */}
+              {grouped.map((g) => (
+                <section key={g.key} style={{ marginBottom: 20 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      flexWrap: 'wrap',
+                      paddingBottom: 6,
+                    }}
+                  >
+                    <span style={{ color: 'var(--mint-d)', display: 'flex' }}>
+                      <Icon name="award" size={15} />
+                    </span>
+                    <b style={{ fontSize: 13.5 }}>{g.name}</b>
                     {g.alts.length > 1 && (
                       /* ★ OR 이라는 것을 반드시 적는다. 안 적으면 둘 다 만족해야 하는 줄 안다 */
-                      <div className="r">
-                        <span className="mk supplement">아래 {g.alts.length}가지 중 하나만 만족하면 유지</span>
-                      </div>
+                      <span className="mk supplement" style={{ marginLeft: 'auto' }}>
+                        아래 {g.alts.length}가지 중 하나만 만족하면 유지
+                      </span>
                     )}
                   </div>
-                  <div className="card-sec-b">
+                  <div>
                     {g.alts.map(([groupNo, list]) => (
                       <div key={groupNo} style={{ marginBottom: 10 }}>
                         {g.alts.length > 1 && (
-                          <div style={{ fontSize: 11.5, color: 'var(--muted)', marginBottom: 4 }}>
+                          <div style={{ fontSize: 11.5, color: 'var(--muted)', margin: '10px 0 2px' }}>
                             대안 {groupNo}
                           </div>
                         )}
@@ -555,7 +623,7 @@ function Content() {
                       </div>
                     ))}
                   </div>
-                </div>
+                </section>
               ))}
             </>
           ) : (
@@ -573,7 +641,12 @@ function Content() {
               }
               toolbar={
                 <>
-                  <button className="btn pri" disabled={busy || academyId === null} onClick={() => void runJudge()}>
+                  <button
+                    className="btn pri"
+                    disabled={busy || academyId === null}
+                    title={academyId === null ? '지점을 먼저 선택하세요' : undefined}
+                    onClick={() => void runJudge()}
+                  >
                     <Icon name="scan-line" size={14} /> 판정 실행
                   </button>
                   <MaskToggle masked={masked} onChange={setMasked} />

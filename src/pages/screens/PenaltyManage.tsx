@@ -769,7 +769,10 @@ function PenaltyActions() {
           onConfirm={() => setOpen(false)}
           onClose={() => setOpen(false)}
         >
-          <div style={{ overflowX: 'auto' }}>
+          {/* ★ 항목이 14개만 돼도 목록이 모달 높이를 넘겨 **아래 등록 폼이 화면 밖으로 밀린다.**
+                 모달 전체가 스크롤되면 새 항목을 추가하러 매번 끝까지 내려야 한다 —
+                 목록만 따로 스크롤시키고 폼은 자리에 둔다. */}
+          <div style={{ overflowX: 'auto', maxHeight: 260, overflowY: 'auto' }}>
             <table className="dt">
               <thead>
                 <tr>
@@ -881,10 +884,12 @@ function PenaltyActions() {
           </div>
 
           {/* ── 자동 부여 규칙 ── */}
-          {/* ★ .frow 는 112px + 1fr 2열이다. 라벨 말고는 **한 칸**에 담는다 —
-                 셋째 자식부터 라벨 칸으로 떨어져 글자가 세로로 눌린다(2026-09-14) */}
-          <div className="frow">
-            <label>자동 부여 규칙</label>
+          {/* ★ `.frow` 안에 두지 않는다. 표가 1fr 칸(모달 폭 − 112px)에 갇혀 글자가
+                 세로로 눌린다 — 표는 라벨 옆이 아니라 **전체 폭**을 써야 읽힌다 */}
+          <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-2)', marginBottom: 8 }}>
+              자동 부여 규칙
+            </div>
             <div>
               {rules === null || rules.length === 0 ? (
                 <div className="hint">등록된 자동 부여 규칙이 없습니다.</div>

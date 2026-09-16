@@ -487,7 +487,9 @@ const MASTERS: MasterDef[] = [
         id: x.id,
         name: x.name ?? `${x.periodNo}교시`,
         sortOrder: x.periodNo,
-        periodText: `${DAY_TYPE_LABEL[x.dayType]} · ${x.startTime}~${x.endTime} · ${PERIOD_TYPE_LABEL[x.periodType]}`,
+        /* ★ 서버는 `HH:mm:ss` 로 준다. 초까지 찍으면 "13:10:00~14:20:00" 이라 칸을 넘겨
+             두 줄로 깨지고, 교시에 초가 의미도 없다 — 앞 5글자만 쓴다 */
+        periodText: `${DAY_TYPE_LABEL[x.dayType]} · ${x.startTime.slice(0, 5)}~${x.endTime.slice(0, 5)} · ${PERIOD_TYPE_LABEL[x.periodType]}`,
       }))
     },
     create: async (academyId, year, name, extra) => {
@@ -549,7 +551,7 @@ const MASTERS: MasterDef[] = [
     extra: {
       key: 'periodText',
       header: '시간 · 종류',
-      width: '230px',
+      width: '200px',
       value: (r) => (r as { periodText?: string }).periodText ?? '-',
     },
     note: '식사·휴식으로 등록한 시간은 순공시간에서 빠집니다. 시각이 아니라 이 종류가 기준입니다. 시간이 겹치면 등록되지 않습니다.',
