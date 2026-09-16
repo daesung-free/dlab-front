@@ -1,6 +1,7 @@
 import type { Mockup } from './types'
 /* Phase 0 */
 import { adminUserMockup } from './AdminUser'
+import { mealVendorMockup } from './MealVendor'
 /* Phase 1 */
 import { studentSearchMockup } from './StudentSearch'
 import { penaltyMockup } from './PenaltyManage'
@@ -52,6 +53,7 @@ import { appManageMockup } from './AppManage'
 export const MOCKUPS: Record<string, Mockup> = {
   /* ── Phase 0 (선행 인프라) ── */
   'admin-user': adminUserMockup, // F-4.10-2 사용자 관리 (RBAC 5단계)
+  'admin-meal-vendor': mealVendorMockup, // F-4.5 부속 급식 업체·지점 배정
 
   /* ── Phase 1 (MVP) ── */
   'student-search': studentSearchMockup, // F-4.1-1 학원생 검색·조회
