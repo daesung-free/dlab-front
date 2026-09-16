@@ -35,8 +35,17 @@ export function releaseLocker(lockerId: number): Promise<void> {
 
 export interface SeatArea {
   id: number
+  /** 키오스크가 이 코드로 좌석을 찾는다. **등록 후 못 바꾼다** */
   areaCd: string
   areaNm: string
+  sortOrder: number | null
+  active: boolean
+  /** `STUDY`(독서실) / `CLASSROOM`(반 교실). ★ 반 좌석표는 아직 설계 전이라 화면은 STUDY 만 만든다 */
+  areaType: 'STUDY' | 'CLASSROOM'
+  /** `CLASSROOM` 일 때만 채워진다 */
+  classMasterId: number | null
+  className: string | null
+  /** 이 구역에 만들어진 좌석 수. **0 이면 배치도가 빈 채로 남는다** */
   seatCount: number
 }
 
@@ -102,4 +111,92 @@ export function releaseSeatOfStudent(enrollmentId: number): Promise<void> {
 /** 좌석 사용중지/해제. 설비 문제로 못 쓰는 자리를 도면에서 빼는 용도 */
 export function setSeatUsable(seatId: number, usable: boolean): Promise<void> {
   return request<void>(`/api/v1/admin/seats/${seatId}/usable`, { method: 'PATCH', query: { usable } })
+}
+
+/* ─────────── 구역 · 좌석 등록 (기초 관리 탭) ─────────── */
+
+/**
+ * 자습 구역 생성.
+ *
+ * ★ **구역만 만들면 좌석이 0개다.** 배치도가 빈 채로 남아서 "등록했는데 아무것도 없다"가
+ *   된다. 등록 폼에서 행·열을 함께 받아 `createSeatGrid` 까지 이어 부른다 —
+ *   `grid` 가 그래서 있다.
+ *
+ * ★ `areaCd` 는 **등록 후 못 바꾼다.** 키오스크가 이 코드로 좌석을 조회한다.
+ *
+ * ★ `areaType` 은 `STUDY`(독서실, 기본) / `CLASSROOM`(반 교실)이다. 반 교실이면
+ *   `classMasterId` 가 필수인데, **반 좌석표는 아직 설계 전이라 화면은 STUDY 만 만든다.**
+ */
+export function createSeatArea(body: {
+  academyId: number
+  /** 등록 후 변경 불가 */
+  areaCd: string
+  areaNm: string
+  sortOrder?: number
+}): Promise<SeatArea> {
+  return request<SeatArea>('/api/v1/admin/seats/areas', { method: 'POST', body: { ...body, areaType: 'STUDY' } })
+}
+
+/**
+ * 좌석 격자 일괄 생성.
+ *
+ * ★ 좌석에는 **x·y 좌표**가 들어간다. 배치도를 그리는 근거이고 없으면 화면이 빈다 —
+ *   `startX`·`startY` 기본값이 1 이라 보통은 안 보내도 된다.
+ *
+ * ★ 번호는 `seatCdPrefix` + 일련번호다(`"A-"` → `A-01`). `numberPadding` 기본 2.
+ * ★ `skips` 로 통로처럼 좌석이 없는 칸을 빼면 **번호가 그 칸을 건너뛰고 이어진다.**
+ */
+export function createSeatGrid(body: {
+  studyAreaId: number
+  rows: number
+  columns: number
+  seatCdPrefix: string
+  startNumber?: number
+  numberPadding?: number
+  columnMajor?: boolean
+}): Promise<unknown> {
+  return request<unknown>('/api/v1/admin/seats/masters/grid', { method: 'POST', body })
+}
+
+/**
+ * 구역 삭제.
+ *
+ * ★ **좌석이 남아 있으면 409** — `STUDY_AREA_HAS_SEATS`, "좌석 6개가 남아 있습니다.
+ *   좌석을 먼저 삭제하세요"(2026-09-16 확인). 격자로 만든 구역은 항상 좌석이 있으므로
+ *   **그냥 부르면 반드시 실패한다.** 화면은 좌석부터 지우고 구역을 지운다.
+ *
+ * ★ 고장·공사로 **잠시** 못 쓰는 자리는 지우지 말고 `PATCH /seats/{id}/usable` 로 막는다.
+ *   지우면 배치도에 구멍이 생기고 번호가 어긋난다.
+ */
+export function deleteSeatArea(studyAreaId: number): Promise<void> {
+  return request<void>(`/api/v1/admin/seats/areas/${studyAreaId}`, { method: 'DELETE' })
+}
+
+export function renameSeatArea(studyAreaId: number, areaNm: string): Promise<SeatArea> {
+  return request<SeatArea>(`/api/v1/admin/seats/areas/${studyAreaId}`, { method: 'PATCH', body: { areaNm } })
+}
+
+/**
+ * 구역의 좌석 목록.
+ *
+ * ★ 좌표 필드 이름이 **`xPos`·`yPos`** 다. `x`·`y` 가 아니다 — 이름을 잘못 보면
+ *   전부 `null` 로 읽혀서 "좌표가 안 들어갔다"고 오해하게 된다.
+ */
+export interface SeatMaster {
+  id: number
+  studyAreaId: number
+  seatCd: string
+  seatNm: string
+  xPos: number | null
+  yPos: number | null
+  usable: boolean
+}
+
+/** ★ `studyAreaId` 가 **필수**다. 안 보내면 400 */
+export function listSeatMasters(studyAreaId: number): Promise<SeatMaster[]> {
+  return request<SeatMaster[]>('/api/v1/admin/seats/masters', { query: { studyAreaId } })
+}
+
+export function deleteSeatMaster(seatId: number): Promise<void> {
+  return request<void>(`/api/v1/admin/seats/masters/${seatId}`, { method: 'DELETE' })
 }
