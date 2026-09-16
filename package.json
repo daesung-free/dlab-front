@@ -16,7 +16,7 @@
     "assumptions": "node scripts/gen-assumptions.ts",
     "docs": "npm run handoff && npm run asks && npm run assumptions",
     "api:types": "npx -y openapi-typescript@7 http://localhost:8080/v3/api-docs -o src/api/schema.d.ts",
-    "check:frow": "python3 scripts/check-frow.py && python3 scripts/check-selectable.py && python3 scripts/check-deadbutton.py"
+    "check:frow": "python3 scripts/check-frow.py && python3 scripts/check-selectable.py && python3 scripts/check-deadbutton.py && python3 scripts/check-menucodes.py"
   },
   "dependencies": {
     "lucide-react": "^1.27.0",
