@@ -52,6 +52,8 @@ export const SCREEN_MENU_CODES: Record<string, string[]> = {
 
   /* 급식 */
   meal: ['meal'],
+  /* 업체·단가는 급식 신청과 코드가 다르다 — 서버도 meal-vendor 로 따로 막는다 */
+  'admin-meal-vendor': ['meal-vendor'],
 
   /* 알림 */
   chat: ['notice'],
@@ -106,4 +108,32 @@ export function canSeeScreen(screenId: string, allowed: Set<string> | null): boo
 export function hasMenuCode(code: string, allowed: Set<string> | null): boolean {
   if (allowed === null || allowed.size === 0) return true
   return allowed.has(code)
+}
+
+/**
+ * 메뉴 코드를 눌렀을 때 열 화면.
+ *
+ * ★ 자주 쓰는 메뉴는 **화면이 아니라 업무 영역(코드) 단위로 저장된다.** 그래서 코드 하나가
+ *   화면 여럿을 덮는 경우(`student` → 학생 검색·신규 접수 등록·교무업무 명단) **대표 하나를
+ *   정해야 한다.** 목록 순서에 맡기면 매핑을 손댈 때 링크가 조용히 바뀌므로 여기 적어 둔다.
+ * ★ 여기 없는 코드는 화면이 없는 것(서버 API 전용)이거나 화면이 하나뿐인 것이다 —
+ *   후자는 `SCREEN_MENU_CODES` 에서 거꾸로 찾는다.
+ */
+const CODE_MAIN_SCREEN: Record<string, string> = {
+  student: 'student-search',
+  attendance: 'attendance',
+  seat: 'reading-room',
+  staff: 'admin-user',
+  statistics: 'student-status',
+  lecture: 'lecture',
+}
+
+/** 코드로 열 화면 id. 화면이 없는 코드면 null */
+export function screenOfMenuCode(code: string): string | null {
+  const main = CODE_MAIN_SCREEN[code]
+  if (main !== undefined) return main
+  for (const [screenId, codes] of Object.entries(SCREEN_MENU_CODES)) {
+    if (codes.includes(code)) return screenId
+  }
+  return null
 }
