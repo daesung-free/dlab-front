@@ -103,6 +103,13 @@ export type Presence = 'PRESENT' | 'OUT' | 'ABSENT' | 'EMPTY'
 export interface SeatCell {
   seatId: number
   seatCd: string
+  /**
+   * 키오스크가 이 번호로 좌석을 찾는다. 별관은 관 offset 이 더해진 값이다(1번 → 1001번).
+   *
+   * 화면에 쓰는 것은 `seatCd` 이고 이 값은 **대조용**이다 — "단말에서 이 자리가 안 보인다"는
+   * 문의가 오면 여기부터 확인한다. 안 보여주면 그 대조를 하려고 다른 화면을 열어야 한다.
+   */
+  kioskSeatCd: string
   seatNm: string | null
   /** 배치도 좌표(1-based). 사물함과 달리 좌석은 도면 위치를 서버가 갖고 있다 */
   xPos: number | null
