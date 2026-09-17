@@ -435,6 +435,21 @@ function Content() {
                         <b>{sel.seatCd}</b> · {sel.row}행 {sel.col}열
                       </span>
                     </div>
+                    {/*
+                      데스크가 "단말에서 이 자리가 안 보인다"는 문의를 받는 곳이 이 화면이다.
+                      별관은 키오스크에 내려가는 번호가 밀려 있어(1번 → 1001번) 여기 없으면
+                      대조하려고 「구역·좌석 등록」 탭까지 옮겨가야 한다.
+                    */}
+                    <div className="row">
+                      <span className="k">키오스크 번호</span>
+                      <span className="v">
+                        {sel.kioskSeatCd === sel.seatCd ? (
+                          <span className="muted">{sel.kioskSeatCd} · 좌석번호와 같음</span>
+                        ) : (
+                          <b>{sel.kioskSeatCd}</b>
+                        )}
+                      </span>
+                    </div>
                     <div className="row">
                       <span className="k">상태</span>
                       <span className="v">
