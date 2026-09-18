@@ -671,7 +671,7 @@ function Content() {
               <span className="pm p-own">담임</span> 담당 반 교사
             </span>
             <span>
-              <span className="pm p-read">학부모</span> 앱 푸시 → 승인
+              <span className="pm p-read">학부모</span> 앱 알림 → 승인
             </span>
             <span style={{ color: 'var(--amber)', fontWeight: 700 }}>
               * 정해진 시간 안에 답이 없으면 다음 사람에게 자동으로 넘어갑니다
@@ -736,19 +736,25 @@ function Content() {
               기본 정책
             </div>
           </div>
+          {/* ★ '승인 대기 UI (시안 1/2)' 줄은 지웠다. 정적 HTML 시안을 옮길 때 딸려 온
+                 **작업 흔적**이라 제품에 있을 이유가 없었다 — 클라이언트에게 '시안' 을 고르게
+                 하는 칸이었다(2026-09-18).
+             ★ 남은 셋은 **진짜 설정인데 저장할 서버 경로가 없다.** 지우면 "원래 없던 설정" 이
+                 되어 백엔드에 요청할 것이 조용히 사라지므로(CLAUDE.md 1) 남겨두고 막는다.
+                 값을 바꿀 수 있는 것처럼 두면 바꿔놓고 저장된 줄 안다. */}
           <div className="card-sec-b">
-            <div className="frow">
-              <label>승인 대기 UI</label>
-              <select className="sel" defaultValue="시안 1">
-                <option>시안 1</option>
-                <option>시안 2</option>
-              </select>
+            <div className="note-box">
+              <div>
+                아래 값은 <b>아직 저장되지 않습니다.</b> 지금 동작하는 기준은 왼쪽 표의 항목별
+                설정이고, 여기 정책은 준비되는 대로 열립니다.
+              </div>
             </div>
+
             <div className="frow">
               <label>기본 응답 제한</label>
               <div className="two">
-                <input className="inp" type="number" defaultValue={120} />
-                <select className="sel">
+                <input className="inp" type="number" defaultValue={120} disabled data-soon title="준비 중입니다" />
+                <select className="sel" disabled data-soon title="준비 중입니다">
                   <option>분</option>
                   <option>시간</option>
                 </select>
@@ -757,8 +763,8 @@ function Content() {
             <div className="frow">
               <label>승인자 사전지정</label>
               <div style={{ paddingTop: 9 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
-                  <input type="checkbox" />
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--muted)' }}>
+                  <input type="checkbox" disabled data-soon title="준비 중입니다" />
                   입학 시 학부모 승인자를 미리 지정
                 </label>
               </div>
@@ -766,8 +772,8 @@ function Content() {
             <div className="frow">
               <label>벌점 연계</label>
               <div style={{ paddingTop: 9 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
-                  <input type="checkbox" defaultChecked />
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--muted)' }}>
+                  <input type="checkbox" defaultChecked disabled data-soon title="준비 중입니다" />
                   벌점 확정 후에는 사유 승인 불가
                 </label>
               </div>
