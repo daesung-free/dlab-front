@@ -13,6 +13,16 @@ import {
   type ApprovalItem,
   type ApproverType,
 } from '../../api/approvals'
+import {
+  UNLOCK_STATUS_LABEL,
+  getViolations,
+  listActiveUnlocks,
+  listFirewallRequests,
+  recordViolation,
+  releaseRestriction,
+  type FirewallRow,
+  type ViolationSummary,
+} from '../../api/firewall'
 import type { Mockup } from './types'
 import './matrix.css'
 import '../../styles/forms.css'
@@ -45,6 +55,351 @@ interface ApprovalItemSaveInput {
   approverType: ApproverType | null
   timeoutMinutes: number | null
   escalationApproverType: ApproverType | null
+}
+
+
+function pad2(n: number): string {
+  return String(n).padStart(2, '0')
+}
+
+function localDateTime(iso: string): string {
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`
+}
+
+function localDate(iso: string): string {
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+}
+
+/** 끝나는 시각까지 남은 분. 이미 지났으면 0 — 음수를 그리면 "-3분" 이 된다 */
+function minutesLeft(endAt: string | null): number {
+  if (endAt === null) return 0
+  return Math.max(0, Math.round((new Date(endAt).getTime() - Date.now()) / 60000))
+}
+
+/* ── 와이파이 해제 · 위반 (계획서 2-10) ──────────────────────────
+ *
+ * 승인·거절은 위 라우팅이 이미 처리한다. 여기는 **그 뒤**다 —
+ * 지금 열려 있는 해제를 보고, 딴 짓하는 것을 적발해 남긴다.
+ *
+ * ★ 위반이 몇 번 쌓이면 제한이 걸리는지 **화면에 적지 않는다.** 지금은 2회에 2주지만
+ *   운영팀이 정한 값이 아니라 바뀔 수 있다(2026-09-18). 서버가 주는 실제 값만 보여준다.
+ */
+function FirewallSection({ academyId }: { academyId: number | null }) {
+  const [active, setActive] = useState<FirewallRow[]>([])
+  const [recent, setRecent] = useState<FirewallRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+  /** 적발 확인 */
+  const [confirm, setConfirm] = useState<FirewallRow | null>(null)
+  /** 학생별 위반 이력 */
+  const [detail, setDetail] = useState<{ row: FirewallRow; sum: ViolationSummary } | null>(null)
+
+  const load = useCallback(async () => {
+    if (academyId === null) {
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    try {
+      const [a, r] = await Promise.all([
+        listActiveUnlocks(academyId),
+        listFirewallRequests({ academyId }),
+      ])
+      setActive(a)
+      setRecent(r)
+      setErr(null)
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : '와이파이 해제 내역을 불러오지 못했습니다.')
+      setActive([])
+      setRecent([])
+    } finally {
+      setLoading(false)
+    }
+  }, [academyId])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  async function openDetail(row: FirewallRow) {
+    setBusy(true)
+    try {
+      setDetail({ row, sum: await getViolations(row.enrollmentId) })
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : '위반 이력을 불러오지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function doRecord(): Promise<boolean> {
+    if (!confirm) return false
+    setBusy(true)
+    try {
+      await recordViolation(confirm.enrollmentId, confirm.id)
+      /* ★ 적발 직후 요약을 다시 읽는다. 이번 건으로 제한이 걸렸는지는 **서버만 안다** —
+           화면이 횟수를 세어 판단하면 규칙이 바뀌는 날 조용히 틀린다 */
+      const sum = await getViolations(confirm.enrollmentId)
+      setNotice(
+        sum.restrictedUntil !== null
+          ? `${confirm.studentName} · 위반 ${sum.count}회로 ${localDate(sum.restrictedUntil)}까지 신청이 제한됩니다.`
+          : `${confirm.studentName} · 위반 ${sum.count}회로 기록했습니다.`,
+      )
+      await load()
+      return true
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : '위반을 기록하지 못했습니다.')
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function doRelease(restrictionId: number, name: string) {
+    setBusy(true)
+    try {
+      await releaseRestriction(restrictionId)
+      setNotice(`${name} 의 신청 제한을 풀었습니다. 적발 기록은 남습니다.`)
+      setDetail(null)
+      await load()
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : '제한을 풀지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const ACTIVE_COLUMNS: Column<FirewallRow>[] = [
+    { key: 'studentName', header: '학생', width: '96px', value: (r) => r.studentName },
+    { key: 'studentNo', header: '학번', width: '104px', value: (r) => r.studentNo },
+    { key: 'reason', header: '사유', value: (r) => r.reason },
+    {
+      key: 'left',
+      header: '남은 시간',
+      width: '96px',
+      align: 'right',
+      /* 서버가 종료 임박순으로 준다 — 화면에서 다시 세지 않고 끝나는 시각만 환산한다 */
+      value: (r) => minutesLeft(r.unlockEndAt),
+      render: (r) => {
+        const m = minutesLeft(r.unlockEndAt)
+        return <b style={{ color: m <= 5 ? 'var(--amber)' : 'var(--ink)' }}>{m}분</b>
+      },
+    },
+    {
+      key: 'act',
+      header: '',
+      width: '150px',
+      align: 'center',
+      value: () => '',
+      render: (r) => (
+        <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+          <button
+            className="btn"
+            style={{ padding: '4px 8px', fontSize: 11.5, whiteSpace: 'nowrap', color: 'var(--red)' }}
+            disabled={busy}
+            onClick={() => setConfirm(r)}
+          >
+            위반 적발
+          </button>
+          <button
+            className="btn"
+            style={{ padding: '4px 8px', fontSize: 11.5, whiteSpace: 'nowrap' }}
+            disabled={busy}
+            onClick={() => void openDetail(r)}
+          >
+            이력
+          </button>
+        </div>
+      ),
+    },
+  ]
+
+  const RECENT_COLUMNS: Column<FirewallRow>[] = [
+    { key: 'requestedAt', header: '신청', width: '128px', sortable: true, value: (r) => localDateTime(r.requestedAt) },
+    { key: 'studentName', header: '학생', width: '92px', value: (r) => r.studentName },
+    { key: 'requestedMinutes', header: '요청', width: '68px', align: 'right', value: (r) => `${r.requestedMinutes}분` },
+    { key: 'reason', header: '사유', value: (r) => r.reason },
+    {
+      key: 'unlockStatus',
+      header: '해제',
+      width: '80px',
+      align: 'center',
+      /* ★ 승인 상태와 다른 축이다. 승인됐어도 시간이 지나면 해제는 끝난다 */
+      value: (r) => UNLOCK_STATUS_LABEL[r.unlockStatus] ?? r.unlockStatus,
+      render: (r) => (
+        <span className={`mk ${r.unlockStatus === 'ACTIVE' ? 'brandnew' : ''}`}>
+          {UNLOCK_STATUS_LABEL[r.unlockStatus] ?? r.unlockStatus}
+        </span>
+      ),
+    },
+    {
+      key: 'act',
+      header: '',
+      width: '150px',
+      align: 'center',
+      value: () => '',
+      /* ★ 적발은 해제중인 건에만 달면 안 된다. 자리를 뜨고 나서 알게 되는 경우가 있고,
+           그때는 이미 시간이 끝나 해제중 목록에서 사라진 뒤다 — 그러면 남길 방법이 없다 */
+      render: (r) => (
+        <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+          <button
+            className="btn"
+            style={{ padding: '4px 8px', fontSize: 11.5, whiteSpace: 'nowrap', color: 'var(--red)' }}
+            disabled={busy}
+            onClick={() => setConfirm(r)}
+          >
+            위반 적발
+          </button>
+          <button
+            className="btn"
+            style={{ padding: '4px 8px', fontSize: 11.5, whiteSpace: 'nowrap' }}
+            disabled={busy}
+            onClick={() => void openDetail(r)}
+          >
+            이력
+          </button>
+        </div>
+      ),
+    },
+  ]
+
+  return (
+    <div className="card-sec">
+      <div className="card-sec-h">
+        <div className="t">
+          <span className="ico">
+            <Icon name="wifi" size={15} />
+          </span>
+          와이파이 해제 · 위반
+        </div>
+        <div className="r">
+          <span className="mk brandnew">지금 해제중 {active.length}</span>
+        </div>
+      </div>
+      <div className="card-sec-b">
+        {err && (
+          <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+            {err}
+          </div>
+        )}
+        {notice && <div className="note-box">{notice}</div>}
+
+        <div className="note-box">
+          <div>
+            신청과 승인은 위 라우팅이 처리합니다. 여기서는 <b>지금 열려 있는 해제</b>를 보고,
+            인강 외 사용을 발견하면 <b>위반으로 남깁니다.</b> 위반이 쌓이면 서버가 신청 제한을 겁니다 —
+            걸린 기간은 학생 이력에서 확인합니다.
+          </div>
+        </div>
+
+        <DataTable
+          columns={ACTIVE_COLUMNS}
+          rows={active}
+          rowKey={(r) => String(r.id)}
+          masked={false}
+          loading={loading}
+          pageSize={8}
+          countLabel={<>지금 해제중 <b>{active.length}</b>건</>}
+          emptyText="지금 열려 있는 해제가 없습니다."
+        />
+
+        <div style={{ marginTop: 16 }}>
+          <DataTable
+            columns={RECENT_COLUMNS}
+            rows={recent}
+            rowKey={(r) => String(r.id)}
+            masked={false}
+            loading={loading}
+            pageSize={8}
+            countLabel={<>신청 이력 <b>{recent.length}</b>건</>}
+            emptyText="신청 이력이 없습니다."
+          />
+        </div>
+      </div>
+
+      {confirm && (
+        <Modal
+          title={`${confirm.studentName} 을(를) 위반으로 남길까요?`}
+          sub="해제를 받아놓고 인강 외 용도로 쓴 것을 기록합니다."
+          confirmLabel="위반 기록"
+          danger
+          busy={busy}
+          onConfirm={() => void doRecord().then((ok) => ok && setConfirm(null))}
+          onClose={() => setConfirm(null)}
+        >
+          <div className="note-box">
+            <div>
+              {/* 임계치를 화면이 말하지 않는다 — 서버가 판단하고, 결과만 받아 적는다 */}
+              위반이 쌓이면 <b>그 자리에서 신청 제한이 걸리고</b>, 지금 해제중이었다면 즉시 차단됩니다.
+              <br />
+              <b>적발 기록은 지울 수 없습니다.</b> 제한만 나중에 풀 수 있습니다.
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {detail && (
+        <Modal
+          wide
+          title={`${detail.row.studentName} 위반 이력`}
+          sub={`학번 ${detail.row.studentNo}`}
+          hideCancel
+          confirmLabel="닫기"
+          onConfirm={() => setDetail(null)}
+          onClose={() => setDetail(null)}
+        >
+          <div className="note-box" style={{ borderColor: detail.sum.restrictedUntil ? 'var(--red)' : undefined }}>
+            <div>
+              위반 <b>{detail.sum.count}회</b>
+              {detail.sum.restrictedUntil === null ? (
+                <> · 지금 걸린 제한은 없습니다.</>
+              ) : (
+                <>
+                  {' '}
+                  · <b>{localDateTime(detail.sum.restrictedUntil)}까지</b> 신청이 제한됩니다.
+                </>
+              )}
+            </div>
+          </div>
+
+          {detail.sum.items.length === 0 ? (
+            <div style={{ padding: 12, color: 'var(--muted)', fontSize: 13 }}>적발된 기록이 없습니다.</div>
+          ) : (
+            <div style={{ display: 'grid', gap: 6 }}>
+              {detail.sum.items.map((v) => (
+                <div
+                  key={v.id}
+                  style={{ display: 'flex', gap: 12, fontSize: 13, borderBottom: '1px solid var(--line)', padding: '6px 0' }}
+                >
+                  <span style={{ color: 'var(--muted)' }}>{localDateTime(v.occurredAt)}</span>
+                  <span style={{ flex: 1 }}>인강 외 사용 적발</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {detail.sum.restrictionId !== null && (
+            <div style={{ marginTop: 12 }}>
+              <button
+                className="btn"
+                style={{ color: 'var(--red)' }}
+                disabled={busy}
+                onClick={() => void doRelease(detail.sum.restrictionId as number, detail.row.studentName)}
+              >
+                <Icon name="undo-2" size={14} /> 신청 제한 풀기
+              </button>
+              {/* 봐주는 버튼이 아니다 — 잘못 눌렀을 때 되돌리는 자리다 */}
+              <div className="hint">잘못 적발한 경우에만 쓰세요. 적발 기록 자체는 남습니다.</div>
+            </div>
+          )}
+        </Modal>
+      )}
+    </div>
+  )
 }
 
 function Content() {
@@ -414,6 +769,8 @@ function Content() {
           </div>
         </div>
       </div>
+
+      <FirewallSection academyId={academyId} />
     </div>
   )
 }
