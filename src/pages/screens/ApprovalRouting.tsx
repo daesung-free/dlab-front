@@ -553,8 +553,14 @@ function Content() {
             승인 항목별 주체 설정
           </div>
           <div className="r">
-            <button className={`chip${escalation ? ' on' : ''}`} onClick={() => setEscalation(!escalation)}>
-              전환 설정 보기
+            {/* ★ 켜고 끄는 버튼은 **지금 누르면 무엇이 되는지**를 써야 한다. 열이 이미 보이는데
+                   '보기' 라고 쓰여 있으면 눌렀을 때 반대로 숨겨져서 고장으로 읽힌다 */}
+            <button
+              className={`chip${escalation ? ' on' : ''}`}
+              title="미응답 시 전환 대상과 기다리는 시간 열을 보여주거나 감춥니다"
+              onClick={() => setEscalation(!escalation)}
+            >
+              전환 열 {escalation ? '숨기기' : '보기'}
             </button>
             {/* 셀을 누르면 그 자리에서 저장된다. 매트릭스에서 '저장' 버튼을 따로 두면
                 무엇이 저장됐는지 알기 어렵다 */}
