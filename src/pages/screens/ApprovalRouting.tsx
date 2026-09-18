@@ -33,12 +33,25 @@ import '../../styles/forms.css'
  * 두 화면은 approval_items / approval_requests 스키마를 공유한다.
  *
  * ⚠ #32 / I-12 (높음) — 항목별 승인 주체 매트릭스 미확정. 방화벽 해제는 특히 미결.
- * ⚠ #40 / I-20 (중)  — 에스컬레이션 응답시간·입학 시 승인자 사전지정, 클라이언트 미확약. */
+ * ⚠ #40 / I-20 (중)  — 미응답 전환 응답시간·입학 시 승인자 사전지정, 클라이언트 미확약.
+ *
+ * ★ 화면 문구에서 개발자 용어를 걷어냈다(2026-09-18, CLAUDE.md 1-1). 아래가 옮겨온 근거다 —
+ *   **지운 것이 아니라 여기로 옮긴 것이니 화면에 되돌리지 말 것.**
+ *
+ *   · 화면의 '미응답 시 전환' 은 서버 필드 `escalationApproverType`(= escalate_to) 이다.
+ *     제한시간은 `timeoutMinutes`(= timeout_min) 다.
+ *   · 승인 주체 3종은 서버 enum `ApproverType` = PARENT · TEACHER · AUTO.
+ *   · 신청 유형 3종은 `RequestType` = ABSENCE_REASON · REGULAR_SCHEDULE · FIREWALL_UNLOCK.
+ *     목업은 10종이었다(API_GAPS 9-2) — 화면에 코드를 병기해 두면 그 차이가 보였지만,
+ *     그건 우리 사정이라 주석으로 내린다.
+ *   · 흐름 5단계의 실제 동작 — ① 앱 신청 시 `approval_requests` 가 생성되고 상태는 대기
+ *     ② `approverType = PARENT` 인 항목은 학부모에게 푸시 ③ `timeoutMinutes` 경과
+ *     ④ `escalationApproverType`(대개 TEACHER) 으로 재라우팅 ⑤ 확정분이 출결·벌점에 반영. */
 
-const APPROVERS: { key: ApproverType; label: string; cls: string; icon: string }[] = [
-  { key: 'PARENT', label: '학부모', cls: 'p-read', icon: 'users' },
-  { key: 'TEACHER', label: '담임', cls: 'p-own', icon: 'user-check' },
-  { key: 'AUTO', label: '자동', cls: 'p-full', icon: 'zap' },
+const APPROVERS: { key: ApproverType; label: string; cls: string; icon: string; desc: string }[] = [
+  { key: 'PARENT', label: '학부모', cls: 'p-read', icon: 'users', desc: '앱 알림으로 승인' },
+  { key: 'TEACHER', label: '담임', cls: 'p-own', icon: 'user-check', desc: '담당 반 교사가 승인' },
+  { key: 'AUTO', label: '자동', cls: 'p-full', icon: 'zap', desc: '조건을 채우면 즉시 승인' },
 ]
 
 const CAT_TONE: Record<string, string> = {
@@ -268,7 +281,9 @@ function FirewallSection({ academyId }: { academyId: number | null }) {
   ]
 
   return (
-    <div className="card-sec">
+    /* ★ 위가 `.split` 이고 그 안 카드는 margin-bottom: 0 이다 — 여백 없이 이어 붙이면
+         바로 위 카드와 테두리가 맞닿아 한 덩어리로 보인다. 다른 섹션 간격(14px)에 맞춘다 */
+    <div className="card-sec" style={{ marginTop: 14 }}>
       <div className="card-sec-h">
         <div className="t">
           <span className="ico">
@@ -507,9 +522,8 @@ function Content() {
               <Icon name={a.icon} size={13} /> {a.label} 승인
             </div>
             <div className="v">{items.filter((i) => i.approverType === a.key).length}</div>
-            <div className="d" style={{ fontFamily: 'ui-monospace, monospace', fontSize: 10 }}>
-              {a.key}
-            </div>
+            {/* 예전에는 여기에 서버 코드(PARENT 등)를 모노스페이스로 찍었다 — 화면에 둘 말이 아니다 */}
+            <div className="d">{a.desc}</div>
           </div>
         ))}
         <div className="stat">
@@ -523,10 +537,10 @@ function Content() {
         </div>
         <div className="stat">
           <div className="l">
-            <Icon name="arrow-right" size={13} /> 에스컬레이션
+            <Icon name="arrow-right" size={13} /> 미응답 시 전환
           </div>
           <div className="v">{items.filter((i) => i.escalationApproverType).length}</div>
-          <div className="d warn">응답시간 미확약</div>
+          <div className="d warn">전환까지 기다리는 시간 미확정</div>
         </div>
       </div>
 
@@ -540,7 +554,7 @@ function Content() {
           </div>
           <div className="r">
             <button className={`chip${escalation ? ' on' : ''}`} onClick={() => setEscalation(!escalation)}>
-              에스컬레이션 열 보기
+              전환 설정 보기
             </button>
             {/* 셀을 누르면 그 자리에서 저장된다. 매트릭스에서 '저장' 버튼을 따로 두면
                 무엇이 저장됐는지 알기 어렵다 */}
@@ -556,22 +570,16 @@ function Content() {
                 <tr>
                   <th className="area">신청 항목</th>
                   <th style={{ width: 90 }}>분류</th>
+                  {/* 영문 코드(PARENT 등)는 뺐다 — 근거는 파일 상단 주석 */}
                   {APPROVERS.map((a) => (
                     <th key={a.key} style={{ width: 100 }}>
                       {a.label}
-                      <span className="rk">{a.key}</span>
                     </th>
                   ))}
                   {escalation && (
                     <>
-                      <th style={{ width: 118 }}>
-                        에스컬레이션
-                        <span className="rk">escalate_to</span>
-                      </th>
-                      <th style={{ width: 110 }}>
-                        응답 제한
-                        <span className="rk">timeout_min</span>
-                      </th>
+                      <th style={{ width: 118 }}>미응답 시 전환</th>
+                      <th style={{ width: 110 }}>기다리는 시간</th>
                     </>
                   )}
                   <th>비고</th>
@@ -580,12 +588,7 @@ function Content() {
               <tbody>
                 {items.map((it) => (
                   <tr key={it.requestType}>
-                    <th className="area">
-                      {REQUEST_TYPE_LABEL[it.requestType]}
-                      <span className="an">
-                        <code style={{ fontSize: 10 }}>{it.requestType}</code>
-                      </span>
-                    </th>
+                    <th className="area">{REQUEST_TYPE_LABEL[it.requestType]}</th>
                     <td>
                       <span className={`mk ${CAT_TONE[REQUEST_TYPE_CATEGORY[it.requestType]] ?? ''}`}>
                         {REQUEST_TYPE_CATEGORY[it.requestType]}
@@ -670,7 +673,9 @@ function Content() {
             <span>
               <span className="pm p-read">학부모</span> 앱 푸시 → 승인
             </span>
-            <span style={{ color: 'var(--amber)', fontWeight: 700 }}>* 응답 제한시간 경과 시 자동 에스컬레이션</span>
+            <span style={{ color: 'var(--amber)', fontWeight: 700 }}>
+              * 정해진 시간 안에 답이 없으면 다음 사람에게 자동으로 넘어갑니다
+            </span>
           </div>
         </div>
       </div>
@@ -682,17 +687,18 @@ function Content() {
               <span className="ico">
                 <Icon name="arrow-right" size={15} />
               </span>
-              에스컬레이션 흐름 (0723 반영)
+              승인이 넘어가는 순서
             </div>
           </div>
           <div className="card-sec-b">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {[
-                { n: 1, t: '학생이 앱에서 신청', d: 'approval_requests 생성 · 상태 대기', c: 'var(--mint)' },
-                { n: 2, t: '학부모에게 푸시', d: 'approver_type = PARENT 인 항목', c: 'var(--blue)' },
-                { n: 3, t: '응답 제한시간 경과', d: '미응답 시 자동 전환 (시간 미확약)', c: 'var(--amber)' },
-                { n: 4, t: '담임에게 재라우팅', d: 'escalate_to = TEACHER', c: 'var(--violet)' },
-                { n: 5, t: '승인 / 반려 확정', d: '출결·벌점에 반영', c: 'var(--green)' },
+                /* 코드·테이블 이름은 파일 상단 주석으로 내렸다(CLAUDE.md 1-1) */
+                { n: 1, t: '학생이 앱에서 신청', d: '승인 대기 상태로 접수됩니다', c: 'var(--mint)' },
+                { n: 2, t: '학부모에게 알림', d: '학부모가 승인하도록 정한 항목만', c: 'var(--blue)' },
+                { n: 3, t: '정해진 시간이 지나면', d: '학부모가 답하지 않은 경우입니다', c: 'var(--amber)' },
+                { n: 4, t: '담임에게 넘어감', d: '항목마다 넘길 사람을 정해둡니다', c: 'var(--violet)' },
+                { n: 5, t: '승인 또는 반려', d: '출결·상벌점에 반영됩니다', c: 'var(--green)' },
               ].map((s) => (
                 <div key={s.n} style={{ display: 'flex', gap: 11, alignItems: 'flex-start' }}>
                   <span
