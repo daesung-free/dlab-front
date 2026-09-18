@@ -173,7 +173,16 @@ export const NAV: NavCat[] = [
       },
       {
         name: '사용자관리',
-        items: [{ screenId: 'admin-user', label: '사용자관리' }],
+        items: [
+          { screenId: 'admin-user', label: '사용자관리' },
+          {
+            screenId: 'admin-branch-config',
+            label: '지점 설정',
+            icon: 'settings',
+            added: true,
+            note: '결제·방화벽·키오스크. 본사 전용',
+          },
+        ],
       },
       {
         name: '배정 · 특강 · 실적',

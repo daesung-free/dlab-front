@@ -2,7 +2,7 @@ import { Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAcademy } from '../auth/AcademyContext'
 import { useAuth } from '../auth/AuthContext'
 import { findScreen } from '../data/menu'
-import { canSeeScreen } from '../data/menuCodes'
+import { canSeeScreenAs } from '../data/menuCodes'
 import { NAV, navCatOfScreen, navSectionOfScreen } from '../data/nav'
 import { PageHead } from '../components/PageHead'
 import { MOCKUPS } from './screens'
@@ -16,7 +16,8 @@ export function ScreenPage() {
   const { screenId } = useParams()
   const [params] = useSearchParams()
   const { academyId, selectable } = useAcademy()
-  const { canSeeAdmin, allowedMenus } = useAuth()
+  const { canSeeAdmin, allowedMenus, principal, me } = useAuth()
+  const isSuper = (me?.roles ?? principal?.roles ?? []).some((r) => r === 'SUPER_ADMIN')
   const s = screenId ? findScreen(screenId) : undefined
   if (!s) return <Navigate to="/" replace />
   /* 메뉴에서 감춰도 주소를 직접 치면 열린다 — 화면 단위로도 같은 판단을 건다 */
@@ -24,7 +25,7 @@ export function ScreenPage() {
   /* ★ 계정별 메뉴 노출. 이건 **보이기 차단일 뿐**이다 — 실제 차단은 서버가 API 단에서 한다.
         아직 목록을 못 읽었으면(null) 막지 않는다. 막아버리면 응답이 늦은 순간
         새로고침한 사람이 자기 화면에서 튕긴다 */
-  if (!canSeeScreen(s.id, allowedMenus)) return <Navigate to="/" replace />
+  if (!canSeeScreenAs(s.id, allowedMenus, isSuper)) return <Navigate to="/" replace />
 
   const mockup = MOCKUPS[s.id]
   if (!mockup) return <Navigate to="/" replace />
