@@ -68,23 +68,33 @@ function Content() {
       /* 지점별 조회가 한 건씩이다 — 일괄 조회 경로가 없다. 지점 수가 11개라 그대로 돈다.
          ★ 배정이 없으면 **오류로 온다**(MEAL_POLICY_NOT_FOUND). 그건 실패가 아니라
             "아직 안 정했다" 이므로 여기서 null 로 받아 넘긴다 */
-      const got = await Promise.all(
+      const got: Row[] = await Promise.all(
         academies.map(async (a) => {
-          const [now, prev] = await Promise.all([
-            getMealVendorAssignment(a.id, year).catch(() => null),
-            getMealVendorAssignment(a.id, year - 1).catch(() => null),
-          ])
-          const row: Row = {
+          const now = await getMealVendorAssignment(a.id, year).catch(() => null)
+          return {
             academyId: a.id,
             academyName: a.acadNm,
             vendorId: now?.vendorId ?? null,
             vendorName: now?.vendorName ?? null,
             unitPrice: now?.unitPrice ?? null,
             deadlineDays: now?.deadlineDays ?? null,
-            lastYear: prev ? { vendorId: prev.vendorId, vendorName: prev.vendorName, unitPrice: prev.unitPrice } : null,
+            lastYear: null,
           }
-          return row
         }),
+      )
+
+      /* ★ 전년도는 **미설정 지점만** 본다. 전 지점을 다 물으면 정상 상태(전부 설정됨)에서도
+           지점 수만큼 404 가 쌓인다 — 자동 점검 리포트에 오류로 올라가고, 정작 봐야 할
+           404 가 그 사이에 묻힌다. 전년도 값을 쓰는 곳은 '작년 그대로 넣기' 뿐이다. */
+      await Promise.all(
+        got
+          .filter((r) => r.vendorId === null)
+          .map(async (r) => {
+            const prev = await getMealVendorAssignment(r.academyId, year - 1).catch(() => null)
+            if (prev) {
+              r.lastYear = { vendorId: prev.vendorId, vendorName: prev.vendorName, unitPrice: prev.unitPrice }
+            }
+          }),
       )
       /* 미설정을 위로 올린다 — 11줄 중 한 줄이 비어 있는 것을 스크롤로 찾게 하지 않는다 */
       got.sort((a, b) => Number(a.vendorId !== null) - Number(b.vendorId !== null))
@@ -191,10 +201,12 @@ function Content() {
              제목만 2025 가 되어 값과 어긋난다 */
         header: `${year - 1}년`,
         width: '150px',
-        value: (r) => (r.lastYear ? `${r.lastYear.vendorName} ${r.lastYear.unitPrice.toLocaleString()}` : '-'),
+        value: (r) => (r.lastYear ? `${r.lastYear.vendorName} ${r.lastYear.unitPrice.toLocaleString()}` : ''),
+        /* ★ 이미 정해진 지점은 전년도를 **묻지 않는다**(위 load 참고). 그 칸에 '-' 를 찍으면
+             "작년에 없었다" 로 읽히므로 비워 둔다. '-' 는 실제로 찾아봤는데 없을 때만이다 */
         render: (r) =>
           r.lastYear === null ? (
-            <span style={{ color: 'var(--muted)' }}>-</span>
+            <span style={{ color: 'var(--muted)' }}>{r.vendorId === null ? '-' : ''}</span>
           ) : (
             <span style={{ color: 'var(--ink-2)', fontSize: 12 }}>
               {r.lastYear.vendorName} · {won(r.lastYear.unitPrice)}
