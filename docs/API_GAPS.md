@@ -2568,3 +2568,54 @@ POST /admin/payment-requests/terminal   ← 서버는 **기록만** 한다
 - SecureVCAT 설치가 **데스크 PC 전제**다 — 지점마다 설치돼 있어야 하고, 안 깔린 PC 에서는
   이 화면이 동작하지 않는다. 그 상태를 화면이 어떻게 알리는지 정해야 한다
 - 이 스크립트는 외부 CDN 이다. 번들에 넣지 않고 그 화면에서만 불러온다
+
+---
+
+# 27부. 지점 설정 (계획서 2-6) — 2026-09-18
+
+```
+GET   /admin/branch-configs                 전 지점. 설정 없는 지점도 빈 행으로 온다
+GET   /admin/branch-configs/{id}            상세 (비밀값은 가려져서 온다)
+GET   /admin/branch-configs/{id}/history    변경 이력
+PATCH /admin/branch-configs/{id}/pg-merchant-code   { value }
+PATCH /admin/branch-configs/{id}/nebula-device-id   { value }
+POST  /admin/branch-configs/{id}/kiosk-credential   재발급
+PUT   /admin/branch-configs/{id}/policy             JSON 통째 교체
+```
+
+## 27-1. 최고관리자 전용이다 ★
+
+**지점 관리자는 자기 지점도 403 이다.** 목록도 상세도 막힌다(확인함). `groupId: 'admin'` 은
+지점 관리자도 보는 칸이라 그것만으로는 부족해서, 화면 쪽에 `superOnly` 플래그를 새로 뒀다
+(`src/data/menu.ts`). 거르는 자리는 3-1 과 같은 네 곳이다.
+
+## 27-2. 빈 값으로 지울 수 없다 ★ (스펙과 실제가 다름)
+
+스펙에는 `minLength: 0` 이라 적혀 있는데 실제로는 거부한다.
+
+```
+PATCH /admin/branch-configs/8/nebula-device-id   {"value":""}
+→ 400 INVALID_REQUEST  "value: 공백일 수 없습니다"     (공백 한 칸도 같다)
+```
+
+**한 번 넣은 값은 다른 값으로 바꾸는 것만 된다.** 잘못 넣어도 되돌릴 수 없다 —
+화면은 빈 값 저장을 막고, 저장 전에 무엇이 깨지는지 먼저 알린다.
+
+> 요청: 값을 비우는 경로(또는 `null` 허용). 오타로 넣은 장비 ID 를 지울 방법이 지금 없다.
+
+## 27-3. 비밀값은 서버가 가려서 준다
+
+`pgMerchantCodeMasked` · `kioskSecretMasked` 로 온다. 원본을 받는 경로는 없다 —
+키오스크는 **재발급만** 되고, 그 `secret` 은 응답에 한 번 실려 오고 끝이다.
+그래서 화면은 "이어서 고치기" 를 만들 수 없고 **전체 재입력**만 받는다.
+
+## 27-4. 이력에 값이 안 남는다
+
+`action` · `detail` · `changedBy`(계정 번호) · `changedAt` 만 온다. 비밀값이라 일부러 그렇다 —
+**"예전 값으로 되돌리기" 를 만들 수 없다.** 사람 이름도 안 와서 화면은 `계정 #1` 로 쓴다.
+
+## 27-5. `policy` 는 읽기만 한다
+
+`Record<string, string>` 자유 형식인데 **키가 확정되지 않았다.** 승인 주체 설정이 여기 붙는다는
+메모가 계획서에 있지만(2-10), 키 이름을 모르는 채로 쓰면 서버와 어긋난다.
+**PUT 이 부분 병합이 아니라 통째 교체**라 잘못 쓰면 남의 키까지 날아간다 — 화면에서 안 건드린다.

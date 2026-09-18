@@ -70,6 +70,14 @@ export interface Screen {
    *   다시 `public/` 으로 옮기지 말 것 — public 은 통째로 배포된다.
    */
   refHtml?: string
+  /**
+   * 본사 계정(SUPER_ADMIN)만 쓸 수 있는 화면인가.
+   *
+   * ★ `groupId: 'admin'` 은 **지점 관리자도 본다.** 그것보다 좁은 칸이 필요해서 따로 둔다 —
+   *   지점 설정은 결제·방화벽·키오스크라 지점 계정에는 서버가 403 을 준다. 메뉴만 띄워두면
+   *   눌러도 아무것도 못 하는 칸이 된다.
+   */
+  superOnly?: boolean
 }
 
 export const GROUPS: Group[] = [
@@ -307,6 +315,18 @@ export const SCREENS: Screen[] = [
     phase: 2,
     feOrder: 3,
     summary: '특강·설명회 기초 설정, 설명회 신청 항목 추가',
+  },
+  {
+    id: 'admin-branch-config',
+    code: 'F-4.10-부속',
+    groupId: 'admin',
+    name: '지점 설정',
+    icon: 'settings',
+    kind: 'verified',
+    phase: 2,
+    feOrder: 4,
+    summary: 'PG 가맹점 코드 · 와이파이 장비 ID · 키오스크 자격증명. 본사 전용',
+    superOnly: true,
   },
   {
     id: 'admin-meal-vendor',

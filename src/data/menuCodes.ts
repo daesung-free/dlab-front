@@ -1,3 +1,4 @@
+import { findScreen } from './menu'
 /* 계정별 메뉴 노출 (F-4.10-2 부속) — 서버 메뉴 코드 ↔ 화면 식별자
  *
  * ★ **두 체계의 단위가 다르다.** 서버는 업무 영역(=API 권한 도메인) 34개, 화면은 40개다.
@@ -54,6 +55,8 @@ export const SCREEN_MENU_CODES: Record<string, string[]> = {
   meal: ['meal'],
   /* 업체·단가는 급식 신청과 코드가 다르다 — 서버도 meal-vendor 로 따로 막는다 */
   'admin-meal-vendor': ['meal-vendor'],
+  /* 결제 사이트코드(pg-site)는 서버 전용이다 — 화면이 부르는 것은 지점 설정 쪽이다 */
+  'admin-branch-config': ['branch-config'],
 
   /* 알림 */
   chat: ['notice'],
@@ -136,4 +139,15 @@ export function screenOfMenuCode(code: string): string | null {
     if (codes.includes(code)) return screenId
   }
   return null
+}
+
+/**
+ * 본사 전용 화면인가 — `menu.ts` 의 `superOnly` 를 읽는다.
+ *
+ * ★ 거르는 자리가 넷이라(좌측 메뉴 · 허브 · 상단 탭 · 주소 직접 진입) 판정을 한 곳에 둔다.
+ *   한 곳만 걸면 나머지에 그대로 남는다 — 3-1 에서 겪은 그대로다.
+ */
+export function canSeeScreenAs(screenId: string, allowed: Set<string> | null, isSuper: boolean): boolean {
+  if (!canSeeScreen(screenId, allowed)) return false
+  return isSuper || findScreen(screenId)?.superOnly !== true
 }
