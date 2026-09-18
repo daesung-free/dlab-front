@@ -628,10 +628,12 @@ function Content() {
                               })
                             }
                           >
+                            {/* ★ 옵션에 '→' 를 붙이지 않는다. 열 제목이 이미 '미응답 시 전환' 이라
+                                   같은 말을 두 번 하고, '없음' 에는 화살표가 없어 줄도 안 맞았다 */}
                             <option value="">없음</option>
                             {APPROVERS.map((a) => (
                               <option key={a.key} value={a.key}>
-                                → {a.label}
+                                {a.label}
                               </option>
                             ))}
                           </select>
