@@ -10,6 +10,8 @@ import {
   reissueKioskCredential,
   setNebulaDeviceId,
   setPgMerchantCode,
+  clearNebulaDeviceId,
+  clearPgMerchantCode,
   type BranchConfig as Row,
   type BranchConfigHistory,
 } from '../../api/branchConfigs'
@@ -37,6 +39,11 @@ function localDateTime(iso: string): string {
 
 type EditKind = 'pg' | 'nebula'
 
+const CLEAR_WARN: Record<EditKind, string> = {
+  pg: '비우면 이 지점 결제가 통째로 멈춥니다.',
+  nebula: '비우면 이 지점 와이파이 해제가 멈춥니다.',
+}
+
 const EDIT_META: Record<EditKind, { title: string; label: string; hint: string; warn: string }> = {
   pg: {
     title: 'PG 가맹점 코드',
@@ -62,7 +69,8 @@ function Content() {
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState<number | null>(null)
 
-  const [edit, setEdit] = useState<{ row: Row; kind: EditKind; value: string } | null>(null)
+  /* clear 면 '값 비우기' — value 에 지금 값을 다시 받는다(서버가 그 값과 같아야 지운다) */
+  const [edit, setEdit] = useState<{ row: Row; kind: EditKind; value: string; clear?: boolean } | null>(null)
   const [modalErr, setModalErr] = useState<string | null>(null)
   const [reissue, setReissue] = useState<Row | null>(null)
   /** 재발급 결과. secret 은 여기서 놓치면 다시 못 본다 */
@@ -106,10 +114,13 @@ function Content() {
     setModalErr(null)
     try {
       const v = edit.value.trim()
-      if (edit.kind === 'pg') await setPgMerchantCode(edit.row.academyId, v)
+      if (edit.clear) {
+        if (edit.kind === 'pg') await clearPgMerchantCode(edit.row.academyId, v)
+        else await clearNebulaDeviceId(edit.row.academyId, v)
+      } else if (edit.kind === 'pg') await setPgMerchantCode(edit.row.academyId, v)
       else await setNebulaDeviceId(edit.row.academyId, v)
       await refreshRow(edit.row.academyId)
-      setNotice(`${edit.row.academyName} · ${EDIT_META[edit.kind].title}를 바꿨습니다.`)
+      setNotice(`${edit.row.academyName} · ${EDIT_META[edit.kind].title}를 ${edit.clear ? '비웠습니다' : '바꿨습니다'}.`)
       return true
     } catch (err) {
       setModalErr(err instanceof ApiError ? err.message : '저장하지 못했습니다.')
@@ -328,9 +339,9 @@ function Content() {
       {/* ── PG 코드 · 장비 ID ── */}
       {edit && (
         <Modal
-          title={`${edit.row.academyName} · ${EDIT_META[edit.kind].title}`}
-          sub={EDIT_META[edit.kind].warn}
-          confirmLabel="저장"
+          title={`${edit.row.academyName} · ${EDIT_META[edit.kind].title}${edit.clear ? ' 비우기' : ''}`}
+          sub={edit.clear ? CLEAR_WARN[edit.kind] : EDIT_META[edit.kind].warn}
+          confirmLabel={edit.clear ? '비우기' : '저장'}
           danger
           busy={busy === edit.row.academyId}
           /* ★ 빈 값은 서버가 거부한다(스펙엔 minLength 0 인데 실제로는 400) */
@@ -340,7 +351,7 @@ function Content() {
           onClose={() => setEdit(null)}
         >
           <div className="frow">
-            <label>{EDIT_META[edit.kind].label}</label>
+            <label>{edit.clear ? '지금 값' : EDIT_META[edit.kind].label}</label>
             <div>
               <input
                 className="inp"
@@ -349,9 +360,29 @@ function Content() {
                 onChange={(e) => setEdit({ ...edit, value: e.target.value })}
               />
               <div className="hint">
-                {EDIT_META[edit.kind].hint} <b>한 번 넣으면 지울 수 없습니다</b> — 다른 값으로 바꾸는
-                것만 됩니다.
+                {edit.clear ? (
+                  <>
+                    실수로 지우지 않도록 <b>지금 값을 그대로</b> 적어야 지워집니다.
+                    {edit.kind === 'pg' && ' 화면에는 가려져 보이므로 발급받은 코드를 확인해 적으세요.'}
+                  </>
+                ) : (
+                  EDIT_META[edit.kind].hint
+                )}
               </div>
+              {/* 지금 값이 있을 때만 비울 수 있다 */}
+              {!edit.clear && (edit.kind === 'pg' ? edit.row.pgMerchantCodeMasked : edit.row.nebulaDeviceId) && (
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ marginTop: 8, color: 'var(--red)' }}
+                  onClick={() => {
+                    setModalErr(null)
+                    setEdit({ ...edit, clear: true, value: '' })
+                  }}
+                >
+                  값 비우기
+                </button>
+              )}
             </div>
           </div>
 

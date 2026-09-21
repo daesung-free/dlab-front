@@ -59,9 +59,7 @@ export function listBranchConfigHistory(academyId: number): Promise<BranchConfig
  * ★ 응답 본문이 없다. 바꾼 뒤에는 다시 읽어야 화면이 맞는다.
  *
  * ★ **빈 값으로 지울 수 없다.** 스펙에는 `minLength: 0` 이라 적혀 있는데 실제로는
- *   `"value: 공백일 수 없습니다"` 로 400 이다(2026-09-18 확인). 공백 하나도 안 된다 —
- *   **한 번 넣은 값은 다른 값으로 바꾸는 것만 된다.** 잘못 넣었을 때 되돌릴 방법이 없으므로
- *   화면이 저장 전에 한 번 더 묻는다.
+ *   `"value: 공백일 수 없습니다"` 로 400 이다(2026-09-18 확인). 지우는 것은 아래 `clear*` 다.
  */
 export function setPgMerchantCode(academyId: number, value: string): Promise<void> {
   return request<void>(`/api/v1/admin/branch-configs/${academyId}/pg-merchant-code`, {
@@ -74,6 +72,25 @@ export function setNebulaDeviceId(academyId: number, value: string): Promise<voi
   return request<void>(`/api/v1/admin/branch-configs/${academyId}/nebula-device-id`, {
     method: 'PATCH',
     body: { value },
+  })
+}
+
+/**
+ * 값 비우기(2026-09-21 추가). **`confirm` 에 지금 값을 그대로** 넣어야 지워진다 — 비우면 그 지점
+ * 결제(PG)나 와이파이 해제(장비 ID)가 통째로 멈추기 때문에 서버가 일부러 한 번 더 받는다.
+ * 이미 비어 있으면 그대로 성공한다.
+ */
+export function clearPgMerchantCode(academyId: number, confirm: string): Promise<void> {
+  return request<void>(`/api/v1/admin/branch-configs/${academyId}/pg-merchant-code`, {
+    method: 'DELETE',
+    query: { confirm },
+  })
+}
+
+export function clearNebulaDeviceId(academyId: number, confirm: string): Promise<void> {
+  return request<void>(`/api/v1/admin/branch-configs/${academyId}/nebula-device-id`, {
+    method: 'DELETE',
+    query: { confirm },
   })
 }
 

@@ -11,7 +11,9 @@ import {
   listTerms,
   setMaintenance,
   updateAppVersions,
+  getAppUsage,
   type AppConfigDetail,
+  type AppUsage,
   type Terms,
 } from '../../api/appConfig'
 import { listNotices, type Notice } from '../../api/notices'
@@ -196,12 +198,14 @@ const API_BANNER_COLUMNS: Column<Notice>[] = [
 
 
 function Content() {
-  const { academyId } = useAcademy()
+  const { academyId, ready: academyReady } = useAcademy()
   const [tab, setTab] = useState('push')
 
   const [configs, setConfigs] = useState<AppConfigDetail[]>([])
   const [terms, setTerms] = useState<Terms[]>([])
   const [banners, setBanners] = useState<Notice[]>([])
+  /* 가입·동의 현황. 실패해도 나머지 탭은 그대로 그려야 해서 따로 받는다 */
+  const [usage, setUsage] = useState<AppUsage | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -222,6 +226,8 @@ function Content() {
   } | null>(null)
 
   const load = useCallback(async () => {
+    // 지점 목록 전엔 academyId 가 null 이라 전 지점 값이 먼저 와서 지점 값을 덮을 수 있다
+    if (!academyReady) return
     setLoading(true)
     try {
       /* 셋을 나란히 부른다. 하나가 늦어도 나머지 탭은 먼저 그려져야 한다 */
@@ -239,7 +245,20 @@ function Content() {
     } finally {
       setLoading(false)
     }
-  }, [academyId])
+  }, [academyId, academyReady])
+
+  /* 가입·동의 현황 — 지점을 바꾸면 늦게 온 이전 지점 응답이 덮지 않게 버린다 */
+  useEffect(() => {
+    if (!academyReady) return
+    let alive = true
+    setUsage(null)
+    getAppUsage(academyId ?? undefined)
+      .then((u) => alive && setUsage(u))
+      .catch(() => alive && setUsage(null))
+    return () => {
+      alive = false
+    }
+  }, [academyId, academyReady])
 
   useEffect(() => {
     void load()
@@ -281,6 +300,8 @@ function Content() {
   }
 
   const inMaintenance = configs.filter((c) => c.maintenance)
+
+  const pushTerms = usage?.terms.find((x) => x.code === 'PUSH') ?? null
 
   return (
     <>
@@ -469,20 +490,43 @@ function Content() {
           <div className="l">
             <Icon name="smartphone" size={13} /> 앱 가입
           </div>
-          {/* 앱 가입자 수를 세는 경로가 없다 */}
-          <div className="v" style={{ fontSize: 14, paddingTop: 8 }}>
-            <Unfilled reason="앱 가입자 수가 서버에 없다" />
-          </div>
-          <div className="d">재원생 대비</div>
+          {usage ? (
+            <>
+              <div className="v">{usage.studentSignupRate}%</div>
+              <div className="d">
+                재원생 {usage.enrolledStudents}명 중 {usage.studentAccounts}명
+                {usage.pendingStudents > 0 && ` · 승인 대기 ${usage.pendingStudents}`}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="v" style={{ fontSize: 14, paddingTop: 8 }}>
+                <Unfilled reason="가입 현황을 못 받았다" />
+              </div>
+              <div className="d">재원생 대비</div>
+            </>
+          )}
         </div>
         <div className="stat">
           <div className="l">
             <Icon name="bell" size={13} /> 푸시 수신동의
           </div>
-          <div className="v" style={{ fontSize: 14, paddingTop: 8 }}>
-            <Unfilled reason="동의율 집계가 없다 — 계정별 조회만 있다" />
-          </div>
-          <div className="d">미동의자는 알림톡으로 대신 발송</div>
+          {/* 푸시 수신 동의는 약관 코드 PUSH 의 동의율이다. 분모는 활성 앱 계정(학생 + 학부모) */}
+          {pushTerms ? (
+            <>
+              <div className="v">{pushTerms.rate}%</div>
+              <div className="d">
+                앱 계정 {pushTerms.targetAccounts}개 중 {pushTerms.agreedAccounts}개 · 미동의자는 알림톡으로
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="v" style={{ fontSize: 14, paddingTop: 8 }}>
+                <Unfilled reason="PUSH 약관이 없거나 현황을 못 받았다" />
+              </div>
+              <div className="d">미동의자는 알림톡으로 대신 발송</div>
+            </>
+          )}
         </div>
         <div className="stat">
           <div className="l">
@@ -738,8 +782,20 @@ function Content() {
                   </div>
                 </span>
                 <span style={{ width: 160, display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                  {/* 계정별 조회만 있어 전체 동의율을 못 낸다 */}
-                  <Unfilled reason="약관 동의율 집계가 없다 — 계정별 조회만 있다" />
+                  {(() => {
+                    const u = usage?.terms.find((x) => x.termsId === t.id)
+                    return u ? (
+                      <span style={{ fontSize: 12.5, textAlign: 'right' }}>
+                        <b>{u.rate}%</b>
+                        <span style={{ color: 'var(--muted)' }}>
+                          {' '}
+                          · {u.agreedAccounts}/{u.targetAccounts}
+                        </span>
+                      </span>
+                    ) : (
+                      <Unfilled reason="이 약관의 동의 현황이 안 왔다" />
+                    )
+                  })()}
                 </span>
               </div>
             ))}
