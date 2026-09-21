@@ -56,17 +56,26 @@ export interface Student {
   address: string | null
   /** 문자열이다 — 마스킹되면 `2007-**-**`이 와서 날짜 타입에 안 담긴다 */
   birthDate: string | null
+  /** 'M' | 'F'. 목록·상세 모두 온다(2026-09-21 확인 — 예전엔 없었다) */
+  gender?: string | null
   schoolName: string | null
   year: number
   grade: GradeType
   track: TrackType | null
   enrollmentStatus: EnrollmentStatus
   admissionDate: string | null
+  /** 소속 지점 id. 담임 예외 지정에서 같은 지점 선생님을 고를 때 쓴다 */
+  academyId?: number
   /** 지점'명'. 본사 계정이 전 지점을 한 화면에서 보므로 코드가 아니라 이름이 온다 */
   academyName: string | null
   /** 고정반. 미배정이면 null */
   className: string | null
+  /** 그 학생의 담임 — 따로 지정됐으면 지정된 선생님, 아니면 반 담임 */
   homeroomTeacher: string | null
+  /** 담임을 따로 지정했는가. 목록은 이것만 쓴다 */
+  homeroomOverridden?: boolean
+  /** 따로 지정한 내용(사유·일시). 지정이 없으면 null */
+  homeroomOverride?: HomeroomOverride | null
   seatCd: string | null
   scholarshipTypes: string[]
   /**
@@ -179,7 +188,7 @@ export function admitStudent(body: AdmitRequest): Promise<Student> {
  *
  * ★ **상세는 가리지 않고 원본을 준다**(`masked: false`, 2026-09-21 확인). 목록은 가려서 주므로
  *   수정 모달이 목록 값을 그대로 채우면 `010-****-3153` 이 입력칸에 들어가 **그대로 저장된다.**
- * ★ **성별이 응답에 없다.** 보낼 수는 있는데 읽어올 수가 없다 — API_GAPS 30-1.
+ * ★ 성별은 2026-09-21 부터 온다. 그 전에는 보낼 수만 있고 읽을 수 없었다 — API_GAPS 30-1.
  */
 export function getStudent(enrollmentId: number): Promise<Student> {
   return request<Student>(`/api/v1/admin/students/${enrollmentId}`)
@@ -194,6 +203,35 @@ export function getStudent(enrollmentId: number): Promise<Student> {
  */
 export function updateStudent(enrollmentId: number, body: StudentUpdateRequest): Promise<Student> {
   return request<Student>(`/api/v1/admin/students/${enrollmentId}`, { method: 'PATCH', body })
+}
+
+export interface HomeroomOverride {
+  enrollmentId: number
+  /** false 면 반 담임을 따른다 */
+  overridden: boolean
+  teacherId: number | null
+  teacherName: string | null
+  reason: string | null
+  at: string | null
+}
+
+/**
+ * 담임 예외 지정 — 같은 반의 이 학생만 다른 선생님에게 맡긴다. 반 전체 교체는 `PUT /classes/{id}/homeroom`.
+ *
+ * ★ 승인 이양·상담 담당·목록의 담임 표시가 따라 바뀐다. 반공지·반설문 권한은 반 담임 그대로다.
+ * ★ 사유 필수(빈 값이면 400), 같은 지점 선생님만, 최고·지점관리자만. **반을 옮기면 자동으로 풀린다.**
+ * ★ 지금 상태는 목록·상세의 `homeroomOverridden`·`homeroomOverride` 로 온다(2026-09-21 추가).
+ */
+export function setHomeroomOverride(enrollmentId: number, teacherId: number, reason: string): Promise<HomeroomOverride> {
+  return request<HomeroomOverride>(`/api/v1/admin/students/${enrollmentId}/homeroom-override`, {
+    method: 'PUT',
+    body: { teacherId, reason },
+  })
+}
+
+/** 담임 예외 해제 — 반 담임으로 돌아간다. 지정이 없어도 오류가 아니다 */
+export function clearHomeroomOverride(enrollmentId: number): Promise<HomeroomOverride> {
+  return request<HomeroomOverride>(`/api/v1/admin/students/${enrollmentId}/homeroom-override`, { method: 'DELETE' })
 }
 
 /** 저장하면 부여될 다음 학번. 미리보기용이고 예약은 아니다 */

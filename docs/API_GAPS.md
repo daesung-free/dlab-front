@@ -2788,13 +2788,15 @@ GET   /admin/students/{enrollmentId}   상세 — 가리지 않고 원본을 준
 PATCH /admin/students/{enrollmentId}   보낸 칸만 바뀐다 · 빈 문자열은 그 값을 지운다
 ```
 
-## 30-1. 성별을 넣을 수는 있는데 읽어올 수가 없다 ★
+## 30-1. 성별을 넣을 수는 있는데 읽어올 수가 없다 — ✅ 해결(2026-09-21)
 
 등록(`POST`)·수정(`PATCH`) 요청에는 `gender` 가 있는데 **조회 응답(목록·상세)에 없다.**
 넣은 값을 어디서도 확인할 수 없다. 수정 모달은 성별 칸을 "바꾸지 않음" 으로 두고,
 고른 경우에만 보낸다(모르는 값을 덮어쓰지 않으려고).
 
 > 요청: 학생 조회 응답에 `gender` 추가.
+
+**반영됨** — 목록·상세 모두 `gender` 가 온다. 수정 모달이 저장된 값을 채우고, 바뀐 경우에만 보낸다.
 
 ## 30-2. 빈 문자열을 보내면 지워진다 (확인만)
 
@@ -2805,3 +2807,33 @@ PATCH /admin/students/{enrollmentId}   보낸 칸만 바뀐다 · 빈 문자열�
 
 목록은 서버가 가려서 준다(`010-****-3153`, `2008-**-**`). 이걸 입력칸에 채우면 가린 값이
 **그대로 저장된다.** 수정 모달은 여는 순간 상세를 다시 읽는다 — 상세는 원본을 준다.
+
+# 31부. 담임 예외 지정 (F-4.1-1 학원생 검색) — 2026-09-21
+
+같은 반의 **일부 학생만** 다른 선생님이 맡는 경우(연구소 0921 답변). 반 전체 교체는 기존
+`PUT /classes/{id}/homeroom`. 학원생 검색 → 줄을 눌러 여는 학생 정보 모달의 **담임** 줄에 붙였다.
+
+```
+PUT    /admin/students/{enrollmentId}/homeroom-override   {teacherId, reason} — 사유 필수
+DELETE /admin/students/{enrollmentId}/homeroom-override   반 담임으로 되돌림
+→ {enrollmentId, overridden, teacherId, teacherName, reason, at}
+```
+
+- 최고·지점관리자만. 화면도 그 계정에만 버튼을 보인다(`canSeeAdmin`)
+- 같은 지점 선생님만 — 선생님 목록은 학생의 `academyId` 로 `/staff/teachers` 를 부른다
+- 반을 옮기면 서버가 자동으로 푼다
+- 바뀌는 것: 승인 이양 대상 · 상담 담당 · 목록의 담임 표시. 반공지·반설문 권한은 반 담임 그대로
+
+## 31-1. 지금 지정돼 있는지가 조회에 없었다 — ✅ 해결(같은 날)
+
+처음엔 목록·상세가 담임 **이름**만 줘서, 지정된 선생님인지 반 담임인지 구분이 안 됐다.
+요청 후 추가됨: 목록·상세에 `homeroomOverridden`(bool) · `homeroomOverride`(PUT 응답과 같은 모양, 없으면 null).
+목록 담임 칸은 `homeroomOverridden` 이면 '지정' 표시, 모달은 `homeroomOverride` 로 사유와 되돌리기를 보인다.
+
+실제 확인(분당 권지호, 반 담임 이담임):
+```
+PUT {teacherId:3, reason:"필드 확인"} → overridden:true, teacherName:"박담임"
+GET 상세 → homeroomTeacher:"박담임", homeroomOverridden:true, homeroomOverride:{…reason:"필드 확인"}
+DELETE → GET 상세 → homeroomTeacher:"이담임", homeroomOverridden:false, homeroomOverride:null
+PUT {reason:""} → 400 "지정 사유를 입력해 주세요."
+```

@@ -198,6 +198,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/students/{enrollmentId}/homeroom-override": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 담임 예외 지정 — 같은 반의 이 학생만 다른 선생님에게 맡긴다
+         * @description 담임 예외 지정 — 같은 반의 이 학생만 다른 선생님에게 맡긴다.
+         *
+         *      <p><b>반 전체 담임 교체는 여기가 아니다</b> — <code>PUT /admin/classes/{id</code>/homeroom}.
+         *
+         *      <p>바뀌는 것: 승인 이양 대상 · 상담 담당 · 학생 목록의 담임 표시.
+         *      <b>안 바뀌는 것</b>: 반공지·반설문 작성 권한(반 담임 그대로) — 예외 학생 하나 때문에 그 반
+         *      전체를 건드릴 수 있게 되면 안 된다.
+         *
+         *      <p>반을 옮기면 자동으로 풀린다. 최고관리자·지점관리자만, 사유 필수.
+         */
+        put: operations["overrideHomeroom"];
+        post?: never;
+        /**
+         * 담임 예외 해제 — 반 담임으로 돌아간다.
+         * @description 담임 예외 해제 — 반 담임으로 돌아간다.
+         */
+        delete: operations["clearHomeroomOverride"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/students/{enrollmentId}/grades/school-record": {
         parameters: {
             query?: never;
@@ -4410,6 +4442,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/grades/exam-responses/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 학생 정오·답안 반영 — 정오표(필수) + 답안표(선택)
+         * @description 학생 정오·답안 반영 — 정오표(필수) + 답안표(선택). 채점 탭의 근거.
+         *
+         *      <p>★ <b>문항 정보(<code>/grades/exam-items/upload</code>)를 먼저 올려야 한다</b> — 국어·수학의
+         *      공통·선택 경계를 거기서 안다.
+         *
+         *      <p>학생 매칭은 성적 업로드와 같은 규칙이다(외부생 제외 → 연결 키 → 이름). <code>unknownSubjects</code>
+         *      가 비어 있지 않으면 <b>그 과목 채점이 빠졌다</b> — 경고할 것.
+         */
+        post: operations["uploadExamResponses"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/grades/exam-items/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 회차 문항 정보 반영 — 문항분석표 + 정답률 (채점 탭의 근거)
+         * @description 회차 문항 정보 반영 — 문항분석표 + 정답률 (채점 탭의 근거).
+         *
+         *      <p><b>디랩에서 본 시험 회차에만</b> 올린다. 다시 올리면 그 회차 문항이 통째로 교체된다.
+         *
+         *      <p><code>unmatchedRates</code> 가 비어 있지 않으면 <b>경고할 것</b> — 과목명 표기가 달라져
+         *      그 문항의 전국 정답률이 붙지 않았다는 뜻이다.
+         */
+        post: operations["uploadExamItems"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/firewall-requests/violations": {
         parameters: {
             query?: never;
@@ -6641,6 +6724,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/app/grades/trend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 성적 변화 — 회차별 과목 등급·백분위, 오래된 순 (시안 4
+         * @description 성적 변화 — 회차별 과목 등급·백분위, 오래된 순 (시안 4.2 그래프).
+         *
+         *      <p>디랩 시험만 담는다. 입학 전 성적은 출처가 달라(학생 입력 + 선생님 대조) 한 줄로
+         *      이을지는 화면이 정한다 — 필요하면 <code>GET /app/grades</code> 와 합쳐 그린다.
+         */
+        get: operations["trend"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/app/grades/form": {
         parameters: {
             query?: never;
@@ -6657,6 +6763,84 @@ export interface paths {
          *      6·9월 평가원 + 전년도 수능(탐구1·탐구2)이다. <b>앱이 이 구성을 자체 판정하지 말 것.</b>
          */
         get: operations["form"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/app/grades/exams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 디랩에서 본 시험 목록 — 최근순 (시안 4
+         * @description 디랩에서 본 시험 목록 — 최근순 (시안 4.1).
+         *
+         *      <p><b>성적이 있는 회차만</b> 내린다. <code>kice=true</code> 면 평가원 모의고사다 — 「평가원」
+         *      표시와 "지망대학 진단 없음" 안내의 근거다.
+         *
+         *      <p>입학 때 입력한 성적은 여기 없다 — <code>GET /app/grades</code> 가 따로 내린다.
+         */
+        get: operations["exams"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/app/grades/exams/{examMasterId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 한 회차 — 과목별 성적 + 지망대학 진단 (시안 4
+         * @description 한 회차 — 과목별 성적 + 지망대학 진단 (시안 4.2 · 4.6).
+         *
+         *      <p>과목별 값 중 <b>없는 것은 <code>null</code></b> 이다. 영어·한국사는 절대평가라 원점수와
+         *      등급만 있다.
+         *
+         *      <p>⚠️ 지점 안 등수·유사 학생 비교·수능 환산 예상은 <b>아직 없다</b> — 노출 여부와 계산
+         *      방식이 확정되지 않았다(시안 6장 2·3·4번).
+         */
+        get: operations["exam"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/app/grades/exams/{examMasterId}/scoring": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 한 회차 채점 — 영역 단위(국어 영역 = 공통 + 선택)
+         * @description 한 회차 채점 — 영역 단위(국어 영역 = 공통 + 선택).
+         *
+         *      <p>복습 우선순위는 <b>틀린 문항을 전국 정답률이 높은 순</b>이다 — 남들은 맞혔는데 나만
+         *      틀린 문항이 가장 빨리 올릴 수 있는 점수다. 내가 고른 오답이 가장 많이 고른 오답이면
+         *      <code>trap=true</code>.
+         *
+         *      <p>평가요소·단원별은 내 정답률과 전국 정답률(문항 평균)을 함께 준다 — 원래 어려운
+         *      유형인지 나만 약한 유형인지 가르려면 둘 다 있어야 한다.
+         */
+        get: operations["scoring"];
         put?: never;
         post?: never;
         delete?: never;
@@ -6735,11 +6919,30 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * 예약 가능한 일정.
-         * @description 예약 가능한 일정. @param from/to 비우면 오늘부터 2주
-         */
         get: operations["slots_2"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/app/consults/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 지난 상담에서 함께 정한 계획 (시안 4
+         * @description 지난 상담에서 함께 정한 계획 (시안 4.8-③).
+         *
+         *      <p><b>상담 내용은 내리지 않는다</b> — 계획만이다. 학부모는 <b>담임이 학부모 공개로 지정한
+         *      상담만</b> 본다(관리자 웹 기본값이 비공개다).
+         */
+        get: operations["plans"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9411,6 +9614,40 @@ export interface components {
             meta?: components["schemas"]["PageMeta"];
             error?: components["schemas"]["ErrorBody"];
         };
+        HomeroomOverride: {
+            /** Format: int64 */
+            teacherId?: number;
+            /** @description 필수 — 권한이 따라 움직이는 값이라 "왜 바꿨나" 가 남아야 한다 */
+            reason?: string;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseHomeroomOverrideView: {
+            success?: boolean;
+            data?: components["schemas"]["HomeroomOverrideView"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        HomeroomOverrideView: {
+            /** Format: int64 */
+            enrollmentId?: number;
+            /** @description <code>false</code> 면 반 담임을 따른다 */
+            overridden?: boolean;
+            /** Format: int64 */
+            teacherId?: number;
+            teacherName?: string;
+            reason?: string;
+            /** Format: date-time */
+            at?: string;
+        };
         ReplaceRoles: {
             roles: ("SUPER_ADMIN" | "BRANCH_ADMIN" | "TEACHER" | "STAFF" | "READONLY")[];
         };
@@ -11818,6 +12055,7 @@ export interface components {
              *                              담기지 않는다. 원본일 때도 같은 타입이어야 화면이 분기하지 않는다
              */
             birthDate?: string;
+            gender?: string;
             schoolName?: string;
             /** Format: int32 */
             year?: number;
@@ -11850,6 +12088,16 @@ export interface components {
             seatCd?: string;
             /** @description 장학 유형. <b>여러 건일 수 있어 목록</b>이고, 없으면 빈 목록이다 */
             scholarshipTypes?: string[];
+            /**
+             * @description 담임 예외 지정 여부. <code>true</code> 면 <code>homeroomTeacher</code> 가
+             *                                반 담임이 아니라 지정된 선생님이다
+             */
+            homeroomOverridden?: boolean;
+            /**
+             * @description 담임 예외 지정 상세 — <code>PUT .../homeroom-override</code> 응답과 같은 모양이다.
+             *                                지정이 없으면 <code>null</code>
+             */
+            homeroomOverride?: components["schemas"]["HomeroomOverrideView"];
             /** @description 개인정보가 가려졌는지. 화면이 "원본 보기" 안내를 띄우는 근거다 */
             masked?: boolean;
         };
@@ -13441,6 +13689,31 @@ export interface components {
          *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
          *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
          */
+        ApiResponseResult: {
+            success?: boolean;
+            data?: components["schemas"]["Result"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        Result: {
+            /** Format: int32 */
+            savedStudents?: number;
+            /** Format: int32 */
+            skippedExternal?: number;
+            unmatched?: components["schemas"]["Unmatched"][];
+            /** @description 대응표에 없는 과목 약어. 비어 있지 않으면 <b>그 과목 채점이 빠졌다</b> */
+            unknownSubjects?: string[];
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
         ApiResponseFileResponse: {
             success?: boolean;
             data?: components["schemas"]["FileResponse"];
@@ -13474,7 +13747,7 @@ export interface components {
             /** @enum {string} */
             gradeType: "HIGH2" | "HIGH3" | "N_SU" | "STAFF";
             /** @enum {string} */
-            examCode: "JUNE" | "SEPT" | "OCT" | "CSAT";
+            examCode: "JUNE" | "SEPT" | "OCT" | "CSAT" | "MONTHLY";
             /**
              * @description 신상기록부에 적힌 문구 그대로. 서버가 연도를 조합해 만들지 않는다 —
              *                        수능은 응시 연도와 학년도가 어긋나(2025년 11월 = 2026학년도)
@@ -13484,6 +13757,18 @@ export interface components {
             /** Format: int32 */
             sortOrder?: number;
             subjects: components["schemas"]["ExamFormSubject"][];
+            /**
+             * @description 비우면 <b>입학 전 성적</b> 양식이다(기존 동작). 디랩에서 본 시험은
+             *                        <code>ACADEMY</code> — 성적 업로드는 이 양식에만 된다
+             * @enum {string}
+             */
+            purpose?: "ADMISSION" | "ACADEMY";
+            /**
+             * Format: date
+             * @description 시행일. <b><code>ACADEMY</code> 는 필수</b> — 월례고사가 코드만으로는
+             *                        달이 구분되지 않는다
+             */
+            examDate?: string;
         };
         ExamFormSubject: {
             /**
@@ -13501,6 +13786,8 @@ export interface components {
             hasStandardScore?: boolean;
             hasPercentile?: boolean;
             hasGradeLevel?: boolean;
+            /** @description 원점수를 받는가. <b>비우면 디랩 시험은 켜고 입학 전 성적은 끈다</b> */
+            hasRawScore?: boolean;
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -13518,7 +13805,6 @@ export interface components {
             meta?: components["schemas"]["PageMeta"];
             error?: components["schemas"]["ErrorBody"];
         };
-        /** @description 등록된 회차 한 줄. */
         FormView: {
             /** Format: int64 */
             examMasterId?: number;
@@ -13532,6 +13818,17 @@ export interface components {
             /** Format: int32 */
             sortOrder?: number;
             subjects?: components["schemas"]["SubjectView"][];
+            /**
+             * @description <code>ADMISSION</code>=입학 전 성적 / <code>ACADEMY</code>=디랩에서 본 시험.
+             *                      <b>업로드 회차 목록은 <code>ACADEMY</code> 만 보여줄 것</b> — 입학 양식에 올리면
+             *                      학생이 넣은 입학 성적이 교체된다(서버도 막는다)
+             */
+            purpose?: string;
+            /**
+             * Format: date
+             * @description 시행일. 입학 양식은 비어 있다
+             */
+            examDate?: string;
         };
         SubjectView: {
             /** Format: int64 */
@@ -13543,6 +13840,7 @@ export interface components {
             hasStandardScore?: boolean;
             hasPercentile?: boolean;
             hasGradeLevel?: boolean;
+            hasRawScore?: boolean;
         };
         WriteRequest: {
             /** Format: int64 */
@@ -15309,6 +15607,47 @@ export interface components {
          *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
          *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
          */
+        ApiResponseListTrendPoint: {
+            success?: boolean;
+            data?: components["schemas"]["TrendPoint"][];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        ExamSummary: {
+            /** Format: int64 */
+            examMasterId?: number;
+            examCode?: string;
+            examName?: string;
+            /** Format: date */
+            examDate?: string;
+            /**
+             * @description 평가원 모의고사인가. 시안 4.1 이 「평가원」 표시로 구분하고, 4.7 이
+             *                  "모의평가에는 지망대학 진단이 없다" 안내를 띄운다
+             */
+            kice?: boolean;
+        };
+        TrendPoint: {
+            exam?: components["schemas"]["ExamSummary"];
+            values?: components["schemas"]["TrendValue"][];
+        };
+        TrendValue: {
+            subjectCode?: string;
+            subjectName?: string;
+            /** Format: int32 */
+            gradeLevel?: number;
+            /** Format: int32 */
+            percentile?: number;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
         ApiResponseListForm: {
             success?: boolean;
             data?: components["schemas"]["Form"][];
@@ -15341,6 +15680,147 @@ export interface components {
             hasStandardScore?: boolean;
             hasPercentile?: boolean;
             hasGradeLevel?: boolean;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseListExamSummary: {
+            success?: boolean;
+            data?: components["schemas"]["ExamSummary"][];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseExamDetail: {
+            success?: boolean;
+            data?: components["schemas"]["ExamDetail"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        /** @description 지망대학 한 줄 — 연구소 판정 그대로. */
+        Choice: {
+            /** Format: int32 */
+            rank?: number;
+            universityName?: string;
+            departmentName?: string;
+            /** Format: int32 */
+            recruitQuota?: number;
+            /** Format: int32 */
+            applicantCount?: number;
+            /** Format: int32 */
+            applicantRank?: number;
+            appliedAreas?: string;
+            expectedScore?: number;
+            cutoffScore?: number;
+            /**
+             * @description 기준점수까지 남은 점수. 음수면 넘었다. 시안이 단계 이름과 함께
+             *                         보여준다(지망을 적은 학생의 약 84% 가 「위험」이라 단계만으로는
+             *                         무엇을 해야 할지 알 수 없다)
+             */
+            gapToCutoff?: number;
+            diagnosis?: string;
+        };
+        ExamDetail: {
+            exam?: components["schemas"]["ExamSummary"];
+            subjects?: components["schemas"]["SubjectScore"][];
+            /** @description 지망대학. 적지 않았으면 비어 있다(시안 4.7 안내 화면) */
+            choices?: components["schemas"]["Choice"][];
+            /**
+             * @description 이 회차는 진단 자체가 오지 않는다(평가원·수능). 비어 있는
+             *                               이유가 "안 적어서"인지 "원래 없어서"인지 화면이 구분하게 한다
+             */
+            noDiagnosisByType?: boolean;
+        };
+        /**
+         * @description 과목 한 칸. <b>없는 값은 <code>null</code></b> 이다 — 0 으로 내리면 진짜 0점과 구분되지 않는다.
+         *      영어·한국사는 절대평가라 표준점수·백분위가 비고 원점수·등급만 있다.
+         */
+        SubjectScore: {
+            subjectCode?: string;
+            subjectName?: string;
+            /** Format: int32 */
+            rawScore?: number;
+            /** Format: int32 */
+            standardScore?: number;
+            /** Format: int32 */
+            percentile?: number;
+            /** Format: int32 */
+            gradeLevel?: number;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseListArea: {
+            success?: boolean;
+            data?: components["schemas"]["Area"][];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        Area: {
+            name?: string;
+            /** @description 선택과목(언어와매체 등). 없으면 <code>null</code> */
+            elective?: string;
+            /** Format: int32 */
+            total?: number;
+            /** Format: int32 */
+            correct?: number;
+            /** Format: int32 */
+            wrong?: number;
+            /**
+             * Format: int32
+             * @description 틀리거나 비운 문항의 배점 합
+             */
+            lostPoints?: number;
+            review?: components["schemas"]["Review"][];
+            bySkill?: components["schemas"]["Breakdown"][];
+            byUnit?: components["schemas"]["Breakdown"][];
+        };
+        Breakdown: {
+            name?: string;
+            /** Format: int32 */
+            questions?: number;
+            /** @description 내 정답률(%) · @param nationalRate 전국 정답률(문항 평균 %) */
+            myRate?: number;
+            nationalRate?: number;
+        };
+        /** @description 복습할 문항 하나. */
+        Review: {
+            subjectName?: string;
+            /** Format: int32 */
+            questionNo?: number;
+            myAnswer?: string;
+            /** Format: int32 */
+            correctAnswer?: number;
+            nationalRate?: number;
+            /** Format: int32 */
+            points?: number;
+            unitName?: string;
+            skillName?: string;
+            /** @description 내가 고른 오답이 <b>가장 많이 고른 오답</b>이다 — 함정에 걸렸다 */
+            trap?: boolean;
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -15518,6 +15998,38 @@ export interface components {
             data?: components["schemas"]["ConsultReservationView"][];
             meta?: components["schemas"]["PageMeta"];
             error?: components["schemas"]["ErrorBody"];
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseListPlan: {
+            success?: boolean;
+            data?: components["schemas"]["Plan"][];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        Plan: {
+            /** Format: int64 */
+            consultId?: number;
+            /** Format: date */
+            consultedAt?: string;
+            consultType?: string;
+            teacherName?: string;
+            actionPlan?: string;
+            /** @description 다음 상담에서 이행을 확인했는가 */
+            actionDone?: boolean;
+            /**
+             * Format: date
+             * @description 다음 상담 예정일
+             */
+            nextDueDate?: string;
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -15769,50 +16281,6 @@ export interface components {
             data?: components["schemas"]["AdminSurveySummary"][];
             meta?: components["schemas"]["PageMeta"];
             error?: components["schemas"]["ErrorBody"];
-        };
-        /**
-         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
-         *      성공: { "success": true, "data": ... }
-         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
-         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
-         *
-         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
-         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
-         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
-         */
-        ApiResponseResult: {
-            success?: boolean;
-            data?: components["schemas"]["Result"];
-            meta?: components["schemas"]["PageMeta"];
-            error?: components["schemas"]["ErrorBody"];
-        };
-        OptionCount: {
-            /** Format: int64 */
-            optionId?: number;
-            label?: string;
-            /** Format: int64 */
-            count?: number;
-        };
-        /** @description 문항별 집계. 유형에 따라 채워지는 칸이 다르다. */
-        QuestionResult: {
-            /** Format: int64 */
-            questionId?: number;
-            title?: string;
-            /** @enum {string} */
-            type?: "SINGLE_CHOICE" | "MULTI_CHOICE" | "TEXT" | "NUMBER";
-            /** Format: int64 */
-            answerCount?: number;
-            options?: components["schemas"]["OptionCount"][];
-            average?: number;
-            min?: number;
-            max?: number;
-            texts?: string[];
-        };
-        Result: {
-            survey?: components["schemas"]["AdminSurveySummary"];
-            /** Format: int32 */
-            responseCount?: number;
-            questions?: components["schemas"]["QuestionResult"][];
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -17401,7 +17869,8 @@ export interface components {
             /** Format: int64 */
             homeroomTeacherId?: number;
             /**
-             * @description 담임. <b>반에 붙어 있어</b> 반 미배정 학생은 비어 있다.
+             * @description 담임. 예외 지정이 있으면 그 선생님, 없으면 반 담임이다.
+             *                                 반 미배정이고 예외 지정도 없으면 비어 있다.
              *                                 담임이 자기 반 미작성자를 보는 화면이라 필요하다
              */
             homeroomTeacherName?: string;
@@ -18565,6 +19034,54 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseVoid"];
+                };
+            };
+        };
+    };
+    overrideHomeroom: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enrollmentId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HomeroomOverride"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseHomeroomOverrideView"];
+                };
+            };
+        };
+    };
+    clearHomeroomOverride: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enrollmentId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseHomeroomOverrideView"];
                 };
             };
         };
@@ -24640,6 +25157,72 @@ export interface operations {
             };
         };
     };
+    uploadExamResponses: {
+        parameters: {
+            query: {
+                academyId?: number;
+                examMasterId: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** Format: binary */
+                    results: string;
+                    /** Format: binary */
+                    answers?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseResult"];
+                };
+            };
+        };
+    };
+    uploadExamItems: {
+        parameters: {
+            query: {
+                examMasterId: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** Format: binary */
+                    analysis: string;
+                    /**
+                     * Format: binary
+                     * @description 정답률 파일. 없어도 된다 — 문항분석표만 먼저 올릴 수 있다
+                     */
+                    rates?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseResult"];
+                };
+            };
+        };
+    };
     violations: {
         parameters: {
             query: {
@@ -27727,6 +28310,28 @@ export interface operations {
             };
         };
     };
+    trend: {
+        parameters: {
+            query?: {
+                studentId?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListTrendPoint"];
+                };
+            };
+        };
+    };
     form: {
         parameters: {
             query?: {
@@ -27745,6 +28350,76 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseListForm"];
+                };
+            };
+        };
+    };
+    exams: {
+        parameters: {
+            query?: {
+                studentId?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListExamSummary"];
+                };
+            };
+        };
+    };
+    exam: {
+        parameters: {
+            query?: {
+                studentId?: number;
+            };
+            header?: never;
+            path: {
+                examMasterId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseExamDetail"];
+                };
+            };
+        };
+    };
+    scoring: {
+        parameters: {
+            query?: {
+                studentId?: number;
+            };
+            header?: never;
+            path: {
+                examMasterId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListArea"];
                 };
             };
         };
@@ -27844,6 +28519,28 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseListConsultSlotView"];
+                };
+            };
+        };
+    };
+    plans: {
+        parameters: {
+            query?: {
+                studentId?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListPlan"];
                 };
             };
         };

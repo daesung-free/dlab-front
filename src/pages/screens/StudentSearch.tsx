@@ -15,6 +15,8 @@ import {
 } from '../../components/common'
 import { Icon } from '../../components/Icon'
 import { useAcademy } from '../../auth/AcademyContext'
+import { useAuth } from '../../auth/AuthContext'
+import { listTeachers, type TeacherRow } from '../../api/accounts'
 import { ApiError } from '../../api/client'
 import {
   GRADE_LABEL,
@@ -27,6 +29,8 @@ import {
   reEnrollStudent,
   getStudent,
   updateStudent,
+  setHomeroomOverride,
+  clearHomeroomOverride,
   type StatusLog,
   type StudentUpdateRequest,
   exportStudents,
@@ -113,7 +117,21 @@ const COLUMNS: Column<Student>[] = [
   { key: 'className', header: '반', width: '58px', align: 'center', value: (r) => r.className ?? '-' },
   { key: 'seatCd', header: '좌석', width: '68px', align: 'center', value: (r) => r.seatCd ?? '-' },
   { key: 'schoolName', header: '출신학교', width: '90px', value: (r) => r.schoolName ?? '-' },
-  { key: 'homeroomTeacher', header: '담임', width: '72px', value: (r) => r.homeroomTeacher ?? '-' },
+  {
+    key: 'homeroomTeacher',
+    header: '담임',
+    width: '72px',
+    value: (r) => r.homeroomTeacher ?? '-',
+    // 반 담임이 아니라 따로 지정된 선생님이면 표시한다 — 이름만 보면 반 담임과 구분이 안 된다
+    render: (r, v) =>
+      r.homeroomOverridden ? (
+        <span title="이 학생만 따로 지정된 담임입니다">
+          {v} <span style={{ color: 'var(--violet)', fontSize: 11, fontWeight: 700 }}>지정</span>
+        </span>
+      ) : (
+        v
+      ),
+  },
   { key: 'phone', header: '전화번호', width: '128px', mask: 'phone', value: (r) => r.phone ?? '-' },
   { key: 'birthDate', header: '생년월일', width: '104px', mask: 'birth', value: (r) => r.birthDate ?? '-' },
   { key: 'admissionDate', header: '등원일', width: '100px', sortable: sortableKey('admissionDate'), value: (r) => r.admissionDate ?? '-' },
@@ -146,12 +164,7 @@ const INFO_FIELDS: { key: InfoKey; label: string; max?: number; placeholder?: st
   { key: 'name', label: '이름', max: 30 },
   { key: 'phone', label: '연락처', max: 20, placeholder: '010-0000-0000' },
   { key: 'birthDate', label: '생년월일' },
-  {
-    key: 'gender',
-    label: '성별',
-    /* 서버가 저장은 하는데 돌려주지 않는다 — 비어 보이는 게 '미입력' 이 아니다 */
-    hint: '저장된 값을 불러올 수 없어 비어 보입니다. 바꿀 때만 고르세요.',
-  },
+  { key: 'gender', label: '성별' },
   { key: 'schoolName', label: '출신학교', max: 40 },
   { key: 'address', label: '주소', max: 120, hint: '칸을 비우고 저장하면 저장된 값이 지워집니다.' },
   { key: 'grade', label: '학년' },
@@ -167,7 +180,7 @@ function infoOf(s: Student): Record<InfoKey, string> {
     name: s.name ?? '',
     phone: s.phone ?? '',
     birthDate: s.birthDate ?? '',
-    gender: '',
+    gender: s.gender ?? '',
     schoolName: s.schoolName ?? '',
     address: s.address ?? '',
     grade: s.grade ?? '',
@@ -303,9 +316,67 @@ function Content() {
   const [infoErr, setInfoErr] = useState<string | null>(null)
   const [infoDone, setInfoDone] = useState<string | null>(null)
 
+  /*
+   * 담임 예외 지정 — 학생 정보 모달 안에서 **바로 반영**한다(아래 '저장'과 따로 나간다).
+   *
+   * ★ 지금 상태는 상세의 `homeroomOverride` 로 안다. 지정·해제 뒤에는 상세를 다시 읽는다.
+   * ★ 지점관리자·본사만 — 서버도 막지만 직원에게 누르면 거절되는 버튼을 보여줄 이유가 없다.
+   */
+  const { canSeeAdmin: canManageHomeroom } = useAuth()
+  const [hr, setHr] = useState<{
+    open: boolean
+    teachers: TeacherRow[] | null
+    teacherId: string
+    reason: string
+    busy: boolean
+    err: string | null
+  }>({ open: false, teachers: null, teacherId: '', reason: '', busy: false, err: null })
+
+  function openHomeroom() {
+    const aid = infoEdit?.loaded?.academyId
+    if (aid == null) return
+    setHr((h) => ({ ...h, open: true, err: null }))
+    if (hr.teachers === null) {
+      listTeachers(aid)
+        .then((t) => setHr((h) => ({ ...h, teachers: t })))
+        .catch((e) => setHr((h) => ({ ...h, teachers: [], err: e instanceof ApiError ? e.message : '선생님 목록을 불러오지 못했습니다.' })))
+    }
+  }
+
+  /* 담임 부분만 갈아 끼운다 — 입력 중인 다른 칸(form)은 건드리지 않는다 */
+  function patchHomeroom(enrollmentId: number, p: Pick<Student, 'homeroomTeacher' | 'homeroomOverride'>) {
+    setInfoEdit((cur) =>
+      cur && cur.loaded?.enrollmentId === enrollmentId ? { ...cur, loaded: { ...cur.loaded, ...p } } : cur,
+    )
+  }
+
+  async function applyHomeroom(clear: boolean) {
+    const loaded = infoEdit?.loaded
+    if (!loaded) return
+    setHr((h) => ({ ...h, busy: true, err: null }))
+    try {
+      const res = clear
+        ? await clearHomeroomOverride(loaded.enrollmentId)
+        : await setHomeroomOverride(loaded.enrollmentId, Number(hr.teacherId), hr.reason.trim())
+      setHr((h) => ({ ...h, busy: false, open: false, teacherId: '', reason: '' }))
+      // 응답으로 먼저 바꾸고, 해제면 돌아간 반 담임 이름을 알아야 하니 상세를 다시 읽는다
+      patchHomeroom(loaded.enrollmentId, {
+        homeroomTeacher: res.overridden ? res.teacherName : loaded.homeroomTeacher,
+        homeroomOverride: res.overridden ? res : null,
+      })
+      table.reload()
+      getStudent(loaded.enrollmentId)
+        .then((d) => patchHomeroom(loaded.enrollmentId, { homeroomTeacher: d.homeroomTeacher, homeroomOverride: d.homeroomOverride ?? null }))
+        .catch(() => {})
+    } catch (e) {
+      setHr((h) => ({ ...h, busy: false, err: e instanceof ApiError ? e.message : '담임을 바꾸지 못했습니다.' }))
+    }
+  }
+
   function openInfo(r: Student) {
     setInfoErr(null)
     setInfoDone(null)
+    setHr({ open: false, teachers: null, teacherId: '', reason: '', busy: false, err: null })
     setInfoEdit({ row: r, loaded: null, form: emptyInfo() })
     void getStudent(r.enrollmentId)
       .then((d) => setInfoEdit((cur) => (cur && cur.row.enrollmentId === r.enrollmentId ? { ...cur, loaded: d, form: infoOf(d) } : cur)))
@@ -318,11 +389,6 @@ function Content() {
     const body: StudentUpdateRequest = {}
     for (const k of INFO_KEYS) {
       const v = infoEdit.form[k].trim()
-      /* 성별은 서버가 돌려주지 않아 '전' 값을 모른다 — 고른 경우에만 보낸다 */
-      if (k === 'gender') {
-        if (v !== '') body.gender = v
-        continue
-      }
       if (v !== before[k].trim()) (body as Record<string, string>)[k] = v
     }
     if (Object.keys(body).length === 0) {
@@ -696,7 +762,7 @@ function Content() {
                         value={infoEdit.form.gender}
                         onChange={(e) => setInfoEdit({ ...infoEdit, form: { ...infoEdit.form, gender: e.target.value } })}
                       >
-                        <option value="">바꾸지 않음</option>
+                        <option value="">미입력</option>
                         <option value="M">남</option>
                         <option value="F">여</option>
                       </select>
@@ -716,6 +782,75 @@ function Content() {
                   </div>
                 </div>
               ))}
+
+              <div className="frow">
+                <label>담임</label>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minHeight: 36 }}>
+                    <span>{infoEdit.loaded.homeroomTeacher ?? '없음'}</span>
+                    {infoEdit.loaded.homeroomOverride?.overridden && <span className="mk supplement">따로 지정됨</span>}
+                    {canManageHomeroom && !hr.open && (
+                      <button type="button" className="btn" onClick={openHomeroom} disabled={hr.busy}>
+                        담임 따로 지정
+                      </button>
+                    )}
+                    {canManageHomeroom && infoEdit.loaded.homeroomOverride?.overridden && !hr.open && (
+                      <button type="button" className="btn" onClick={() => void applyHomeroom(true)} disabled={hr.busy}>
+                        반 담임으로 되돌리기
+                      </button>
+                    )}
+                  </div>
+                  {infoEdit.loaded.homeroomOverride?.overridden && infoEdit.loaded.homeroomOverride.reason && <div className="hint">사유: {infoEdit.loaded.homeroomOverride.reason}</div>}
+                  {hr.open && (
+                    <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
+                      <select
+                        className="sel"
+                        value={hr.teacherId}
+                        onChange={(e) => setHr({ ...hr, teacherId: e.target.value })}
+                        disabled={hr.teachers === null}
+                      >
+                        <option value="">{hr.teachers === null ? '불러오는 중…' : '선생님 선택'}</option>
+                        {(hr.teachers ?? []).map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.name}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        className="inp"
+                        placeholder="사유 (필수) — 예: 학부모 요청으로 상담 담당 변경"
+                        maxLength={200}
+                        value={hr.reason}
+                        onChange={(e) => setHr({ ...hr, reason: e.target.value })}
+                        // Enter 가 모달의 '저장'(submit)으로 새지 않게 막는다
+                        onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+                      />
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button
+                          type="button"
+                          className="btn pri"
+                          disabled={hr.busy || hr.teacherId === '' || hr.reason.trim() === ''}
+                          onClick={() => void applyHomeroom(false)}
+                        >
+                          {hr.busy ? '지정 중…' : '지정'}
+                        </button>
+                        <button type="button" className="btn" onClick={() => setHr({ ...hr, open: false, err: null })}>
+                          취소
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {hr.err && (
+                    <div className="hint" style={{ color: 'var(--red)' }}>
+                      {hr.err}
+                    </div>
+                  )}
+                  <div className="hint">
+                    반은 그대로 두고 이 학생만 다른 선생님이 맡습니다. 누르면 바로 반영되고, 반을 옮기면 반 담임으로
+                    돌아갑니다.
+                  </div>
+                </div>
+              </div>
             </>
           )}
         </Modal>
