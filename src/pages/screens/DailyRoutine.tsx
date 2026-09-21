@@ -10,10 +10,14 @@ import {
   copyRoutinesFromPreviousMonth,
   createRoutine,
   getRoutineMatrix,
+  listRoutineResults,
   listRoutines,
+  publishRoutineResults,
+  saveRoutineResults,
   type MatrixRow,
   type Routine,
   type RoutineRef,
+  type RoutineResult,
   type RoutineStatus,
 } from '../../api/routines'
 import type { Mockup } from './types'
@@ -180,6 +184,83 @@ function Content() {
   useEffect(() => {
     void load()
   }, [load])
+
+  /*
+   * 결과 입력 — 루틴 하나를 골라 반 전체를 한 번에 넣는다.
+   * ★ 서버가 '개별 폼 금지, 반 단위 그리드 일괄 입력' 이라 한 건씩 저장하는 경로가 없다.
+   * ★ 가채점(학생)과 검수 점수(교사)는 다른 칸이다 — 하나로 합치면 누가 매긴 점수인지 사라진다.
+   * ★ 처음 부르면 대상 학생 전원이 id=null(계획)로 온다 — 저장한 적 없는 줄이다.
+   */
+  const [editRoutine, setEditRoutine] = useState<number | null>(null)
+  const [grid, setGrid] = useState<RoutineResult[] | null>(null)
+  const [gridBusy, setGridBusy] = useState(false)
+  const [gridMsg, setGridMsg] = useState<{ text: string; error?: boolean } | null>(null)
+
+  useEffect(() => {
+    setGridMsg(null)
+    if (editRoutine === null) {
+      setGrid(null)
+      return
+    }
+    let alive = true
+    setGrid(null)
+    listRoutineResults(editRoutine, date)
+      .then((r) => alive && setGrid(r))
+      .catch((e) => alive && setGridMsg({ text: e instanceof ApiError ? e.message : '결과를 불러오지 못했습니다.', error: true }))
+    return () => {
+      alive = false
+    }
+  }, [editRoutine, date])
+  // 달을 바꾸면 그 달 루틴이 아니다
+  useEffect(() => setEditRoutine(null), [month, academyId])
+
+  const editing = routines.find((r) => r.id === editRoutine) ?? null
+  const setCell = (enrollmentId: number, patch: Partial<RoutineResult>) =>
+    setGrid((g) => (g ? g.map((x) => (x.enrollmentId === enrollmentId ? { ...x, ...patch } : x)) : g))
+  const num = (v: string) => (v.trim() === '' ? null : Number(v))
+
+  async function saveGrid() {
+    if (editRoutine === null || !grid) return
+    setGridBusy(true)
+    setGridMsg(null)
+    try {
+      await saveRoutineResults(
+        editRoutine,
+        date,
+        grid.map((r) => ({
+          enrollmentId: r.enrollmentId,
+          status: r.status,
+          selfScore: r.selfScore ?? undefined,
+          reviewedScore: r.reviewedScore ?? undefined,
+          memo: r.memo?.trim() || undefined,
+        })),
+      )
+      setGridMsg({ text: `${editing?.name ?? '루틴'} ${date} 결과 ${grid.length}명을 저장했습니다. 학생 앱에는 '학생에게 공개' 를 눌러야 보입니다.` })
+      setGrid(await listRoutineResults(editRoutine, date))
+      void load()
+    } catch (e) {
+      setGridMsg({ text: e instanceof ApiError ? e.message : '저장하지 못했습니다.', error: true })
+    } finally {
+      setGridBusy(false)
+    }
+  }
+
+  async function publishGrid() {
+    if (editRoutine === null || !grid) return
+    setGridBusy(true)
+    setGridMsg(null)
+    try {
+      await publishRoutineResults(editRoutine, date)
+      const n = grid.filter((r) => r.status === 'REVIEWED').length
+      setGridMsg({ text: `검수까지 끝난 ${n}명의 결과를 학생 앱에 공개했습니다. 검수 전인 학생은 공개되지 않았습니다.` })
+      setGrid(await listRoutineResults(editRoutine, date))
+      void load()
+    } catch (e) {
+      setGridMsg({ text: e instanceof ApiError ? e.message : '공개하지 못했습니다.', error: true })
+    } finally {
+      setGridBusy(false)
+    }
+  }
 
   const columns = useMemo<Column<Row>[]>(
     () => [
@@ -395,7 +476,131 @@ function Content() {
         />
 
         <div style={{ padding: 14 }}>
-          {tab === 'result' ? (
+          {tab === 'result' && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12.5, fontWeight: 700 }}>입력할 루틴</span>
+              <select
+                className="sel"
+                style={{ width: 240 }}
+                value={editRoutine ?? ''}
+                onChange={(e) => setEditRoutine(e.target.value === '' ? null : Number(e.target.value))}
+              >
+                <option value="">전체 결과 보기</option>
+                {routines.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                    {r.subject ? ` · ${r.subject}` : ''}
+                  </option>
+                ))}
+              </select>
+              <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+                루틴을 고르면 {date} 결과를 반 전체 한 번에 입력합니다
+              </span>
+            </div>
+          )}
+          {tab === 'result' && editRoutine !== null ? (
+            <div>
+              {gridMsg && (
+                <div
+                  className="note-box"
+                  role={gridMsg.error ? 'alert' : 'status'}
+                  style={gridMsg.error ? { borderColor: 'var(--red)', color: 'var(--red)' } : undefined}
+                >
+                  <div>{gridMsg.text}</div>
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+                <input className="inp" type="date" style={{ width: 140 }} value={date} onChange={(e) => setDate(e.target.value)} />
+                <span style={{ fontSize: 12.5 }}>
+                  <b>{editing?.name}</b> · {grid?.length ?? 0}명
+                  {editing && editing.maxScore > 0 ? ` · 배점 ${editing.maxScore}점` : ' · 완료/미완료만'}
+                </span>
+                <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                  <button className="btn" disabled={gridBusy || !grid} onClick={() => void publishGrid()} title="검수까지 끝난 학생만 학생 앱에 보입니다">
+                    <Icon name="send" size={14} /> 학생에게 공개
+                  </button>
+                  <button className="btn pri" disabled={gridBusy || !grid || grid.length === 0} onClick={() => void saveGrid()}>
+                    <Icon name="save" size={14} /> {gridBusy ? '저장 중…' : '결과 저장'}
+                  </button>
+                </span>
+              </div>
+              {grid === null ? (
+                <div style={{ padding: 20, color: 'var(--muted)', fontSize: 13 }}>불러오는 중…</div>
+              ) : grid.length === 0 ? (
+                <div style={{ padding: 20, color: 'var(--muted)', fontSize: 13 }}>이 루틴의 대상 학생이 없습니다.</div>
+              ) : (
+                <div className="dt-scroll" style={{ maxHeight: 520, overflow: 'auto' }}>
+                  <table className="dt nowrap" style={{ width: '100%' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ width: 96 }}>학번</th>
+                        <th style={{ width: 84 }}>이름</th>
+                        <th style={{ width: 110 }}>상태</th>
+                        <th style={{ width: 90 }}>가채점</th>
+                        <th style={{ width: 90 }}>검수 점수</th>
+                        <th>메모</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {grid.map((r) => (
+                        <tr key={r.enrollmentId}>
+                          <td>{r.studentNo ?? '-'}</td>
+                          <td>{r.studentName}</td>
+                          <td>
+                            <select
+                              className="sel"
+                              value={r.status}
+                              onChange={(e) => setCell(r.enrollmentId, { status: e.target.value as RoutineStatus })}
+                            >
+                              {(Object.keys(ROUTINE_STATUS_LABEL) as RoutineStatus[]).map((st) => (
+                                <option key={st} value={st}>
+                                  {ROUTINE_STATUS_LABEL[st]}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td>
+                            <input
+                              className="inp"
+                              type="number"
+                              min={0}
+                              max={editing?.maxScore || undefined}
+                              value={r.selfScore ?? ''}
+                              onChange={(e) => setCell(r.enrollmentId, { selfScore: num(e.target.value) })}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              className="inp"
+                              type="number"
+                              min={0}
+                              max={editing?.maxScore || undefined}
+                              value={r.reviewedScore ?? ''}
+                              onChange={(e) => setCell(r.enrollmentId, { reviewedScore: num(e.target.value) })}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              className="inp"
+                              maxLength={200}
+                              value={r.memo ?? ''}
+                              onChange={(e) => setCell(r.enrollmentId, { memo: e.target.value })}
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {/* ★ 서버가 빈 점수·'계획' 으로 되돌리기를 조용히 무시한다(저장 1건이라고 답한다) — API_GAPS 33-2.
+                     저장 뒤 다시 읽어 실제 값을 보여 주고, 미리 알린다 */}
+              <div className="hint" style={{ marginTop: 6 }}>
+                한 번 저장한 점수는 칸을 비워도 지워지지 않고, 상태를 &lsquo;계획&rsquo;으로 되돌릴 수 없습니다. 저장한 뒤
+                보이는 값이 실제로 저장된 값입니다.
+              </div>
+            </div>
+          ) : tab === 'result' ? (
             <DataTable
               nowrap
               columns={columns}
@@ -427,9 +632,7 @@ function Content() {
                   />
                   <MaskToggle masked={masked} onChange={setMasked} />
                   <ExcelButton filename="데일리루틴_결과" columns={columns} rows={matrix} masked={masked} />
-                  <button className="btn pri" disabled data-soon title="결과 입력은 아직 준비 중입니다">
-                    <Icon name="save" size={14} /> 결과 저장
-                  </button>
+                  <span style={{ fontSize: 12, color: 'var(--muted)' }}>입력은 위에서 루틴을 고르세요</span>
                 </>
               }
             />

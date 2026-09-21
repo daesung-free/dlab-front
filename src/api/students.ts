@@ -308,3 +308,44 @@ export function reEnrollStudent(
 ): Promise<{ enrollmentId: number; studentNo: string | null }> {
   return request(`/api/v1/admin/students/${enrollmentId}/re-enroll`, { method: 'POST', body })
 }
+
+/* ── 엑셀 일괄 등록 (F-4.1-3) ─────────────────────────────── */
+
+export interface StudentImportResult {
+  totalRows: number
+  validRows: number
+  errorRows: number
+  /** 반영될(반영된) 행. `existing` 이면 새로 만들지 않고 기존 학생을 갱신한다 */
+  rows: { rowNumber: number; name: string; grade: string; track: string | null; existing: boolean }[]
+  /** 행 번호는 **엑셀 기준 1-based** — 사용자가 그 행을 바로 찾는다 */
+  errors: { rowNumber: number; field: string; message: string }[]
+}
+
+function importForm(file: File): FormData {
+  const fd = new FormData()
+  fd.append('file', file)
+  return fd
+}
+
+/**
+ * 미리보기 — **아무것도 저장하지 않는다.** 서버는 결과를 들고 있지 않아서
+ * 반영할 때 **같은 파일을 다시 올려야** 한다(다중 인스턴스라 세션에 둘 수 없다).
+ * ★ 칸은 위치가 아니라 **첫 줄의 제목**으로 찾는다 — 필수: 이름·학년 / 선택: 연락처·계열·생년월일·성별·출신학교·학생고유ID
+ */
+export function previewStudentImport(academyId: number, year: number, file: File): Promise<StudentImportResult> {
+  return request<StudentImportResult>('/api/v1/admin/students/import/preview', {
+    method: 'POST',
+    query: { academyId, year },
+    body: importForm(file),
+  })
+}
+
+/** 반영 — **오류 행이 있어도 정상 행은 넣는다.** */
+export function applyStudentImport(academyId: number, year: number, file: File): Promise<StudentImportResult> {
+  return request<StudentImportResult>('/api/v1/admin/students/import', {
+    method: 'POST',
+    query: { academyId, year },
+    body: importForm(file),
+  })
+}
+

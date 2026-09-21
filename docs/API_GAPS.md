@@ -2961,3 +2961,24 @@ GET /api/v1/admin/staff/accounts/{bundang}/history
 덧붙여 — 프론트 타입이 이 응답과 **달랐다**(beforeValue·afterValue·changedAt 을 읽었다). 그래서 예전
 '이력 보기' 는 "- → -" 만 찍었다. 실제 모양(`changes` JSON 문자열)으로 고쳤다.
 
+## 33-2. 루틴 결과 — 점수를 지우거나 '계획' 으로 되돌리면 **조용히 무시**된다 ★ 요청
+
+```
+PUT /routines/22/results?date=2026-09-21
+{"results":[{"enrollmentId":4,"status":"PLANNED","selfScore":null,"reviewedScore":null}]}
+→ {"success":true,"data":{"saved":1}}          ← 저장했다고 답한다
+GET  → status:"SUBMITTED", selfScore:40            ← 그대로다
+```
+
+`NOT_SUBMITTED` 로는 바뀐다. 즉 **null 점수는 '안 바꿈'**, **PLANNED 로의 전환은 무시**다.
+잘못 넣은 점수를 지울 방법이 없고, 응답이 '저장 1건' 이라 사용자는 된 줄 안다.
+
+> 요청: (1) 점수를 비우는 방법(null 을 지우기로 받거나 별도 필드), (2) 막는 전환이면 400 과 이유.
+> 화면은 저장 뒤 다시 읽어 실제 값을 보여 주고, 입력 표 아래에 미리 알린다.
+
+## 33-3. 기초 마스터 수정(PUT)은 안 보낸 칸을 지운다 (확인만)
+
+`PUT /masters/course-types/{id}` 에 `{name}` 만 보내면 코드·비고가 **null** 이 된다(실호출로 확인 후 원복).
+화면이 이름만 보내고 있었다 — 코드·비고를 넣기 시작하면 이름 수정 한 번에 사라졌을 것이다.
+등록·수정 창에 코드·비고 칸을 두고 셋을 늘 함께 보내게 고쳤다. 강의실은 PATCH(부분 수정)로 바꿨다.
+
