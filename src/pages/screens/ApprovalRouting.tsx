@@ -12,6 +12,7 @@ import {
   type ApprovalBoardRow,
   type ApprovalItem,
   type ApproverType,
+  type RequestType,
 } from '../../api/approvals'
 import {
   UNLOCK_STATUS_LABEL,
@@ -425,7 +426,8 @@ function Content() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  /** ★ 저장 중인 **줄**. 전체를 잠그면 다른 줄까지 눌러도 반응이 없어 "안 바뀐다" 가 된다 */
+  const [savingType, setSavingType] = useState<RequestType | null>(null)
 
   const year = new Date().getFullYear()
 
@@ -460,26 +462,47 @@ function Content() {
     const approverType = patch.approverType ?? item.approverType
     if (!approverType) return // 승인 주체는 필수다
 
-    setBusy(true)
+    const timeoutMinutes = patch.timeoutMinutes ?? item.timeoutMinutes ?? undefined
+    const escalationApproverType =
+      'escalationApproverType' in patch
+        ? (patch.escalationApproverType ?? undefined)
+        : (item.escalationApproverType ?? undefined)
+
+    setSavingType(item.requestType)
     setNotice(null)
     try {
       await saveApprovalItem(item.requestType, {
         academyId,
         year,
         approverType,
-        timeoutMinutes: patch.timeoutMinutes ?? item.timeoutMinutes ?? undefined,
-        escalationApproverType:
-          'escalationApproverType' in patch
-            ? (patch.escalationApproverType ?? undefined)
-            : (item.escalationApproverType ?? undefined),
+        timeoutMinutes,
+        escalationApproverType,
       })
-      await load()
+      /* ★ 전체를 다시 읽지 않는다. 재조회를 기다리는 동안 표가 멈춰 있어서
+           "눌러도 안 바뀐다" 로 느껴졌다.
+         ★ 서버는 **응답 본문을 주지 않으므로**(approvals.ts 주석) 방금 보낸 값으로
+           그 줄만 갈아 끼운다. 실패하면 아래에서 전체를 다시 읽는다 */
+      setItems((prev) =>
+        prev.map((x) =>
+          x.requestType === item.requestType
+            ? {
+                ...x,
+                configured: true,
+                approverType,
+                timeoutMinutes: timeoutMinutes ?? null,
+                escalationApproverType: escalationApproverType ?? null,
+              }
+            : x,
+        ),
+      )
       /* 좁은 자리라 화면 이름을 통째로 넣지 않는다. 무엇을 눌렀는지는 방금 누른 사람이 안다 */
       setNotice('저장했습니다')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '저장하지 못했습니다.')
+      /* 실패하면 화면과 서버가 어긋난다 — 그때만 전체를 다시 읽는다 */
+      await load()
     } finally {
-      setBusy(false)
+      setSavingType(null)
     }
   }
 
@@ -559,11 +582,19 @@ function Content() {
             {/* 셀을 누르면 그 자리에서 저장된다. 매트릭스에서 '저장' 버튼을 따로 두면
                 무엇이 저장됐는지 알기 어렵다.
                 ★ 자리를 차지한 채 글자만 바뀌므로 표가 밀리지 않는다 */}
+            {/* ★ 폭을 고정한다. 글자 길이가 바뀔 때마다 옆 버튼이 밀려서 움찔거렸다
+                   (113px → 59px 로 줄면서 칩이 54px 이동했다) */}
             <span
               role="status"
-              style={{ fontSize: 11.5, color: notice ? 'var(--mint-d)' : 'var(--muted)' }}
+              style={{
+                fontSize: 11.5,
+                color: notice ? 'var(--mint-d)' : 'var(--muted)',
+                width: 116,
+                textAlign: 'right',
+                flexShrink: 0,
+              }}
             >
-              {busy ? '저장 중…' : loading ? '불러오는 중…' : (notice ?? '선택하면 바로 저장됩니다')}
+              {savingType ? '저장 중…' : loading ? '불러오는 중…' : (notice ?? '선택하면 바로 저장됩니다')}
             </span>
           </div>
         </div>
@@ -604,10 +635,14 @@ function Content() {
                       <td key={a.key}>
                         <button
                           type="button"
-                          disabled={busy}
+                          disabled={savingType === it.requestType}
                           onClick={() => void apply(it, { approverType: a.key })}
                           className={`pm ${it.approverType === a.key ? a.cls : 'p-none'}`}
-                          style={{ border: 'none', cursor: busy ? 'default' : 'pointer', fontFamily: 'inherit' }}
+                          style={{
+                            border: 'none',
+                            cursor: savingType === it.requestType ? 'default' : 'pointer',
+                            fontFamily: 'inherit',
+                          }}
                           title={`${REQUEST_TYPE_LABEL[it.requestType]} → ${a.label} 승인`}
                         >
                           {it.approverType === a.key ? '지정' : '—'}
@@ -620,7 +655,7 @@ function Content() {
                           <select
                             className="sel"
                             style={{ width: 104, padding: '4px 8px', fontSize: 11.5 }}
-                            disabled={busy || !it.approverType}
+                            disabled={savingType === it.requestType || !it.approverType}
                             value={it.escalationApproverType ?? ''}
                             onChange={(e) =>
                               void apply(it, {
@@ -642,7 +677,7 @@ function Content() {
                           <select
                             className="sel"
                             style={{ width: 96, padding: '4px 8px', fontSize: 11.5 }}
-                            disabled={busy || !it.approverType}
+                            disabled={savingType === it.requestType || !it.approverType}
                             value={it.timeoutMinutes ?? ''}
                             onChange={(e) =>
                               void apply(it, { timeoutMinutes: e.target.value === '' ? null : Number(e.target.value) })
