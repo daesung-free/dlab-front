@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DataTable, ExcelButton, MaskToggle, Modal, Unfilled, type Column } from '../../components/common'
+import { DataTable, ExcelButton, MaskToggle, Modal, PrintButton, Unfilled, type Column } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
@@ -1283,9 +1283,8 @@ function Content() {
                 </span>
                 <div className="dt-right">
                   <MaskToggle masked={masked} onChange={setMasked} />
-                  <button className="btn" disabled data-soon title="준비 중입니다">
-                    <Icon name="printer" size={14} /> 출석부 인쇄
-                  </button>
+                  {/* 지금 보이는 출석부를 그대로 인쇄한다 — 따로 만든 출력 양식은 없다 */}
+                  <PrintButton label="출석부 인쇄" />
                 </div>
               </div>
               <div className="dt-scroll">

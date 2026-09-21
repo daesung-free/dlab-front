@@ -7,6 +7,7 @@ import { ApiError } from '../../api/client'
 import { listClasses, type ClassGroup } from '../../api/classes'
 import { getStatistics, getStudentStatistics, type StudentStatRow } from '../../api/statistics'
 import type { Mockup } from './types'
+import { createScreenSignal } from './screenSignal'
 import './matrix.css'
 
 /* 학원생 관리 > 교무업무 > 학원생 현황 (F-C-2) — /api/v1/admin/statistics/students
@@ -146,6 +147,13 @@ const MONTH_COLUMNS: Column<MonthRow>[] = [
   { key: 'delta', header: '전월 대비', value: (r) => (r.delta === null ? '' : r.delta) },
 ]
 
+/*
+ * 전년 대비 비교 — 헤더 버튼(켜기/끄기)과 본문을 잇는다. 누를 때마다 버전이 오르므로 홀수면 켜진 것.
+ * ★ 반끼리는 비교하지 않는다. 반은 해마다 새로 만들어 작년 '고3 1반' 과 올해 '고3 1반' 이 다른 반이다.
+ *   월별 등록 인원만 같은 달끼리 나란히 놓는다.
+ */
+const compareSignal = createScreenSignal()
+
 function signed(n: number | null): string {
   if (n === null) return '-'
   return n > 0 ? `+${n}` : String(n)
@@ -162,6 +170,9 @@ function Content() {
   const [byClass, setByClass] = useState<StudentStatRow[]>([])
   const [byTrack, setByTrack] = useState<StudentStatRow[]>([])
   const [byMonth, setByMonth] = useState<StudentStatRow[]>([])
+  const compareVer = compareSignal.useVersion()
+  const compare = compareVer % 2 === 1
+  const [prevMonth, setPrevMonth] = useState<StudentStatRow[] | null>(null)
   const [status, setStatus] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -222,6 +233,23 @@ function Content() {
   const fillPct = totalCapacity > 0 ? Math.round((seated / totalCapacity) * 100) : null
 
   const months: MonthRow[] = byMonth.map((r) => ({ month: r.key, count: r.count, delta: r.delta }))
+  /* 작년 같은 달 — 키가 'yyyy-MM' 이라 달만 떼어 맞춘다 */
+  const prevByMm = new Map((prevMonth ?? []).map((r) => [r.key.slice(-2), r.count]))
+
+  useEffect(() => {
+    if (!compare) {
+      setPrevMonth(null)
+      return
+    }
+    setTab('month')
+    let alive = true
+    getStudentStatistics({ academyId: branchId ?? undefined, year: year - 1, groupBy: 'MONTH' })
+      .then((r) => alive && setPrevMonth(r))
+      .catch(() => alive && setPrevMonth([]))
+    return () => {
+      alive = false
+    }
+  }, [compare, branchId, year])
   const maxCount = Math.max(1, ...months.map((m) => m.count))
   const lastMonth = months.at(-1)
 
@@ -442,12 +470,33 @@ function Content() {
                 >
                   {m.delta === null ? '첫 달' : `전월 대비 ${signed(m.delta)}`}
                 </span>
+                {compare && (
+                  <span style={{ width: 150, fontSize: 11.5, textAlign: 'right', color: 'var(--violet)' }}>
+                    {(() => {
+                      const p = prevByMm.get(m.month.slice(-2))
+                      return p === undefined ? `${year - 1}년 기록 없음` : `${year - 1}년 ${p}명 (${signed(m.count - p)})`
+                    })()}
+                  </span>
+                )}
               </div>
             ))}
           </div>
         </div>
       )}
     </>
+  )
+}
+
+function CompareButton() {
+  const on = compareSignal.useVersion() % 2 === 1
+  return (
+    <button
+      className={`btn${on ? ' pri' : ''}`}
+      onClick={() => compareSignal.bump()}
+      title="월별 등록 인원을 작년 같은 달과 나란히 봅니다"
+    >
+      <Icon name="bar-chart-3" size={14} /> {on ? '전년 비교 끄기' : '전년 대비 비교'}
+    </button>
   )
 }
 
@@ -459,9 +508,7 @@ export const studentStatusMockup: Mockup = {
   actions: (
     <>
       <button className="btn" disabled data-soon title="준비 중입니다">기수 선택 ▾</button>
-      <button className="btn" disabled data-soon title="준비 중입니다">
-        <Icon name="bar-chart-3" size={14} /> 전년 대비 비교
-      </button>
+      <CompareButton />
     </>
   ),
 }

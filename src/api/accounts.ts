@@ -106,18 +106,38 @@ export function withdrawAccount(accountId: number): Promise<void> {
 }
 
 /**
- * 권한 변경 이력 한 줄.
+ * 계정 변경 이력 한 줄 — **실제 응답 모양**(2026-09-21 확인).
  *
- * ★ replaceRoles 가 역할을 통째로 교체하므로 before/after 를 봐야 무엇이 빠졌는지 알 수 있다.
+ * ★ 예전 타입(beforeValue·afterValue·changedAt)은 서버와 달랐다. 그래서 '이력 보기' 가
+ *   "undefined - → -" 만 찍었다. 실제는 `changes` 에 **바뀐 칸 목록이 JSON 문자열**로 온다.
+ * ★ `actorName` 에 사람 이름이 아니라 계정 종류("EMPLOYEE")가 온다 — 백엔드 요청(API_GAPS 33-1).
  */
 export interface AccountHistory {
   id: number
   action: string
-  beforeValue: string | null
-  afterValue: string | null
-  changedBy: string | null
+  /** JSON 문자열 — `[{"field":"status","before":"ACTIVE","after":"WITHDRAWN"}]` */
+  changes: string | null
+  actorId: number | null
+  actorName: string | null
   /** ISO instant */
-  changedAt: string
+  occurredAt: string
+}
+
+export interface AccountChange {
+  field: string
+  before: string | null
+  after: string | null
+}
+
+/** `changes` 를 푼다. 깨진 값이면 빈 목록 — 이력 한 줄 때문에 창 전체가 죽지 않게 */
+export function parseAccountChanges(raw: string | null): AccountChange[] {
+  if (!raw) return []
+  try {
+    const v = JSON.parse(raw) as unknown
+    return Array.isArray(v) ? (v as AccountChange[]) : []
+  } catch {
+    return []
+  }
 }
 
 export function listAccountHistory(accountId: number): Promise<AccountHistory[]> {

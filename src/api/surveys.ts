@@ -1,4 +1,4 @@
-import { request } from './client'
+import { downloadFile, request } from './client'
 
 /* 설문 (F-4.6-부속) — /api/v1/admin/surveys
  *
@@ -139,3 +139,12 @@ export function createSurvey(body: SurveyCreate): Promise<SurveySummary> {
 export function closeSurvey(surveyId: number): Promise<void> {
   return request<void>(`/api/v1/admin/surveys/${surveyId}/close`, { method: 'PATCH' })
 }
+
+/**
+ * 원시 응답 엑셀 — 집계로는 부족할 때(가채점처럼 개별 응답을 봐야 할 때).
+ * ★ 익명 설문은 학번·이름 칸이 빈다. 응답 행에 응답자를 저장하지 않는 구조라 되돌릴 값이 없다.
+ */
+export function exportSurveyResponses(surveyId: number, title: string): Promise<void> {
+  return downloadFile(`/api/v1/admin/surveys/${surveyId}/responses/export`, `${title}_응답.xlsx`)
+}
+

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { DataTable, Unfilled, useServerData, type Column, Modal } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
@@ -379,7 +380,12 @@ const SCOPES = [
 ]
 
 function Content() {
-  const [tab, setTab] = useState('send')
+  // 다른 화면(출결 '출결 알림 템플릿')에서 템플릿 탭으로 바로 오게 ?tab= 을 받는다
+  const [searchParams] = useSearchParams()
+  const [tab, setTab] = useState(() => {
+    const t = searchParams.get('tab')
+    return t === 'tpl' || t === 'log' ? t : 'send'
+  })
   const { academyId } = useAcademy()
 
   /* 헤더 「발송 이력」을 누르면 그 탭으로 옮긴다. 첫 렌더의 0 은 건너뛴다 */

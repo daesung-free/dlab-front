@@ -3,6 +3,7 @@ import { Icon } from '../../components/Icon'
 import { DataTable, MaskToggle, Unfilled, type Column } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { ApiError } from '../../api/client'
+import { clearDraft, loadDraft, saveDraft } from '../../lib/draft'
 import { useAcademy } from '../../auth/AcademyContext'
 import {
   GRADE_LABEL,
@@ -98,7 +99,17 @@ type Result = { kind: 'admitted'; student: Student } | { kind: 'failed'; message
 /** 합격생 등록 폼 — 원래 이 화면 전체였다. 탭이 생기면서 이름만 갈랐고 내용은 그대로다 */
 function EnrollForm() {
   const { academyId, academies } = useAcademy()
-  const [form, setForm] = useState<FormState>(EMPTY)
+  /* 임시저장한 게 있으면 그걸로 시작한다 — 이 브라우저에만 남는다(lib/draft) */
+  const [form, setForm] = useState<FormState>(() => {
+    const d = loadDraft<FormState>('enroll')
+    if (!d) return EMPTY
+    const { savedAt: _at, ...rest } = d
+    return { ...EMPTY, ...rest }
+  })
+  const [tempMsg, setTempMsg] = useState<string | null>(() => {
+    const d = loadDraft<FormState>('enroll')
+    return d ? `${d.savedAt}에 임시저장한 내용을 불러왔습니다.` : null
+  })
   const [saving, setSaving] = useState(false)
   const [result, setResult] = useState<Result | null>(null)
   const [nextNo, setNextNo] = useState<string | null>(null)
@@ -145,6 +156,8 @@ function EnrollForm() {
       })
       setResult({ kind: 'admitted', student })
       setForm(EMPTY)
+      clearDraft('enroll')
+      setTempMsg(null)
       void refreshNextNo()
     } catch (err) {
       setResult({ kind: 'failed', message: err instanceof ApiError ? err.message : '등록하지 못했습니다.' })
@@ -395,7 +408,16 @@ function EnrollForm() {
             미완 상태로 남습니다.
           </div>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-            <button className="btn" disabled data-soon title="준비 중입니다">
+            {tempMsg && <span style={{ fontSize: 12, color: 'var(--muted)', alignSelf: 'center' }}>{tempMsg}</span>}
+            <button
+              className="btn"
+              disabled={saving}
+              title="이 컴퓨터에 잠시 저장합니다. 학번은 매겨지지 않습니다"
+              onClick={() => {
+                const at = saveDraft('enroll', form)
+                setTempMsg(at ? `${at} 임시저장했습니다 (이 컴퓨터에서만 불러옵니다).` : '임시저장하지 못했습니다.')
+              }}
+            >
               임시저장
             </button>
             <button className="btn pri" disabled={!canSave} onClick={() => void save()}>
