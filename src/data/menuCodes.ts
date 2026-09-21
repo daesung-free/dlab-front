@@ -40,6 +40,8 @@ export const SCREEN_MENU_CODES: Record<string, string[]> = {
   'daily-routine': ['routine'],
   'learning-plan': ['learning-plan'],
   score: ['grade'],
+  /* 서버가 성적 업로드를 grade 권한으로 막는다(별도 메뉴 코드 없음) */
+  'exam-upload': ['grade'],
   survey: ['survey'],
   consult: ['consult'],
   lecture: ['lecture'],

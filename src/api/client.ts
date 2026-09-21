@@ -134,13 +134,16 @@ async function send(path: string, opts: RequestOptions): Promise<Response> {
     throw new ApiError(403, 'READ_ONLY', '조회 전용 계정입니다. 등록·수정·삭제는 할 수 없습니다.')
   }
   const token = opts.anonymous ? null : getAccessToken()
+  // 파일 업로드는 FormData 를 그대로 보낸다. Content-Type 을 직접 붙이면 multipart 경계(boundary)가
+  // 빠져 서버가 파일을 못 읽는다 — 브라우저가 채우게 비워 둔다
+  const multipart = opts.body instanceof FormData
   return fetch(buildUrl(path, opts.query, opts.repeatable), {
     method: opts.method ?? 'GET',
     headers: {
-      ...(opts.body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      ...(opts.body === undefined || multipart ? {} : { 'Content-Type': 'application/json' }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+    body: opts.body === undefined ? undefined : multipart ? (opts.body as FormData) : JSON.stringify(opts.body),
   })
 }
 

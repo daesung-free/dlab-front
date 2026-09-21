@@ -26,6 +26,7 @@ import { staffCardsMockup } from './StaffCards'
 import { regularScheduleMockup } from './RegularSchedule'
 import { adminBillingMockup } from './AdminBilling'
 import { adminResultMockup } from './AdminResult'
+import { examUploadMockup } from './ExamUpload'
 import { seatMoveMockup } from './SeatMove'
 /* Phase 3 */
 import { scoreMockup } from './ScoreReport'
@@ -81,6 +82,7 @@ export const MOCKUPS: Record<string, Mockup> = {
   'regular-schedule': regularScheduleMockup, // F-4.11-8 정기일정 · 인정 판정
   'admin-billing': adminBillingMockup, // F-4.10-5 수납 관리(청구기준)
   'admin-result': adminResultMockup, // F-4.10-6 실적 관리
+  'exam-upload': examUploadMockup, // F-4.6 부속 성적 업로드(디랩 시험 파일)
   'seat-move': seatMoveMockup, // F-4.11-8 좌석 이탈/복귀
 
   /* ── Phase 3 (교육·성적·소통) ── */

@@ -190,6 +190,13 @@ export const NAV: NavCat[] = [
           { screenId: 'admin-assign', label: '배정 관리', added: true, note: '사물함·독서실. 기숙사 제외' },
           { screenId: 'admin-lecture', label: '특강 기초 설정', added: true },
           { screenId: 'admin-result', label: '실적 관리', added: true, note: '합격 실적 입력·통계' },
+          {
+            screenId: 'exam-upload',
+            label: '성적 업로드',
+            icon: 'upload',
+            added: true,
+            note: '디랩 시험 성적·문항분석표·정오표 파일',
+          },
         ],
       },
     ],
