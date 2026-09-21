@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type CSSProperties } from 'react'
 import type { ReactNode } from 'react'
 import { maskValue, type MaskKind } from '../../lib/mask'
 import { Icon } from '../Icon'
@@ -27,9 +27,25 @@ export interface Column<T> {
   value: (row: T) => string | number
   /** 셀 커스텀 렌더 (배지 등). 없으면 value를 그대로 그린다 */
   render?: (row: T, displayValue: string) => ReactNode
+  /**
+   * 가로로 밀어도 왼쪽에 붙어 있는다. **앞에서부터 이어진 칸에만** 준다(학번·이름).
+   *
+   * ★ `width` 가 px 여야 한다 — 다음 칸이 붙을 자리를 그 폭으로 계산한다.
+   * ★ `nowrap` 과 같이 쓴다. 칸이 눌리는 표는 밀리지 않아서 고정할 의미가 없다.
+   */
+  sticky?: boolean
 }
 
 interface Props<T> {
+  /**
+   * 칸 안에서 줄바꿈하지 않는다. 기본 false.
+   *
+   * ★ 표는 `width: 100%` 라 칸이 많으면 **넘치는 대신 칸을 눌러버린다** — 학원생 검색(17칸)이
+   *   1280px 에서 `N/수/2/반` 처럼 세로로 쪼개졌다. 이걸 켜면 칸이 제 폭을 지키고,
+   *   모자라면 표가 옆으로 밀린다(`.dt-scroll` 가 받는다).
+   * ★ 옵션으로만 켠다. 긴 글(메모·사유)이 있는 표에 켜면 한 줄로 끝없이 늘어난다.
+   */
+  nowrap?: boolean
   columns: Column<T>[]
   rows: T[]
   rowKey: (row: T) => string
@@ -91,9 +107,35 @@ export function DataTable<T>({
   emptyText = '조회 결과가 없습니다.',
   toolbar,
   countLabel,
+  nowrap = false,
 }: Props<T>) {
   const [sort, setSort] = useState<SortState>(null)
   const [page, setPage] = useState(1)
+
+  /* 고정 칸의 왼쪽 위치. 앞 칸 폭을 더해 간다 — px 가 아니면 계산할 수 없어 고정하지 않는다 */
+  const stickyLeft = useMemo(() => {
+    const out = new Map<string, { left: number; w: number; last: boolean }>()
+    let x = selectable ? 40 : 0
+    const stickies = columns.filter((c) => c.sticky && /^\d+px$/.test(c.width ?? ''))
+    stickies.forEach((c, i) => {
+      const w = parseInt(c.width as string, 10)
+      out.set(c.key, { left: x, w, last: i === stickies.length - 1 })
+      x += w
+    })
+    return out
+  }, [columns, selectable])
+
+  function stickyStyle(key: string, base?: CSSProperties): CSSProperties | undefined {
+    const st = stickyLeft.get(key)
+    if (!st) return base
+    /* 폭을 못박는다. 칸이 계산보다 좁아지면 고정 칸 사이로 밑에 지나가는 칸 글자가 비친다 */
+    return { ...base, position: 'sticky', left: st.left, zIndex: 1, width: st.w, minWidth: st.w, maxWidth: st.w }
+  }
+  function stickyClass(key: string): string {
+    const st = stickyLeft.get(key)
+    return st ? (st.last ? 'stk stk-last' : 'stk') : ''
+  }
+  const anySticky = stickyLeft.size > 0
 
   const sorted = useMemo(() => {
     // 서버 정렬을 쓰는 화면은 서버가 준 순서를 그대로 유지한다
@@ -173,11 +215,11 @@ export function DataTable<T>({
       </div>
 
       <div className="dt-scroll">
-        <table className="dt">
+        <table className={['dt', nowrap ? 'nowrap' : ''].filter(Boolean).join(' ')}>
           <thead>
             <tr>
               {selectable && (
-                <th className="cb-col">
+                <th className={anySticky ? 'cb-col stk' : 'cb-col'} style={anySticky ? { position: 'sticky', left: 0, zIndex: 2, width: 40, minWidth: 40, maxWidth: 40 } : undefined}>
                   <input type="checkbox" checked={allChecked} onChange={toggleAll} aria-label="전체 선택" />
                 </th>
               )}
@@ -186,8 +228,9 @@ export function DataTable<T>({
                 return (
                   <th
                     key={c.key}
-                    style={c.width ? { width: c.width } : undefined}
+                    style={stickyStyle(c.key, c.width ? { width: c.width } : undefined)}
                     className={[
+                      stickyClass(c.key),
                       c.align ? `al-${c.align}` : '',
                       c.sortable && sortEnabled ? 'sortable' : '',
                       isSorted ? 'sorted' : '',
@@ -218,7 +261,11 @@ export function DataTable<T>({
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
                 >
                   {selectable && (
-                    <td className="cb-col" onClick={(e) => e.stopPropagation()}>
+                    <td
+                      className={anySticky ? 'cb-col stk' : 'cb-col'}
+                      style={anySticky ? { position: 'sticky', left: 0, zIndex: 1, width: 40, minWidth: 40, maxWidth: 40 } : undefined}
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <input type="checkbox" checked={checked} onChange={() => toggleOne(id)} aria-label={`${id} 선택`} />
                     </td>
                   )}
@@ -227,7 +274,8 @@ export function DataTable<T>({
                     return (
                       <td
                         key={c.key}
-                        className={[c.align ? `al-${c.align}` : '', c.mask && masked ? 'masked' : '']
+                        style={stickyStyle(c.key)}
+                        className={[stickyClass(c.key), c.align ? `al-${c.align}` : '', c.mask && masked ? 'masked' : '']
                           .filter(Boolean)
                           .join(' ')}
                       >

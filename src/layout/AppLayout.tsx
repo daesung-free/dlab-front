@@ -17,7 +17,7 @@ export function AppLayout() {
   return (
     /* ★ 조회 전용이면 뿌리에 표시를 남긴다. 쓰기 버튼이 188개라 하나씩 잠그면 반드시
        빠뜨리므로, 실제 차단은 API 클라이언트가 하고(client.ts) 여기서는 **보이게** 한다 */
-    <div data-readonly={readOnly ? 'true' : undefined}>
+    <div className="app-shell" data-readonly={readOnly ? 'true' : undefined}>
       <TopNav />
       {readOnly && (
         <div className="readonly-bar">
