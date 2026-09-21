@@ -422,7 +422,6 @@ function FirewallSection({ academyId }: { academyId: number | null }) {
 function Content() {
   const { academyId } = useAcademy()
   const [items, setItems] = useState<ApprovalItem[]>([])
-  const [escalation, setEscalation] = useState(true)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -570,15 +569,6 @@ function Content() {
             승인 항목별 주체 설정
           </div>
           <div className="r">
-            {/* ★ 켜고 끄는 버튼은 **지금 누르면 무엇이 되는지**를 써야 한다. 열이 이미 보이는데
-                   '보기' 라고 쓰여 있으면 눌렀을 때 반대로 숨겨져서 고장으로 읽힌다 */}
-            <button
-              className={`chip${escalation ? ' on' : ''}`}
-              title="전환 대상과 전환까지 걸리는 시간 열을 보여주거나 감춥니다"
-              onClick={() => setEscalation(!escalation)}
-            >
-              전환 열 {escalation ? '숨기기' : '보기'}
-            </button>
             {/* 셀을 누르면 그 자리에서 저장된다. 매트릭스에서 '저장' 버튼을 따로 두면
                 무엇이 저장됐는지 알기 어렵다.
                 ★ 자리를 차지한 채 글자만 바뀌므로 표가 밀리지 않는다 */}
@@ -611,14 +601,15 @@ function Content() {
                       {a.label}
                     </th>
                   ))}
-                  {escalation && (
-                    <>
-                      {/* ★ 두 열은 짝이다 — '전환 대상 / 전환까지' 로 같은 말에 걸어 둔다.
-                             '미응답 시' 조건은 바로 아래 범례가 이미 말한다 */}
-                      <th style={{ width: 104 }}>전환 대상</th>
-                      <th style={{ width: 104 }}>전환까지</th>
-                    </>
-                  )}
+                  {/* ★ 두 열은 짝이다 — '전환 대상 / 전환까지' 로 같은 말에 걸어 둔다.
+                         '미응답 시' 조건은 바로 아래 범례가 이미 말한다.
+                     ★ 예전에는 이 둘을 접는 토글이 있었다. 원본 시안이 없는 화면이라 우리가
+                         넣은 것인데, 재보니 1340~760px 어디서도 표가 넘치지 않아 **접어서 얻는
+                         공간이 없었다.** 접으면 행 높이가 43→36px 로 줄어 표가 들썩이기만 했고,
+                         접힌 동안에는 이 값을 보지도 고치지도 못했다. 좁은 화면은 .mx-scroll 이
+                         가로 스크롤로 받는다(2026-09-21 제거) */}
+                  <th style={{ width: 104 }}>전환 대상</th>
+                  <th style={{ width: 104 }}>전환까지</th>
                   <th>비고</th>
                 </tr>
               </thead>
@@ -649,56 +640,52 @@ function Content() {
                         </button>
                       </td>
                     ))}
-                    {escalation && (
-                      <>
-                        <td>
-                          <select
-                            className="sel"
-                            style={{ width: 104, padding: '4px 8px', fontSize: 11.5 }}
-                            disabled={savingType === it.requestType || !it.approverType}
-                            value={it.escalationApproverType ?? ''}
-                            onChange={(e) =>
-                              void apply(it, {
-                                escalationApproverType: e.target.value === '' ? null : (e.target.value as ApproverType),
-                              })
-                            }
-                          >
-                            {/* ★ 옵션에 '→' 를 붙이지 않는다. 열 제목이 이미 '미응답 시 전환' 이라
-                                   같은 말을 두 번 하고, '없음' 에는 화살표가 없어 줄도 안 맞았다 */}
-                            <option value="">없음</option>
-                            {APPROVERS.map((a) => (
-                              <option key={a.key} value={a.key}>
-                                {a.label}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td>
-                          <select
-                            className="sel"
-                            style={{ width: 96, padding: '4px 8px', fontSize: 11.5 }}
-                            disabled={savingType === it.requestType || !it.approverType}
-                            value={it.timeoutMinutes ?? ''}
-                            onChange={(e) =>
-                              void apply(it, { timeoutMinutes: e.target.value === '' ? null : Number(e.target.value) })
-                            }
-                          >
-                            {/* ★ 서버 값이 후보에 없으면 `<select>` 는 **아무것도 안 고른 상태**가 되어
-                                   '없음' 으로 보인다 — 실제로는 10분이 걸려 있는데 안 걸린 것처럼 읽혔다
-                                   (와이파이 해제·정기일정이 10분이라 두 줄이 그랬다, 2026-09-21).
-                                   지금 값을 후보에 섞어서 **서버에 있는 것은 반드시 보이게** 한다 */}
-                            <option value="">없음</option>
-                            {[...new Set([...TIMEOUT_CHOICES, ...(it.timeoutMinutes ? [it.timeoutMinutes] : [])])]
-                              .sort((a, b) => a - b)
-                              .map((m) => (
-                                <option key={m} value={m}>
-                                  {m}분
-                                </option>
-                              ))}
-                          </select>
-                        </td>
-                      </>
-                    )}
+                    <td>
+                      <select
+                        className="sel"
+                        style={{ width: 104, padding: '4px 8px', fontSize: 11.5 }}
+                        disabled={savingType === it.requestType || !it.approverType}
+                        value={it.escalationApproverType ?? ''}
+                        onChange={(e) =>
+                          void apply(it, {
+                            escalationApproverType: e.target.value === '' ? null : (e.target.value as ApproverType),
+                          })
+                        }
+                      >
+                        {/* ★ 옵션에 '→' 를 붙이지 않는다. 열 제목이 이미 '미응답 시 전환' 이라
+                               같은 말을 두 번 하고, '없음' 에는 화살표가 없어 줄도 안 맞았다 */}
+                        <option value="">없음</option>
+                        {APPROVERS.map((a) => (
+                          <option key={a.key} value={a.key}>
+                            {a.label}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td>
+                      <select
+                        className="sel"
+                        style={{ width: 96, padding: '4px 8px', fontSize: 11.5 }}
+                        disabled={savingType === it.requestType || !it.approverType}
+                        value={it.timeoutMinutes ?? ''}
+                        onChange={(e) =>
+                          void apply(it, { timeoutMinutes: e.target.value === '' ? null : Number(e.target.value) })
+                        }
+                      >
+                        {/* ★ 서버 값이 후보에 없으면 `<select>` 는 **아무것도 안 고른 상태**가 되어
+                               '없음' 으로 보인다 — 실제로는 10분이 걸려 있는데 안 걸린 것처럼 읽혔다
+                               (와이파이 해제·정기일정이 10분이라 두 줄이 그랬다, 2026-09-21).
+                               지금 값을 후보에 섞어서 **서버에 있는 것은 반드시 보이게** 한다 */}
+                        <option value="">없음</option>
+                        {[...new Set([...TIMEOUT_CHOICES, ...(it.timeoutMinutes ? [it.timeoutMinutes] : [])])]
+                          .sort((a, b) => a - b)
+                          .map((m) => (
+                            <option key={m} value={m}>
+                              {m}분
+                            </option>
+                          ))}
+                      </select>
+                    </td>
                     <td style={{ textAlign: 'left', fontSize: 11.5, color: it.configured ? 'var(--muted)' : 'var(--red)' }}>
                       {it.configured
                         ? it.copiedFrom
@@ -785,9 +772,10 @@ function Content() {
               기본 정책
             </div>
           </div>
-          {/* ★ '승인 대기 UI (시안 1/2)' 줄은 지웠다. 정적 HTML 시안을 옮길 때 딸려 온
-                 **작업 흔적**이라 제품에 있을 이유가 없었다 — 클라이언트에게 '시안' 을 고르게
-                 하는 칸이었다(2026-09-18).
+          {/* ★ '승인 대기 UI (시안 1/2)' 줄은 지웠다. 이 화면은 원본 시안이 없는
+                 **신규개발**이고(`menu.ts` 에 refHtml 없음), '시안1' 은 0723 회의에서
+                 **이미 정해진 결론**이다("승인 대기 UI = 시안1"). 정해진 것을 매번 고르게
+                 하는 칸이었고, 시안1·2 가 뭐가 다른지는 레포에 기록도 없다(2026-09-21).
              ★ 남은 셋은 **진짜 설정인데 저장할 서버 경로가 없다.** 지우면 "원래 없던 설정" 이
                  되어 백엔드에 요청할 것이 조용히 사라지므로(CLAUDE.md 1) 남겨두고 막는다.
                  값을 바꿀 수 있는 것처럼 두면 바꿔놓고 저장된 줄 안다. */}
