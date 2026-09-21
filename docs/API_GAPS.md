@@ -2849,7 +2849,7 @@ PUT {reason:""} → 400 "지정 사유를 입력해 주세요."
 
 ```
 POST /admin/exam-forms                         디랩 시험 회차 등록 (purpose: ACADEMY, examDate 필수)
-GET  /admin/exam-forms/subject-presets         학년별 기본 과목 (로컬 반영 대기 — 없으면 입학 양식 과목으로)
+GET  /admin/exam-forms/subject-presets         학년별 기본 과목 (조회 실패·빈 값이면 입학 양식 과목으로)
 POST /admin/grades/exam-scores/upload/preview  ① 성적 미리보기 — 저장 안 함        (file)
 POST /admin/grades/exam-scores/upload          ① 성적 반영 — 찾은 학생만 저장      (file)
 POST /admin/grades/exam-scores/upload/links    못 찾은 행을 학생에 잇기 — 그해 다음 회차부터 자동
@@ -2858,8 +2858,9 @@ POST /admin/grades/exam-responses/upload       ③ 정오표(필수) + 답안표
 ```
 
 - **③은 ②가 있어야 한다** — 국어·수학 공통/선택 경계(1~34 / 35~45번)를 문항분석표에서 안다.
-  문항 정보가 올라가 있는지 **조회할 API가 없어** 화면이 ③을 잠그지 못한다. 없으면 서버 문구
-  ("문항분석표를 먼저 올려 주세요")를 그대로 보인다. → 요청 후보: 회차별 문항 수 조회
+  처음엔 확인할 조회가 없었는데, 요청 후 `GET /exam-forms` 에 `itemCount`·`itemsUploadedAt` 이
+  추가됐다(✅ 같은 날). 화면은 `itemCount === 0` 이면 ③을 잠그고, ② 카드에 "문항 N개 · M/D 올림" 을 보인다
+- 학년별 기본 과목(`subject-presets`) 로컬 반영 확인 — 고3: 국어·수학·영어·한국사·탐구1·탐구2
 - 업로드는 `purpose: ACADEMY` 회차에만 된다. 성적 관리 화면은 입학 전 성적 전용이라 ACADEMY 를 거른다
 - `GET /exam-forms` 는 `academyId` 를 붙이면 **그 지점 전용만**, 빼면 **공통만** 준다 — 둘 다 불러 합친다
 
@@ -2877,3 +2878,16 @@ POST /admin/grades/exam-responses/upload       ③ 정오표(필수) + 답안표
 | 한 행을 학생에 연결 → 다시 미리보기 | 찾음 1 · 못 찾음 604 (연결은 확인 후 삭제) |
 | ② 문항분석표 + 정답률(202608) | 문항 507 · 정답률 507 |
 | ③ 정오표(202606) | 저장 0 · 못 찾음 108 |
+| ①  반영(샘플 이름으로 고3 테스트 학생을 만들어) | 찾음 1 → 저장 1. 반영 뒤 버튼 잠김. 테스트 학생은 삭제 |
+| 새 회차(고3 월례) | 과목 = 학년별 기본 과목 · ② "아직 올리지 않았습니다" · ③ 잠김. 회차는 삭제 |
+
+## 32-3. 올린 디랩 시험 성적을 관리자 웹에서 볼 곳이 없다 ★ 요청
+
+`GET /admin/students/{id}/grades` 는 **입학 전 성적만** 준다. 디랩 시험(ACADEMY) 점수·채점은
+학생 앱 조회(`/app/grades/exams`, `/app/grades/exams/{id}/scoring`)에만 있다.
+반영 응답은 "저장 1명"인데, 무엇이 들어갔는지 웹에서 확인할 수 없다 — 잘못 올린 파일을
+알아챌 방법이 앱뿐이다.
+
+> 요청: 관리자용 조회 — 학생별 `GET /admin/students/{id}/grades/exams`(앱과 같은 모양) 또는
+> 회차별 `GET /admin/exam-forms/{id}/scores`(올라간 학생 목록 · 과목 점수).
+

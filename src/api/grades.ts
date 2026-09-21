@@ -42,6 +42,10 @@ export interface ExamForm {
   purpose?: 'ADMISSION' | 'ACADEMY'
   /** 시행일(yyyy-MM-dd). ACADEMY 는 필수 — 월례고사는 코드만으로 달이 구분되지 않는다 */
   examDate?: string | null
+  /** 올라간 문항 정보(문항분석표) 수. 0 이면 정오·답안을 올릴 수 없다 */
+  itemCount?: number
+  /** 문항 정보를 마지막으로 올린 시각(ISO). 없으면 null */
+  itemsUploadedAt?: string | null
   /** null이면 전 지점 공통. 지점 행이 있으면 그 지점에서는 공통본 대신 그것이 쓰인다 */
   academyId: number | null
   year: number

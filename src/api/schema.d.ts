@@ -4,6 +4,32 @@
  */
 
 export interface paths {
+    "/api/v1/app/surveys/{surveyId}/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 임시저장 불러오기.
+         * @description 임시저장 불러오기. 없으면 빈 목록(<code>savedAt</code>이 비어 있다).
+         */
+        get: operations["draft"];
+        /**
+         * 임시저장
+         * @description 임시저장. <b>검증하지 않는다</b> — 필수가 빠져도 저장된다. 부를 때마다 덮어쓴다.
+         *
+         *      <p>익명 설문과 이미 낸 설문은 받지 않는다(낸 설문은 <code>responses/me</code>로 불러와 다시 낸다).
+         */
+        put: operations["saveDraft"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/app/settings/notifications/{event}": {
         parameters: {
             query?: never;
@@ -996,6 +1022,34 @@ export interface paths {
          * @description soft delete — 이미 이 과목으로 쌓인 계획의 통계가 사라지면 안 된다.
          */
         delete: operations["deleteOption"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/exam-forms/subject-presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 학년별 기본 과목 구성
+         * @description 학년별 기본 과목 구성.
+         *
+         *      <p>디랩 시험 회차를 만들 때 과목을 비우면 이걸로 채워진다. 화면은 회차 등록 폼에
+         *      미리 채워 두는 데 써도 된다.
+         */
+        get: operations["presets"];
+        /**
+         * 한 학년의 기본 과목 구성을 통째로 바꾼다.
+         * @description 한 학년의 기본 과목 구성을 통째로 바꾼다. <b>이미 만든 회차는 안 바뀐다</b> —
+         *      다음에 만드는 회차부터 적용된다.
+         */
+        put: operations["replacePresets"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2066,8 +2120,11 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 응답 제출.
-         * @description 응답 제출. 한 번만 낼 수 있다.
+         * 응답 제출
+         * @description 응답 제출.
+         *
+         *      <p><code>allowEdit</code>이 켜진 설문은 기간 안에 <b>다시 낼 수 있다</b> — 같은 요청을 다시 보내면
+         *      응답이 교체된다. 꺼져 있으면 한 번만 낼 수 있다. 제출하면 임시저장은 지워진다.
          */
         post: operations["submit"];
         delete?: never;
@@ -4583,6 +4640,30 @@ export interface paths {
          *      만들면 학생 화면에 제목만 있고 입력 칸이 없는 빈 표가 그려진다.
          */
         post: operations["create_10"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/exam-forms/rollover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 연도 롤오버 — 전년도 입학 전 성적 양식과 기본 과목 구성을 새 해로 복사한다
+         * @description 연도 롤오버 — 전년도 입학 전 성적 양식과 기본 과목 구성을 새 해로 복사한다.
+         *
+         *      <p>이미 있는 것은 건너뛰어 두 번 불러도 된다. 디랩 시험 회차는 복사하지 않는다(시행일이
+         *      붙은 한 번뿐인 시험이다). 시험 이름의 연도는 올려 주지만 제도 변경(9평 → 8평 등)은
+         *      반영하지 않는다 — 복사 후 확인할 것.
+         */
+        post: operations["rollover"];
         delete?: never;
         options?: never;
         head?: never;
@@ -9189,8 +9270,16 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        ToggleNotification: {
-            enabled: boolean;
+        SurveyAnswerInput: {
+            /** Format: int64 */
+            questionId: number;
+            optionIds?: number[];
+            textValue?: string;
+            numberValue?: number;
+        };
+        /** @description 임시저장. <b>검증하지 않는다</b> — 비어 있어도, 필수가 빠져도 저장된다. */
+        SurveyDraftSave: {
+            answers?: components["schemas"]["SurveyAnswerInput"][];
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -9202,11 +9291,17 @@ export interface components {
          *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
          *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
          */
-        ApiResponseVoid: {
+        ApiResponseDraft: {
             success?: boolean;
-            data?: unknown;
+            data?: components["schemas"]["Draft"];
             meta?: components["schemas"]["PageMeta"];
             error?: components["schemas"]["ErrorBody"];
+        };
+        /** @description 임시저장. 제출 요청과 같은 모양이라 화면이 그대로 되살린다. */
+        Draft: {
+            answers?: components["schemas"]["SurveyAnswerInput"][];
+            /** Format: date-time */
+            savedAt?: string;
         };
         ErrorBody: {
             code?: string;
@@ -9233,6 +9328,25 @@ export interface components {
             /** Format: int32 */
             totalPages?: number;
             hasNext?: boolean;
+        };
+        ToggleNotification: {
+            enabled: boolean;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseVoid: {
+            success?: boolean;
+            data?: unknown;
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
         };
         Replace: {
             items: components["schemas"]["ScheduleItemInput"][];
@@ -9597,6 +9711,7 @@ export interface components {
              *                    <b>덮어써진다</b> — "예정 마감이 언제였나"는 남지 않는다.
              */
             status?: string;
+            allowEdit?: boolean;
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -10592,6 +10707,75 @@ export interface components {
             /** Format: int32 */
             sortOrder?: number;
         };
+        ExamFormSubject: {
+            /**
+             * @description 통계 축. 학년이 달라도 국어끼리 묶이게 하는 값이라
+             *                         표시명과 분리한다 — 표시명("통합사회")은 해마다 바뀐다
+             */
+            subjectCode: string;
+            subjectName: string;
+            /** Format: int32 */
+            sortOrder?: number;
+            /**
+             * @description 한국사처럼 절대평가 과목은 <code>false</code>로 둘 것.
+             *                              일괄로 열면 학생이 없는 점수를 지어내 채운다
+             */
+            hasStandardScore?: boolean;
+            hasPercentile?: boolean;
+            hasGradeLevel?: boolean;
+            /** @description 원점수를 받는가. <b>비우면 디랩 시험은 켜고 입학 전 성적은 끈다</b> */
+            hasRawScore?: boolean;
+        };
+        /** @description 한 학년의 기본 과목 구성 교체. */
+        PresetReplace: {
+            /**
+             * Format: int64
+             * @description 비우면 <b>전 지점 공통</b> — 본사만
+             */
+            academyId?: number;
+            /** Format: int32 */
+            year: number;
+            /** @enum {string} */
+            gradeType: "HIGH2" | "HIGH3" | "N_SU" | "STAFF";
+            /**
+             * @description 비우면 그 범위의 행을 전부 지운다(지점 행이면 공통본으로 돌아간다).
+             *                       <code>hasRawScore</code> 를 비우면 켠다 — 디랩 시험용 구성이다
+             */
+            subjects: components["schemas"]["ExamFormSubject"][];
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseListPresetView: {
+            success?: boolean;
+            data?: components["schemas"]["PresetView"][];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        PresetView: {
+            /** Format: int64 */
+            presetId?: number;
+            /** Format: int64 */
+            academyId?: number;
+            /** Format: int32 */
+            year?: number;
+            gradeType?: string;
+            subjectCode?: string;
+            subjectName?: string;
+            /** Format: int32 */
+            sortOrder?: number;
+            hasStandardScore?: boolean;
+            hasPercentile?: boolean;
+            hasGradeLevel?: boolean;
+            hasRawScore?: boolean;
+        };
         ConsultUpdateRequest: {
             /** @enum {string} */
             consultType: "REGULAR" | "SCORE" | "LIFE" | "ADMISSION" | "PARENT";
@@ -11181,13 +11365,6 @@ export interface components {
             sourceRowId?: number;
             status?: string;
             message?: string;
-        };
-        SurveyAnswerInput: {
-            /** Format: int64 */
-            questionId: number;
-            optionIds?: number[];
-            textValue?: string;
-            numberValue?: number;
         };
         /**
          * @description 응답 제출.
@@ -11960,13 +12137,8 @@ export interface components {
             /** Format: date-time */
             closesAt: string;
             questions: components["schemas"]["AdminSurveyQuestion"][];
+            allowEdit?: boolean;
         };
-        /**
-         * @description 문항.
-         *
-         *      <p>순서는 보내지 않는다 — <b>배열 순서가 곧 순서</b>다. 번호를 받으면 빠진 번호나
-         *      중복이 그대로 들어와 유니크 제약에 걸린다.
-         */
         AdminSurveyQuestion: {
             /** @enum {string} */
             type: "SINGLE_CHOICE" | "MULTI_CHOICE" | "TEXT" | "NUMBER";
@@ -11975,6 +12147,17 @@ export interface components {
             minValue?: number;
             maxValue?: number;
             options?: string[];
+            /**
+             * Format: int32
+             * @description 조건부 문항 — 이 문항은 <b>앞쪽 단일 선택 문항</b>(1부터 센 순서)에서
+             *                                 <code>showIfOptionIndex</code> 번째 선택지를 골랐을 때만 보인다.
+             *                                 가채점의 "응시/미응시" 가 이걸 쓴다. 숨은 문항은 필수여도 묻지 않고 보낸 답은 버린다
+             */
+            showIfQuestionIndex?: number;
+            /** Format: int32 */
+            showIfOptionIndex?: number;
+            /** @description 합산 문항 — 더할 숫자 문항 순서(1부터). 값은 서버가 채운다("공통 + 선택 = 총점") */
+            sumOfIndexes?: number[];
         };
         /**
          * @description 신규 접수 등록.
@@ -13756,7 +13939,11 @@ export interface components {
             examName: string;
             /** Format: int32 */
             sortOrder?: number;
-            subjects: components["schemas"]["ExamFormSubject"][];
+            /**
+             * @description 과목. <b>디랩 시험(<code>ACADEMY</code>)은 비워도 된다</b> — 학년별 기본 구성
+             *                        (<code>GET /exam-forms/subject-presets</code>)으로 채운다. 입학 전 성적은 필수
+             */
+            subjects?: components["schemas"]["ExamFormSubject"][];
             /**
              * @description 비우면 <b>입학 전 성적</b> 양식이다(기존 동작). 디랩에서 본 시험은
              *                        <code>ACADEMY</code> — 성적 업로드는 이 양식에만 된다
@@ -13769,25 +13956,6 @@ export interface components {
              *                        달이 구분되지 않는다
              */
             examDate?: string;
-        };
-        ExamFormSubject: {
-            /**
-             * @description 통계 축. 학년이 달라도 국어끼리 묶이게 하는 값이라
-             *                         표시명과 분리한다 — 표시명("통합사회")은 해마다 바뀐다
-             */
-            subjectCode: string;
-            subjectName: string;
-            /** Format: int32 */
-            sortOrder?: number;
-            /**
-             * @description 한국사처럼 절대평가 과목은 <code>false</code>로 둘 것.
-             *                              일괄로 열면 학생이 없는 점수를 지어내 채운다
-             */
-            hasStandardScore?: boolean;
-            hasPercentile?: boolean;
-            hasGradeLevel?: boolean;
-            /** @description 원점수를 받는가. <b>비우면 디랩 시험은 켜고 입학 전 성적은 끈다</b> */
-            hasRawScore?: boolean;
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -13829,6 +13997,17 @@ export interface components {
              * @description 시행일. 입학 양식은 비어 있다
              */
             examDate?: string;
+            /**
+             * Format: int32
+             * @description 올라간 문항 정보(②) 수. 없으면 0 — <b>0이면 정오표(③) 업로드를 막을 것</b>.
+             *                       정오표는 문항의 정답·배점으로 채점한다
+             */
+            itemCount?: number;
+            /**
+             * Format: date-time
+             * @description 문항 정보를 올린 시각. 없으면 비어 있다
+             */
+            itemsUploadedAt?: string;
         };
         SubjectView: {
             /** Format: int64 */
@@ -13841,6 +14020,43 @@ export interface components {
             hasPercentile?: boolean;
             hasGradeLevel?: boolean;
             hasRawScore?: boolean;
+        };
+        Rollover: {
+            /**
+             * Format: int64
+             * @description 비우면 공통본 — 본사만
+             */
+            academyId?: number;
+            /** Format: int32 */
+            fromYear: number;
+            /** Format: int32 */
+            toYear: number;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseRolloverResult: {
+            success?: boolean;
+            data?: components["schemas"]["RolloverResult"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        RolloverResult: {
+            /** Format: int32 */
+            formsCreated?: number;
+            /** Format: int32 */
+            formsSkipped?: number;
+            /** Format: int32 */
+            presetsCreated?: number;
+            /** @description 새 해에 이미 행이 있어 건너뛴 학년 */
+            presetsSkippedGrades?: ("HIGH2" | "HIGH3" | "N_SU" | "STAFF")[];
         };
         WriteRequest: {
             /** Format: int64 */
@@ -14996,11 +15212,6 @@ export interface components {
             meta?: components["schemas"]["PageMeta"];
             error?: components["schemas"]["ErrorBody"];
         };
-        /**
-         * @description 목록 한 줄.
-         *
-         *      <p><code>open</code>·<code>submitted</code>를 서버가 판정해 내린다 — 앱은 버튼 상태만 그린다.
-         */
         SurveySummary: {
             /** Format: int64 */
             id?: number;
@@ -15015,6 +15226,11 @@ export interface components {
             closesAt?: string;
             open?: boolean;
             submitted?: boolean;
+            /**
+             * @description 제출 후 기간 안에 고칠 수 있는가. <code>true</code>면 제출한 뒤에도 같은
+             *                       <code>POST .../responses</code>로 다시 낸다(응답이 교체된다)
+             */
+            allowEdit?: boolean;
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -15055,6 +15271,20 @@ export interface components {
             minValue?: number;
             maxValue?: number;
             options?: components["schemas"]["SurveyOptionView"][];
+            /**
+             * Format: int64
+             * @description 조건부 문항 — 이 문항에서 <code>showIfOptionId</code>를 골랐을 때만 그린다.
+             *                              숨은 문항은 필수여도 안 물어도 되고, 보낸 답은 서버가 버린다
+             */
+            showIfQuestionId?: number;
+            /** Format: int64 */
+            showIfOptionId?: number;
+            /**
+             * @description 합산 문항. <b>입력 칸이 아니다</b> — 서버가 <code>sumOfQuestionIds</code>의
+             *                              값을 더해 채운다. 화면은 같은 합을 미리 보여주기만 한다
+             */
+            computed?: boolean;
+            sumOfQuestionIds?: number[];
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -18769,6 +18999,58 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    draft: {
+        parameters: {
+            query?: {
+                studentId?: number;
+            };
+            header?: never;
+            path: {
+                surveyId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseDraft"];
+                };
+            };
+        };
+    };
+    saveDraft: {
+        parameters: {
+            query?: {
+                studentId?: number;
+            };
+            header?: never;
+            path: {
+                surveyId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SurveyDraftSave"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseDraft"];
+                };
+            };
+        };
+    };
     changeNotification: {
         parameters: {
             query?: never;
@@ -20425,6 +20707,56 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseVoid"];
+                };
+            };
+        };
+    };
+    presets: {
+        parameters: {
+            query: {
+                year: number;
+                /** @description 비우면 전 학년 */
+                gradeType?: "HIGH2" | "HIGH3" | "N_SU" | "STAFF";
+                /** @description 비우면 공통본. 지점을 넣으면 <b>그 지점에 실제로 쓰일</b> 구성이다 */
+                academyId?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListPresetView"];
+                };
+            };
+        };
+    };
+    replacePresets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PresetReplace"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListPresetView"];
                 };
             };
         };
@@ -25375,6 +25707,30 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseFormView"];
+                };
+            };
+        };
+    };
+    rollover: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Rollover"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseRolloverResult"];
                 };
             };
         };

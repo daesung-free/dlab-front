@@ -37,8 +37,8 @@ import type { Mockup } from './types'
  *   과목 코드·절대평가 여부를 사람이 다시 치면 틀린다.
  *
  * ★ **③ 정오·답안은 ② 문항 정보가 있어야 한다.** 국어·수학의 공통/선택 경계(1~34 / 35~45번)를
- *   문항분석표에서 알아내기 때문이다. 문항 정보가 이미 올라가 있는지 물어볼 조회가 없어서
- *   ③을 잠그지 않고, 없으면 서버가 돌려주는 문구를 그대로 보인다.
+ *   문항분석표에서 알아내기 때문이다. 회차의 `itemCount` 가 0 이면 ③을 잠근다(2026-09-21 추가된
+ *   필드 — 그 전에는 물어볼 조회가 없어 서버 거절 문구에 기댔다). 필드가 없으면 잠그지 않는다.
  *
  * ★ ①은 **미리보기 → 반영** 두 단계다. 605명짜리 파일을 바로 저장하면 매칭이 어긋났을 때
  *   무엇이 잘못 들어갔는지 모른 채 전교생 성적이 바뀐다. 반영은 찾은 학생만 저장한다.
@@ -312,6 +312,8 @@ function Content() {
     setItemErr(null)
     try {
       setItemRes(await uploadExamItems(examId, analysisFile, ratesFile))
+      // 문항 수가 회차에 실려 오므로 다시 읽어야 ③ 잠금이 풀린다
+      await loadForms()
     } catch (e) {
       setItemErr(msg(e, '문항 정보를 올리지 못했습니다.'))
     } finally {
@@ -346,6 +348,14 @@ function Content() {
 
   const noBranch = academyId === null
   const locked = exam === null
+  // 필드가 안 오면(undefined) 잠그지 않는다 — 서버가 거절 문구로 알려준다
+  const noItems = exam !== null && exam.itemCount === 0
+  const itemsAt = exam?.itemsUploadedAt
+    ? (() => {
+        const d = new Date(exam.itemsUploadedAt)
+        return `${d.getMonth() + 1}/${d.getDate()}`
+      })()
+    : null
 
   const unmatchedCols: Column<ScoreUploadUnmatched>[] = [
     { key: 'rowNumber', header: '행', width: '56px', value: (r) => String(r.rowNumber) },
@@ -511,7 +521,15 @@ function Content() {
             ② 문항 정보
           </div>
           <div className="r" style={{ fontSize: 12, color: 'var(--muted)' }}>
-            정오·답안보다 먼저 올립니다
+            {exam === null ? (
+              '정오·답안보다 먼저 올립니다'
+            ) : noItems ? (
+              <span className="mk brandnew">아직 올리지 않았습니다</span>
+            ) : exam.itemCount !== undefined ? (
+              <span className="mk verified">
+                문항 {exam.itemCount}개{itemsAt ? ` · ${itemsAt} 올림` : ''}
+              </span>
+            ) : null}
           </div>
         </div>
         <div className="card-sec-b">
@@ -560,12 +578,19 @@ function Content() {
           </div>
         </div>
         <div className="card-sec-b">
-          <FilePick label="정오표" required onChange={setResultsFile} disabled={locked || noBranch} />
-          <FilePick label="답안표" onChange={setAnswersFile} disabled={locked || noBranch} />
+          {noItems && (
+            <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
+              <div>
+                이 회차는 <b>② 문항 정보</b>가 아직 없어 정오표를 올릴 수 없습니다. 문항분석표를 먼저 올리세요.
+              </div>
+            </div>
+          )}
+          <FilePick label="정오표" required onChange={setResultsFile} disabled={locked || noBranch || noItems} />
+          <FilePick label="답안표" onChange={setAnswersFile} disabled={locked || noBranch || noItems} />
           <button
             type="button"
             className="btn pri"
-            disabled={locked || noBranch || !resultsFile || respBusy}
+            disabled={locked || noBranch || noItems || !resultsFile || respBusy}
             onClick={() => void runResponses()}
           >
             <Icon name="upload" size={14} /> {respBusy ? '올리는 중…' : '올리기'}
