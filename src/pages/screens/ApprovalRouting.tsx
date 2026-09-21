@@ -474,7 +474,8 @@ function Content() {
             : (item.escalationApproverType ?? undefined),
       })
       await load()
-      setNotice(`${REQUEST_TYPE_LABEL[item.requestType]} 설정을 저장했습니다.`)
+      /* 좁은 자리라 화면 이름을 통째로 넣지 않는다. 무엇을 눌렀는지는 방금 누른 사람이 안다 */
+      setNotice('저장했습니다')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '저장하지 못했습니다.')
     } finally {
@@ -505,17 +506,9 @@ function Content() {
         </div>
       )}
 
-      {notice && (
-        <div className="note-box" role="status">
-          <div className="ic">
-            <Icon name="check" size={17} />
-          </div>
-          <div>
-            <div className="tt">{notice}</div>
-          </div>
-        </div>
-      )}
-
+      {/* ★ 저장 안내를 여기(표 위)에 띄우면 **표가 통째로 76px 아래로 밀린다** —
+             방금 누른 칸이 커서 밑에서 빠져나가서 "칸이 움직인다" 가 된다.
+             그래서 안내는 표 헤더의 상태줄에서 제자리 갱신한다. */}
       <div className="stat-strip">
         {APPROVERS.map((a) => (
           <div className="stat" key={a.key}>
@@ -564,9 +557,13 @@ function Content() {
               전환 열 {escalation ? '숨기기' : '보기'}
             </button>
             {/* 셀을 누르면 그 자리에서 저장된다. 매트릭스에서 '저장' 버튼을 따로 두면
-                무엇이 저장됐는지 알기 어렵다 */}
-            <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>
-              {busy ? '저장 중…' : loading ? '불러오는 중…' : '선택하면 바로 저장됩니다'}
+                무엇이 저장됐는지 알기 어렵다.
+                ★ 자리를 차지한 채 글자만 바뀌므로 표가 밀리지 않는다 */}
+            <span
+              role="status"
+              style={{ fontSize: 11.5, color: notice ? 'var(--mint-d)' : 'var(--muted)' }}
+            >
+              {busy ? '저장 중…' : loading ? '불러오는 중…' : (notice ?? '선택하면 바로 저장됩니다')}
             </span>
           </div>
         </div>
