@@ -350,8 +350,8 @@ function Content() {
   /*
    * 수납청구 — 고른 신청자에게 특강비 청구를 한 명씩 만든다(일괄 API 가 없다).
    * ★ 건별 결과를 모아 보여준다. 중간에 실패하면 일부만 청구된 채 남는데, 안 알리면 전부 된 줄 안다.
-   * ★ 신청자 응답에 등록 ID(enrollmentId)가 없고 학생 ID만 있다 — 재원생 목록에서 학생 ID로 찾는다
-   *   (API_GAPS 33-4). 못 찾으면 그 학생은 실패로 남긴다.
+   * ★ 청구는 등록 ID(enrollmentId)로 한다. 신청자 응답에 2026-09-21 부터 온다(API_GAPS 33-4).
+   *   비어 있으면 재원생 목록에서 학생 ID로 찾고, 못 찾으면 그 학생은 실패로 남긴다.
    */
   const [billing, setBilling] = useState<{
     rows: ApplicantRow[]
@@ -367,10 +367,13 @@ function Content() {
     setBillBusy(true)
     const results: { name: string; ok: boolean; msg: string }[] = []
     try {
-      const page = await searchStudents({ academyId, size: 1000 })
-      const enrollmentOf = new Map(page.rows.map((st) => [st.studentId, st.enrollmentId]))
+      // 신청자에 등록 ID 가 온다(2026-09-21). 비어 있는 줄이 있을 때만 재원생 목록으로 찾는다
+      const needLookup = billing.rows.some((r) => r.enrollmentId == null)
+      const enrollmentOf = needLookup
+        ? new Map((await searchStudents({ academyId, size: 1000 })).rows.map((st) => [st.studentId, st.enrollmentId]))
+        : new Map<number, number>()
       for (const r of billing.rows) {
-        const enrollmentId = enrollmentOf.get(r.studentId)
+        const enrollmentId = r.enrollmentId ?? enrollmentOf.get(r.studentId)
         if (enrollmentId === undefined) {
           results.push({ name: r.studentName, ok: false, msg: '재원생 목록에서 찾지 못했습니다' })
           continue

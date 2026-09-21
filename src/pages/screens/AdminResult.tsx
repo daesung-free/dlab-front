@@ -16,6 +16,9 @@ import {
   getResultSuggestions,
   listResults,
   listStudentResults,
+  applyResultImport,
+  previewResultImport,
+  type ResultImport,
   updateResult,
   type AdmissionResult,
   type AdmissionResultInput,
@@ -24,6 +27,8 @@ import {
   type AdmissionType,
 } from '../../api/admissionResults'
 import type { Mockup } from './types'
+import { importFieldLabel } from '../../lib/importFields'
+import { createScreenSignal } from './screenSignal'
 
 /* F-4.10-6 실적 관리(실적 입력) — /api/v1/admin/admission-results (2026-09-21 연동)
  *
@@ -138,6 +143,7 @@ function Content() {
   )
   /* 본사 계정은 지점 없이 부르면 400 이다(집계와 같다) — 지점을 고르기 전에는 안 부른다 */
   const table = useServerTable({ fetcher: listResults, params, pageSize: 20, enabled: academyReady && academyId !== null })
+  const importVer = imported.useVersion()
 
   /* 추가·수정 창의 전형별 개수 — 그 학생의 지원을 따로 읽어 센다(표는 페이지 단위라 못 센다) */
   const [studentRows, setStudentRows] = useState<AdmissionResultRow[]>([])
@@ -180,6 +186,14 @@ function Content() {
   useEffect(() => {
     void loadStats()
   }, [loadStats])
+
+  // 헤더 엑셀 등록이 반영하면 표와 집계를 다시 읽는다
+  useEffect(() => {
+    if (importVer === 0) return
+    table.reload()
+    void loadStats()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [importVer])
 
   /* 대학을 고르면 그 대학 학과로 좁힌다. 비어 있어도 정상 — 첫 해에는 쌓인 값이 없다 */
   useEffect(() => {
@@ -705,13 +719,165 @@ function Content() {
   )
 }
 
+/* 헤더 '엑셀 일괄 등록' 이 반영한 뒤 본문 표·집계를 다시 읽게 잇는다(CLAUDE.md 5-1) */
+const imported = createScreenSignal()
+
+/**
+ * 실적 엑셀 일괄 등록 — 미리보기로 몇 건이 들어가고 어느 행이 틀렸는지 먼저 보고 반영한다.
+ * ★ 반영 때 같은 파일을 다시 보낸다(서버가 미리보기를 들고 있지 않다). 파일을 바꾸면 미리보기를 지운다.
+ */
+function ImportButton() {
+  const { academyId } = useAcademy()
+  const [open, setOpen] = useState(false)
+  const [file, setFile] = useState<File | null>(null)
+  const [preview, setPreview] = useState<ResultImport | null>(null)
+  const [applied, setApplied] = useState<ResultImport | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function run(apply: boolean) {
+    if (!file || academyId === null) return
+    setBusy(true)
+    setErr(null)
+    try {
+      const r = apply ? await applyResultImport(academyId, file) : await previewResultImport(academyId, file)
+      if (apply) {
+        setApplied(r)
+        imported.bump()
+      }
+      setPreview(r)
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : apply ? '반영하지 못했습니다.' : '파일을 읽지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const r = applied ?? preview
+  return (
+    <>
+      <button
+        className="btn"
+        disabled={academyId === null}
+        title={academyId === null ? '지점을 먼저 선택하세요' : undefined}
+        onClick={() => {
+          setOpen(true)
+          setFile(null)
+          setPreview(null)
+          setApplied(null)
+          setErr(null)
+        }}
+      >
+        <Icon name="upload" size={14} /> 엑셀 일괄 등록
+      </button>
+      {open && (
+        <Modal
+          wide
+          title="실적 엑셀 일괄 등록"
+          sub="미리보기로 확인한 뒤 반영합니다. 틀린 행은 빼고 나머지만 등록됩니다."
+          confirmLabel={applied ? '닫기' : '반영'}
+          busy={busy}
+          error={err}
+          confirmDisabled={!applied && (!preview || !preview.applicable)}
+          onConfirm={() => (applied ? setOpen(false) : void run(true))}
+          onClose={() => setOpen(false)}
+        >
+          <div className="frow">
+            <label className="req">파일</label>
+            <div>
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={(e) => {
+                  setFile(e.target.files?.[0] ?? null)
+                  setPreview(null)
+                  setApplied(null)
+                }}
+              />
+              <div className="hint">
+                첫 줄에 칸 이름을 적습니다. <b>학번 · 구분(수시/정시) · 대학명 · 학과명</b>은 꼭 있어야 하고, 이름 · 전형명 ·
+                결과(합격/불합격/발표전/등록포기) · 메모는 있으면 함께 들어갑니다. 이름을 적으면 학번과 맞는지 확인합니다.
+              </div>
+            </div>
+          </div>
+          <button type="button" className="btn" disabled={!file || busy || applied !== null} onClick={() => void run(false)} style={{ marginBottom: 10 }}>
+            <Icon name="eye" size={14} /> {busy && !preview ? '읽는 중…' : '미리보기'}
+          </button>
+          {r && (
+            <>
+              <div className="note-box" role="status" style={applied ? { borderColor: 'var(--green)' } : undefined}>
+                <div>
+                  {applied ? <b>반영했습니다. </b> : <b>미리보기 — 아직 등록하지 않았습니다. </b>}
+                  전체 {r.totalRows}행 · 정상 <b>{r.validRows}</b>행 · 오류{' '}
+                  <b style={{ color: r.errorRows ? 'var(--red)' : undefined }}>{r.errorRows}</b>행
+                  {applied && r.errorRows > 0 && ' — 오류 행은 등록하지 않았습니다.'}
+                </div>
+              </div>
+              {r.errors.length > 0 && (
+                <div style={{ maxHeight: 180, overflow: 'auto', marginBottom: 10 }}>
+                  <table className="dt" style={{ width: '100%' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ width: 60 }}>행</th>
+                        <th style={{ width: 100 }}>칸</th>
+                        <th>무엇이 틀렸나</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {r.errors.map((x, i) => (
+                        <tr key={i}>
+                          <td>{x.rowNumber}</td>
+                          <td>{importFieldLabel(x.field)}</td>
+                          <td style={{ color: 'var(--red)' }}>{x.message}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {r.valid.length > 0 && (
+                <div style={{ maxHeight: 220, overflow: 'auto' }}>
+                  <table className="dt nowrap" style={{ width: '100%' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ width: 50 }}>행</th>
+                        <th>학번</th>
+                        <th>이름</th>
+                        <th>구분</th>
+                        <th>대학 · 학과</th>
+                        <th>결과</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {r.valid.map((x) => (
+                        <tr key={x.rowNumber}>
+                          <td>{x.rowNumber}</td>
+                          <td>{x.studentNo}</td>
+                          <td>{x.studentName}</td>
+                          <td>{ADMISSION_TYPE_LABEL[x.admissionType] ?? x.admissionType}</td>
+                          <td>
+                            {x.universityName} {x.departmentName}
+                          </td>
+                          <td>{ADMISSION_RESULT_LABEL[x.result] ?? x.result}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+        </Modal>
+      )}
+    </>
+  )
+}
+
 export const adminResultMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled data-soon title="준비 중입니다">
-        <Icon name="upload" size={14} /> 엑셀 일괄 등록
-      </button>
+      <ImportButton />
       {/* 지금 화면(탭·필터 그대로)을 인쇄한다 — 서버 출력물이 따로 없다 */}
       <PrintButton label="실적 현황 출력" />
     </>

@@ -157,31 +157,57 @@ function one(v: unknown): string | undefined {
 
 /* ── 학생 정보 수정 폼 ─────────────────────────────────────────── */
 
-const INFO_KEYS = ['name', 'phone', 'birthDate', 'gender', 'schoolName', 'address', 'grade', 'track'] as const
+const INFO_KEYS = [
+  'name',
+  'englishName',
+  'phone',
+  'birthDate',
+  'gender',
+  'schoolName',
+  'graduationYear',
+  'address',
+  'grade',
+  'track',
+] as const
 type InfoKey = (typeof INFO_KEYS)[number]
 
 const INFO_FIELDS: { key: InfoKey; label: string; max?: number; placeholder?: string; hint?: string }[] = [
   { key: 'name', label: '이름', max: 30 },
+  { key: 'englishName', label: '영문명', max: 60, placeholder: 'Hong Gildong' },
   { key: 'phone', label: '연락처', max: 20, placeholder: '010-0000-0000' },
   { key: 'birthDate', label: '생년월일' },
   { key: 'gender', label: '성별' },
   { key: 'schoolName', label: '출신학교', max: 40 },
+  { key: 'graduationYear', label: '졸업연도', placeholder: '2026' },
   { key: 'address', label: '주소', max: 120, hint: '칸을 비우고 저장하면 저장된 값이 지워집니다.' },
   { key: 'grade', label: '학년' },
   { key: 'track', label: '계열' },
 ]
 
 function emptyInfo(): Record<InfoKey, string> {
-  return { name: '', phone: '', birthDate: '', gender: '', schoolName: '', address: '', grade: '', track: '' }
+  return {
+    name: '',
+    englishName: '',
+    phone: '',
+    birthDate: '',
+    gender: '',
+    schoolName: '',
+    graduationYear: '',
+    address: '',
+    grade: '',
+    track: '',
+  }
 }
 
 function infoOf(s: Student): Record<InfoKey, string> {
   return {
     name: s.name ?? '',
+    englishName: s.englishName ?? '',
     phone: s.phone ?? '',
     birthDate: s.birthDate ?? '',
     gender: s.gender ?? '',
     schoolName: s.schoolName ?? '',
+    graduationYear: s.graduationYear != null ? String(s.graduationYear) : '',
     address: s.address ?? '',
     grade: s.grade ?? '',
     track: s.track ?? '',
@@ -389,7 +415,13 @@ function Content() {
     const body: StudentUpdateRequest = {}
     for (const k of INFO_KEYS) {
       const v = infoEdit.form[k].trim()
-      if (v !== before[k].trim()) (body as Record<string, string>)[k] = v
+      if (v === before[k].trim()) continue
+      // 졸업연도는 숫자로 보낸다. 비우면 보내지 않는다 — 숫자 칸을 빈 문자열로 지울 수는 없다
+      if (k === 'graduationYear') {
+        if (v !== '') body.graduationYear = Number(v)
+        continue
+      }
+      ;(body as Record<string, string>)[k] = v
     }
     if (Object.keys(body).length === 0) {
       setInfoEdit(null)
@@ -769,7 +801,7 @@ function Content() {
                     ) : (
                       <input
                         className="inp"
-                        type={f.key === 'birthDate' ? 'date' : 'text'}
+                        type={f.key === 'birthDate' ? 'date' : f.key === 'graduationYear' ? 'number' : 'text'}
                         maxLength={f.max}
                         placeholder={f.placeholder}
                         value={infoEdit.form[f.key]}

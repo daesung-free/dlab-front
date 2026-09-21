@@ -23,6 +23,9 @@ export interface ClassGroup {
    *   "정원 0명" 이 되어 늘 초과로 보인다. 충원율도 못 낸다.
    */
   capacity: number | null
+  /** 반 강의실(강의실 마스터). 지정 안 했으면 null (2026-09-21 추가) */
+  roomId?: number | null
+  roomName?: string | null
   /**
    * 현재 인원. 반마다 명단을 부르지 않아도 되게 목록에 실려 온다.
    *
@@ -133,3 +136,9 @@ export function createClass(body: {
 }): Promise<ClassGroup> {
   return request<ClassGroup>('/api/v1/admin/classes', { method: 'POST', body })
 }
+
+/** 반 강의실 지정·해제. roomId 를 비우면(null) 해제한다 */
+export function setClassRoom(classId: number, roomId: number | null): Promise<ClassGroup> {
+  return request<ClassGroup>(`/api/v1/admin/classes/${classId}/room`, { method: 'PUT', body: { roomId } })
+}
+

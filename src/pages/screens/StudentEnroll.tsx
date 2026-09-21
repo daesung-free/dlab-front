@@ -25,6 +25,7 @@ import {
   type PendingSignup,
 } from '../../api/studentSignups'
 import type { Mockup } from './types'
+import { importFieldLabel } from '../../lib/importFields'
 import '../../styles/forms.css'
 
 /* F-4.1-3 신규 접수 등록(합격생 등록) — POST /api/v1/admin/students
@@ -78,6 +79,8 @@ interface FormState {
   gender: string
   address: string
   schoolName: string
+  englishName: string
+  graduationYear: string
   admissionDate: string
   year: string
   grade: GradeType
@@ -91,6 +94,8 @@ const EMPTY: FormState = {
   gender: '',
   address: '',
   schoolName: '',
+  englishName: '',
+  graduationYear: '',
   admissionDate: '',
   year: String(new Date().getFullYear()),
   grade: 'N_SU',
@@ -155,6 +160,8 @@ function EnrollForm() {
         gender: form.gender || undefined,
         schoolName: form.schoolName.trim() || undefined,
         address: form.address.trim() || undefined,
+        englishName: form.englishName.trim() || undefined,
+        graduationYear: form.graduationYear ? Number(form.graduationYear) : undefined,
         admissionDate: form.admissionDate || undefined,
       })
       setResult({ kind: 'admitted', student })
@@ -239,11 +246,13 @@ function EnrollForm() {
                   onChange={(e) => set('name', e.target.value)}
                   maxLength={20}
                 />
-                <div className="link-box" style={{ alignItems: 'center' }}>
-                  <div>
-                    영문명 <Unfilled reason="등록 요청에 영문명 필드가 없다" />
-                  </div>
-                </div>
+                <input
+                  className="inp"
+                  placeholder="영문명 (예: Hong Gildong)"
+                  value={form.englishName}
+                  onChange={(e) => set('englishName', e.target.value)}
+                  maxLength={60}
+                />
               </div>
             </div>
             <div className="frow">
@@ -363,11 +372,15 @@ function EnrollForm() {
                   onChange={(e) => set('schoolName', e.target.value)}
                   maxLength={64}
                 />
-                <div className="link-box" style={{ alignItems: 'center' }}>
-                  <div>
-                    졸업연도 <Unfilled reason="졸업연도 필드가 없다" />
-                  </div>
-                </div>
+                <input
+                  className="inp"
+                  type="number"
+                  placeholder="졸업(예정) 연도 (예: 2026)"
+                  min={1990}
+                  max={2100}
+                  value={form.graduationYear}
+                  onChange={(e) => set('graduationYear', e.target.value)}
+                />
               </div>
             </div>
             <div className="frow">
@@ -801,7 +814,7 @@ function ImportButton() {
                       {r.errors.map((x, i) => (
                         <tr key={i}>
                           <td>{x.rowNumber}</td>
-                          <td>{x.field}</td>
+                          <td>{importFieldLabel(x.field)}</td>
                           <td style={{ color: 'var(--red)' }}>{x.message}</td>
                         </tr>
                       ))}

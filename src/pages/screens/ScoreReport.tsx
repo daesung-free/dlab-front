@@ -3,12 +3,14 @@ import { StudentList, type StudentRow } from '../../components/StudentList'
 import { StudentHeader } from '../../components/StudentHeader'
 import { AcademyExams } from '../../components/AcademyExams'
 import { Icon } from '../../components/Icon'
-import { Modal, Unfilled } from '../../components/common'
+import { Modal } from '../../components/common'
 import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
 import {
   EXAM_CODE_LABEL,
   getStudentGrades,
+  getAcademyScoring,
+  listAcademyExams,
   listExamForms,
   updateExamScores,
   updateSchoolRecord,
@@ -559,10 +561,11 @@ function Content() {
                   </div>
                 </div>
                 <div className="box-b">
-                  <div style={{ fontSize: 12, color: 'var(--muted)', padding: '18px 0', textAlign: 'center' }}>
-                    {/* 엑셀 업로드 안이 채택되지 않아 이 값의 출처 자체가 없다 — 박스 유지 여부 확인 필요 */}
-                    <Unfilled reason="관리자용 채점(단원별) 조회가 없다 — 앱 /app/grades/exams/{id}/scoring 만 있다" />
-                  </div>
+                  {selected ? (
+                    <WeakUnits key={selected.enrollmentId} enrollmentId={selected.enrollmentId} />
+                  ) : (
+                    <div style={{ fontSize: 12, color: 'var(--muted)', padding: '18px 0', textAlign: 'center' }}>-</div>
+                  )}
                 </div>
               </div>
             </div>
@@ -694,6 +697,60 @@ function Content() {
           </div>
         </Modal>
       )}
+    </div>
+  )
+}
+
+/**
+ * 단원별 정답률 — 가장 최근 디랩 시험의 채점에서 **정답률이 낮은 단원 5개**. 전 단원은 아래 '디랩 시험' 에 있다.
+ * ★ 문항 정보와 정오표가 둘 다 있어야 나온다(성적 업로드 ②·③).
+ */
+function WeakUnits({ enrollmentId }: { enrollmentId: number }) {
+  const [rows, setRows] = useState<{ name: string; my: number | null; nat: number | null }[] | null>(null)
+  const [examName, setExamName] = useState<string | null>(null)
+  useEffect(() => {
+    let alive = true
+    listAcademyExams(enrollmentId)
+      .then(async (ex) => {
+        if (ex.length === 0) return alive && setRows([])
+        const areas = await getAcademyScoring(enrollmentId, ex[0].examMasterId)
+        const units = areas
+          .flatMap((a) => a.byUnit.map((u) => ({ name: `${a.name} · ${u.name}`, my: u.myRate, nat: u.nationalRate })))
+          .filter((u) => u.my !== null)
+          .sort((x, y) => (x.my ?? 0) - (y.my ?? 0))
+          .slice(0, 5)
+        if (alive) {
+          setExamName(ex[0].examName)
+          setRows(units)
+        }
+      })
+      .catch(() => alive && setRows([]))
+    return () => {
+      alive = false
+    }
+  }, [enrollmentId])
+
+  if (rows === null) return <div style={{ fontSize: 12, color: 'var(--muted)', padding: '18px 0', textAlign: 'center' }}>불러오는 중…</div>
+  if (rows.length === 0)
+    return (
+      <div style={{ fontSize: 12, color: 'var(--muted)', padding: '18px 0', textAlign: 'center' }}>
+        채점된 디랩 시험이 없습니다. 성적 업로드에서 문항 정보와 정오표를 올리면 나옵니다.
+      </div>
+    )
+  return (
+    <div style={{ display: 'grid', gap: 6 }}>
+      <div style={{ fontSize: 11.5, color: 'var(--muted)' }}>{examName} · 정답률 낮은 단원</div>
+      {rows.map((u) => (
+        <div key={u.name} style={{ display: 'grid', gridTemplateColumns: '1fr 110px', gap: 8, fontSize: 12 }}>
+          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={u.name}>
+            {u.name}
+          </span>
+          <span style={{ textAlign: 'right' }}>
+            <b>{Math.round(u.my ?? 0)}%</b>
+            <span style={{ color: 'var(--muted)' }}> · 전국 {u.nat == null ? '-' : `${Math.round(u.nat)}%`}</span>
+          </span>
+        </div>
+      ))}
     </div>
   )
 }

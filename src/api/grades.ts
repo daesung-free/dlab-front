@@ -403,3 +403,46 @@ export function getAcademyTrend(enrollmentId: number): Promise<AcademyExamTrend[
   return request<AcademyExamTrend[]>(`/api/v1/admin/students/${enrollmentId}/grades/trend`)
 }
 
+/** 채점 — 영역 하나(국어·수학 선택과목 등) */
+export interface ScoringArea {
+  name: string
+  /** 선택과목(언매·화작 등). 공통만 있는 영역은 null */
+  elective: string | null
+  total: number
+  correct: number
+  wrong: number
+  lostPoints: number
+  /** 틀린 문항 */
+  review: {
+    subjectName: string
+    questionNo: number
+    myAnswer: string | null
+    correctAnswer: number | null
+    /** 전국 정답률(%) */
+    nationalRate: number | null
+    points: number | null
+    unitName: string | null
+    skillName: string | null
+    /** 전국 정답률은 높은데 틀린 — '실수' 로 볼 문항 */
+    trap: boolean
+  }[]
+  bySkill: ScoringBreakdown[]
+  byUnit: ScoringBreakdown[]
+}
+
+export interface ScoringBreakdown {
+  name: string
+  questions: number
+  /** 내 정답률(%) */
+  myRate: number | null
+  nationalRate: number | null
+}
+
+/**
+ * 채점 — 정오표·문항분석표로 만든 영역별 결과(2026-09-21 추가). 앱 채점 탭과 같은 모양.
+ * ★ ② 문항 정보와 ③ 정오표가 둘 다 올라가야 나온다. 하나라도 없으면 빈 목록이다.
+ */
+export function getAcademyScoring(enrollmentId: number, examMasterId: number): Promise<ScoringArea[]> {
+  return request<ScoringArea[]>(`/api/v1/admin/students/${enrollmentId}/grades/exams/${examMasterId}/scoring`)
+}
+

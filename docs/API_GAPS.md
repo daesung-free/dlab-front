@@ -2950,7 +2950,9 @@ POST /admin/grades/exam-responses/upload       ③ 정오표(필수) + 답안표
 
 # 33부. '준비 중' 버튼 정리 중 발견 — 2026-09-21
 
-## 33-1. 계정 변경 이력의 '바꾼 사람' 이 이름이 아니다 ★ 요청
+## 33-1. 계정 변경 이력의 '바꾼 사람' 이 이름이 아니다 ★ 요청 — ✅ 해결 (2026-09-21 서버 반영)
+
+> 이름으로 온다("통합관리자").
 
 `GET /staff/accounts/{accountId}/history` 의 `actorName` 에 사람 이름이 아니라 **계정 종류**가 온다.
 
@@ -2965,7 +2967,9 @@ GET /api/v1/admin/staff/accounts/{bundang}/history
 덧붙여 — 프론트 타입이 이 응답과 **달랐다**(beforeValue·afterValue·changedAt 을 읽었다). 그래서 예전
 '이력 보기' 는 "- → -" 만 찍었다. 실제 모양(`changes` JSON 문자열)으로 고쳤다.
 
-## 33-2. 루틴 결과 — 점수를 지우거나 '계획' 으로 되돌리면 **조용히 무시**된다 ★ 요청
+## 33-2. 루틴 결과 — 점수를 지우거나 '계획' 으로 되돌리면 **조용히 무시**된다 ★ 요청 — ✅ 해결 (2026-09-21 서버 반영)
+
+> 보낸 상태대로 반영하고 null 점수는 지운다. 모순된 입력(제출 전에 점수 등)은 400 과 이유. 화면은 null 을 실어 보내게 고치고 안내 문구를 바꿨다.
 
 ```
 PUT /routines/22/results?date=2026-09-21
@@ -2986,7 +2990,9 @@ GET  → status:"SUBMITTED", selfScore:40            ← 그대로다
 화면이 이름만 보내고 있었다 — 코드·비고를 넣기 시작하면 이름 수정 한 번에 사라졌을 것이다.
 등록·수정 창에 코드·비고 칸을 두고 셋을 늘 함께 보내게 고쳤다. 강의실은 PATCH(부분 수정)로 바꿨다.
 
-## 33-4. 특강 신청자 응답에 등록 ID(enrollmentId)가 없다 — 요청
+## 33-4. 특강 신청자 응답에 등록 ID(enrollmentId)가 없다 — 요청 — ✅ 해결 (2026-09-21 서버 반영)
+
+> 신청자 행에 `enrollmentId` 가 온다. 수납청구가 그걸 바로 쓴다(비어 있을 때만 재원생 목록으로 찾는다).
 
 `GET /lectures/{id}/applications` 행에 `studentId` 만 있다. 청구(`POST /billings`)는 `enrollmentId` 를 받는다.
 특강 '수납청구' 는 재원생 목록을 한 번 더 불러 학생 ID → 등록 ID 로 잇는다(못 찾으면 그 학생은 실패로 표시).
@@ -3001,11 +3007,30 @@ GET  → status:"SUBMITTED", selfScore:40            ← 그대로다
 
 > 요청: 지점별 질의응답 운영 설정 조회·저장.
 
-## 33-6. `POST /billings` 요청 스키마가 결제 요청의 `CreateRequest` 를 가리킨다 (스펙 이름 충돌)
+## 33-6. `POST /billings` 요청 스키마가 결제 요청의 `CreateRequest` 를 가리킨다 (스펙 이름 충돌) — ✅ 해결 (2026-09-21 서버 반영)
+
+> 충돌 10건을 서버가 정리했다(@Schema name + 충돌 테스트).
 
 `/v3/api-docs` 에서 청구 생성 본문이 `{billingId, payMethod, sendSms}`(결제 요청)로 나온다. 실제 컨트롤러는
 `{enrollmentId, name, billingType, suppliedAmount, discountAmount?, dueDate?}` 다(AdminBillingController.CreateRequest).
 record 이름이 같아 스펙이 한쪽을 덮었다(1-2 와 같은 종류). 타입 생성으로 붙이면 틀린다.
 
 > 요청: record 이름을 겹치지 않게(`BillingCreateRequest` 등).
+
+# 34부. 백엔드 #144 · #145 반영 — 2026-09-21
+
+| 항목 | 화면 |
+|---|---|
+| 채점 조회 `GET /students/{id}/grades/exams/{examMasterId}/scoring` | 성적 관리 '디랩 시험' 회차 상세 · 단원별 정답률 |
+| 반별 통계 `onLeave · withdrawn · tracks` | 학원생 현황 반별 — 서버 값 우선(없는 반만 학생 목록으로 셈) |
+| 반 강의실 `PUT /classes/{id}/room`, 반 응답 `roomId · roomName` | 기초 관리 > 반 '강의실 지정', 반 배정 반 카드 |
+| 템플릿 `updatedAt · updatedByName` | 알림 발송 > 템플릿 관리 '최종 수정 · 수정자' |
+| 학생 `englishName · graduationYear` | 신규 접수 · 학원생 검색 학생 정보 수정 |
+| 수정 이력 `targetStudentName · targetStudentNo` (+ 일부 `changes`) | 금일 수정 이력 '대상 · 대상 학번 · 변경 항목 · 변경 전→후' |
+| 실적 엑셀 `/admission-results/import/preview · import` | 실적 관리 '엑셀 일괄 등록' |
+| 전년도 복사에 연간 행사 | 연간 행사 '전년도 복사' → 기초 관리 전년도 복사로 안내 |
+
+⚠ 반별 퇴원 수가 서버와 학생 목록에서 다르다(분당 N수 1반: 서버 2 · 목록 0). 서버가 기준이다.
+⚠ 연간 행사만 따로 복사하는 경로는 없다 — 기초 데이터 전체 복사에 함께 넘어가고, 대상 연도에 데이터가
+  이미 있으면 전체가 409 로 막힌다. 행사만 다시 넘길 방법이 필요하면 요청 후보.
 

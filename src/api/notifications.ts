@@ -97,6 +97,9 @@ export interface NotificationTemplate {
    * 축을 따로 보면 "왜 알림이 안 가지"를 못 짚으므로 화면은 이 값을 쓴다.
    */
   sendable: boolean
+  /** 마지막으로 고친 시각·사람(2026-09-21 추가). 그 전에 고친 행은 사람이 null 이다 */
+  updatedAt?: string | null
+  updatedByName?: string | null
 }
 
 /** `requiredVariables` 는 쉼표 문자열이라 화면에서 쪼갠다 */

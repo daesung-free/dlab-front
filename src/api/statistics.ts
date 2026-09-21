@@ -79,6 +79,11 @@ export interface StudentStatRow {
   capacity: number | null
   fillRate: number | null
   delta: number | null
+  /** 반별(groupBy=CLASS)에만 온다(2026-09-21 추가) — 반의 휴원·퇴원 인원, 재원생 계열별 인원 */
+  onLeave?: number
+  withdrawn?: number
+  /** { SCIENCE: 3, HUMANITIES: 1 } — 없는 계열은 키가 없다 */
+  tracks?: Record<string, number>
 }
 
 export function getStudentStatistics(params: {

@@ -165,3 +165,58 @@ export function getAdmissionStatistics(params: {
 }): Promise<AdmissionStatistics> {
   return request<AdmissionStatistics>('/api/v1/admin/admission-results/statistics', { query: { ...params } })
 }
+
+/* ── 엑셀 일괄 등록 (2026-09-21 추가) ─────────────────────────────── */
+
+export interface ResultImport {
+  importId: string
+  totalRows: number
+  validRows: number
+  errorRows: number
+  /** 행 번호는 엑셀 기준 1-based */
+  errors: { rowNumber: number; field: string; message: string }[]
+  valid: {
+    rowNumber: number
+    enrollmentId: number
+    studentNo: string
+    studentName: string
+    admissionType: AdmissionType
+    universityName: string
+    departmentName: string
+    trackName: string | null
+    result: AdmissionResult
+    memo: string | null
+  }[]
+  /** 반영할 행이 있는가 */
+  applicable: boolean
+}
+
+function resultForm(file: File): FormData {
+  const fd = new FormData()
+  fd.append('file', file)
+  return fd
+}
+
+/**
+ * 미리보기 — **아무것도 저장하지 않는다.**
+ * ★ 칸은 첫 줄 제목으로 찾는다: 학번·구분(수시/정시)·대학명·학과명 필수, 이름·전형명·결과·메모 선택.
+ *   이름을 적으면 학번의 학생과 대조한다(학번 오타로 남의 실적이 들어가지 않게).
+ * ★ 정원 초과·이미 있는 지원(같은 구분·대학·학과)은 오류로 잡힌다 — 같은 파일을 다시 올려도 안 쌓인다.
+ */
+export function previewResultImport(academyId: number, file: File): Promise<ResultImport> {
+  return request<ResultImport>('/api/v1/admin/admission-results/import/preview', {
+    method: 'POST',
+    query: { academyId },
+    body: resultForm(file),
+  })
+}
+
+/** 반영 — 오류 행이 있어도 정상 행은 넣는다. 결과는 미리보기와 같은 모양이다 */
+export function applyResultImport(academyId: number, file: File): Promise<ResultImport> {
+  return request<ResultImport>('/api/v1/admin/admission-results/import', {
+    method: 'POST',
+    query: { academyId },
+    body: resultForm(file),
+  })
+}
+
