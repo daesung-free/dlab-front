@@ -21,6 +21,7 @@ import {
 } from '../../api/meals'
 import { MOCK_STUDENTS } from './mockStudents'
 import type { Mockup } from './types'
+import { createScreenSignal } from './screenSignal'
 import './meal.css'
 
 /* F-4.5 급식 관리 — 신규개발-요구사항신규 (디멤버 급식신청 대체)
@@ -295,6 +296,11 @@ function Content() {
   const [reason, setReason] = useState(CLOSURE_REASONS[0])
   const [deadlineDays, setDeadlineDays] = useState(3)
   const [month, setMonth] = useState(thisMonth())
+  /* 헤더 '기간 선택' — 이번 달·지난 달·다음 달을 한 번에. 본문 월 칸과 같은 값을 쓴다 */
+  const monthVer = monthSignal.useVersion()
+  useEffect(() => {
+    if (monthVer > 0 && pickedMonth) setMonth(pickedMonth)
+  }, [monthVer])
 
   const [dayList, setDayList] = useState<MealDay[]>([])
   const [closureList, setClosureList] = useState<MealClosure[]>([])
@@ -1046,11 +1052,40 @@ function Content() {
   )
 }
 
+const monthSignal = createScreenSignal()
+let pickedMonth: string | null = null
+
+function monthShift(delta: number): string {
+  const d = new Date()
+  const t = new Date(d.getFullYear(), d.getMonth() + delta, 1)
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}`
+}
+
+function MonthMenu() {
+  return (
+    <select
+      className="sel"
+      style={{ width: 130 }}
+      value=""
+      onChange={(e) => {
+        if (e.target.value === '') return
+        pickedMonth = monthShift(Number(e.target.value))
+        monthSignal.bump()
+      }}
+    >
+      <option value="">기간 선택 ▾</option>
+      <option value="-1">지난 달</option>
+      <option value="0">이번 달</option>
+      <option value="1">다음 달</option>
+    </select>
+  )
+}
+
 export const mealMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled data-soon title="준비 중입니다">기간 선택 ▾</button>
+      <MonthMenu />
       <button className="btn" disabled data-soon title="준비 중입니다">
         <Icon name="utensils" size={14} /> 식수 마감
       </button>
