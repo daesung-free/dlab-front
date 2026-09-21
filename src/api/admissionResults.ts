@@ -1,4 +1,5 @@
-import { request } from './client'
+import { request, requestPaged } from './client'
+import type { Paged } from './types'
 
 /* 입시 실적 (F-4.10-6 실적 관리) — /api/v1/admin/admission-results
  *
@@ -75,6 +76,29 @@ export interface AdmissionResultInput {
 }
 
 /** 학생 한 명의 지원 목록. 수시·정시가 함께 온다 */
+export interface ResultSearchParams {
+  academyId?: number
+  year: number
+  result?: AdmissionResult
+  admissionType?: AdmissionType
+  /** 이름·학번·대학 */
+  keyword?: string
+  page?: number
+  size?: number
+  sort?: string
+}
+
+/**
+ * 그해 전체 실적 — 학생을 고르지 않고 지점 전체를 본다. **학번순**, 서버 페이징(2026-09-21 추가).
+ *
+ * ★ 정렬 허용 키를 모른다(스펙에 없다). 모르는 키는 조용히 무시되므로 화면은 정렬 UI 를 달지 않는다
+ *   (CLAUDE.md 3-3). 목록 응답은 학생별 조회와 같은 모양이다.
+ */
+export function listResults(params: ResultSearchParams): Promise<Paged<AdmissionResultRow>> {
+  const { sort, ...rest } = params
+  return requestPaged<AdmissionResultRow>('/api/v1/admin/admission-results', { query: { ...rest }, repeatable: { sort } })
+}
+
 export function listStudentResults(enrollmentId: number): Promise<AdmissionResultRow[]> {
   return request<AdmissionResultRow[]>(`/api/v1/admin/admission-results/students/${enrollmentId}`)
 }

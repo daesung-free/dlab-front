@@ -213,7 +213,7 @@ function Content() {
       {
         key: 'act',
         header: '',
-        width: '270px',
+        width: '380px',
         align: 'center',
         value: () => '',
         render: (r) => (
@@ -227,7 +227,7 @@ function Content() {
                 setEdit({ row: r, kind: 'pg', value: '' })
               }}
             >
-              PG 코드
+              PG 코드 변경
             </button>
             <button
               className="btn"
@@ -238,7 +238,7 @@ function Content() {
                 setEdit({ row: r, kind: 'nebula', value: r.nebulaDeviceId ?? '' })
               }}
             >
-              장비 ID
+              장비 ID 변경
             </button>
             <button
               className="btn"
@@ -250,15 +250,16 @@ function Content() {
                 setReissue(r)
               }}
             >
-              키오스크
+              키오스크 재발급
             </button>
             <button
               className="btn"
               style={{ padding: '4px 8px', fontSize: 11.5, whiteSpace: 'nowrap' }}
               disabled={busy !== null}
+              title="누가 언제 무엇을 바꿨는지 봅니다"
               onClick={() => void showHistory(r)}
             >
-              이력
+              변경 이력
             </button>
           </div>
         ),

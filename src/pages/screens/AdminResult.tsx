@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DataTable, Modal, type Column } from '../../components/common'
+import { DataTable, Modal, PrintButton, useServerTable, type Column } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
-import { StudentList, type StudentRow } from '../../components/StudentList'
 import { useAcademy } from '../../auth/AcademyContext'
 import { ApiError } from '../../api/client'
 import { GRADE_LABEL, searchStudents, type Student } from '../../api/students'
@@ -15,6 +14,7 @@ import {
   deleteResult,
   getAdmissionStatistics,
   getResultSuggestions,
+  listResults,
   listStudentResults,
   updateResult,
   type AdmissionResult,
@@ -32,11 +32,9 @@ import type { Mockup } from './types'
  * ★ **지원 목록이 곧 실적이다.** 학생이 수시·정시 지원 대학을 넣고, 발표 뒤 직원이 합불을
  *   채운다. 따로 두면 같은 대학을 두 번 입력하게 된다(성적 입력과 같은 방식).
  *
- * ★ **목업과 구성이 다르다 — 서버에 '그해 전체 실적 목록' 이 없다.** 조회가 학생 한 명
- *   단위뿐이라, 학생마다 부르면 인원수만큼 요청이 나간다(화면에서 모아 세지 않는다 — 원생이
- *   늘수록 그대로 느려진다). 그래서 실적 입력 탭을 **학생을 고르면 그 학생의 지원 목록이
- *   나오는** 좌우 분할로 바꿨다(ConsultLog 와 같은 모양). 목록 API 가 생기면 표로 되돌린다.
- *   API_GAPS 29-1.
+ * ★ 실적 입력 탭은 **목업대로 지점 전체 표**다. 전체 목록 API 가 없던 동안(29-1)은 학생을 골라
+ *   보는 좌우 분할로 바꿔 뒀었다 — 2026-09-21 `GET /admission-results` 가 생겨 되돌렸다.
+ *   반·학년은 목록 응답에 없어 재원생 목록에서 채운다. 목업의 '등록 확정' 칸은 결과(합격/등록포기)가 맡는다.
  *
  * ★ **목표 계열 5단계(메디컬·서울 최상위·서울 지거국·수도권·지방 4년제)는 서버에 없다.**
  *   서버의 계열(trackName)은 자유 입력이다. 5단계는 명칭·순서부터 미확정이라(#42 / I-22)
@@ -47,6 +45,8 @@ import type { Mockup } from './types'
 
 type EditDraft = {
   resultId: number | null
+  /** 누구의 지원인가. 추가할 때는 창에서 고른다 */
+  enrollmentId: string
   admissionType: AdmissionType
   universityName: string
   departmentName: string
@@ -57,6 +57,7 @@ type EditDraft = {
 
 const EMPTY_DRAFT: EditDraft = {
   resultId: null,
+  enrollmentId: '',
   admissionType: 'EARLY',
   universityName: '',
   departmentName: '',
@@ -72,17 +73,6 @@ const RESULT_TONE: Record<AdmissionResult, string> = {
   GAVE_UP: 'supplement',
 }
 
-/** 좌측 목록 필터. 실적은 수험생 몫이라 고2 는 따로 뺄 수 있게 둔다 */
-const FILTERS = ['재원 전체', '고3', 'N수'] as const
-type Filter = (typeof FILTERS)[number]
-
-function toRow(s: Student): StudentRow {
-  return {
-    id: String(s.enrollmentId),
-    name: s.name,
-    meta: [GRADE_LABEL[s.grade] ?? s.grade, s.studentNo ?? ''].filter(Boolean).join(' · '),
-  }
-}
 
 function Content() {
   const { academyId, ready: academyReady } = useAcademy()
@@ -90,15 +80,14 @@ function Content() {
   const [tab, setTab] = useState('list')
   const [year, setYear] = useState(thisYear)
 
-  /* ── 좌측 학생 목록 ── */
+  /* ── 재원생 — 표의 반·학년을 채우고, 지원 추가 때 학생을 고르는 데 쓴다 ── */
   const [students, setStudents] = useState<Student[]>([])
-  const [listLoading, setListLoading] = useState(true)
-  const [filter, setFilter] = useState<Filter>('재원 전체')
-  const [selectedId, setSelectedId] = useState<string | null>(null)
 
-  /* ── 우측 지원 목록 ── */
-  const [rows, setRows] = useState<AdmissionResultRow[]>([])
-  const [rowsLoading, setRowsLoading] = useState(false)
+  /* ── 전체 실적 표 ── */
+  const [resultFilter, setResultFilter] = useState<AdmissionResult | ''>('')
+  const [typeFilter, setTypeFilter] = useState<AdmissionType | ''>('')
+  const [keyword, setKeyword] = useState('')
+  const [keywordApplied, setKeywordApplied] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
@@ -117,12 +106,9 @@ function Content() {
 
   /* 학생 목록 — 서버 페이징이지만 한 지점 재원생은 수백 명 안이라 한 번에 받는다 */
   useEffect(() => {
-    // 지점 목록 전엔 전 지점 학생이 한 번 섞여 온다. 지점을 바꾸면 이전 선택도 비운다 —
-    // 남겨두면 목록에 없는 학생의 실적이 오른쪽에 그대로 보인다
-    setSelectedId(null)
+    // 지점 목록 전엔 전 지점 학생이 한 번 섞여 온다
     if (!academyReady) return
     let alive = true
-    setListLoading(true)
     searchStudents({
       academyId: academyId ?? undefined,
       year,
@@ -132,41 +118,43 @@ function Content() {
     })
       .then((page) => alive && setStudents(page.rows))
       .catch((e) => alive && setError(e instanceof ApiError ? e.message : '학생 목록을 불러오지 못했습니다.'))
-      .finally(() => alive && setListLoading(false))
     return () => {
       alive = false
     }
   }, [academyId, academyReady, year])
 
-  const filtered = useMemo(() => {
-    if (filter === '고3') return students.filter((s) => s.grade === 'HIGH3')
-    if (filter === 'N수') return students.filter((s) => s.grade === 'N_SU')
-    return students
-  }, [students, filter])
+  const studentById = useMemo(() => new Map(students.map((s) => [s.enrollmentId, s])), [students])
 
-  const selected = students.find((s) => String(s.enrollmentId) === selectedId) ?? null
+  // ★ useMemo 필수 — 매 렌더 새 객체면 무한 요청이 된다
+  const params = useMemo(
+    () => ({
+      academyId: academyId ?? undefined,
+      year,
+      result: resultFilter || undefined,
+      admissionType: typeFilter || undefined,
+      keyword: keywordApplied.trim() || undefined,
+    }),
+    [academyId, year, resultFilter, typeFilter, keywordApplied],
+  )
+  /* 본사 계정은 지점 없이 부르면 400 이다(집계와 같다) — 지점을 고르기 전에는 안 부른다 */
+  const table = useServerTable({ fetcher: listResults, params, pageSize: 20, enabled: academyReady && academyId !== null })
 
-  const loadRows = useCallback(async () => {
-    if (selectedId === null) {
-      setRows([])
+  /* 추가·수정 창의 전형별 개수 — 그 학생의 지원을 따로 읽어 센다(표는 페이지 단위라 못 센다) */
+  const [studentRows, setStudentRows] = useState<AdmissionResultRow[]>([])
+  const draftStudent = draft?.enrollmentId ?? ''
+  useEffect(() => {
+    if (draftStudent === '') {
+      setStudentRows([])
       return
     }
-    setRowsLoading(true)
-    try {
-      setRows(await listStudentResults(Number(selectedId)))
-      setError(null)
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : '지원 목록을 불러오지 못했습니다.')
-      setRows([])
-    } finally {
-      setRowsLoading(false)
+    let alive = true
+    listStudentResults(Number(draftStudent))
+      .then((r) => alive && setStudentRows(r))
+      .catch(() => alive && setStudentRows([]))
+    return () => {
+      alive = false
     }
-  }, [selectedId])
-
-  useEffect(() => {
-    setNotice(null)
-    void loadRows()
-  }, [loadRows])
+  }, [draftStudent])
 
   const loadStats = useCallback(async () => {
     /* ★ 지점을 정하기 전에는 부르지 않는다. 학원생 현황 집계와 달리 이쪽은 본사 계정이
@@ -205,10 +193,10 @@ function Content() {
     }
   }, [draft?.universityName, draft])
 
-  const used = (t: AdmissionType) => rows.filter((r) => r.admissionType === t).length
+  const used = (t: AdmissionType) => studentRows.filter((r) => r.admissionType === t).length
 
   async function save(): Promise<boolean> {
-    if (!draft || selectedId === null) return false
+    if (!draft || draft.enrollmentId === '') return false
     setBusy(true)
     setModalErr(null)
     const body: AdmissionResultInput = {
@@ -220,10 +208,11 @@ function Content() {
       memo: draft.memo.trim() || undefined,
     }
     try {
-      if (draft.resultId === null) await createResult(Number(selectedId), body)
+      if (draft.resultId === null) await createResult(Number(draft.enrollmentId), body)
       else await updateResult(draft.resultId, body)
       setNotice(draft.resultId === null ? '지원을 추가했습니다.' : '고쳤습니다. 이 줄은 이제 직원 확인 값입니다.')
-      await Promise.all([loadRows(), loadStats()])
+      table.reload()
+      await loadStats()
       return true
     } catch (e) {
       /* "정시는 3개까지 등록합니다. 지우고 다시 넣어 주세요." — 서버 문구가 그대로 쓸 만하다 */
@@ -241,7 +230,8 @@ function Content() {
     try {
       await deleteResult(dropping.id)
       setNotice(`${dropping.universityName} ${dropping.departmentName} 지원을 내렸습니다.`)
-      await Promise.all([loadRows(), loadStats()])
+      table.reload()
+      await loadStats()
       return true
     } catch (e) {
       setModalErr(e instanceof ApiError ? e.message : '내리지 못했습니다.')
@@ -252,16 +242,28 @@ function Content() {
   }
 
   const columns: Column<AdmissionResultRow>[] = [
+    { key: 'studentNo', header: '학번', width: '96px', value: (r) => r.studentNo ?? '-', sticky: true },
+    { key: 'studentName', header: '이름', width: '80px', value: (r) => r.studentName, sticky: true },
+    {
+      key: 'grade',
+      header: '학년',
+      width: '56px',
+      align: 'center',
+      value: (r) => {
+        const st = studentById.get(r.enrollmentId)
+        return st ? (GRADE_LABEL[st.grade] ?? st.grade) : '-'
+      },
+    },
+    { key: 'className', header: '반', width: '80px', value: (r) => studentById.get(r.enrollmentId)?.className ?? '-' },
     {
       key: 'admissionType',
       header: '전형',
       width: '64px',
       align: 'center',
-      sortable: true,
       value: (r) => ADMISSION_TYPE_LABEL[r.admissionType],
       render: (r) => <span className="mk supplement">{ADMISSION_TYPE_LABEL[r.admissionType]}</span>,
     },
-    { key: 'universityName', header: '대학', sortable: true, value: (r) => r.universityName },
+    { key: 'universityName', header: '대학', value: (r) => r.universityName },
     { key: 'departmentName', header: '학과', value: (r) => r.departmentName },
     { key: 'trackName', header: '계열', width: '90px', value: (r) => r.trackName ?? '-' },
     {
@@ -269,7 +271,6 @@ function Content() {
       header: '결과',
       width: '84px',
       align: 'center',
-      sortable: true,
       value: (r) => ADMISSION_RESULT_LABEL[r.result],
       render: (r) => <span className={`mk ${RESULT_TONE[r.result]}`}>{ADMISSION_RESULT_LABEL[r.result]}</span>,
     },
@@ -302,6 +303,7 @@ function Content() {
               setModalErr(null)
               setDraft({
                 resultId: r.id,
+                enrollmentId: String(r.enrollmentId),
                 admissionType: r.admissionType,
                 universityName: r.universityName,
                 departmentName: r.departmentName,
@@ -404,86 +406,88 @@ function Content() {
             ))}
           </select>
           {tab === 'list' && (
-            <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-              왼쪽에서 학생을 고르면 그 학생의 수시·정시 지원이 나옵니다
-            </span>
+            <>
+              <select
+                className="sel"
+                style={{ width: 110 }}
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value as AdmissionType | '')}
+              >
+                <option value="">전형 전체</option>
+                {(Object.keys(ADMISSION_TYPE_LABEL) as AdmissionType[]).map((t) => (
+                  <option key={t} value={t}>
+                    {ADMISSION_TYPE_LABEL[t]}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="sel"
+                style={{ width: 110 }}
+                value={resultFilter}
+                onChange={(e) => setResultFilter(e.target.value as AdmissionResult | '')}
+              >
+                <option value="">결과 전체</option>
+                {(Object.keys(ADMISSION_RESULT_LABEL) as AdmissionResult[]).map((r) => (
+                  <option key={r} value={r}>
+                    {ADMISSION_RESULT_LABEL[r]}
+                  </option>
+                ))}
+              </select>
+              <input
+                className="inp"
+                style={{ width: 200 }}
+                placeholder="이름 · 학번 · 대학"
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && setKeywordApplied(keyword)}
+              />
+              <button type="button" className="btn" onClick={() => setKeywordApplied(keyword)}>
+                <Icon name="search" size={14} /> 검색
+              </button>
+              <button
+                type="button"
+                className="btn pri"
+                style={{ marginLeft: 'auto' }}
+                disabled={busy || academyId === null}
+                onClick={() => {
+                  setModalErr(null)
+                  setDraft({ ...EMPTY_DRAFT })
+                }}
+              >
+                <Icon name="plus" size={14} /> 지원 추가
+              </button>
+            </>
           )}
         </div>
 
         {tab === 'list' ? (
           <div style={{ padding: '0 14px 14px' }}>
-            <div className="layout">
-              <StudentList
-                title="재원생"
-                count={`${filtered.length}명`}
-                filters={[...FILTERS]}
-                filter={filter}
-                onFilterChange={(f) => setFilter(f as Filter)}
-                rows={filtered.map(toRow)}
-                selected={selectedId ?? undefined}
-                onSelect={setSelectedId}
-                loading={listLoading}
-                emptyText={academyId === null ? '위에서 지점을 먼저 고르세요.' : '해당하는 학생이 없습니다.'}
-              />
-
-              <section className="panel" style={{ padding: 16 }}>
-                {error && (
-                  <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
-                    {error}
-                  </div>
-                )}
-                {notice && <div className="note-box">{notice}</div>}
-
-                {selected === null ? (
-                  <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
-                    학생을 고르세요.
-                  </div>
-                ) : (
-                  <>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                      <b style={{ fontSize: 15 }}>{selected.name}</b>
-                      <span style={{ color: 'var(--muted)', fontSize: 12.5 }}>
-                        {GRADE_LABEL[selected.grade] ?? selected.grade} · {selected.studentNo ?? '학번 없음'}
-                      </span>
-                      <span className="mk supplement" style={{ marginLeft: 'auto' }}>
-                        수시 {used('EARLY')}/{ADMISSION_QUOTA.EARLY}
-                      </span>
-                      <span className="mk supplement">
-                        정시 {used('REGULAR')}/{ADMISSION_QUOTA.REGULAR}
-                      </span>
-                      <button
-                        className="btn pri"
-                        disabled={busy}
-                        onClick={() => {
-                          setModalErr(null)
-                          /* 수시가 다 찼으면 정시로 시작한다 — 고르고 나서 거절당하지 않게 */
-                          const start: AdmissionType =
-                            used('EARLY') >= ADMISSION_QUOTA.EARLY ? 'REGULAR' : 'EARLY'
-                          setDraft({ ...EMPTY_DRAFT, admissionType: start })
-                        }}
-                      >
-                        <Icon name="plus" size={14} /> 지원 추가
-                      </button>
-                    </div>
-
-                    <DataTable
-                      columns={columns}
-                      rows={rows}
-                      rowKey={(r) => String(r.id)}
-                      masked={false}
-                      loading={rowsLoading}
-                      pageSize={10}
-                      countLabel={
-                        <>
-                          지원 <b>{rows.length}</b>건
-                        </>
-                      }
-                      emptyText="아직 넣은 지원이 없습니다."
-                    />
-                  </>
-                )}
-              </section>
-            </div>
+            {error && (
+              <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+                {error}
+              </div>
+            )}
+            {table.error && (
+              <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+                {table.error}
+              </div>
+            )}
+            {notice && <div className="note-box">{notice}</div>}
+            <DataTable
+              nowrap
+              columns={columns}
+              rows={table.rows}
+              rowKey={(r) => String(r.id)}
+              masked={false}
+              loading={table.loading}
+              serverPaging={table.serverPaging}
+              countLabel={
+                <>
+                  {year}학년도 지원 <b>{table.serverPaging.totalElements}</b>건
+                </>
+              }
+              emptyText={academyId === null ? '위에서 지점을 먼저 고르세요.' : '조건에 맞는 지원이 없습니다.'}
+            />
           </div>
         ) : (
           <div className="card-sec-b">
@@ -547,9 +551,13 @@ function Content() {
         )}
       </div>
 
-      {draft && selected && (
+      {draft && (
         <Modal
-          title={`${selected.name} · ${draft.resultId === null ? '지원 추가' : '지원 수정'}`}
+          title={`${
+            studentById.get(Number(draft.enrollmentId))?.name ??
+            table.rows.find((r) => r.id === draft.resultId)?.studentName ??
+            '학생'
+          } · ${draft.resultId === null ? '지원 추가' : '지원 수정'}`}
           sub={
             draft.resultId === null
               ? `수시 ${ADMISSION_QUOTA.EARLY}개 · 정시 ${ADMISSION_QUOTA.REGULAR}개까지 넣을 수 있습니다.`
@@ -558,10 +566,35 @@ function Content() {
           confirmLabel="저장"
           busy={busy}
           error={modalErr}
-          confirmDisabled={draft.universityName.trim() === '' || draft.departmentName.trim() === ''}
+          confirmDisabled={
+            draft.enrollmentId === '' || draft.universityName.trim() === '' || draft.departmentName.trim() === ''
+          }
           onConfirm={() => void save().then((ok) => ok && setDraft(null))}
           onClose={() => setDraft(null)}
         >
+          {draft.resultId === null && (
+            <div className="frow">
+              <label className="req">학생</label>
+              <select
+                className="sel"
+                value={draft.enrollmentId}
+                onChange={(e) => {
+                  const id = e.target.value
+                  setDraft({ ...draft, enrollmentId: id })
+                }}
+              >
+                <option value="">학생 선택</option>
+                {/* 실적은 수험생 몫이라 고3·N수를 먼저 둔다 */}
+                {[...students]
+                  .sort((a, b) => Number(a.grade === 'HIGH2') - Number(b.grade === 'HIGH2'))
+                  .map((st) => (
+                    <option key={st.enrollmentId} value={st.enrollmentId}>
+                      {st.name} · {st.studentNo ?? '학번 없음'} · {GRADE_LABEL[st.grade] ?? st.grade}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          )}
           <div className="frow">
             <label className="req">전형</label>
             <div>
@@ -679,9 +712,8 @@ export const adminResultMockup: Mockup = {
       <button className="btn" disabled data-soon title="준비 중입니다">
         <Icon name="upload" size={14} /> 엑셀 일괄 등록
       </button>
-      <button className="btn" disabled data-soon title="준비 중입니다">
-        <Icon name="printer" size={14} /> 실적 현황 출력
-      </button>
+      {/* 지금 화면(탭·필터 그대로)을 인쇄한다 — 서버 출력물이 따로 없다 */}
+      <PrintButton label="실적 현황 출력" />
     </>
   ),
 }

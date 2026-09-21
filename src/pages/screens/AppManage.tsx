@@ -4,6 +4,7 @@ import { Icon } from '../../components/Icon'
 import { Tabs } from '../../components/Tabs'
 import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
+import { useAuth } from '../../auth/AuthContext'
 import {
   PLATFORM_LABEL,
   listAppConfigs,
@@ -199,6 +200,9 @@ const API_BANNER_COLUMNS: Column<Notice>[] = [
 
 function Content() {
   const { academyId, ready: academyReady } = useAcademy()
+  const { principal, me } = useAuth()
+  // 서버 app-config 전체가 SUPER_ADMIN 전용이다(지점 관리자 → 403)
+  const isSuper = (me?.roles ?? principal?.roles ?? []).some((r) => r === 'SUPER_ADMIN')
   const [tab, setTab] = useState('push')
 
   const [configs, setConfigs] = useState<AppConfigDetail[]>([])
@@ -227,7 +231,7 @@ function Content() {
 
   const load = useCallback(async () => {
     // 지점 목록 전엔 academyId 가 null 이라 전 지점 값이 먼저 와서 지점 값을 덮을 수 있다
-    if (!academyReady) return
+    if (!academyReady || !isSuper) return
     setLoading(true)
     try {
       /* 셋을 나란히 부른다. 하나가 늦어도 나머지 탭은 먼저 그려져야 한다 */
@@ -245,11 +249,11 @@ function Content() {
     } finally {
       setLoading(false)
     }
-  }, [academyId, academyReady])
+  }, [academyId, academyReady, isSuper])
 
   /* 가입·동의 현황 — 지점을 바꾸면 늦게 온 이전 지점 응답이 덮지 않게 버린다 */
   useEffect(() => {
-    if (!academyReady) return
+    if (!academyReady || !isSuper) return
     let alive = true
     setUsage(null)
     getAppUsage(academyId ?? undefined)
@@ -258,7 +262,7 @@ function Content() {
     return () => {
       alive = false
     }
-  }, [academyId, academyReady])
+  }, [academyId, academyReady, isSuper])
 
   useEffect(() => {
     void load()
@@ -294,7 +298,8 @@ function Content() {
       setMaintEdit({ c, message: c.maintenanceMessage ?? '시스템 점검 중입니다.' })
       return
     }
-    void run('점검 모드를 껐습니다.', '점검 모드를 끄지 못했습니다.', () =>
+    const who = PLATFORM_LABEL[c.platform] ?? c.platform
+    void run(`${who} 점검 모드를 껐습니다. 지금부터 다시 앱을 쓸 수 있습니다.`, `${who} 점검 모드를 끄지 못했습니다.`, () =>
       setMaintenance(c.platform, { maintenance: false }),
     )
   }
@@ -303,13 +308,27 @@ function Content() {
 
   const pushTerms = usage?.terms.find((x) => x.code === 'PUSH') ?? null
 
+  if (!isSuper) {
+    return (
+      <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
+        <div className="ic">
+          <Icon name="triangle-alert" size={17} />
+        </div>
+        <div>
+          <div className="tt">본사 관리자만 볼 수 있는 화면입니다</div>
+          <div className="tx">앱 버전·점검 모드·약관은 전 지점 앱에 한꺼번에 적용되어 본사에서만 바꿉니다.</div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <>
       {newTerms && (
         <Modal
-          title="약관 새 버전 배포"
+          title="약관 새 버전 등록"
           sub="기존 문구는 고치지 않습니다. 버전을 올려 새로 등록합니다."
-          confirmLabel="배포"
+          confirmLabel="등록"
           busy={busy}
           error={modalErr}
           confirmDisabled={
@@ -319,7 +338,10 @@ function Content() {
             newTerms.content.trim() === ''
           }
           onConfirm={() => {
-            void run('약관을 배포했습니다.', '약관을 배포하지 못했습니다.', () =>
+            void run(
+              `'${newTerms.title.trim()}' ${newTerms.version.trim()}을(를) 등록했습니다. 앞으로 동의하는 사람은 이 버전에 동의한 것으로 기록됩니다.`,
+              '약관을 등록하지 못했습니다.',
+              () =>
               createTerms({
                 academyId: academyId ?? undefined,
                 code: newTerms.code.trim().toUpperCase(),
@@ -344,8 +366,8 @@ function Content() {
             <div>
               <div className="tt">지우거나 고칠 수 없습니다</div>
               <div className="tx">
-                한 번 배포한 약관은 <b>수정·삭제가 안 됩니다.</b> 같은 코드·버전으로 다시 배포하는 것도 막혀
-                있습니다. 오타를 고치려면 버전을 올려 다시 배포해야 합니다.
+                한 번 등록한 약관은 <b>수정·삭제가 안 됩니다.</b> 같은 코드·버전으로 다시 등록하는 것도 막혀
+                있습니다. 오타를 고치려면 버전을 올려 새로 등록해야 합니다.
               </div>
             </div>
           </div>
@@ -403,14 +425,24 @@ function Content() {
       {verEdit && (
         <Modal
           title={`${PLATFORM_LABEL[verEdit.c.platform]} ${verEdit.field === 'minVersion' ? '최소 지원 버전' : '최신 버전'}`}
-          sub={verEdit.field === 'minVersion' ? '이보다 낮은 버전은 앱이 열리지 않습니다.' : undefined}
+          sub={
+            verEdit.field === 'minVersion'
+              ? '이보다 낮은 버전을 쓰는 학생·학부모는 저장 즉시 앱을 쓸 수 없고, 업데이트하라는 안내를 받습니다.'
+              : '스토어에 올라간 최신 버전을 적습니다. 낮은 버전 사용자에게 업데이트를 권하지만 막지는 않습니다.'
+          }
           confirmLabel="저장"
           confirmDisabled={verEdit.value.trim() === ''}
           error={modalErr}
           onConfirm={() => {
             const e = verEdit
             const label = e.field === 'minVersion' ? '최소 지원 버전' : '최신 버전'
-            void run(`${label}을 바꿨습니다.`, `${label}을 바꾸지 못했습니다.`, () =>
+            const who = PLATFORM_LABEL[e.c.platform] ?? e.c.platform
+            const v = e.value.trim()
+            const done =
+              e.field === 'minVersion'
+                ? `${who} 최소 지원 버전을 ${v}(으)로 바꿨습니다. 지금부터 ${v}보다 낮은 버전은 업데이트해야 앱을 쓸 수 있습니다.`
+                : `${who} 최신 버전을 ${v}(으)로 바꿨습니다. 낮은 버전 사용자에게 업데이트를 권합니다.`
+            void run(done, `${who} ${label}을 바꾸지 못했습니다.`, () =>
               updateAppVersions(e.c.platform, { [e.field]: e.value.trim() }),
             ).then((ok) => ok && setVerEdit(null))
           }}
@@ -439,7 +471,11 @@ function Content() {
           error={modalErr}
           onConfirm={() => {
             const e = maintEdit
-            void run('점검 모드를 켰습니다.', '점검 모드를 켜지 못했습니다.', () =>
+            const who = PLATFORM_LABEL[e.c.platform] ?? e.c.platform
+            void run(
+              `${who} 점검 모드를 켰습니다. 끄기 전까지 ${who} 사용자는 앱을 열면 안내 문구만 보게 됩니다.`,
+              `${who} 점검 모드를 켜지 못했습니다.`,
+              () =>
               setMaintenance(e.c.platform, { maintenance: true, message: e.message.trim() }),
             ).then((ok) => ok && setMaintEdit(null))
           }}
@@ -642,9 +678,9 @@ function Content() {
                   {c.maintenance ? (
                     <span className="mk brandnew">점검 중 — 앱 사용 불가</span>
                   ) : c.minVersion ? (
-                    <span className="mk brandnew">업데이트 게이트 ON</span>
+                    <span className="mk brandnew">{c.minVersion} 미만은 업데이트해야 사용 가능</span>
                   ) : (
-                    <span className="mk verified">게이트 없음</span>
+                    <span className="mk verified">모든 버전 사용 가능</span>
                   )}
                 </div>
               </div>
@@ -660,7 +696,10 @@ function Content() {
                     <span className="k">최소 지원</span>
                     <span className="v">
                       {c.minVersion ?? '-'}
-                      <span style={{ color: 'var(--muted)', fontSize: 11.5 }}> — 미만은 실행 시 업데이트 게이트</span>
+                      <span style={{ color: 'var(--muted)', fontSize: 11.5 }}>
+                        {' '}
+                        — 이보다 낮은 버전은 앱을 열면 업데이트 안내가 뜨고, 업데이트하기 전까지 쓸 수 없습니다
+                      </span>
                     </span>
                   </div>
                   <div className="row">
@@ -741,8 +780,8 @@ function Content() {
               약관 · 동의 버전
             </div>
             <div className="r">
-              <span className="mk supplement" title="동의 시점의 약관 버전을 함께 저장합니다">
-                동의 이력 버전 고정
+              <span className="mk supplement" title="누가 어느 버전에 동의했는지 함께 남습니다">
+                동의한 버전이 함께 기록됩니다
               </span>
               <button
                 className="btn pri"
@@ -750,7 +789,7 @@ function Content() {
                   setNewTerms({ code: '', version: '', title: '', content: '', required: true })
                 }
               >
-                <Icon name="plus" size={14} /> 새 버전 배포
+                <Icon name="plus" size={14} /> 새 버전 등록
               </button>
             </div>
           </div>
