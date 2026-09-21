@@ -3,8 +3,17 @@ import { StudentList, type StudentRow } from '../../components/StudentList'
 import { StudentHeader } from '../../components/StudentHeader'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
-import { Unfilled, todayStr } from '../../components/common'
+import { addDaysStr, toDateStr, todayStr } from '../../components/common'
 import { ApiError } from '../../api/client'
+import { AcademyExams } from '../../components/AcademyExams'
+import { getAcademyExam, listAcademyExams } from '../../api/grades'
+import { fetchStudentPenalties, type StudentPenalties } from '../../api/penalties'
+import {
+  ATTENDANCE_STATUS_LABEL,
+  fetchAttendanceBoard,
+  type AttendanceRow,
+  type AttendanceStatus,
+} from '../../api/attendance'
 import { clearDraft, loadDraft, saveDraft } from '../../lib/draft'
 import { useAcademy } from '../../auth/AcademyContext'
 import {
@@ -34,7 +43,8 @@ import './consult.css'
  *
  * ★ 서버에 없어서 못 붙인 것 — docs/API_GAPS.md 참고
  *   · 성적 스트립(국어/수학/영어/탐구 등급) — 성적 도메인이라 묶음 F에서 붙인다
- *   · 상세 탭 3개(성적 추이 · 출결·상벌점 · 학부모 공유내역) — 각각 다른 도메인
+ *   · 상세 탭 3개(성적 추이 · 출결·상벌점 · 학부모 공유내역) — 2026-09-21 붙임. 성적은 디랩 시험 조회,
+ *     출결은 지점 출결을 기간·학번으로 좁혀 그 학생만, 상벌점은 학생별 조회, 공유내역은 받은 이력에서 거른다
  *
  * ★ 작성자는 **서버가 로그인 주체로 채운다**(2026-09-03). 클라이언트가 안 보낸다 —
  *   남의 id 를 보낼 수 없으니 이 편이 안전하다. */
@@ -275,12 +285,12 @@ function Content() {
             }
           />
 
-          {/* 성적 스트립은 성적 도메인(묶음 F)에서 붙인다 */}
+          {/* 성적 요약 — 가장 최근 디랩 시험의 과목 등급 */}
           <div className="score-strip">
             <div className="sc" style={{ gridColumn: '1 / -1' }}>
               <div className="l">성적 요약</div>
               <div className="v" style={{ fontSize: 13 }}>
-                <Unfilled reason="준비 중입니다" />
+                {selected ? <LatestExam key={selected.enrollmentId} enrollmentId={selected.enrollmentId} /> : '-'}
               </div>
             </div>
           </div>
@@ -288,17 +298,41 @@ function Content() {
           <Tabs items={DETAIL_TABS} active={tab} onChange={setTab} />
 
           <div className="panel-body">
-            {tab !== 'log' ? (
-              <div className="note-box plain">
-                <div className="ic">
-                  <Icon name="alert-circle" size={17} />
-                </div>
-                <div>
-                  <div className="tt">준비 중입니다</div>
-                  <div className="tx">
-                    성적 추이 · 출결·상벌점 · 학부모 공유내역은 곧 볼 수 있습니다.
-                  </div>
-                </div>
+            {tab === 'score' ? (
+              selected ? (
+                <AcademyExams key={selected.enrollmentId} enrollmentId={selected.enrollmentId} />
+              ) : null
+            ) : tab === 'att' ? (
+              selected ? (
+                <AttPenalty key={selected.enrollmentId} enrollmentId={selected.enrollmentId} studentNo={selected.studentNo} />
+              ) : null
+            ) : tab === 'share' ? (
+              /* 학부모에게 공유한 상담만 — 이미 받은 이력에서 거른다(따로 부르지 않는다) */
+              <div className="timeline">
+                {logs.filter((e) => e.parentShare && e.parentShare !== 'NONE').length === 0 && (
+                  <div className="dt-empty">학부모와 공유한 상담이 없습니다.</div>
+                )}
+                {logs
+                  .filter((e) => e.parentShare && e.parentShare !== 'NONE')
+                  .map((e) => (
+                    <div className="entry" key={e.id}>
+                      <div className="ecard">
+                        <div className="ecard-h">
+                          <span className={`ty ${CONSULT_TYPE_CLASS[e.consultType]}`}>{CONSULT_TYPE_LABEL[e.consultType]}</span>
+                          <span className="dt">{e.consultedAt}</span>
+                          <span className="who">
+                            {e.teacherName ?? '작성자 미기록'} · 학부모 공유: {PARENT_SHARE_LABEL[e.parentShare as ParentShare]}
+                          </span>
+                        </div>
+                        <div className="ecard-b">
+                          <div className="esec">
+                            <div className="sl">상담 내용</div>
+                            <div className="sx">{e.content}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
               </div>
             ) : (
               <>
@@ -480,6 +514,124 @@ function Content() {
             )}
           </div>
         </section>
+      </div>
+    </div>
+  )
+}
+
+/** 성적 요약 한 줄 — 가장 최근 디랩 시험의 과목 등급. 없으면 없다고 적는다 */
+function LatestExam({ enrollmentId }: { enrollmentId: number }) {
+  const [text, setText] = useState<string | null>(null)
+  useEffect(() => {
+    let alive = true
+    listAcademyExams(enrollmentId)
+      .then(async (ex) => {
+        if (ex.length === 0) return alive && setText('반영된 디랩 시험이 없습니다')
+        const d = await getAcademyExam(enrollmentId, ex[0].examMasterId)
+        const grades = d.subjects
+          .filter((x) => x.gradeLevel !== null)
+          .map((x) => `${x.subjectName} ${x.gradeLevel}`)
+          .join(' · ')
+        if (alive) setText(`${d.exam.examName} — ${grades || '등급 없음'}`)
+      })
+      .catch(() => alive && setText('성적을 불러오지 못했습니다'))
+    return () => {
+      alive = false
+    }
+  }, [enrollmentId])
+  return <>{text ?? '불러오는 중…'}</>
+}
+
+/**
+ * 출결 · 상벌점 — 최근 30일 출결 요약과 상벌점 내역.
+ * ★ 학생 한 명 출결 조회가 따로 없어 지점 출결을 기간·학번으로 좁혀 받고 그 학생 줄만 남긴다.
+ */
+function AttPenalty({ enrollmentId, studentNo }: { enrollmentId: number; studentNo: string | null }) {
+  const { academyId } = useAcademy()
+  const [att, setAtt] = useState<AttendanceRow[] | null>(null)
+  const [pen, setPen] = useState<StudentPenalties | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const to = todayStr()
+  const from = addDaysStr(new Date(), -29)
+
+  useEffect(() => {
+    let alive = true
+    if (academyId !== null) {
+      fetchAttendanceBoard({ academyId, from, to, keyword: studentNo ?? undefined })
+        .then((b) => alive && setAtt(b.rows.filter((r) => r.enrollmentId === enrollmentId)))
+        .catch(() => alive && setAtt([]))
+    }
+    fetchStudentPenalties(enrollmentId)
+      .then((b) => alive && setPen(b))
+      .catch((e) => alive && setErr(e instanceof ApiError ? e.message : '상벌점을 불러오지 못했습니다.'))
+    return () => {
+      alive = false
+    }
+  }, [academyId, enrollmentId, studentNo, from, to])
+
+  const count = (st: AttendanceStatus) => (att ?? []).filter((r) => r.status === st).length
+
+  return (
+    <div style={{ display: 'grid', gap: 16 }}>
+      <div>
+        <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>최근 30일 출결</div>
+        {att === null ? (
+          <div style={{ color: 'var(--muted)', fontSize: 12.5 }}>불러오는 중…</div>
+        ) : (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {(['ON_TIME', 'LATE', 'EARLY_LEAVE', 'OUT', 'ABSENT'] as AttendanceStatus[]).map((st) => (
+              <span key={st} className={`mk ${st === 'ON_TIME' ? 'verified' : st === 'ABSENT' ? 'brandnew' : 'supplement'}`}>
+                {ATTENDANCE_STATUS_LABEL[st]} {count(st)}
+              </span>
+            ))}
+            <span style={{ fontSize: 12, color: 'var(--muted)', alignSelf: 'center' }}>
+              {from} ~ {to} · {att.length}일 기록
+            </span>
+          </div>
+        )}
+      </div>
+      <div>
+        <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>
+          상벌점
+          {pen && (
+            <span style={{ fontWeight: 500, fontSize: 12, marginLeft: 8 }}>
+              상점 <b style={{ color: 'var(--mint-d)' }}>+{pen.rows.filter((r) => r.point > 0).reduce((n, r) => n + r.point, 0)}</b>{' '}
+              · 벌점 <b style={{ color: 'var(--red)' }}>{pen.rows.filter((r) => r.point < 0).reduce((n, r) => n + r.point, 0)}</b> · 합계{' '}
+              <b>{pen.totalPoints > 0 ? `+${pen.totalPoints}` : pen.totalPoints}</b>
+            </span>
+          )}
+        </div>
+        {err && <div style={{ color: 'var(--red)', fontSize: 12.5 }}>{err}</div>}
+        {pen === null && !err ? (
+          <div style={{ color: 'var(--muted)', fontSize: 12.5 }}>불러오는 중…</div>
+        ) : pen && pen.rows.length === 0 ? (
+          <div style={{ color: 'var(--muted)', fontSize: 12.5 }}>상벌점 기록이 없습니다.</div>
+        ) : (
+          <div style={{ maxHeight: 280, overflow: 'auto' }}>
+            <table className="dt nowrap" style={{ width: '100%' }}>
+              <thead>
+                <tr>
+                  <th style={{ width: 100 }}>일자</th>
+                  <th>항목</th>
+                  <th style={{ width: 70, textAlign: 'right' }}>점수</th>
+                  <th>사유</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(pen?.rows ?? []).map((r) => (
+                  <tr key={r.id}>
+                    <td>{toDateStr(new Date(r.occurredAt))}</td>
+                    <td>{r.itemName}</td>
+                    <td style={{ textAlign: 'right', color: r.point < 0 ? 'var(--red)' : 'var(--mint-d)' }}>
+                      {r.point > 0 ? `+${r.point}` : r.point}
+                    </td>
+                    <td>{r.reason ?? '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   )

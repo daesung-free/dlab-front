@@ -84,6 +84,20 @@ export interface PenaltyParams {
   classId?: number
 }
 
+/**
+ * 학생 한 명의 상벌점 내역. 상담 관리 '출결 · 상벌점' 탭이 쓴다.
+ * ★ 전체 목록(`PenaltyBoard`)과 **모양이 다르다** — `summary` 가 없고 `totalPoints`(순합계) 하나다
+ *   (2026-09-21 실응답). 같은 타입으로 받았다가 합계를 읽는 순간 화면이 통째로 죽었다.
+ */
+export interface StudentPenalties {
+  rows: PenaltyRow[]
+  totalPoints: number
+}
+
+export function fetchStudentPenalties(enrollmentId: number): Promise<StudentPenalties> {
+  return request<StudentPenalties>(`/api/v1/admin/penalties/students/${enrollmentId}`)
+}
+
 export function fetchPenaltyBoard(params: PenaltyParams): Promise<PenaltyBoard> {
   const { source, ...rest } = params
   return request<PenaltyBoard>('/api/v1/admin/penalties', {
