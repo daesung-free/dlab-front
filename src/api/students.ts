@@ -174,6 +174,24 @@ export function admitStudent(body: AdmitRequest): Promise<Student> {
   return request<Student>('/api/v1/admin/students', { method: 'POST', body })
 }
 
+/**
+ * 학생 한 명. 수정 화면이 여는 순간 다시 읽는다 — 목록 값은 가려져 있거나 낡았을 수 있다.
+ *
+ * ★ **상세는 가리지 않고 원본을 준다**(`masked: false`, 2026-09-21 확인). 목록은 가려서 주므로
+ *   수정 모달이 목록 값을 그대로 채우면 `010-****-3153` 이 입력칸에 들어가 **그대로 저장된다.**
+ * ★ **성별이 응답에 없다.** 보낼 수는 있는데 읽어올 수가 없다 — API_GAPS 30-1.
+ */
+export function getStudent(enrollmentId: number): Promise<Student> {
+  return request<Student>(`/api/v1/admin/students/${enrollmentId}`)
+}
+
+/**
+ * 학생 정보 수정.
+ *
+ * ★ **보낸 칸만 바뀐다.** 안 보낸 칸은 그대로다.
+ * ★ **빈 문자열을 보내면 그 값이 지워진다**(주소 `""` → 빈 값, 2026-09-21 확인). 그래서
+ *   화면은 **바뀐 칸만** 보낸다 — 폼 전체를 보내면 손대지 않은 빈 칸까지 지워진다.
+ */
 export function updateStudent(enrollmentId: number, body: StudentUpdateRequest): Promise<Student> {
   return request<Student>(`/api/v1/admin/students/${enrollmentId}`, { method: 'PATCH', body })
 }
