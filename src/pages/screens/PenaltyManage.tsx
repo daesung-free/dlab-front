@@ -104,7 +104,7 @@ function one(v: unknown): string | undefined {
 }
 
 function Content() {
-  const { academyId } = useAcademy()
+  const { academyId, ready: academyReady } = useAcademy()
   const [query, setQuery] = useState<SearchValues>({})
   const [selected, setSelected] = useState<string[]>([])
   const [masked, setMasked] = useState(true)
@@ -400,7 +400,7 @@ function Content() {
 
       <SearchForm fields={fields} onSearch={setQuery} presetKey="penalty" />
 
-      {academyId === null && (
+      {academyId === null && academyReady && (
         <div className="note-box">지점을 먼저 선택하세요. 상벌점은 지점 단위로 조회합니다.</div>
       )}
 
@@ -478,6 +478,7 @@ function Content() {
       )}
 
       <DataTable
+        nowrap
         columns={columns}
         rows={rows}
         rowKey={(r) => String(r.id)}

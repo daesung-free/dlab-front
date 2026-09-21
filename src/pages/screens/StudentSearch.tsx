@@ -176,7 +176,7 @@ function infoOf(s: Student): Record<InfoKey, string> {
 }
 
 function Content() {
-  const { academyId } = useAcademy()
+  const { academyId, ready: academyReady } = useAcademy()
   /* 상태를 안 고르면 **재원생**이다. 비워두면 휴원·퇴원생이 첫 쪽에 섞여 들어와
    * "재원생 명부"를 뽑는 기본 용도와 어긋난다. 전체를 보려면 '전체'를 고르면 된다 */
   /* 기본은 재원생만 본다 — 평소 명단에 휴원·퇴원이 섞이면 안 된다.
@@ -374,6 +374,8 @@ function Content() {
     params,
     pageSize: PAGE_SIZE,
     sortable: SORTABLE,
+    // 지점 목록을 받기 전엔 academyId 가 null 이라 전 지점 학생을 한 번 받고 다시 받는다 — 표가 깜빡인다
+    enabled: academyReady,
   })
 
   // 서버가 이미 가려서 보낸 경우(masked=true) 프론트에서 또 가리지 않는다 — 이중 마스킹이 된다.

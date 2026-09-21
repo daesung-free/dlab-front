@@ -153,7 +153,7 @@ const TABS = [
 ]
 
 function Content() {
-  const { academyId } = useAcademy()
+  const { academyId, ready: academyReady } = useAcademy()
   const [tab, setTab] = useState('roster')
   const [query, setQuery] = useState<SearchValues>({})
   const [masked, setMasked] = useState(true)
@@ -222,6 +222,8 @@ function Content() {
     params,
     pageSize: PAGE_SIZE,
     sortable: SORTABLE,
+    // 지점 목록을 받기 전엔 academyId 가 null 이라 전 지점 학생을 한 번 받고 다시 받는다 — 표가 깜빡인다
+    enabled: academyReady,
   })
 
   const rows = table.rows
@@ -263,6 +265,7 @@ function Content() {
         <Tabs items={TABS.map((t) => ({ key: t.key, label: t.label }))} active={tab} onChange={setTab} />
         <div style={{ padding: 14 }}>
           <DataTable
+            nowrap
             columns={columns}
             rows={rows}
             rowKey={(r) => String(r.enrollmentId)}

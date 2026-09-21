@@ -1074,6 +1074,7 @@ function Content() {
         {tab === 'users' ? (
           <div style={{ padding: 14 }}>
             <DataTable
+              nowrap
               columns={columns}
               rows={rows}
               rowKey={(r) => String(r.accountId)}

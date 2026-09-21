@@ -85,7 +85,7 @@ function toRow(s: Student): StudentRow {
 }
 
 function Content() {
-  const { academyId } = useAcademy()
+  const { academyId, ready: academyReady } = useAcademy()
   const thisYear = new Date().getFullYear()
   const [tab, setTab] = useState('list')
   const [year, setYear] = useState(thisYear)
@@ -117,6 +117,10 @@ function Content() {
 
   /* 학생 목록 — 서버 페이징이지만 한 지점 재원생은 수백 명 안이라 한 번에 받는다 */
   useEffect(() => {
+    // 지점 목록 전엔 전 지점 학생이 한 번 섞여 온다. 지점을 바꾸면 이전 선택도 비운다 —
+    // 남겨두면 목록에 없는 학생의 실적이 오른쪽에 그대로 보인다
+    setSelectedId(null)
+    if (!academyReady) return
     let alive = true
     setListLoading(true)
     searchStudents({
@@ -132,7 +136,7 @@ function Content() {
     return () => {
       alive = false
     }
-  }, [academyId, year])
+  }, [academyId, academyReady, year])
 
   const filtered = useMemo(() => {
     if (filter === '고3') return students.filter((s) => s.grade === 'HIGH3')

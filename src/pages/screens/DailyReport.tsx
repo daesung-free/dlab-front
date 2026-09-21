@@ -256,6 +256,7 @@ function Content() {
         {tab === 'rank' ? (
           <div style={{ padding: 14 }}>
             <DataTable
+              nowrap
               columns={COLUMNS}
               rows={rows}
               rowKey={(r) => r.id}

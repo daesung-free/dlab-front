@@ -82,7 +82,7 @@ const EMPTY_ITEM: ItemDraft = {
 }
 
 function Content() {
-  const { academyId } = useAcademy()
+  const { academyId, ready: academyReady } = useAcademy()
   const [month, setMonth] = useState(() => monthStr(0))
   const [rows, setRows] = useState<ScheduleMonth[]>([])
   const [students, setStudents] = useState<Student[]>([])
@@ -303,7 +303,7 @@ function Content() {
         </div>
       </div>
 
-      {academyId === null && (
+      {academyId === null && academyReady && (
         <div className="note-box">지점을 먼저 선택하세요. 정기일정은 지점 단위로 조회합니다.</div>
       )}
 

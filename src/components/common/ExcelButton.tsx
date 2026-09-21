@@ -38,7 +38,11 @@ export function ExcelButton<T>({ filename, columns, rows, masked = true, label =
     >
       <Icon name="file-spreadsheet" size={14} />
       {label}
-      <span className={`mask-pill${masked ? '' : ' off'}`}>{masked ? '마스킹' : '원본'}</span>
+      {/* 두 글자를 겹쳐 두고 하나만 보인다 — '마스킹'·'원본' 폭이 달라 토글할 때 옆 버튼이 밀렸다 */}
+      <span className={`mask-pill${masked ? '' : ' off'}`}>
+        <span style={{ visibility: masked ? 'visible' : 'hidden' }}>마스킹</span>
+        <span style={{ visibility: masked ? 'hidden' : 'visible' }}>원본</span>
+      </span>
     </button>
   )
 }
@@ -88,7 +92,12 @@ export function MaskToggle({ masked, onChange }: { masked: boolean; onChange: (v
       title="개인정보 가리기 — 해제할 수 있는지는 계정 권한에 따라 다릅니다"
     >
       <Icon name={masked ? 'shield-check' : 'shield-off'} size={14} />
-      마스킹 {masked ? 'ON' : 'OFF'}
+      마스킹{' '}
+      {/* ON·OFF 를 한 칸에 겹쳐 두고 하나만 보인다 — 글자 폭이 달라 누를 때마다 옆 버튼들이 밀렸다 */}
+      <span className="mask-st">
+        <span style={{ visibility: masked ? 'visible' : 'hidden' }}>ON</span>
+        <span style={{ visibility: masked ? 'hidden' : 'visible' }}>OFF</span>
+      </span>
     </button>
   )
 }

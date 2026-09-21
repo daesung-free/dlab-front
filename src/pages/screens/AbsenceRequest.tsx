@@ -70,7 +70,7 @@ function localDateTime(iso: string): string {
 }
 
 function Content() {
-  const { academyId } = useAcademy()
+  const { academyId, ready: academyReady } = useAcademy()
   const [tab, setTab] = useState<ApprovalStatus>('PENDING')
   const [acting, setActing] = useState<number | null>(null)
   /** 반려 사유 입력 모달. 사유는 학생·학부모에게 그대로 전달된다 */
@@ -287,7 +287,7 @@ function Content() {
         </div>
       </div>
 
-      {academyId === null && (
+      {academyId === null && academyReady && (
         <div className="note-box">지점을 먼저 선택하세요. 사유 신청은 지점 단위로 조회합니다.</div>
       )}
 
@@ -313,6 +313,7 @@ function Content() {
         />
         <div style={{ padding: 14 }}>
           <DataTable
+            nowrap
             columns={columns}
             rows={rows}
             rowKey={(r) => String(r.id)}

@@ -788,6 +788,7 @@ function Content() {
               <div className="split-3-2">
                 <div>
                   <DataTable
+                    nowrap
                     columns={DISCOUNT_COLUMNS}
                     rows={DISCOUNTS}
                     rowKey={(r) => r.id}
@@ -948,6 +949,7 @@ function Content() {
 
           {tab === 'all' && (
             <DataTable
+              nowrap
               columns={columnsWithAct}
               rows={rows}
               rowKey={(r) => String(r.billingId)}
@@ -981,6 +983,7 @@ function Content() {
 
           {tab === 'unpaid' && (
             <DataTable
+              nowrap
               columns={UNPAID_COLUMNS}
               rows={unpaid}
               rowKey={(r) => String(r.billingId)}

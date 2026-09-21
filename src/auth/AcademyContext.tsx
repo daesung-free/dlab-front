@@ -21,6 +21,12 @@ interface AcademyState {
   /** 사용자가 고를 수 있는가. false면 지점이 하나뿐이라 선택 UI를 감춘다 */
   selectable: boolean
   loading: boolean
+  /**
+   * 지점 목록을 한 번이라도 받았는가. 받기 전에도 academyId 는 null 이라
+   * "지점을 먼저 고르세요" 안내가 새로고침 때마다 잠깐 떴다 사라지며 아래 표를 밀어 올렸다.
+   * 안내는 이 값이 true 일 때만 띄운다.
+   */
+  ready: boolean
   error: string | null
 }
 
@@ -40,12 +46,14 @@ export function AcademyProvider({ children }: { children: ReactNode }) {
   const [academies, setAcademies] = useState<Academy[]>([])
   const [academyId, setId] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
+  const [ready, setReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!signedIn) {
       setAcademies([])
       setId(null)
+      setReady(false)
       return
     }
 
@@ -68,7 +76,10 @@ export function AcademyProvider({ children }: { children: ReactNode }) {
         if (!cancelled) setError('지점 목록을 불러오지 못했습니다.')
       })
       .finally(() => {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) {
+          setLoading(false)
+          setReady(true)
+        }
       })
 
     return () => {
@@ -82,8 +93,8 @@ export function AcademyProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo<AcademyState>(
-    () => ({ academies, academyId, setAcademyId, selectable: academies.length > 1, loading, error }),
-    [academies, academyId, setAcademyId, loading, error],
+    () => ({ academies, academyId, setAcademyId, selectable: academies.length > 1, loading, ready, error }),
+    [academies, academyId, setAcademyId, loading, ready, error],
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

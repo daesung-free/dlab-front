@@ -397,6 +397,7 @@ function Content() {
         <div style={{ padding: 14 }}>
           {tab === 'result' ? (
             <DataTable
+              nowrap
               columns={columns}
               rows={matrix}
               rowKey={(r) => String(r.enrollmentId)}
@@ -434,6 +435,7 @@ function Content() {
             />
           ) : (
             <DataTable
+              nowrap
               columns={ROUTINE_COLUMNS}
               rows={routines}
               rowKey={(r) => String(r.id)}

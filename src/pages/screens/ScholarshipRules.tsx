@@ -128,7 +128,7 @@ function ruleText(r: ScholarshipRule): string {
 }
 
 function Content() {
-  const { academyId } = useAcademy()
+  const { academyId, ready: academyReady } = useAcademy()
   const year = new Date().getFullYear()
   const [tab, setTab] = useState('rules')
 
@@ -437,7 +437,7 @@ function Content() {
 
       {/* 지점을 못 고른 상태를 먼저 말한다. 다른 화면과 같은 문구를 쓴다 —
           이 상태에서는 목록이 비는 것이 정상이고, 버튼이 잠긴 것도 그래서다 */}
-      {academyId === null && (
+      {academyId === null && academyReady && (
         <div className="note-box">지점을 먼저 선택하세요. 장학 기준은 지점 단위로 관리합니다.</div>
       )}
 
