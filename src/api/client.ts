@@ -156,7 +156,7 @@ export async function requestEnvelope<T>(path: string, opts: RequestOptions = {}
     // CORS는 브라우저가 응답을 안 넘겨줘서 여기서 구분이 안 된다(콘솔에만 보인다).
     /* ★ 화면에 그대로 뜨는 문구다. 포트·CORS 는 우리 사정이라 쓰지 않는다(CLAUDE.md 1-1).
          원인은 콘솔과 서버 로그로 본다 — 사용자는 다시 시도할지만 정하면 된다. */
-    throw new ApiError(0, 'NETWORK', '서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.')
+    throw new ApiError(0, 'NETWORK', '연결이 원활하지 않습니다. 잠시 후 다시 시도해 주세요.')
   }
 
   if (res.status === 401 && !opts.anonymous && !opts.keepSessionOn401 && (await refreshTokens())) {
@@ -170,7 +170,7 @@ export async function requestEnvelope<T>(path: string, opts: RequestOptions = {}
   try {
     json = (await res.json()) as ApiEnvelope<T>
   } catch {
-    throw new ApiError(res.status, 'MALFORMED_RESPONSE', `서버 응답을 해석할 수 없습니다 (HTTP ${res.status}).`)
+    throw new ApiError(res.status, 'MALFORMED_RESPONSE', `요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요. (오류 ${res.status})`)
   }
 
   if (!res.ok || !json.success) {
@@ -241,7 +241,7 @@ export async function downloadFile(path: string, fallbackName: string, opts: Req
     res = await send(path, opts)
   } catch (err) {
     if (err instanceof ApiError) throw err
-    throw new ApiError(0, 'NETWORK', '서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.')
+    throw new ApiError(0, 'NETWORK', '연결이 원활하지 않습니다. 잠시 후 다시 시도해 주세요.')
   }
 
   if (res.status === 401 && !opts.anonymous && (await refreshTokens())) {

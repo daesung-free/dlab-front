@@ -407,7 +407,7 @@ function Content() {
                         </option>
                       ))}
                     </select>
-                    <button className="btn" disabled title="전년도 일정을 복사하는 경로가 서버에 없습니다">
+                    <button className="btn" disabled title="준비 중입니다">
                       <Icon name="history" size={14} /> 전년도 복사
                     </button>
                   </>

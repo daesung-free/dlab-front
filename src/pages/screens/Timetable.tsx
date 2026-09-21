@@ -467,7 +467,7 @@ function Content() {
               강의실 주간 사용률
             </div>
             <div className="r">
-              <span className="mk brandnew">중복 배정은 서버에서 차단</span>
+              <span className="mk brandnew">중복 배정 자동 차단</span>
             </div>
           </div>
           <div className="card-sec-b" style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>

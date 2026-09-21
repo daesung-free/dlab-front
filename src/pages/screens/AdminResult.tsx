@@ -659,7 +659,7 @@ function Content() {
       {dropping && (
         <Modal
           title={`${dropping.universityName} ${dropping.departmentName} 지원을 내릴까요?`}
-          sub="목록과 집계에서 빠집니다. 지난 지원 이력은 서버에 남습니다."
+          sub="목록과 집계에서 빠집니다. 기록 자체는 지워지지 않고 남습니다."
           confirmLabel="내리기"
           danger
           busy={busy}
