@@ -67,7 +67,7 @@ interface DayRow {
 }
 
 function Content() {
-  const { academyId } = useAcademy()
+  const { academyId, ready: academyReady } = useAcademy()
   const [tab, setTab] = useState('staff')
 
   const [staff, setStaff] = useState<StaffCard[]>([])
@@ -304,7 +304,7 @@ function Content() {
         </div>
       </div>
 
-      {academyId === null && (
+      {academyId === null && academyReady && (
         <div className="note-box">지점을 먼저 선택하세요. 직원 카드는 지점 단위로 관리합니다.</div>
       )}
 

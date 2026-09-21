@@ -482,7 +482,7 @@ function Content() {
           <div className="v" style={{ fontSize: 14, paddingTop: 8 }}>
             <Unfilled reason="동의율 집계가 없다 — 계정별 조회만 있다" />
           </div>
-          <div className="d">미동의자는 알림톡으로 폴백</div>
+          <div className="d">미동의자는 알림톡으로 대신 발송</div>
         </div>
         <div className="stat">
           <div className="l">
@@ -521,8 +521,8 @@ function Content() {
           <div className="tt">앱 알림과 카카오 알림톡은 서로 다릅니다 — 이 화면은 앱 알림만 다룹니다</div>
           <div className="tx">
             학부모 대상 <b>카카오 알림톡</b>은 템플릿 심사가 필요하므로 <b>문자발송</b> 메뉴에서 관리합니다. 여기서는 학생 앱
-            대상 <b>앱 알림</b>만 발송하며, 수신 미동의자는 서버가 알림톡으로 폴백합니다. <b>SMS는 제공하지 않으므로</b>{' '}
-            승인된 알림톡 문안이 없는 자유 문안은 폴백 경로가 없습니다.
+            대상 <b>앱 알림</b>만 발송하며, 수신 미동의자에게는 알림톡으로 대신 보냅니다. <b>문자(SMS)는 보내지 않으므로</b>{' '}
+            승인된 알림톡 문안이 없는 자유 문안은 미동의자에게 전달되지 않습니다.
           </div>
         </div>
       </div>

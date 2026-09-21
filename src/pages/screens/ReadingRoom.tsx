@@ -291,7 +291,7 @@ function Content() {
             <Icon name="circle-dot" size={13} /> 재실
           </div>
           <div className="v">{count('in')}</div>
-          <div className="d up">서버 계산값</div>
+          <div className="d up">실시간</div>
         </div>
         <div className="stat">
           <div className="l">

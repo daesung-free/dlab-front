@@ -104,7 +104,14 @@ function Content() {
     try {
       const rows = await listConsultStatus(academyId)
       setStatus(rows)
-      setSelectedId((prev) => prev ?? (rows[0] ? String(rows[0].enrollmentId) : null))
+      // 지점을 바꾸면 이전 선택이 새 목록에 없다 — 그대로 두면 남의 지점 학생 상담일지가 오른쪽에 남는다
+      setSelectedId((prev) =>
+        prev !== null && rows.some((r) => String(r.enrollmentId) === prev)
+          ? prev
+          : rows[0]
+            ? String(rows[0].enrollmentId)
+            : null,
+      )
       setError(null)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '상담 현황을 불러오지 못했습니다.')
@@ -237,9 +244,9 @@ function Content() {
                   <Icon name="alert-circle" size={17} />
                 </div>
                 <div>
-                  <div className="tt">아직 연동하지 않은 탭입니다</div>
+                  <div className="tt">준비 중입니다</div>
                   <div className="tx">
-                    성적 추이 · 출결·상벌점 · 학부모 공유내역은 준비 중입니다.
+                    성적 추이 · 출결·상벌점 · 학부모 공유내역은 곧 볼 수 있습니다.
                   </div>
                 </div>
               </div>

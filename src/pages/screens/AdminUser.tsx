@@ -293,7 +293,7 @@ function MenuModal({ row, onClose, onSaved }: { row: AccountRow; onClose: () => 
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
                   <input type="checkbox" checked={picked.has(top.code)} onChange={() => toggle(top, children)} />
                   <b>{top.name}</b>
-                  {!SCREEN_CODES.has(top.code) && <span className="mk">서버 API 전용</span>}
+                  {!SCREEN_CODES.has(top.code) && <span className="mk">화면 없음</span>}
                 </label>
                 {children.length > 0 && (
                   <div style={{ display: 'grid', gap: 6, marginTop: 7, paddingLeft: 22 }}>
@@ -301,7 +301,7 @@ function MenuModal({ row, onClose, onSaved }: { row: AccountRow; onClose: () => 
                       <label key={c.code} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
                         <input type="checkbox" checked={picked.has(c.code)} onChange={() => toggleOne(c.code)} />
                         {c.name}
-                        {!SCREEN_CODES.has(c.code) && <span className="mk">서버 API 전용</span>}
+                        {!SCREEN_CODES.has(c.code) && <span className="mk">화면 없음</span>}
                       </label>
                     ))}
                   </div>
@@ -1074,6 +1074,7 @@ function Content() {
         {tab === 'users' ? (
           <div style={{ padding: 14 }}>
             <DataTable
+              nowrap
               columns={columns}
               rows={rows}
               rowKey={(r) => String(r.accountId)}

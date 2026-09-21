@@ -1,6 +1,6 @@
 /* 03_admin_seongjeok.html 이관 — .p-score 스코프 */
 
-.p-score .sec-h { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 12px; }
+.p-score .sec-h { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 12px; flex-wrap: wrap; }
 .p-score .sec-h .t {
   font-weight: 800;
   font-size: 15px;
@@ -10,7 +10,9 @@
   gap: 8px;
 }
 .p-score .sec-h .t .ic { color: var(--mint-d); display: flex; }
-.p-score .sec-h .note { font-size: 11.5px; color: var(--muted); }
+.p-score .sec-h .note { font-size: 11.5px; color: var(--muted); flex-wrap: wrap; }
+/* 제목·회차 버튼이 한 줄에 몰리면 '6월' 이 한 글자씩 세로로 꺾였다 — 꺾지 말고 다음 줄로 넘긴다 */
+.p-score .sec-h .t, .p-score .sec-h .note > * { white-space: nowrap; }
 
 /* 회차별 성적 표 */
 .p-score .rtable { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-bottom: 8px; }
@@ -53,7 +55,7 @@
   flex-wrap: wrap;
 }
 .p-score .box-h .bt { font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 8px; }
-.p-score .subj-pick { display: flex; gap: 5px; }
+.p-score .subj-pick { display: flex; gap: 5px; flex-wrap: wrap; }
 .p-score .subj-opt {
   font-size: 11px;
   font-weight: 700;
@@ -64,6 +66,7 @@
   cursor: pointer;
   background: #fff;
   font-family: inherit;
+  white-space: nowrap;
 }
 .p-score .subj-opt.on { background: var(--amber); border-color: var(--amber); color: #fff; }
 .p-score .box-b { padding: 15px; }

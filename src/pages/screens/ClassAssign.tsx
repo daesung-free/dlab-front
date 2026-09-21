@@ -62,7 +62,7 @@ const COLUMNS: Column<Student>[] = [
 ]
 
 function Content() {
-  const { academies, academyId } = useAcademy()
+  const { academies, academyId, ready: academyReady } = useAcademy()
   const [classes, setClasses] = useState<ClassGroup[]>([])
   const [selected, setSelected] = useState<string[]>([])
   const [target, setTarget] = useState<number | null>(null)
@@ -71,11 +71,13 @@ function Content() {
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const loadClasses = useCallback(async () => {
+    if (!academyReady) return
     try {
       // memberCount 가 목록에 실려 와서 반마다 명단을 부르지 않아도 된다
       const list = await listClasses(new Date().getFullYear(), academyId ?? undefined)
       setClasses(list)
-      setTarget((prev) => prev ?? list[0]?.id ?? null)
+      // ★ 지점을 바꾸면 이전 지점의 반이 대상으로 남는다 — 그대로 두면 남의 지점 반으로 배정 요청이 나간다
+      setTarget((prev) => (prev !== null && list.some((c) => c.id === prev) ? prev : (list[0]?.id ?? null)))
       setLoadError(null)
     } catch (err) {
       // ★ 서버 문구만 띄우면("권한이 없습니다") **화면 전체가 막힌 것처럼 읽힌다.**
@@ -87,7 +89,7 @@ function Content() {
           : '반 목록을 불러오지 못했습니다.',
       )
     }
-  }, [academyId])
+  }, [academyId, academyReady])
 
   useEffect(() => {
     void loadClasses()
@@ -104,7 +106,7 @@ function Content() {
     () => ({ status: 'ENROLLED' as const, unassignedClass: true, academyId: academyId ?? undefined }),
     [academyId],
   )
-  const table = useServerTable({ fetcher: searchStudents, params, pageSize: PAGE_SIZE, sortable: SORTABLE })
+  const table = useServerTable({ fetcher: searchStudents, params, pageSize: PAGE_SIZE, sortable: SORTABLE, enabled: academyReady })
 
   async function assign() {
     if (target === null || selected.length === 0) return

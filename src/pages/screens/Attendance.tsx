@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   DataTable,
   ExcelButton,
@@ -97,10 +97,10 @@ function one(v: unknown): string | undefined {
 }
 
 function Content() {
-  const { academyId } = useAcademy()
+  const { academyId, ready: academyReady } = useAcademy()
   const [query, setQuery] = useState<SearchValues>({})
   const [masked, setMasked] = useState(true)
-  const [recalcMsg, setRecalcMsg] = useState<string | null>(null)
+  const [recalcMsg, setRecalcMsg] = useState<{ text: string; error?: boolean } | null>(null)
   const [recalcing, setRecalcing] = useState(false)
 
   /**
@@ -310,23 +310,26 @@ function Content() {
     [ranged],
   )
 
+  // 결과 문구에 날짜를 빼고 머리줄의 날짜를 따르게 했으므로, 조회 날짜가 바뀌면 지운다
+  useEffect(() => setRecalcMsg(null), [date, range, ranged])
+
   async function recalculate() {
     setRecalcing(true)
     setRecalcMsg(null)
     const from = ranged ? (range?.from as string) : date
     const to = ranged ? (range?.to as string) : date
-    const label = ranged ? `${from} ~ ${to}` : date
     try {
       const res = await recalculateStudyTime({ academyId: academyId ?? undefined, from, to })
       // 0은 실패가 아니다 — 아직 확정 전인 날(오늘)은 조회 시점에 즉석 계산되므로 대상이 아니다
-      setRecalcMsg(
-        res.updated > 0
-          ? `${label} 순공시간 ${res.updated}건을 다시 계산했습니다.`
-          : `${label}은 다시 계산할 확정분이 없습니다. (당일치는 조회할 때마다 즉석 계산됩니다)`,
-      )
+      setRecalcMsg({
+        text:
+          res.updated > 0
+            ? `순공시간 ${res.updated}건을 다시 계산했습니다`
+            : '다시 계산할 확정분이 없습니다 (오늘 것은 조회할 때마다 계산됩니다)',
+      })
       board.reload()
     } catch (err) {
-      setRecalcMsg(err instanceof ApiError ? err.message : '학습시간 재계산에 실패했습니다.')
+      setRecalcMsg({ text: err instanceof ApiError ? err.message : '학습시간 재계산에 실패했습니다', error: true })
     } finally {
       setRecalcing(false)
     }
@@ -467,7 +470,7 @@ function Content() {
         }
       />
 
-      {academyId === null && (
+      {academyId === null && academyReady && (
         <div className="note-box">지점을 먼저 선택하세요. 출결은 지점 단위로 조회합니다.</div>
       )}
 
@@ -477,9 +480,8 @@ function Content() {
         </div>
       )}
 
-      {recalcMsg && <div className="note-box">{recalcMsg}</div>}
-
       <DataTable
+        nowrap
         columns={columns}
         rows={rows}
         // 기간 조회면 같은 학생이 날짜 수만큼 나온다 — enrollmentId 만 쓰면 키가 겹쳐
@@ -491,12 +493,18 @@ function Content() {
         countLabel={
           <>
             {ranged ? `${range?.from} ~ ${range?.to}` : date} 출결 <b>{rows.length}</b>건
+            {/* 결과를 표 위 안내 상자로 띄우면 누를 때마다 표가 67px 밀렸다 — 이 줄에 붙인다 */}
+            {(recalcing || recalcMsg) && (
+              <span style={{ marginLeft: 10, fontWeight: 400, color: recalcMsg?.error ? 'var(--red)' : 'var(--muted)' }}>
+                {recalcing ? '학습시간 계산 중…' : recalcMsg?.text}
+              </span>
+            )}
           </>
         }
         toolbar={
           <>
             <button className="btn" onClick={() => void recalculate()} disabled={recalcing || academyId === null}>
-              <Icon name="refresh-cw" size={14} /> {recalcing ? '계산 중…' : '학습시간 일괄계산'}
+              <Icon name="refresh-cw" size={14} /> 학습시간 일괄계산
             </button>
             {serverMasked ? (
               <span className="dt-count" style={{ color: 'var(--muted)' }}>

@@ -308,7 +308,7 @@ function FirewallSection({ academyId }: { academyId: number | null }) {
         <div className="note-box">
           <div>
             신청과 승인은 위 라우팅이 처리합니다. 여기서는 <b>지금 열려 있는 해제</b>를 보고,
-            인강 외 사용을 발견하면 <b>위반으로 남깁니다.</b> 위반이 쌓이면 서버가 신청 제한을 겁니다 —
+            인강 외 사용을 발견하면 <b>위반으로 남깁니다.</b> 위반이 쌓이면 신청이 자동으로 제한됩니다 —
             걸린 기간은 학생 이력에서 확인합니다.
           </div>
         </div>
@@ -513,7 +513,7 @@ function Content() {
           <Icon name="triangle-alert" size={17} />
         </div>
         <div>
-          <div className="tt">서버가 다루는 신청 유형은 3종입니다</div>
+          <div className="tt">승인을 거치는 신청은 3종입니다</div>
           <div className="tx">
             사유 신청 · 정기일정 · 방화벽 해제만 승인 대상입니다. 좌석 이탈·급식 취소·
             질의응답 예약 등은 <b>승인 대상이 아닙니다</b> — 각자 다른 방식으로 처리합니다.
@@ -686,7 +686,7 @@ function Content() {
                           ))}
                       </select>
                     </td>
-                    <td style={{ textAlign: 'left', fontSize: 11.5, color: it.configured ? 'var(--muted)' : 'var(--red)' }}>
+                    <td style={{ textAlign: 'left', fontSize: 11.5, whiteSpace: 'nowrap', color: it.configured ? 'var(--muted)' : 'var(--red)' }}>
                       {it.configured
                         ? it.copiedFrom
                           ? '전년도에서 복사됨'

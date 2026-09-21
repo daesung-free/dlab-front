@@ -94,7 +94,7 @@ function toRow(s: Student): StudentRow {
 }
 
 function Content() {
-  const { academyId } = useAcademy()
+  const { academyId, ready: academyReady } = useAcademy()
   const [students, setStudents] = useState<Student[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [forms, setForms] = useState<ExamForm[]>([])
@@ -116,19 +116,29 @@ function Content() {
   /* ★ 지점을 넘겨야 한다. `/students` 는 안 보내면 **계정 스코프 그대로** 오므로
        본사 계정에서는 전 지점 학생이 섞여 나온다 — 분당을 골라도 65명이 다 보였다.
        (400 이 아니라 조용히 섞여서 들어오는 것이라 더 늦게 드러났다. CLAUDE.md 3-1) */
+  /* ★ 지점 목록을 받기 전에는 부르지 않는다. 그 사이 academyId 가 null 이라 전 지점 학생을 먼저 받았고,
+       그 첫 학생(다른 지점)이 선택된 채 남아 **남의 지점 학생 성적**을 불러왔다 */
   const loadStudents = useCallback(async () => {
+    if (!academyReady) return
     setListLoading(true)
     try {
       const page = await searchStudents({ status: 'ENROLLED', size: 100, academyId: academyId ?? undefined })
       setStudents(page.rows)
-      setSelectedId((prev) => prev ?? (page.rows[0] ? String(page.rows[0].enrollmentId) : null))
+      // 지점을 바꾸면 이전 선택이 새 목록에 없다 — 그대로 두면 목록에 없는 학생의 성적이 오른쪽에 남는다
+      setSelectedId((prev) =>
+        prev !== null && page.rows.some((r) => String(r.enrollmentId) === prev)
+          ? prev
+          : page.rows[0]
+            ? String(page.rows[0].enrollmentId)
+            : null,
+      )
       setError(null)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '학생 목록을 불러오지 못했습니다.')
     } finally {
       setListLoading(false)
     }
-  }, [academyId])
+  }, [academyId, academyReady])
 
   useEffect(() => {
     void loadStudents()
@@ -372,9 +382,10 @@ function Content() {
                 </span>{' '}
                 회차별 성적 (표준 / 백분위 · 등급)
               </div>
-              {/* 회차마다 양식이 달라 입력 버튼도 회차별로 둔다 — 한 번에 한 회차만 교체된다 */}
+              {/* 회차마다 양식이 달라 입력 버튼도 회차별로 둔다 — 한 번에 한 회차만 교체된다.
+                  학생을 고르기 전에는 학년을 몰라 전 학년 양식이 다 나온다('6월'이 세 번) — 그래서 감춘다 */}
               <div className="note" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                {gradeForms.length === 0 ? (
+                {selected === null ? null : gradeForms.length === 0 ? (
                   `${year}년 시험 양식이 없습니다`
                 ) : (
                   <>

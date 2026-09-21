@@ -622,7 +622,7 @@ function Content() {
   /* 진입 마스터는 URL이 결정한다 — 사이드바의 '과정/학과/학과계열 관리'가
    * 각각 다른 탭으로 들어오고, 새로고침·뒤로가기에도 그 상태가 유지된다. */
   const [params, setParams] = useSearchParams()
-  const { academyId } = useAcademy()
+  const { academyId, ready: academyReady } = useAcademy()
   const active = MASTERS.find((m) => m.key === params.get('tab')) ?? MASTERS[0]
 
   const [year, setYear] = useState(new Date().getFullYear())
@@ -1041,7 +1041,7 @@ function Content() {
         </div>
       </div>
 
-      {academyId === null && !active.global && (
+      {academyId === null && academyReady && !active.global && (
         <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
           위에서 지점을 먼저 고르세요. 기초 데이터는 지점마다 따로 관리합니다.
         </div>

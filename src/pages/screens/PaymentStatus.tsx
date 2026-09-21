@@ -742,18 +742,17 @@ function Content() {
         </div>
       )}
 
-      {tab !== 'discount' && (
-        <SearchForm
-          fields={FIELDS}
-          onSearch={setQuery}
-          presetKey="payment"
-          headerRight={
-            <span className="mk supplement" title="직원 계정은 조회만 할 수 있습니다">
-              <Icon name="shield-check" size={11} /> STAFF 조회 전용
-            </span>
-          }
-        />
-      )}
+      {/* 할인 정책 탭에서도 감추지 않는다 — 감추면 탭 줄이 320px 위로 튀었다(2026-09-21 사용자 결정) */}
+      <SearchForm
+        fields={FIELDS}
+        onSearch={setQuery}
+        presetKey="payment"
+        headerRight={
+          <span className="mk supplement" title="직원 계정은 조회만 할 수 있습니다">
+            <Icon name="shield-check" size={11} /> STAFF 조회 전용
+          </span>
+        }
+      />
 
       <div className="card-sec">
         <Tabs
@@ -788,6 +787,7 @@ function Content() {
               <div className="split-3-2">
                 <div>
                   <DataTable
+                    nowrap
                     columns={DISCOUNT_COLUMNS}
                     rows={DISCOUNTS}
                     rowKey={(r) => r.id}
@@ -932,11 +932,13 @@ function Content() {
                         <Icon name="shield" size={16} />
                       </div>
                       <div>
-                        <div className="tt">이 금액은 서버가 다시 계산해야 합니다</div>
+                        {/* ★ 이 화면에서 계산한 값을 그대로 결제에 넘기면 결제 금액을 조작할 수 있다.
+                               서버가 같은 정책으로 재계산해 금액이 일치할 때만 결제창을 띄우고,
+                               승인 결과도 서버가 검증해야 한다(menu.internal 보안 항목). */}
+                        <div className="tt">실제 결제 금액은 결제할 때 다시 계산됩니다</div>
                         <div className="tx">
-                          이 화면에서 계산한 값을 그대로 결제에 넘기면 <b>결제 금액을 조작할 수 있습니다.</b> 서버가 같은
-                          정책으로 재계산해 <b>금액이 일치할 때만 결제창을 띄우고</b>, 승인 결과도 서버가 검증해야
-                          합니다. 이 화면은 정책을 입력하고 결과를 확인하는 용도입니다.
+                          이 화면은 할인 정책을 입력하고 청구액을 <b>미리 계산해 보는 곳</b>입니다. 결제할 때 같은 정책으로
+                          다시 계산해 <b>금액이 맞을 때만 결제창이 뜹니다.</b>
                         </div>
                       </div>
                     </div>
@@ -948,6 +950,7 @@ function Content() {
 
           {tab === 'all' && (
             <DataTable
+              nowrap
               columns={columnsWithAct}
               rows={rows}
               rowKey={(r) => String(r.billingId)}
@@ -981,6 +984,7 @@ function Content() {
 
           {tab === 'unpaid' && (
             <DataTable
+              nowrap
               columns={UNPAID_COLUMNS}
               rows={unpaid}
               rowKey={(r) => String(r.billingId)}

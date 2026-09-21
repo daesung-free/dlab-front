@@ -240,6 +240,7 @@ function Content() {
       </div>
 
       <DataTable
+        nowrap
         columns={COLUMNS}
         rows={rows}
         rowKey={(r) => r.id}
