@@ -5,6 +5,7 @@ import { Tabs } from '../../components/Tabs'
 import { useAcademy } from '../../auth/AcademyContext'
 import { ApiError } from '../../api/client'
 import { listClasses, type ClassGroup } from '../../api/classes'
+import { searchStudents, type Student } from '../../api/students'
 import { getStatistics, getStudentStatistics, type StudentStatRow } from '../../api/statistics'
 import type { Mockup } from './types'
 import { createScreenSignal } from './screenSignal'
@@ -25,8 +26,8 @@ import './matrix.css'
  *   빼서 휴원생만 있는 반이 사라졌었다(분당 N수 1반, 2026-09-21 서버 수정). 담임·정원이
  *   반 목록에만 있어 합치는 것은 그대로 둔다. API_GAPS 28부.
  *
- * ★ 서버가 안 주는 칸은 지우지 않고 `미제공` 으로 둔다(CLAUDE.md 4) —
- *   반별 휴원·퇴원 · 반별 계열 인원 · 계열 × 재수 구분 교차. */
+ * ★ 반별 휴원·퇴원 · 반 안의 계열 · 계열 × 재수 구분은 서버 집계에 없어 **학생 목록으로 센다**
+ *   (반·상태·계열·재수 횟수가 목록에 다 있다). 목록을 못 받으면 그 칸만 `미제공` 으로 남긴다. */
 
 const TABS = [
   { key: 'class', label: '반별 현황' },
@@ -43,6 +44,16 @@ interface ClassRow {
   teacher: string | null
   capacity: number | null
   enrolled: number
+  /* 아래 넷은 학생 목록으로 센다 — 서버 반별 집계에 없다(재원만 센다). 목록을 못 받으면 null */
+  onLeave: number | null
+  withdrawn: number | null
+  nature: number | null
+  humanity: number | null
+}
+
+/** 학생 목록에서 센 값 — 못 받았을 때와 0 을 구분하려고 null 을 쓴다 */
+function countCell(n: number | null) {
+  return n === null ? <Unfilled reason="학생 목록을 못 받았다" /> : n
 }
 
 /** 채움 막대 — 정원 대비 재원 비율을 한눈에 */
@@ -95,32 +106,32 @@ const CLASS_COLUMNS: Column<ClassRow>[] = [
     header: '휴원',
     width: '68px',
     align: 'right',
-    value: () => '',
-    render: () => <Unfilled reason="반별 휴원 인원을 서버가 주지 않는다" />,
+    value: (r) => r.onLeave ?? '',
+    render: (r) => countCell(r.onLeave),
   },
   {
     key: 'withdrawn',
     header: '퇴원',
     width: '68px',
     align: 'right',
-    value: () => '',
-    render: () => <Unfilled reason="반별 퇴원 인원을 서버가 주지 않는다" />,
+    value: (r) => r.withdrawn ?? '',
+    render: (r) => countCell(r.withdrawn),
   },
   {
     key: 'nature',
     header: '자연',
     width: '68px',
     align: 'right',
-    value: () => '',
-    render: () => <Unfilled reason="반 안의 계열 구분을 서버가 주지 않는다" />,
+    value: (r) => r.nature ?? '',
+    render: (r) => countCell(r.nature),
   },
   {
     key: 'humanity',
     header: '인문',
     width: '68px',
     align: 'right',
-    value: () => '',
-    render: () => <Unfilled reason="반 안의 계열 구분을 서버가 주지 않는다" />,
+    value: (r) => r.humanity ?? '',
+    render: (r) => countCell(r.humanity),
   },
   {
     key: 'fill',
@@ -154,6 +165,12 @@ const MONTH_COLUMNS: Column<MonthRow>[] = [
  */
 const compareSignal = createScreenSignal()
 
+const RETAKE_COLS: { label: string; test: (n: number) => boolean }[] = [
+  { label: '재수', test: (n) => n === 1 },
+  { label: '삼수', test: (n) => n === 2 },
+  { label: 'N수', test: (n) => n >= 3 },
+]
+
 function signed(n: number | null): string {
   if (n === null) return '-'
   return n > 0 ? `+${n}` : String(n)
@@ -167,6 +184,11 @@ function Content() {
   const year = new Date().getFullYear()
 
   const [classes, setClasses] = useState<ClassGroup[]>([])
+  /*
+   * 학생 목록 — 반별 휴원·퇴원·계열과 계열 × 재수 구분을 여기서 센다. 서버 집계는 재원 인원만 준다.
+   * ★ 한 번에 받는다(지점 재원·휴원·퇴원 합쳐 수백 명). 실패하면 그 칸들만 '미제공' 으로 남긴다.
+   */
+  const [students, setStudents] = useState<Student[] | null>(null)
   const [byClass, setByClass] = useState<StudentStatRow[]>([])
   const [byTrack, setByTrack] = useState<StudentStatRow[]>([])
   const [byMonth, setByMonth] = useState<StudentStatRow[]>([])
@@ -191,6 +213,9 @@ function Content() {
         getStatistics({ academyId, year, from: today, to: today }),
       ])
       setClasses(cls)
+      searchStudents({ academyId, year, size: 2000 })
+        .then((p) => setStudents(p.rows))
+        .catch(() => setStudents(null))
       setByClass(c)
       setByTrack(t)
       setByMonth(m)
@@ -210,6 +235,24 @@ function Content() {
   const branchName = branchId === null ? '전체' : (academies.find((a) => a.id === branchId)?.acadNm ?? '')
   /* ★ 반 목록을 기준으로 합친다. 예전엔 서버 집계가 재원 0 인 반을 뺐다(2026-09-21 고쳐짐 —
        API_GAPS 28-1). 지금도 합치는 이유: 담임·정원은 반 목록에만 있다 */
+  /* 반별 휴원·퇴원·계열 — 반 이름은 지점마다 겹치므로 지점까지 붙여 센다 */
+  const tally = useMemo(() => {
+    const m = new Map<string, { onLeave: number; withdrawn: number; nature: number; humanity: number }>()
+    for (const st of students ?? []) {
+      if (!st.className) continue
+      const k = `${st.academyId}:${st.className}`
+      const t = m.get(k) ?? { onLeave: 0, withdrawn: 0, nature: 0, humanity: 0 }
+      if (st.enrollmentStatus === 'LEAVE') t.onLeave++
+      if (st.enrollmentStatus === 'WITHDRAWN') t.withdrawn++
+      if (st.enrollmentStatus === 'ENROLLED') {
+        if (st.track === 'SCIENCE') t.nature++
+        if (st.track === 'HUMANITIES') t.humanity++
+      }
+      m.set(k, t)
+    }
+    return m
+  }, [students])
+
   const classRows: ClassRow[] = useMemo(() => {
     const stat = new Map(byClass.map((r) => [r.key, r]))
     /* 전 지점이면 반 이름이 겹친다(분당 고3 1반 · 이매 고3 1반) — 지점을 앞에 붙인다 */
@@ -220,8 +263,24 @@ function Content() {
       teacher: c.homeroomTeacherName,
       capacity: c.capacity,
       enrolled: stat.get(String(c.id))?.count ?? 0,
+      ...(students === null
+        ? { onLeave: null, withdrawn: null, nature: null, humanity: null }
+        : { onLeave: 0, withdrawn: 0, nature: 0, humanity: 0, ...tally.get(`${c.academyId}:${c.name}`) }),
     }))
-  }, [classes, byClass, branchId, academies])
+  }, [classes, byClass, branchId, academies, tally, students])
+
+  /* 계열 × 재수 — 재원생만. 계열 null(미정)은 행이 없어 합계에서만 센다 */
+  const retakeCount = (track: string | null, test: (n: number) => boolean) =>
+    (students ?? []).filter(
+      (st) =>
+        st.enrollmentStatus === 'ENROLLED' &&
+        st.retakeCount != null &&
+        test(st.retakeCount) &&
+        (track === null || st.track === track),
+    ).length
+  const noRetake = (students ?? []).filter(
+    (st) => st.enrollmentStatus === 'ENROLLED' && st.grade === 'N_SU' && st.retakeCount == null,
+  ).length
 
   const enrolled = status.ENROLLED ?? 0
   const onLeave = status.LEAVE ?? 0
@@ -374,8 +433,8 @@ function Content() {
                 <thead>
                   <tr>
                     <th className="area">계열</th>
-                    {['재수', '삼수', 'N수'].map((r) => (
-                      <th key={r}>{r}</th>
+                    {RETAKE_COLS.map((r) => (
+                      <th key={r.label}>{r.label}</th>
                     ))}
                     <th>합계</th>
                   </tr>
@@ -387,10 +446,14 @@ function Content() {
                         {TRACK_LABEL[t.key] ?? t.label}
                         <span className="an">{t.key === 'SCIENCE' ? '수학 미적/기하 · 과탐' : '수학 확통 · 사탐'}</span>
                       </th>
-                      {/* 계열 × 재수 구분 교차는 서버가 주지 않는다 — 계열 합계만 온다 */}
-                      {['재수', '삼수', 'N수'].map((r) => (
-                        <td key={r}>
-                          <Unfilled reason="재수 구분별 인원을 서버가 주지 않는다" />
+                      {/* 교차는 서버가 안 준다 — 학생 목록의 재수 횟수로 센다(1 재수 · 2 삼수 · 3 이상 N수) */}
+                      {RETAKE_COLS.map((r) => (
+                        <td key={r.label}>
+                          {students === null ? (
+                            <Unfilled reason="학생 목록을 못 받았다" />
+                          ) : (
+                            <span className="pm">{retakeCount(t.key, r.test)}</span>
+                          )}
                         </td>
                       ))}
                       <td>
@@ -400,9 +463,13 @@ function Content() {
                   ))}
                   <tr>
                     <th className="area">합계</th>
-                    {['재수', '삼수', 'N수'].map((r) => (
-                      <td key={r}>
-                        <Unfilled reason="재수 구분별 인원을 서버가 주지 않는다" />
+                    {RETAKE_COLS.map((r) => (
+                      <td key={r.label}>
+                        {students === null ? (
+                          <Unfilled reason="학생 목록을 못 받았다" />
+                        ) : (
+                          <span className="pm">{retakeCount(null, r.test)}</span>
+                        )}
                       </td>
                     ))}
                     <td>
@@ -416,6 +483,9 @@ function Content() {
               <span>
                 <span className="pm p-full">n</span> 계열 합계 (재원생)
               </span>
+              {noRetake > 0 && (
+                <span style={{ color: 'var(--muted)' }}>재수 횟수가 비어 있는 N수생 {noRetake}명은 합계에만 들어갑니다</span>
+              )}
             </div>
           </div>
         </div>
