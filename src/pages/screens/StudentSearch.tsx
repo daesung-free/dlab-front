@@ -94,11 +94,13 @@ const STATUS_TONE: Record<EnrollmentStatus, string> = {
 const sortableKey = (key: string): boolean => (SORTABLE as readonly string[]).includes(key)
 
 const COLUMNS: Column<Student>[] = [
-  { key: 'studentNo', header: '학번', width: '104px', sortable: sortableKey('studentNo'), value: (r) => r.studentNo ?? '-' },
+  /* 학번·이름은 가로로 밀어도 붙어 있는다 — 뒤 칸을 보다가 누구 줄인지 잃지 않게 */
+  { key: 'studentNo', header: '학번', width: '104px', sticky: true, sortable: sortableKey('studentNo'), value: (r) => r.studentNo ?? '-' },
   {
     key: 'name',
     header: '이름',
     width: '92px',
+    sticky: true,
     sortable: sortableKey('name'),
     mask: 'name',
     value: (r) => r.name,
@@ -768,6 +770,8 @@ function Content() {
         /* ★ 줄을 누르면 정보 수정이 열린다. 버튼 칸을 따로 두면 표 폭이 그대로라 데이터 칸이
              좁아져 '분/당' · 'N/수/2/반' 처럼 세로로 쪼개졌다 */
         onRowClick={openInfo}
+        /* 17칸이라 좁은 창에서 칸이 눌려 '분/당' 처럼 쪼개졌다. 줄바꿈을 막고 옆으로 밀게 한다 */
+        nowrap
         countLabel={
           <>
             검색결과 <b>{table.totalElements}</b>건

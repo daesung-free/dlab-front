@@ -13,6 +13,10 @@
 }
 .topnav .brand {
   display: flex;
+  /* ★ 줄어들지 않는다. 옆 메뉴 탭과 폭을 다투다 '통합관리 1.0' 이 한 글자 폭으로 세로로
+       쪼개졌다(560px). 모자라면 탭 쪽이 양보한다 */
+  flex-shrink: 0;
+  white-space: nowrap;
   /* ★ 여기는 center 다. 아래 '대성 · 관리형 독학재수' 까지 두 줄이라 baseline 으로 맞추면
        로고가 윗줄에만 붙어 전체가 위로 쏠린다 — 로그인 화면(한 줄)과 사정이 다르다 */
   align-items: center;
@@ -268,10 +272,15 @@
 }
 .m-head .sub { font-size: 13px; color: var(--muted); margin-top: 6px; max-width: 720px; line-height: 1.6; }
 
+/* ★ PC 전용이다 — 최소 폭 1024px(2026-09-21). 예전에는 1180px 아래에서 왼쪽 메뉴를 본문 위로
+     올렸는데, 노트북 반 화면(1100px)에서 **첫 화면이 전부 메뉴**가 되고 본문은 y=1637 에서야
+     시작했다. 메뉴는 늘 옆에 두고, 좁아지면 메뉴 폭만 줄인다. */
 @media (max-width: 1180px) {
-  .wrap { grid-template-columns: 1fr; }
-  .side { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--line); }
+  .wrap { grid-template-columns: 208px 1fr; }
 }
+
+/* 최소 폭. 이보다 좁으면 화면 전체가 옆으로 밀린다 — 눌려서 글자가 쪼개지는 것보다 낫다 */
+.app-shell { min-width: 1024px; }
 
 /* 지점 선택 — TopNav 우측. 전 지점 권한 계정만 보인다(지점이 하나면 숨김)
  *
