@@ -25,7 +25,10 @@ import {
   changeStudentStatus,
   listStatusLogs,
   reEnrollStudent,
+  getStudent,
+  updateStudent,
   type StatusLog,
+  type StudentUpdateRequest,
   exportStudents,
   searchStudents,
   type EnrollmentStatus,
@@ -129,6 +132,45 @@ function one(v: unknown): string | undefined {
   if (Array.isArray(v)) return v.length > 0 ? String(v[0]) : undefined
   if (typeof v === 'string' && v !== '') return v
   return undefined
+}
+
+
+/* ── 학생 정보 수정 폼 ─────────────────────────────────────────── */
+
+const INFO_KEYS = ['name', 'phone', 'birthDate', 'gender', 'schoolName', 'address', 'grade', 'track'] as const
+type InfoKey = (typeof INFO_KEYS)[number]
+
+const INFO_FIELDS: { key: InfoKey; label: string; max?: number; placeholder?: string; hint?: string }[] = [
+  { key: 'name', label: '이름', max: 30 },
+  { key: 'phone', label: '연락처', max: 20, placeholder: '010-0000-0000' },
+  { key: 'birthDate', label: '생년월일' },
+  {
+    key: 'gender',
+    label: '성별',
+    /* 서버가 저장은 하는데 돌려주지 않는다 — 비어 보이는 게 '미입력' 이 아니다 */
+    hint: '저장된 값을 불러올 수 없어 비어 보입니다. 바꿀 때만 고르세요.',
+  },
+  { key: 'schoolName', label: '출신학교', max: 40 },
+  { key: 'address', label: '주소', max: 120, hint: '칸을 비우고 저장하면 저장된 값이 지워집니다.' },
+  { key: 'grade', label: '학년' },
+  { key: 'track', label: '계열' },
+]
+
+function emptyInfo(): Record<InfoKey, string> {
+  return { name: '', phone: '', birthDate: '', gender: '', schoolName: '', address: '', grade: '', track: '' }
+}
+
+function infoOf(s: Student): Record<InfoKey, string> {
+  return {
+    name: s.name ?? '',
+    phone: s.phone ?? '',
+    birthDate: s.birthDate ?? '',
+    gender: '',
+    schoolName: s.schoolName ?? '',
+    address: s.address ?? '',
+    grade: s.grade ?? '',
+    track: s.track ?? '',
+  }
 }
 
 function Content() {
@@ -241,6 +283,64 @@ function Content() {
    * ★ **학번이 새로 매겨진다.** 지금 학번은 퇴원 이력으로 남는다 — 되돌릴 수 없으므로
    *   모달에서 먼저 알린다.
    */
+  /**
+   * 학생 정보 수정.
+   *
+   * ★ **여는 순간 상세를 다시 읽는다.** 목록 값은 서버가 가려서 준다(`010-****-3153`).
+   *   그걸 입력칸에 채우면 가린 값이 **그대로 저장된다.** 상세는 원본을 준다.
+   * ★ **바뀐 칸만 보낸다.** 서버는 빈 문자열을 받으면 그 값을 지운다 — 폼 전체를 보내면
+   *   손대지 않은 칸까지 건드리게 된다.
+   * ★ 재원 상태는 여기서 안 바꾼다. 사유를 받고 이력을 남기는 '상태 변경' 이 따로 있다.
+   */
+  const [infoEdit, setInfoEdit] = useState<{
+    row: Student
+    loaded: Student | null
+    form: Record<InfoKey, string>
+  } | null>(null)
+  const [infoBusy, setInfoBusy] = useState(false)
+  const [infoErr, setInfoErr] = useState<string | null>(null)
+  const [infoDone, setInfoDone] = useState<string | null>(null)
+
+  function openInfo(r: Student) {
+    setInfoErr(null)
+    setInfoDone(null)
+    setInfoEdit({ row: r, loaded: null, form: emptyInfo() })
+    void getStudent(r.enrollmentId)
+      .then((d) => setInfoEdit((cur) => (cur && cur.row.enrollmentId === r.enrollmentId ? { ...cur, loaded: d, form: infoOf(d) } : cur)))
+      .catch((e) => setInfoErr(e instanceof ApiError ? e.message : '학생 정보를 불러오지 못했습니다.'))
+  }
+
+  async function submitInfo() {
+    if (!infoEdit?.loaded) return
+    const before = infoOf(infoEdit.loaded)
+    const body: StudentUpdateRequest = {}
+    for (const k of INFO_KEYS) {
+      const v = infoEdit.form[k].trim()
+      /* 성별은 서버가 돌려주지 않아 '전' 값을 모른다 — 고른 경우에만 보낸다 */
+      if (k === 'gender') {
+        if (v !== '') body.gender = v
+        continue
+      }
+      if (v !== before[k].trim()) (body as Record<string, string>)[k] = v
+    }
+    if (Object.keys(body).length === 0) {
+      setInfoEdit(null)
+      return
+    }
+    setInfoBusy(true)
+    setInfoErr(null)
+    try {
+      await updateStudent(infoEdit.loaded.enrollmentId, body)
+      table.reload()
+      setInfoDone(`${infoEdit.loaded.name} 학생 정보를 고쳤습니다.`)
+      setInfoEdit(null)
+    } catch (e) {
+      setInfoErr(e instanceof ApiError ? e.message : '저장하지 못했습니다.')
+    } finally {
+      setInfoBusy(false)
+    }
+  }
+
   const [reEnroll, setReEnroll] = useState<{ row: Student; year: string; grade: GradeType } | null>(null)
   const [reBusy, setReBusy] = useState(false)
   const [reErr, setReErr] = useState<string | null>(null)
@@ -289,10 +389,13 @@ function Content() {
         render: (r) => (
           <button
             className="btn"
-            style={{ padding: '4px 9px', fontSize: 11.5 }}
+            /* ★ 줄바꿈을 막는다 — '정보 수정' 칸이 생기면서 좁아져 '상/태/변/경' 으로 눌렸다 */
+            style={{ padding: '4px 9px', fontSize: 11.5, whiteSpace: 'nowrap' }}
             disabled={changing === r.enrollmentId}
             title="퇴원·제적·휴원으로 바꿉니다. 삭제는 이력 때문에 막혀 있습니다"
-            onClick={() => {
+            onClick={(e) => {
+              /* 줄을 누르면 정보 수정이 열린다 — 이 버튼 클릭이 줄로 번지면 모달이 둘 뜬다 */
+              e.stopPropagation()
               setStatusErr(null)
               setStatusEdit({ row: r, next: '', reason: '' })
               setLogs(null)
@@ -317,8 +420,9 @@ function Content() {
           r.enrollmentStatus === 'WITHDRAWN' || r.enrollmentStatus === 'EXPELLED' ? (
             <button
               className="btn"
-              style={{ padding: '4px 9px', fontSize: 11.5 }}
-              onClick={() => {
+              style={{ padding: '4px 9px', fontSize: 11.5, whiteSpace: 'nowrap' }}
+              onClick={(e) => {
+                e.stopPropagation()
                 setReErr(null)
                 setReDone(null)
                 setReEnroll({ row: r, year: String(new Date().getFullYear()), grade: r.grade })
@@ -537,6 +641,94 @@ function Content() {
         </Modal>
       )}
 
+      {infoEdit && (
+        <Modal
+          wide
+          title={`${infoEdit.loaded?.name ?? infoEdit.row.name} 학생 정보`}
+          sub={infoEdit.loaded ? `${infoEdit.loaded.studentNo ?? '학번 없음'} · ${infoEdit.loaded.academyName ?? ''}` : '불러오는 중…'}
+          confirmLabel="저장"
+          busy={infoBusy}
+          error={infoErr}
+          confirmDisabled={!infoEdit.loaded || infoEdit.form.name.trim() === ''}
+          onConfirm={() => void submitInfo()}
+          onClose={() => setInfoEdit(null)}
+        >
+          {infoEdit.loaded === null ? (
+            <div style={{ padding: 18, color: 'var(--muted)' }}>불러오는 중…</div>
+          ) : (
+            <>
+              {INFO_FIELDS.map((f) => (
+                <div className="frow" key={f.key}>
+                  <label className={f.key === 'name' ? 'req' : undefined}>{f.label}</label>
+                  <div>
+                    {f.key === 'grade' ? (
+                      <select
+                        className="sel"
+                        value={infoEdit.form.grade}
+                        onChange={(e) => setInfoEdit({ ...infoEdit, form: { ...infoEdit.form, grade: e.target.value } })}
+                      >
+                        {(Object.keys(GRADE_LABEL) as GradeType[]).map((g) => (
+                          <option key={g} value={g}>
+                            {GRADE_LABEL[g]}
+                          </option>
+                        ))}
+                      </select>
+                    ) : f.key === 'track' ? (
+                      <select
+                        className="sel"
+                        value={infoEdit.form.track}
+                        onChange={(e) => setInfoEdit({ ...infoEdit, form: { ...infoEdit.form, track: e.target.value } })}
+                      >
+                        <option value="">미정</option>
+                        {(Object.keys(TRACK_LABEL) as TrackType[]).map((t) => (
+                          <option key={t} value={t}>
+                            {TRACK_LABEL[t]}
+                          </option>
+                        ))}
+                      </select>
+                    ) : f.key === 'gender' ? (
+                      <select
+                        className="sel"
+                        value={infoEdit.form.gender}
+                        onChange={(e) => setInfoEdit({ ...infoEdit, form: { ...infoEdit.form, gender: e.target.value } })}
+                      >
+                        <option value="">바꾸지 않음</option>
+                        <option value="M">남</option>
+                        <option value="F">여</option>
+                      </select>
+                    ) : (
+                      <input
+                        className="inp"
+                        type={f.key === 'birthDate' ? 'date' : 'text'}
+                        maxLength={f.max}
+                        placeholder={f.placeholder}
+                        value={infoEdit.form[f.key]}
+                        onChange={(e) =>
+                          setInfoEdit({ ...infoEdit, form: { ...infoEdit.form, [f.key]: e.target.value } })
+                        }
+                      />
+                    )}
+                    {f.hint && <div className="hint">{f.hint}</div>}
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+        </Modal>
+      )}
+
+      {infoDone && (
+        <div className="note-box plain" role="status">
+          <div className="ic">
+            <Icon name="check" size={17} />
+          </div>
+          <div style={{ flex: 1 }}>{infoDone}</div>
+          <button className="btn" onClick={() => setInfoDone(null)}>
+            닫기
+          </button>
+        </div>
+      )}
+
       {reDone && (
         <div className="note-box plain" role="status">
           <div className="ic">
@@ -573,7 +765,15 @@ function Content() {
         masked={effectiveMasked}
         loading={table.loading}
         serverPaging={table.serverPaging}
-        countLabel={<>검색결과 <b>{table.totalElements}</b>건</>}
+        /* ★ 줄을 누르면 정보 수정이 열린다. 버튼 칸을 따로 두면 표 폭이 그대로라 데이터 칸이
+             좁아져 '분/당' · 'N/수/2/반' 처럼 세로로 쪼개졌다 */
+        onRowClick={openInfo}
+        countLabel={
+          <>
+            검색결과 <b>{table.totalElements}</b>건
+            <span style={{ marginLeft: 8, fontSize: 11.5, color: 'var(--muted)' }}>줄을 누르면 정보를 고칠 수 있습니다</span>
+          </>
+        }
         toolbar={
           <>
             {selected.length > 0 && (
