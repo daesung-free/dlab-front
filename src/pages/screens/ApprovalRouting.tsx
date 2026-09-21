@@ -61,7 +61,8 @@ const CAT_TONE: Record<string, string> = {
   기타: 'verified',
 }
 
-/** 응답 제한시간 후보 — I-20(응답시간) 미확약이라 화면에서 고르게 한다 */
+/** 전환까지 걸리는 시간 후보 — I-20(응답시간) 미확약이라 화면에서 고르게 한다.
+ *  ★ 문서·이슈에서는 '응답 제한시간' 으로 부른다. 화면 말과 다르니 대조할 때 헷갈리지 말 것 */
 const TIMEOUT_CHOICES = [30, 60, 120, 240]
 
 interface ApprovalItemSaveInput {
@@ -537,10 +538,10 @@ function Content() {
         </div>
         <div className="stat">
           <div className="l">
-            <Icon name="arrow-right" size={13} /> 미응답 시 전환
+            <Icon name="arrow-right" size={13} /> 전환 대상 지정
           </div>
           <div className="v">{items.filter((i) => i.escalationApproverType).length}</div>
-          <div className="d warn">전환까지 기다리는 시간 미확정</div>
+          <div className="d warn">전환까지 걸리는 시간 미확정</div>
         </div>
       </div>
 
@@ -557,7 +558,7 @@ function Content() {
                    '보기' 라고 쓰여 있으면 눌렀을 때 반대로 숨겨져서 고장으로 읽힌다 */}
             <button
               className={`chip${escalation ? ' on' : ''}`}
-              title="미응답 시 전환 대상과 기다리는 시간 열을 보여주거나 감춥니다"
+              title="전환 대상과 전환까지 걸리는 시간 열을 보여주거나 감춥니다"
               onClick={() => setEscalation(!escalation)}
             >
               전환 열 {escalation ? '숨기기' : '보기'}
@@ -584,8 +585,10 @@ function Content() {
                   ))}
                   {escalation && (
                     <>
-                      <th style={{ width: 118 }}>미응답 시 전환</th>
-                      <th style={{ width: 110 }}>기다리는 시간</th>
+                      {/* ★ 두 열은 짝이다 — '전환 대상 / 전환까지' 로 같은 말에 걸어 둔다.
+                             '미응답 시' 조건은 바로 아래 범례가 이미 말한다 */}
+                      <th style={{ width: 104 }}>전환 대상</th>
+                      <th style={{ width: 104 }}>전환까지</th>
                     </>
                   )}
                   <th>비고</th>
@@ -648,12 +651,18 @@ function Content() {
                               void apply(it, { timeoutMinutes: e.target.value === '' ? null : Number(e.target.value) })
                             }
                           >
+                            {/* ★ 서버 값이 후보에 없으면 `<select>` 는 **아무것도 안 고른 상태**가 되어
+                                   '없음' 으로 보인다 — 실제로는 10분이 걸려 있는데 안 걸린 것처럼 읽혔다
+                                   (와이파이 해제·정기일정이 10분이라 두 줄이 그랬다, 2026-09-21).
+                                   지금 값을 후보에 섞어서 **서버에 있는 것은 반드시 보이게** 한다 */}
                             <option value="">없음</option>
-                            {TIMEOUT_CHOICES.map((m) => (
-                              <option key={m} value={m}>
-                                {m}분
-                              </option>
-                            ))}
+                            {[...new Set([...TIMEOUT_CHOICES, ...(it.timeoutMinutes ? [it.timeoutMinutes] : [])])]
+                              .sort((a, b) => a - b)
+                              .map((m) => (
+                                <option key={m} value={m}>
+                                  {m}분
+                                </option>
+                              ))}
                           </select>
                         </td>
                       </>
@@ -759,7 +768,8 @@ function Content() {
             </div>
 
             <div className="frow">
-              <label>기본 응답 제한</label>
+              {/* 표의 '전환까지' 와 같은 값이다 — 한 화면에서 두 이름으로 부르지 않는다 */}
+              <label>기본 전환 시간</label>
               <div className="two">
                 <input className="inp" type="number" defaultValue={120} disabled data-soon title="준비 중입니다" />
                 <select className="sel" disabled data-soon title="준비 중입니다">
