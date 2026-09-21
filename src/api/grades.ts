@@ -169,6 +169,22 @@ export interface ExamFormSubjectInput {
   hasStandardScore?: boolean
   hasPercentile?: boolean
   hasGradeLevel?: boolean
+  /** 원점수를 받는가. 비우면 디랩 시험은 켠다 */
+  hasRawScore?: boolean
+}
+
+/** 학년별 기본 과목 구성 — 디랩 시험 회차를 만들 때 과목을 비우면 서버가 이것으로 채운다 */
+export interface SubjectPreset extends ExamFormSubjectInput {
+  presetId: number
+  /** null 이면 전 지점 공통본 */
+  academyId: number | null
+  gradeType: GradeType
+}
+
+export function listSubjectPresets(year: number, gradeType: GradeType, academyId: number | null): Promise<SubjectPreset[]> {
+  return request<SubjectPreset[]>('/api/v1/admin/exam-forms/subject-presets', {
+    query: { year, gradeType, academyId: academyId ?? undefined },
+  })
 }
 
 export interface ExamFormCreate {
@@ -178,7 +194,11 @@ export interface ExamFormCreate {
   gradeType: GradeType
   examCode: ExamCode
   examName: string
-  sortOrder?: number
+  /**
+   * ★ 보내야 한다. 빼면 서버가 500 을 냈다(2026-09-21, 백엔드 수정 중 — 고친 뒤엔 0 으로 들어간다).
+   *   과목 안의 sortOrder 와 다른 값이다 — 이건 회차의 순서다
+   */
+  sortOrder: number
   subjects: ExamFormSubjectInput[]
   purpose: 'ACADEMY'
   examDate: string

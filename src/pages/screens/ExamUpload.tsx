@@ -11,11 +11,13 @@ import {
   createExamForm,
   linkUploadRow,
   listAllExamForms,
+  listSubjectPresets,
   previewScoreUpload,
   uploadExamItems,
   uploadExamResponses,
   type ExamCode,
   type ExamForm,
+  type ExamFormSubjectInput,
   type ExamItemResult,
   type ExamResponseResult,
   type ScoreUploadResult,
@@ -57,17 +59,15 @@ function msg(e: unknown, fallback: string): string {
   return e instanceof ApiError ? e.message : fallback
 }
 
-/** 파일 고르기 한 칸. 고른 파일 이름을 옆에 보여준다 — 기본 input 은 좁은 칸에서 이름이 잘린다 */
+/** 파일 고르기 한 칸. 고른 파일 이름은 브라우저 기본 칸이 보여준다 */
 function FilePick({
   label,
   required,
-  file,
   onChange,
   disabled,
 }: {
   label: string
   required?: boolean
-  file: File | null
   onChange: (f: File | null) => void
   disabled?: boolean
 }) {
@@ -83,7 +83,6 @@ function FilePick({
           style={{ fontSize: 12.5 }}
         />
         {!required && <div className="hint">없어도 됩니다.</div>}
-        {file && <div className="hint">{file.name}</div>}
       </div>
     </div>
   )
@@ -139,12 +138,32 @@ function Content() {
   const [regErr, setRegErr] = useState<string | null>(null)
   const isSuper = academies.length > 1
 
-  /** 과목 원본 — 같은 학년의 입학 전 양식. 같은 시험 종류가 있으면 그것, 없으면 그 학년 아무거나 */
-  const template = useMemo(() => {
+  /*
+   * 과목 — 서버의 학년별 기본 구성(subject-presets)을 먼저 쓴다. 그 조회가 없거나 비었으면
+   * 같은 학년의 입학 전 양식에서 가져온다(기본 구성이 생기기 전 서버와도 돌게).
+   */
+  const [presets, setPresets] = useState<{ key: string; rows: ExamFormSubjectInput[] } | null>(null)
+  const regGrade = reg?.gradeType ?? null
+  useEffect(() => {
+    if (regGrade === null) return
+    const key = `${year}:${regGrade}:${academyId}`
+    let alive = true
+    listSubjectPresets(year, regGrade, academyId)
+      .then((rows) => alive && setPresets({ key, rows }))
+      .catch(() => alive && setPresets({ key, rows: [] }))
+    return () => {
+      alive = false
+    }
+  }, [year, regGrade, academyId])
+
+  const template = useMemo((): { from: string; subjects: ExamFormSubjectInput[] } | null => {
     if (!reg) return null
+    const p = presets?.key === `${year}:${reg.gradeType}:${academyId}` ? presets.rows : []
+    if (p.length > 0) return { from: '학년별 기본 과목', subjects: [...p].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)) }
     const same = forms.filter((f) => f.purpose !== 'ACADEMY' && f.gradeType === reg.gradeType)
-    return same.find((f) => f.examCode === reg.examCode) ?? same[0] ?? null
-  }, [forms, reg])
+    const f = same.find((x) => x.examCode === reg.examCode) ?? same[0]
+    return f ? { from: `같은 학년 입학 성적 양식(${f.examName})`, subjects: f.subjects } : null
+  }, [forms, reg, presets, year, academyId])
 
   async function submitReg() {
     if (!reg || !template) return
@@ -159,6 +178,7 @@ function Content() {
         examName: reg.examName.trim(),
         examDate: reg.examDate,
         purpose: 'ACADEMY',
+        sortOrder: 1,
         subjects: template.subjects.map((s) => ({
           subjectCode: s.subjectCode,
           subjectName: s.subjectName,
@@ -166,6 +186,7 @@ function Content() {
           hasStandardScore: s.hasStandardScore,
           hasPercentile: s.hasPercentile,
           hasGradeLevel: s.hasGradeLevel,
+          hasRawScore: s.hasRawScore,
         })),
       })
       setReg(null)
@@ -345,6 +366,12 @@ function Content() {
     },
   ]
 
+  const respUnmatchedCols: Column<ExamResponseResult['unmatched'][number]>[] = [
+    { key: 'rowNumber', header: '행', width: '56px', value: (r) => String(r.rowNumber) },
+    { key: 'name', header: '이름', width: '90px', value: (r) => r.name },
+    { key: 'reason', header: '사유', value: (r) => r.reason },
+  ]
+
   return (
     <>
       {formsErr && (
@@ -417,7 +444,7 @@ function Content() {
           </div>
         </div>
         <div className="card-sec-b">
-          <FilePick label="성적 파일" required file={scoreFile} onChange={setScoreFile} disabled={locked || noBranch} />
+          <FilePick label="성적 파일" required onChange={setScoreFile} disabled={locked || noBranch} />
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
             <button
               type="button"
@@ -488,8 +515,8 @@ function Content() {
           </div>
         </div>
         <div className="card-sec-b">
-          <FilePick label="문항분석표" required file={analysisFile} onChange={setAnalysisFile} disabled={locked} />
-          <FilePick label="정답률" file={ratesFile} onChange={setRatesFile} disabled={locked} />
+          <FilePick label="문항분석표" required onChange={setAnalysisFile} disabled={locked} />
+          <FilePick label="정답률" onChange={setRatesFile} disabled={locked} />
           <button
             type="button"
             className="btn pri"
@@ -533,8 +560,8 @@ function Content() {
           </div>
         </div>
         <div className="card-sec-b">
-          <FilePick label="정오표" required file={resultsFile} onChange={setResultsFile} disabled={locked || noBranch} />
-          <FilePick label="답안표" file={answersFile} onChange={setAnswersFile} disabled={locked || noBranch} />
+          <FilePick label="정오표" required onChange={setResultsFile} disabled={locked || noBranch} />
+          <FilePick label="답안표" onChange={setAnswersFile} disabled={locked || noBranch} />
           <button
             type="button"
             className="btn pri"
@@ -559,14 +586,23 @@ function Content() {
                     {respRes.unknownSubjects.join(', ')}
                   </div>
                 )}
-                {respRes.unmatched.length > 0 && (
-                  <div style={{ marginTop: 6 }}>
-                    못 찾은 학생:{' '}
-                    {respRes.unmatched.map((u) => `${u.name}(${u.rowNumber}행 · ${u.reason})`).join(' · ')}
-                  </div>
-                )}
               </div>
             </div>
+          )}
+          {/* 한 줄로 늘어놓으면 백 명이 넘을 때 읽을 수 없다 — ①과 같은 표로 */}
+          {respRes && respRes.unmatched.length > 0 && (
+            <DataTable
+              nowrap
+              columns={respUnmatchedCols}
+              rows={respRes.unmatched}
+              rowKey={(r) => String(r.rowNumber)}
+              pageSize={10}
+              countLabel={
+                <>
+                  못 찾은 행 <b>{respRes.unmatched.length}</b>건 — ① 성적에서 학생을 이어 두면 다음부터 함께 찾습니다
+                </>
+              }
+            />
           )}
         </div>
       </div>
@@ -645,7 +681,7 @@ function Content() {
                       </span>
                     ))}
                   </div>
-                  <div className="hint">같은 학년 입학 성적 양식({template.examName})의 과목을 그대로 씁니다.</div>
+                  <div className="hint">{template.from}을 그대로 씁니다.</div>
                 </>
               ) : (
                 <div className="hint" style={{ color: 'var(--red)' }}>
@@ -725,7 +761,7 @@ function Content() {
                 ))}
               </select>
               <div className="hint">
-                사유: {link.row.reason}. 한 번 이으면 {exam?.year ?? year}년 다음 회차부터 이 학생으로 자동으로 찾습니다.
+                사유: {link.row.reason.replace(/\.$/, '')}. 한 번 이으면 {exam?.year ?? year}년 다음 회차부터 이 학생으로 자동으로 찾습니다.
               </div>
             </div>
           </div>
