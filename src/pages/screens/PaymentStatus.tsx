@@ -9,6 +9,7 @@ import {
   type Field,
   type SearchValues,
   Modal,
+  todayStr,
 } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
@@ -1327,14 +1328,129 @@ function Content() {
   )
 }
 
+/**
+ * 기간·지점별 통계 — 지점마다 수납 요약(`/receipt-status/summary`)을 불러 한 표로 놓는다.
+ * ★ 지점별 합계 API 가 따로 없어 지점 수만큼 부른다(본사 11곳). 지점 관리자는 자기 지점만 나온다 —
+ *   목록은 서버가 권한에 맞게 준다(AcademyContext).
+ * ★ 청구 연도(year)와 기간(from~to)은 다른 축이다 — 기간은 청구일 기준이다.
+ */
+function BranchStatsButton() {
+  const { academies } = useAcademy()
+  const now = new Date()
+  const [open, setOpen] = useState(false)
+  const [from, setFrom] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`)
+  const [to, setTo] = useState(todayStr())
+  const [rows, setRows] = useState<{ name: string; s: ReceiptSummary | null; err?: string }[] | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  async function run() {
+    setBusy(true)
+    const year = Number(from.slice(0, 4))
+    const out = await Promise.all(
+      academies.map(async (a) => {
+        try {
+          return { name: a.acadNm, s: await getReceiptSummary({ academyId: a.id, year, from, to }) }
+        } catch (e) {
+          return { name: a.acadNm, s: null, err: e instanceof ApiError ? e.message : '불러오지 못함' }
+        }
+      }),
+    )
+    setRows(out)
+    setBusy(false)
+  }
+
+  const won = (n: number) => `${n.toLocaleString()}원`
+  const total = (rows ?? []).reduce(
+    (t, r) =>
+      r.s
+        ? { billed: t.billed + r.s.billedAmount, received: t.received + r.s.receivedAmount, unpaid: t.unpaid + r.s.unpaidAmount }
+        : t,
+    { billed: 0, received: 0, unpaid: 0 },
+  )
+  const rate = (b: number, r: number) => (b > 0 ? `${Math.round((r / b) * 100)}%` : '-')
+
+  return (
+    <>
+      <button
+        className="btn"
+        onClick={() => {
+          setOpen(true)
+          setRows(null)
+        }}
+      >
+        <Icon name="bar-chart-3" size={14} /> 기간·지점별 통계
+      </button>
+      {open && (
+        <Modal wide title="기간·지점별 수납 통계" hideCancel confirmLabel="닫기" onConfirm={() => setOpen(false)} onClose={() => setOpen(false)}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+            <input className="inp" type="date" style={{ width: 150 }} value={from} onChange={(e) => setFrom(e.target.value)} />
+            <span>~</span>
+            <input className="inp" type="date" style={{ width: 150 }} value={to} onChange={(e) => setTo(e.target.value)} />
+            <button type="button" className="btn pri" disabled={busy || !from || !to || from > to} onClick={() => void run()}>
+              {busy ? '계산 중…' : '조회'}
+            </button>
+            <span style={{ fontSize: 12, color: 'var(--muted)' }}>청구일 기준</span>
+          </div>
+          {rows && (
+            <div style={{ maxHeight: 420, overflow: 'auto' }}>
+              <table className="dt nowrap" style={{ width: '100%' }}>
+                <thead>
+                  <tr>
+                    <th>지점</th>
+                    <th style={{ textAlign: 'right' }}>청구</th>
+                    <th style={{ textAlign: 'right' }}>수납</th>
+                    <th style={{ textAlign: 'right' }}>미납</th>
+                    <th style={{ textAlign: 'right' }}>미납 건</th>
+                    <th style={{ textAlign: 'right' }}>수납률</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.name}>
+                      <td>{r.name}</td>
+                      {r.s ? (
+                        <>
+                          <td style={{ textAlign: 'right' }}>{won(r.s.billedAmount)}</td>
+                          <td style={{ textAlign: 'right' }}>{won(r.s.receivedAmount)}</td>
+                          <td style={{ textAlign: 'right', color: r.s.unpaidAmount > 0 ? 'var(--red)' : undefined }}>{won(r.s.unpaidAmount)}</td>
+                          <td style={{ textAlign: 'right' }}>{r.s.unpaidCount}건</td>
+                          <td style={{ textAlign: 'right' }}>
+                            <b>{rate(r.s.billedAmount, r.s.receivedAmount)}</b>
+                          </td>
+                        </>
+                      ) : (
+                        <td colSpan={5} style={{ color: 'var(--red)' }}>
+                          {r.err}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                  {rows.length > 1 && (
+                    <tr style={{ fontWeight: 800 }}>
+                      <td>합계</td>
+                      <td style={{ textAlign: 'right' }}>{won(total.billed)}</td>
+                      <td style={{ textAlign: 'right' }}>{won(total.received)}</td>
+                      <td style={{ textAlign: 'right' }}>{won(total.unpaid)}</td>
+                      <td />
+                      <td style={{ textAlign: 'right' }}>{rate(total.billed, total.received)}</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Modal>
+      )}
+    </>
+  )
+}
+
 export const paymentMockup: Mockup = {
   Content,
   actions: (
     <>
       <button className="btn" disabled data-soon title="준비 중입니다">기수 선택 ▾</button>
-      <button className="btn" disabled data-soon title="준비 중입니다">
-        <Icon name="bar-chart-3" size={14} /> 기간·지점별 통계
-      </button>
+      <BranchStatsButton />
     </>
   ),
 }

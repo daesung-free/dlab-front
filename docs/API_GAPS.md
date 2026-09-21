@@ -2982,3 +2982,26 @@ GET  → status:"SUBMITTED", selfScore:40            ← 그대로다
 화면이 이름만 보내고 있었다 — 코드·비고를 넣기 시작하면 이름 수정 한 번에 사라졌을 것이다.
 등록·수정 창에 코드·비고 칸을 두고 셋을 늘 함께 보내게 고쳤다. 강의실은 PATCH(부분 수정)로 바꿨다.
 
+## 33-4. 특강 신청자 응답에 등록 ID(enrollmentId)가 없다 — 요청
+
+`GET /lectures/{id}/applications` 행에 `studentId` 만 있다. 청구(`POST /billings`)는 `enrollmentId` 를 받는다.
+특강 '수납청구' 는 재원생 목록을 한 번 더 불러 학생 ID → 등록 ID 로 잇는다(못 찾으면 그 학생은 실패로 표시).
+재등록한 학생은 등록이 둘이라 학생 ID 만으로는 어느 등록인지 모른다.
+
+> 요청: 신청자 행에 `enrollmentId`.
+
+## 33-5. 질의응답 운영 설정(타임 간격·운영 시간)을 저장할 곳이 없다 — 요청
+
+질의응답 화면 '설정 저장' — 간격(분)·운영 시작/끝을 받는 API 가 없다. 타임 열기(`POST /qna/offline/slots`)는 있다.
+지금은 버튼을 '준비 중' 으로 둔다.
+
+> 요청: 지점별 질의응답 운영 설정 조회·저장.
+
+## 33-6. `POST /billings` 요청 스키마가 결제 요청의 `CreateRequest` 를 가리킨다 (스펙 이름 충돌)
+
+`/v3/api-docs` 에서 청구 생성 본문이 `{billingId, payMethod, sendSms}`(결제 요청)로 나온다. 실제 컨트롤러는
+`{enrollmentId, name, billingType, suppliedAmount, discountAmount?, dueDate?}` 다(AdminBillingController.CreateRequest).
+record 이름이 같아 스펙이 한쪽을 덮었다(1-2 와 같은 종류). 타입 생성으로 붙이면 틀린다.
+
+> 요청: record 이름을 겹치지 않게(`BillingCreateRequest` 등).
+

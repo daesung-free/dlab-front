@@ -15,6 +15,7 @@ import {
 } from '../../api/notices'
 import { MOCK_STUDENTS } from './mockStudents'
 import type { Mockup } from './types'
+import { createScreenSignal } from './screenSignal'
 import '../../styles/forms.css'
 
 /* F-4.11-3 메시지 관리(공지·행정요청·1:1채팅) — 신규개발-요구사항신규
@@ -198,6 +199,18 @@ function Content() {
   useEffect(() => {
     void load()
   }, [load])
+
+  /* 헤더 '공지 작성'·'수신함' — 본문의 같은 기능으로 보낸다(헤더는 본문 상태를 못 만진다, CLAUDE.md 5-1) */
+  const composeVer = composeSignal.useVersion()
+  const inboxVer = inboxSignal.useVersion()
+  useEffect(() => {
+    if (composeVer === 0) return
+    setTab('notice')
+    setComposing(true)
+  }, [composeVer])
+  useEffect(() => {
+    if (inboxVer > 0) setTab('request')
+  }, [inboxVer])
 
   async function send() {
     if (title.trim() === '' || content.trim() === '') return
@@ -519,14 +532,17 @@ function Content() {
   )
 }
 
+const composeSignal = createScreenSignal()
+const inboxSignal = createScreenSignal()
+
 export const chatMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled data-soon title="준비 중입니다">
+      <button className="btn" onClick={() => inboxSignal.bump()}>
         <Icon name="inbox" size={14} /> 수신함
       </button>
-      <button className="btn pri" disabled data-soon title="준비 중입니다">
+      <button className="btn pri" onClick={() => composeSignal.bump()}>
         <Icon name="plus" size={14} /> 공지 작성
       </button>
     </>

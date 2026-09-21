@@ -1,10 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   DataTable,
   ExcelButton,
   MaskToggle,
   SearchForm,
   Unfilled,
+  addDaysStr,
+  toDateStr,
   todayStr,
   useServerTable,
   type Column,
@@ -15,6 +17,7 @@ import { Icon } from '../../components/Icon'
 import { useAcademy } from '../../auth/AcademyContext'
 import { listAuditLogs, type AuditAction, type AuditLog } from '../../api/auditLogs'
 import type { Mockup } from './types'
+import { createScreenSignal } from './screenSignal'
 
 /* 학원생 관리 > 메모/기타 > 금일 수정 이력 — 클라이언트 메뉴표 기준 추가 화면
  *
@@ -171,8 +174,58 @@ const COLUMNS: Column<LogRow>[] = [
      읽혀서, 어제 것이 왜 없냐는 말이 나온다. 실제로 4차 점검에서 그렇게 올라왔다. */
 const TODAY_RANGE: SearchValues = { date: { from: todayStr(), to: todayStr() } }
 
+/*
+ * 헤더 '기간 선택' — 자주 쓰는 기간을 한 번에 고른다. 헤더는 본문 상태를 못 만지므로(CLAUDE.md 5-1)
+ * 고른 값을 여기에 두고 신호로 알린다. 본문은 검색 폼을 그 값으로 다시 그려 칸에도 보이게 한다 —
+ * 칸은 그대로인데 결과만 바뀌면 무엇으로 조회했는지 알 수 없다.
+ */
+const periodSignal = createScreenSignal()
+let pickedPeriod: { from: string; to: string } | null = null
+
+function periodOf(kind: string): { from: string; to: string } {
+  const t = new Date()
+  const today = todayStr()
+  if (kind === 'week') return { from: addDaysStr(t, -6), to: today }
+  if (kind === 'month') return { from: `${today.slice(0, 8)}01`, to: today }
+  if (kind === 'lastMonth') {
+    const first = new Date(t.getFullYear(), t.getMonth() - 1, 1)
+    const last = new Date(t.getFullYear(), t.getMonth(), 0)
+    return { from: toDateStr(first), to: toDateStr(last) }
+  }
+  return { from: today, to: today }
+}
+
+function PeriodMenu() {
+  return (
+    <select
+      className="sel"
+      style={{ width: 130 }}
+      value=""
+      onChange={(e) => {
+        if (!e.target.value) return
+        pickedPeriod = periodOf(e.target.value)
+        periodSignal.bump()
+      }}
+    >
+      <option value="">기간 선택 ▾</option>
+      <option value="today">오늘</option>
+      <option value="week">최근 7일</option>
+      <option value="month">이번 달</option>
+      <option value="lastMonth">지난 달</option>
+    </select>
+  )
+}
+
 function Content() {
   const [query, setQuery] = useState<SearchValues>(TODAY_RANGE)
+  const [formKey, setFormKey] = useState(0)
+  const periodVer = periodSignal.useVersion()
+  useEffect(() => {
+    if (periodVer === 0 || !pickedPeriod) return
+    const date = pickedPeriod
+    setQuery((q) => ({ ...q, date }))
+    setFormKey((k) => k + 1)
+  }, [periodVer])
   const [masked, setMasked] = useState(true)
   const { academyId } = useAcademy()
 
@@ -256,9 +309,10 @@ function Content() {
       </div>
 
       <SearchForm
+        key={formKey}
         fields={FIELDS}
         onSearch={setQuery}
-        initial={TODAY_RANGE}
+        initial={query}
         presetKey="change-log"
         headerRight={
           <span className="mk supplement" title="조회 기본값은 오늘입니다">
@@ -305,7 +359,7 @@ export const changeLogMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled data-soon title="준비 중입니다">기간 선택 ▾</button>
+      <PeriodMenu />
       <button className="btn" disabled data-soon title="준비 중입니다">
         <Icon name="shield-check" size={14} /> 보존정책
       </button>
