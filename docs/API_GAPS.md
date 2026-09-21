@@ -2723,3 +2723,54 @@ N수 1반은 한 명뿐인 학생(한민주)이 **휴원**이라 재원이 0 이
 
 `label` 이 `HUMANITIES` · `SCIENCE` 그대로다. 반·월은 `고3 1반` · `1월` 처럼 한글로 오는데
 계열만 다르다. 화면에서 `인문` · `자연` 으로 바꿔 쓴다.
+
+---
+
+# 29부. 실적 관리 (F-4.10-6) — 2026-09-21 연동
+
+```
+GET    /admin/admission-results/students/{enrollmentId}   학생 한 명의 지원 목록
+POST   /admin/admission-results/students/{enrollmentId}   등록 (수시 6 · 정시 3 초과 시 400)
+PATCH  /admin/admission-results/{id}                      수정 — 고치면 입력 주체가 STAFF 로 바뀐다
+DELETE /admin/admission-results/{id}                      지우지 않고 내린다
+GET    /admin/admission-results/suggestions               자동완성 (비어 있어도 정상)
+GET    /admin/admission-results/statistics                기간별 집계 — 본사 계정은 academyId 필수
+```
+
+지원 목록과 실적이 **같은 데이터**다 — 학생이 지원 대학을 넣고 직원이 합불을 채운다.
+수시/정시 구분(`EARLY`/`REGULAR`)과 결과 4종(발표 전·합격·불합격·등록포기)이 들어왔다.
+
+## 29-1. 그해 전체 실적 목록이 없다 ★
+
+조회가 **학생 한 명 단위뿐**이다. 목업의 주 화면은 "그해 실적 전체를 표로" 보는 것인데,
+학생마다 부르면 인원수만큼 요청이 나간다. 화면은 **학생을 고르면 그 학생 지원이 나오는**
+좌우 분할로 바꿨다(ConsultLog 와 같은 모양).
+
+> 요청: `GET /admin/admission-results?academyId&year[&result][&admissionType]` — 페이징 목록.
+> 생기면 목업대로 표로 되돌린다.
+
+## 29-2. 목표 계열 5단계가 없다
+
+목업 상단 카드는 목표 계열 5단계(메디컬·서울 최상위·서울 지거국·수도권·지방 4년제) 별 인원이다.
+서버의 `trackName` 은 자유 입력이라 그 축으로 셀 수 없다. 5단계 자체가 명칭·순서부터 미확정이라
+(#42 / I-22) 상단 카드를 서버가 주는 값(지원·수시·정시·발표·합격·합격률)으로 바꿨다.
+
+## 29-3. 집계 응답 스키마가 스펙에서 잘못 연결돼 있다
+
+`/v3/api-docs` 에서 이 엔드포인트의 응답이 `ApiResponseStatistics` 로 되어 있는데, 그 이름이
+**학습계획 집계와 겹쳐서** `plannedMinutes` · `doneMinutes` 같은 엉뚱한 필드를 가리킨다.
+실제 응답은 이렇다:
+
+```json
+{ "total": 1, "early": 0, "regular": 1, "decided": 1, "passed": 1,
+  "byResult": { "PASSED": 1 }, "passedByUniversity": { "서울대": 1 } }
+```
+
+`schema.d.ts` 를 믿지 말고 `src/api/admissionResults.ts` 의 타입을 쓴다.
+
+> 요청: 응답 DTO 이름을 겹치지 않게 (`AdmissionStatistics` 등).
+
+## 29-4. 합격률 계산 기준 (확인만)
+
+분모는 **발표 난 건수(`decided`)** 다. 전체로 나누면 발표 전 지원까지 실패로 잡힌다.
+합격(`passed`)에는 **등록포기가 들어간다** — 붙은 것은 사실이고 등록 여부는 `byResult` 가 따로 준다.
