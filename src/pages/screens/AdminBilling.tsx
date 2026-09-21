@@ -10,6 +10,7 @@ import {
   createBillingStandard,
   deleteBillingStandard,
   listBillingStandards,
+  copyBillingStandardsYear,
   listRefundRules,
   setBillingStandardActive,
   type AmountSource,
@@ -27,6 +28,7 @@ import {
   type TuitionPrice,
 } from '../../api/tuition'
 import type { Mockup } from './types'
+import { createScreenSignal } from './screenSignal'
 import '../../styles/forms.css'
 
 /* F-4.10-5 수납 관리(청구기준 관리) — 신규개발-요구사항검증됨
@@ -308,6 +310,16 @@ function Content() {
   const [monthEdit, setMonthEdit] = useState<{ mo: number; days: string } | null>(null)
   const [monthErr, setMonthErr] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  /*
+   * 전년도 기준 복사 — 청구 기준만 옮긴다(`/billing-standards/copy-year`). 같은 코드는 건너뛴다.
+   * 헤더 버튼은 본문 상태를 못 만져 신호로 이 창을 연다(CLAUDE.md 5-1).
+   */
+  const [copyAsk, setCopyAsk] = useState(false)
+  const [copyBusy, setCopyBusy] = useState(false)
+  const copyVer = copySignal.useVersion()
+  useEffect(() => {
+    if (copyVer > 0) setCopyAsk(true)
+  }, [copyVer])
 
   /* 청구 기준 등록. **코드·항목·금액 방식이 필수**라 이름만 받는 창으로는 못 만든다 */
   const [newStd, setNewStd] = useState<NewStandard | null>(null)
@@ -444,8 +456,47 @@ function Content() {
     }
   }
 
+  async function copyStandards() {
+    if (academyId === null) return
+    setCopyBusy(true)
+    try {
+      const r = await copyBillingStandardsYear({ academyId, fromYear: year - 1, toYear: year })
+      setNotice(
+        r.copied === 0
+          ? `새로 옮길 청구 기준이 없습니다${r.skipped ? ` — ${r.skipped}건은 같은 코드가 이미 ${year}년에 있습니다` : ` — ${year - 1}년에 등록된 기준이 없습니다`}.`
+          : `${year - 1}년 청구 기준을 ${year}년으로 옮겼습니다 — ${r.copied}건 복사` +
+              (r.skipped ? ` · ${r.skipped}건은 같은 코드가 있어 건너뜀` : '') +
+              '. 금액이 바뀌었으면 옮긴 기준을 고치세요.',
+      )
+      setCopyAsk(false)
+      await load()
+    } catch (err) {
+      setNotice(err instanceof ApiError ? `복사하지 못했습니다 — ${err.message}` : '복사하지 못했습니다.')
+      setCopyAsk(false)
+    } finally {
+      setCopyBusy(false)
+    }
+  }
+
   return (
     <>
+      {copyAsk && (
+        <Modal
+          title={`${year - 1}년 청구 기준을 ${year}년으로 복사할까요?`}
+          sub="같은 코드가 이미 있으면 건너뜁니다. 사용 중지된 기준도 그대로 옮깁니다."
+          confirmLabel="복사"
+          busy={copyBusy}
+          onConfirm={() => void copyStandards()}
+          onClose={() => setCopyAsk(false)}
+        >
+          <div className="note-box">
+            <div>
+              금액은 작년 그대로 넘어갑니다. 올해 금액이 다르면 옮긴 뒤 고치세요. 위에서 고른 시즌({year})이 옮겨 갈
+              연도입니다.
+            </div>
+          </div>
+        </Modal>
+      )}
       {delStd && (
         <Modal
           title="청구 기준 삭제"
@@ -840,12 +891,14 @@ function Content() {
   )
 }
 
+const copySignal = createScreenSignal()
+
 export const adminBillingMockup: Mockup = {
   Content,
   actions: (
     <>
       <button className="btn" disabled data-soon title="준비 중입니다">기수 선택 ▾</button>
-      <button className="btn" disabled data-soon title="준비 중입니다">
+      <button className="btn" onClick={() => copySignal.bump()} title="작년 청구 기준을 올해로 옮깁니다. 같은 코드는 건너뜁니다">
         <Icon name="history" size={14} /> 전년도 기준 복사
       </button>
     </>

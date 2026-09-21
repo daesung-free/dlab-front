@@ -20,6 +20,13 @@ export interface QnaReservation {
   question: string | null
   reservedAt: string | null
   canceledAt: string | null
+  /** 과목(학생이 자유 입력, 30자, 2026-09-21 추가) */
+  subject?: string | null
+  /**
+   * 질문 사진(예약당 3장까지, 이미지·PDF).
+   * ★ `url` 은 **잠깐만 유효한 주소**다 — 오래 열어 두었다가 누르면 만료될 수 있다. 목록을 다시 불러오면 새 주소가 온다
+   */
+  photos?: { attachmentId: number; name: string; url: string }[]
 }
 
 export interface QnaSlot {

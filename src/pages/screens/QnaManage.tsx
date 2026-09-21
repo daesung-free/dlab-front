@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DataTable, ExcelButton, MaskToggle, Modal, Unfilled, type Column, toDateStr, todayStr } from '../../components/common'
+import { DataTable, ExcelButton, MaskToggle, Modal, type Column, toDateStr, todayStr } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
@@ -65,6 +65,8 @@ interface ReqRow {
   name: string
   className: string
   question: string
+  subject: string
+  photos: { attachmentId: number; name: string; url: string }[]
   teacher: string
   slot: string
   canceled: boolean
@@ -102,14 +104,31 @@ const REQ_COLUMNS: Column<ReqRow>[] = [
     header: '과목',
     width: '72px',
     align: 'center',
-    value: () => '',
-    render: () => <Unfilled reason="예약에 과목 항목이 없다" />,
+    value: (r) => r.subject || '-',
   },
   {
     key: 'question',
     header: '질문 내용',
     value: (r) => r.question,
-    render: (r) => (r.question ? r.question : <span style={{ color: 'var(--muted)' }}>-</span>),
+    render: (r) => (
+      <span>
+        {r.question ? r.question : <span style={{ color: 'var(--muted)' }}>-</span>}
+        {/* 사진 주소는 잠깐만 유효하다 — 안 열리면 목록을 다시 불러온다 */}
+        {r.photos.map((ph, i) => (
+          <a
+            key={ph.attachmentId}
+            href={ph.url}
+            target="_blank"
+            rel="noreferrer"
+            className="mk supplement"
+            style={{ marginLeft: 6 }}
+            title={`${ph.name} — 안 열리면 새로고침 후 다시 누르세요`}
+          >
+            사진 {i + 1}
+          </a>
+        ))}
+      </span>
+    ),
   },
   { key: 'teacher', header: '담당', width: '86px', align: 'center', value: (r) => r.teacher },
   { key: 'slot', header: '예약 타임', width: '150px', align: 'center', sortable: true, value: (r) => r.slot },
@@ -327,6 +346,8 @@ function Content() {
           name: r.studentName,
           className: r.className ?? '-',
           question: r.question ?? '',
+          subject: r.subject ?? '',
+          photos: r.photos ?? [],
           teacher: s.teacherName ?? '미지정',
           slot: `${s.date.slice(5)} ${s.startTime.slice(0, 5)}`,
           canceled: r.canceledAt !== null,
@@ -366,11 +387,8 @@ function Content() {
           <div className="l">
             <Icon name="upload" size={13} /> 사진 첨부
           </div>
-          {/* 사진 첨부는 예약 응답에 없다 — 앱에서 올린다면 서버가 개수를 실어줘야 한다 */}
-          <div className="v" style={{ fontSize: 14, paddingTop: 8 }}>
-            <Unfilled reason="예약에 사진 첨부 정보가 없다" />
-          </div>
-          <div className="d">문제 사진</div>
+          <div className="v">{activeReq.filter((r) => r.photos.length > 0).length}</div>
+          <div className="d">사진을 올린 신청 · {activeReq.reduce((n, r) => n + r.photos.length, 0)}장</div>
         </div>
         <div className="stat">
           <div className="l">

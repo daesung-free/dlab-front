@@ -2347,6 +2347,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/app/qna/offline/reservations/{reservationId}/photos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 질문 사진 올리기 — 예약한 뒤 한 장씩
+         * @description 질문 사진 올리기 — 예약한 뒤 한 장씩. 한 예약에 3장까지, 이미지·PDF 만.
+         *
+         *      <p>비공개로 저장된다 — 문제 사진에 이름·학교가 찍혀 있는 일이 흔하다.
+         */
+        post: operations["addPhoto"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/app/notices/{id}/read": {
         parameters: {
             query?: never;
@@ -4975,6 +4997,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/billing-standards/copy-year": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 전년도 청구 기준 복사
+         * @description 전년도 청구 기준 복사. 같은 코드는 건너뛰어 두 번 눌러도 된다.
+         *
+         *      <p>기초 데이터 전년도 복사와 달리 새 해에 다른 데이터가 있어도 된다. 교습비 표 금액은
+         *      옮기지 않는다 — 교습비 화면에서 새 해 가격을 넣는다.
+         */
+        post: operations["copyYear_1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/auth/refresh": {
         parameters: {
             query?: never;
@@ -5274,11 +5319,30 @@ export interface paths {
          */
         get: operations["list_14"];
         put?: never;
-        /**
-         * 등록.
-         * @description 등록. <b>지점을 비우면 전 지점 공통</b>이고 그건 본사만 만들 수 있다.
-         */
         post: operations["create_14"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/annual-events/copy-year": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 전년도 행사 복사 — 날짜는 연도 차이만큼 민다
+         * @description 전년도 행사 복사 — 날짜는 연도 차이만큼 민다. 같은 이름·시작일은 건너뛰어 두 번 눌러도 된다.
+         *
+         *      <p>기초 데이터 전년도 복사와 달리 새 해에 다른 데이터가 있어도 된다. 시험·설명회는 해마다
+         *      날이 달라 복사 후 확인이 필요하다.
+         */
+        post: operations["copyYear_2"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8972,6 +9036,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/app/qna/offline/reservations/{reservationId}/photos/{attachmentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * 질문 사진 지우기 — 본인 예약의 사진만.
+         * @description 질문 사진 지우기 — 본인 예약의 사진만.
+         */
+        delete: operations["deletePhoto"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/app/meals/orders/items/{itemId}": {
         parameters: {
             query?: never;
@@ -11790,9 +11874,10 @@ export interface components {
             month: string;
             items: components["schemas"]["ScheduleItemInput"][];
         };
-        /** @description 학생 예약. 질문은 선택 — ▷[0803] 회신 항목이라 시트 미반영이다. */
         QnaReserve: {
             question?: string;
+            /** @description 과목(자유 입력, 선택). 사진은 예약 후 <code>.../photos</code>로 따로 올린다 */
+            subject?: string;
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -11825,6 +11910,30 @@ export interface components {
             reservedAt?: string;
             /** Format: date-time */
             canceledAt?: string;
+            subject?: string;
+            photos?: components["schemas"]["Photo"][];
+        };
+        Photo: {
+            /** Format: int64 */
+            attachmentId?: number;
+            name?: string;
+            url?: string;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponsePhoto: {
+            success?: boolean;
+            data?: components["schemas"]["Photo"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
         };
         /**
          * @description 한 달치 일괄 신청.
@@ -13369,13 +13478,16 @@ export interface components {
             studentId?: number;
             studentNo?: string;
             studentName?: string;
-            /** @description 고정반. 반 미배정이면 비어 있다 */
             className?: string;
             question?: string;
             /** Format: date-time */
             reservedAt?: string;
             /** Format: date-time */
             canceledAt?: string;
+            /** @description 과목(자유 입력) */
+            subject?: string;
+            /** @description 질문 사진. <code>url</code>은 짧게 유효한 주소라 만료되면 목록을 다시 받는다 */
+            photos?: components["schemas"]["Photo"][];
         };
         /** @description 슬롯 한 줄. */
         QnaSlot: {
@@ -14740,6 +14852,39 @@ export interface components {
             sortOrder?: number;
             memo?: string;
         };
+        BillingStandardCopyYear: {
+            /** Format: int64 */
+            academyId?: number;
+            /** Format: int32 */
+            fromYear: number;
+            /** Format: int32 */
+            toYear: number;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseBillingStandardCopyResult: {
+            success?: boolean;
+            data?: components["schemas"]["BillingStandardCopyResult"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        BillingStandardCopyResult: {
+            /** Format: int32 */
+            copied?: number;
+            /**
+             * Format: int32
+             * @description 새 해에 같은 코드가 이미 있어 건너뛴 수
+             */
+            skipped?: number;
+        };
         TaggingRequest: {
             /** Format: date */
             date: string;
@@ -14893,6 +15038,39 @@ export interface components {
             eventType?: "ACADEMY" | "EXAM" | "HOLIDAY_EVENT" | "ETC";
             showInPlan?: boolean;
             memo?: string;
+        };
+        AnnualEventCopyYear: {
+            /** Format: int64 */
+            academyId?: number;
+            /** Format: int32 */
+            fromYear: number;
+            /** Format: int32 */
+            toYear: number;
+        };
+        AnnualEventCopyResult: {
+            /** Format: int32 */
+            copied?: number;
+            /**
+             * Format: int32
+             * @description 새 해에 같은 이름·시작일이 이미 있어 건너뛴 수
+             */
+            skipped?: number;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseAnnualEventCopyResult: {
+            success?: boolean;
+            data?: components["schemas"]["AnnualEventCopyResult"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
         };
         SaveResult: {
             /** @enum {string} */
@@ -23063,6 +23241,35 @@ export interface operations {
             };
         };
     };
+    addPhoto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reservationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePhoto"];
+                };
+            };
+        };
+    };
     markRead: {
         parameters: {
             query?: {
@@ -26928,6 +27135,30 @@ export interface operations {
             };
         };
     };
+    copyYear_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BillingStandardCopyYear"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseBillingStandardCopyResult"];
+                };
+            };
+        };
+    };
     refresh_3: {
         parameters: {
             query?: never;
@@ -27280,6 +27511,30 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseEventView"];
+                };
+            };
+        };
+    };
+    copyYear_2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnnualEventCopyYear"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseAnnualEventCopyResult"];
                 };
             };
         };
@@ -31742,6 +31997,29 @@ export interface operations {
             header?: never;
             path: {
                 reservationId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseVoid"];
+                };
+            };
+        };
+    };
+    deletePhoto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reservationId: number;
+                attachmentId: number;
             };
             cookie?: never;
         };
