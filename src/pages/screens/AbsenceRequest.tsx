@@ -38,6 +38,13 @@ import type { Mockup } from './types'
 
 const PAGE_SIZE = 12
 
+/** 승인 주체별 한 줄 설명. 뱃지만 보고는 "왜 이 사람인지" 를 모른다 */
+const APPROVER_TIP: Record<string, string> = {
+  PARENT: '학부모가 앱에서 승인합니다',
+  TEACHER: '담당 반 교사가 승인합니다',
+  AUTO: '조건을 채우면 자동으로 승인됩니다',
+}
+
 const APPROVER_CLASS: Record<string, string> = {
   PARENT: 'supplement',
   TEACHER: 'verified',
@@ -158,8 +165,10 @@ function Content() {
         align: 'center',
         sortable: true,
         value: (r) => APPROVER_TYPE_LABEL[r.approverType] ?? r.approverType,
+        /* ★ 툴팁도 화면이다(CLAUDE.md 1-1). 예전에는 `approver_type: PARENT` 를 띄웠는데
+             서버 필드명이라 읽는 사람에게 쓸모가 없다 — 지금 누가 답할 차례인지를 쓴다 */
         render: (r, shown) => (
-          <span className={`mk ${APPROVER_CLASS[r.approverType] ?? ''}`} title={`approver_type: ${r.approverType}`}>
+          <span className={`mk ${APPROVER_CLASS[r.approverType] ?? ''}`} title={APPROVER_TIP[r.approverType] ?? ''}>
             {shown}
           </span>
         ),
@@ -245,18 +254,18 @@ function Content() {
             <Icon name="users" size={13} /> 학부모 대기
           </div>
           <div className="v">{summary?.waitingParent ?? 0}</div>
-          <div className="d">PARENT</div>
+          <div className="d">앱 알림 보낸 뒤 대기</div>
         </div>
         <div className="stat">
           <div className="l">
             <Icon name="user-check" size={13} /> 담임 대기
           </div>
           <div className="v">{summary?.waitingTeacher ?? 0}</div>
-          <div className="d">TEACHER</div>
+          <div className="d">담임이 답할 차례</div>
         </div>
         <div className="stat">
           <div className="l">
-            <Icon name="arrow-right" size={13} /> 에스컬레이션 후보
+            <Icon name="arrow-right" size={13} /> 담임에게 넘어갈 건
           </div>
           <div className="v" style={{ color: 'var(--red)' }}>
             {summary?.escalationCandidate ?? 0}
