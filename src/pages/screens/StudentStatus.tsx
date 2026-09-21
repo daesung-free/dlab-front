@@ -1,30 +1,30 @@
-import { useMemo, useState } from 'react'
-import {DataTable, ExcelButton, PrintButton, type Column, MockNotice } from '../../components/common'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { DataTable, ExcelButton, PrintButton, Unfilled, todayStr, type Column } from '../../components/common'
 import { Icon } from '../../components/Icon'
 import { Tabs } from '../../components/Tabs'
 import { useAcademy } from '../../auth/AcademyContext'
-import { MOCK_STUDENTS, type MockStudent } from './mockStudents'
+import { ApiError } from '../../api/client'
+import { listClasses, type ClassGroup } from '../../api/classes'
+import { getStatistics, getStudentStatistics, type StudentStatRow } from '../../api/statistics'
 import type { Mockup } from './types'
 import './matrix.css'
 
-/* 학원생 관리 > 교무업무 > 학원생 현황 — 클라이언트 메뉴표 기준 추가 화면
+/* 학원생 관리 > 교무업무 > 학원생 현황 (F-C-2) — /api/v1/admin/statistics/students
  *
  * 명단 조회·출력(F-4.9)과 목적이 다르다.
  *   · 명단 조회·출력 = 개별 학생 행을 뽑아 엑셀로 내리는 화면
- *   · 학원생 현황   = 반·계열·재수구분별로 "몇 명인가"를 집계해서 보는 화면
- * 둘을 한 화면에 합치면 필터 조건이 서로 간섭하므로 분리한다.
+ *   · 학원생 현황   = 반·계열·월별로 "몇 명인가"를 집계해서 보는 화면
  *
- * ⚠ BE 전제 — 집계는 화면에서 돌리지 않는다.
- *   전 원생을 내려받아 프론트에서 세면 원생 수가 늘수록 그대로 느려진다.
- *   GET /api/v1/students/stats?groupBy=class|track|month 형태로 서버 집계를 받는다.
- *   현재는 목데이터라 화면에서 계산하고 있고, 연동 시 이 useMemo 들이 통째로 교체된다. */
-
-const CLASS_META: Record<string, { teacher: string; capacity: number; track: string }> = {
-  '1반': { teacher: '담임 A', capacity: 14, track: '인문' },
-  '2반': { teacher: '담임 B', capacity: 14, track: '자연' },
-  '3반': { teacher: '담임 C', capacity: 14, track: '자연' },
-  '4반': { teacher: '담임 D', capacity: 14, track: '자연' },
-}
+ * ★ 집계는 서버가 한다(2026-09-21 연동). 예전 목업은 전 원생을 받아 화면에서 셌다.
+ *
+ * ★ **축마다 세는 기준이 다르다** — 반별·계열별은 재원생만, 월별은 휴원·퇴원 포함 등록 전체.
+ *   화면이 그걸 밝히지 않으면 같은 달 숫자가 두 탭에서 달라 "왜 안 맞지" 가 된다.
+ *
+ * ★ 반별은 **반 목록(`/classes`)을 기준으로 합친다.** 서버 집계는 재원 0 인 반을 통째로
+ *   빼서, 휴원생만 있는 반이 현황에서 사라졌다(분당 N수 1반). API_GAPS 28부.
+ *
+ * ★ 서버가 안 주는 칸은 지우지 않고 `미제공` 으로 둔다(CLAUDE.md 4) —
+ *   반별 휴원·퇴원 · 반별 계열 인원 · 계열 × 재수 구분 교차. */
 
 const TABS = [
   { key: 'class', label: '반별 현황' },
@@ -32,15 +32,15 @@ const TABS = [
   { key: 'month', label: '월별 증감' },
 ]
 
+/** 계열은 코드가 그대로 온다(HUMANITIES). 화면에는 한글로 */
+const TRACK_LABEL: Record<string, string> = { SCIENCE: '자연', HUMANITIES: '인문' }
+
 interface ClassRow {
+  key: string
   classNo: string
-  teacher: string
-  capacity: number
+  teacher: string | null
+  capacity: number | null
   enrolled: number
-  onLeave: number
-  withdrawn: number
-  nature: number
-  humanity: number
 }
 
 /** 채움 막대 — 정원 대비 재원 비율을 한눈에 */
@@ -67,9 +67,18 @@ function FillBar({ ratio }: { ratio: number }) {
 }
 
 const CLASS_COLUMNS: Column<ClassRow>[] = [
-  { key: 'classNo', header: '반', width: '72px', align: 'center', sortable: true, value: (r) => r.classNo },
-  { key: 'teacher', header: '담임', width: '86px', value: (r) => r.teacher },
-  { key: 'capacity', header: '정원', width: '68px', align: 'right', sortable: true, value: (r) => r.capacity },
+  { key: 'classNo', header: '반', width: '104px', sortable: true, value: (r) => r.classNo },
+  { key: 'teacher', header: '담임', width: '86px', value: (r) => r.teacher ?? '미지정' },
+  {
+    key: 'capacity',
+    header: '정원',
+    width: '68px',
+    align: 'right',
+    sortable: true,
+    value: (r) => r.capacity ?? '',
+    /* 정원 없는 반은 비워 둔다 — 0 으로 그리면 늘 초과로 보인다 */
+    render: (r) => (r.capacity === null ? <span style={{ color: 'var(--muted)' }}>-</span> : r.capacity),
+  },
   {
     key: 'enrolled',
     header: '재원',
@@ -84,130 +93,163 @@ const CLASS_COLUMNS: Column<ClassRow>[] = [
     header: '휴원',
     width: '68px',
     align: 'right',
-    sortable: true,
-    value: (r) => r.onLeave,
-    render: (r) => (r.onLeave ? <span style={{ color: 'var(--amber)' }}>{r.onLeave}</span> : '-'),
+    value: () => '',
+    render: () => <Unfilled reason="반별 휴원 인원을 서버가 주지 않는다" />,
   },
   {
     key: 'withdrawn',
     header: '퇴원',
     width: '68px',
     align: 'right',
-    sortable: true,
-    value: (r) => r.withdrawn,
-    render: (r) => (r.withdrawn ? <span style={{ color: 'var(--red)' }}>{r.withdrawn}</span> : '-'),
+    value: () => '',
+    render: () => <Unfilled reason="반별 퇴원 인원을 서버가 주지 않는다" />,
   },
-  { key: 'nature', header: '자연', width: '68px', align: 'right', value: (r) => r.nature },
-  { key: 'humanity', header: '인문', width: '68px', align: 'right', value: (r) => r.humanity },
+  {
+    key: 'nature',
+    header: '자연',
+    width: '68px',
+    align: 'right',
+    value: () => '',
+    render: () => <Unfilled reason="반 안의 계열 구분을 서버가 주지 않는다" />,
+  },
+  {
+    key: 'humanity',
+    header: '인문',
+    width: '68px',
+    align: 'right',
+    value: () => '',
+    render: () => <Unfilled reason="반 안의 계열 구분을 서버가 주지 않는다" />,
+  },
   {
     key: 'fill',
     header: '충원율',
     width: '150px',
-    value: (r) => Math.round((r.enrolled / r.capacity) * 100),
-    render: (r) => <FillBar ratio={r.enrolled / r.capacity} />,
+    value: (r) => (r.capacity ? Math.round((r.enrolled / r.capacity) * 100) : ''),
+    render: (r) =>
+      r.capacity ? <FillBar ratio={r.enrolled / r.capacity} /> : <span style={{ color: 'var(--muted)' }}>정원 없음</span>,
   },
 ]
 
 interface MonthRow {
   month: string
-  added: number
-  cumulative: number
+  count: number
+  delta: number | null
 }
 
+/* ★ 월별은 '신규 등원' 이 아니다. 서버는 **그달 말 등록 인원**과 **전월 대비 증감**을 준다.
+     증감은 들어온 사람에서 나간 사람을 뺀 값이라 음수도 된다 — '신규' 칸에 넣으면 거짓말이 된다.
+     목업 열 이름(신규 등원 / 누계)을 서버가 주는 뜻에 맞게 바꿨다(2026-09-21). */
 const MONTH_COLUMNS: Column<MonthRow>[] = [
   { key: 'month', header: '월', value: (r) => r.month },
-  { key: 'added', header: '신규 등원', value: (r) => r.added },
-  { key: 'cumulative', header: '누계', value: (r) => r.cumulative },
+  { key: 'count', header: '등록 인원', value: (r) => r.count },
+  { key: 'delta', header: '전월 대비', value: (r) => (r.delta === null ? '' : r.delta) },
 ]
 
-function countBy(list: MockStudent[], fn: (s: MockStudent) => boolean): number {
-  return list.filter(fn).length
+function signed(n: number | null): string {
+  if (n === null) return '-'
+  return n > 0 ? `+${n}` : String(n)
 }
 
 function Content() {
   const { academies } = useAcademy()
   const [tab, setTab] = useState('class')
-  const [branch, setBranch] = useState<string>('전체')
+  /** null = 전체 지점. 본사 계정만 전 지점 합계를 받는다(지점 계정은 자기 지점뿐) */
+  const [branchId, setBranchId] = useState<number | null>(null)
+  const year = new Date().getFullYear()
 
-  const pool = useMemo(
-    () => (branch === '전체' ? MOCK_STUDENTS : MOCK_STUDENTS.filter((s) => s.branch === branch)),
-    [branch],
-  )
+  const [classes, setClasses] = useState<ClassGroup[]>([])
+  const [byClass, setByClass] = useState<StudentStatRow[]>([])
+  const [byTrack, setByTrack] = useState<StudentStatRow[]>([])
+  const [byMonth, setByMonth] = useState<StudentStatRow[]>([])
+  const [status, setStatus] = useState<Record<string, number>>({})
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const enrolled = countBy(pool, (s) => s.status === '재원')
-  const onLeave = countBy(pool, (s) => s.status === '휴원')
-  const withdrawn = countBy(pool, (s) => s.status === '퇴원')
-  const totalCapacity = Object.values(CLASS_META).reduce((n, m) => n + m.capacity, 0)
-
-  const classRows: ClassRow[] = useMemo(
-    () =>
-      Object.entries(CLASS_META).map(([classNo, meta]) => {
-        const list = pool.filter((s) => s.classNo === classNo)
-        const live = list.filter((s) => s.status === '재원')
-        return {
-          classNo,
-          teacher: meta.teacher,
-          capacity: meta.capacity,
-          enrolled: live.length,
-          onLeave: countBy(list, (s) => s.status === '휴원'),
-          withdrawn: countBy(list, (s) => s.status === '퇴원'),
-          nature: countBy(live, (s) => s.track === '자연'),
-          humanity: countBy(live, (s) => s.track === '인문'),
-        }
-      }),
-    [pool],
-  )
-
-  /** 계열 × 재수구분 크로스탭 — 재원생만 센다 */
-  const cross = useMemo(() => {
-    const live = pool.filter((s) => s.status === '재원')
-    const tracks: MockStudent['track'][] = ['자연', '인문']
-    const repeats: MockStudent['repeat'][] = ['재수', '삼수', 'N수']
-    return {
-      tracks,
-      repeats,
-      cell: (t: MockStudent['track'], r: MockStudent['repeat']) =>
-        countBy(live, (s) => s.track === t && s.repeat === r),
-      rowSum: (t: MockStudent['track']) => countBy(live, (s) => s.track === t),
-      colSum: (r: MockStudent['repeat']) => countBy(live, (s) => s.repeat === r),
-      total: live.length,
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const academyId = branchId ?? undefined
+      const today = todayStr()
+      const [cls, c, t, m, st] = await Promise.all([
+        listClasses(year, academyId),
+        getStudentStatistics({ academyId, year, groupBy: 'CLASS' }),
+        getStudentStatistics({ academyId, year, groupBy: 'TRACK' }),
+        getStudentStatistics({ academyId, year, groupBy: 'MONTH' }),
+        /* 재원·휴원·퇴원 합계는 대시보드 개요에서 받는다 — 현황 집계에는 상태별 합계가 없다 */
+        getStatistics({ academyId, year, from: today, to: today }),
+      ])
+      setClasses(cls)
+      setByClass(c)
+      setByTrack(t)
+      setByMonth(m)
+      setStatus(st.students.byStatus ?? {})
+      setError(null)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '학원생 현황을 불러오지 못했습니다.')
+    } finally {
+      setLoading(false)
     }
-  }, [pool])
+  }, [branchId, year])
 
-  /** 월별 신규 등원 — 등원일 기준 */
-  const months: MonthRow[] = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const s of pool) {
-      const m = s.enrolledAt.slice(0, 7)
-      map.set(m, (map.get(m) ?? 0) + 1)
-    }
-    const sorted = [...map.entries()].sort(([a], [b]) => a.localeCompare(b))
-    let acc = 0
-    return sorted.map(([month, n]) => {
-      acc += n
-      return { month, added: n, cumulative: acc }
-    })
-  }, [pool])
+  useEffect(() => {
+    void load()
+  }, [load])
 
-  const maxAdded = Math.max(1, ...months.map((m) => m.added))
+  const branchName = branchId === null ? '전체' : (academies.find((a) => a.id === branchId)?.acadNm ?? '')
+  /* ★ 반 목록을 기준으로 합친다. 서버 집계는 재원 0 인 반을 빼므로, 집계만 쓰면
+       휴원생만 남은 반이 현황에서 사라진다 */
+  const classRows: ClassRow[] = useMemo(() => {
+    const stat = new Map(byClass.map((r) => [r.key, r]))
+    /* 전 지점이면 반 이름이 겹친다(분당 고3 1반 · 이매 고3 1반) — 지점을 앞에 붙인다 */
+    const nameOf = new Map(academies.map((a) => [a.id, a.acadNm]))
+    return classes.map((c) => ({
+      key: String(c.id),
+      classNo: branchId === null ? `${nameOf.get(c.academyId) ?? ''} ${c.name}`.trim() : c.name,
+      teacher: c.homeroomTeacherName,
+      capacity: c.capacity,
+      enrolled: stat.get(String(c.id))?.count ?? 0,
+    }))
+  }, [classes, byClass, branchId, academies])
+
+  const enrolled = status.ENROLLED ?? 0
+  const onLeave = status.LEAVE ?? 0
+  const withdrawn = status.WITHDRAWN ?? 0
+  /* 충원율은 **반 배정 기준**이다. 반 없이 재원 중인 학생은 정원에 안 잡혀서,
+     전체 재원을 정원으로 나누면 100% 를 넘기거나 엉뚱한 값이 된다 */
+  const seated = classRows.reduce((n, r) => n + r.enrolled, 0)
+  const totalCapacity = classRows.reduce((n, r) => n + (r.capacity ?? 0), 0)
+  const fillPct = totalCapacity > 0 ? Math.round((seated / totalCapacity) * 100) : null
+
+  const months: MonthRow[] = byMonth.map((r) => ({ month: r.key, count: r.count, delta: r.delta }))
+  const maxCount = Math.max(1, ...months.map((m) => m.count))
+  const lastMonth = months.at(-1)
+
+  const trackTotal = byTrack.reduce((n, r) => n + r.count, 0)
 
   return (
     <>
-      <MockNotice reason="반별 집계 API가 없습니다. /statistics 는 대시보드용 전체 요약이라 축이 다릅니다. 퇴원·제적 처리도 아직 붙지 않았습니다." />
+      {error && (
+        <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+          {error}
+        </div>
+      )}
+
       <div className="stat-strip c6">
         <div className="stat">
           <div className="l">
             <Icon name="users" size={13} /> 재원
           </div>
           <div className="v">{enrolled}</div>
-          <div className="d">정원 {totalCapacity}명 대비</div>
+          <div className="d">반 배정 {seated}명</div>
         </div>
         <div className="stat">
           <div className="l">
             <Icon name="percent" size={13} /> 충원율
           </div>
-          <div className="v">{Math.round((enrolled / totalCapacity) * 100)}%</div>
-          <div className="d">{enrolled >= totalCapacity ? '정원 초과' : `여석 ${totalCapacity - enrolled}석`}</div>
+          <div className="v">{fillPct === null ? '-' : `${fillPct}%`}</div>
+          <div className="d">
+            {totalCapacity > 0 ? `정원 ${totalCapacity}석 · 여석 ${Math.max(0, totalCapacity - seated)}석` : '정원이 정해진 반이 없습니다'}
+          </div>
         </div>
         <div className="stat">
           <div className="l">
@@ -221,30 +263,37 @@ function Content() {
             <Icon name="user-x" size={13} /> 퇴원
           </div>
           <div className="v">{withdrawn}</div>
-          <div className="d down">누적 기준</div>
+          <div className="d down">{year}년 누적</div>
         </div>
         <div className="stat">
           <div className="l">
             <Icon name="layout-grid" size={13} /> 운영 반
           </div>
           <div className="v">{classRows.length}</div>
-          <div className="d">고정반 기준</div>
+          <div className="d">{year}년 기준</div>
         </div>
         <div className="stat">
           <div className="l">
-            <Icon name="user-plus" size={13} /> 금월 신규
+            <Icon name="trending-up" size={13} /> 이번 달 증감
           </div>
-          <div className="v">{months.at(-1)?.added ?? 0}</div>
-          <div className="d up">{months.at(-1)?.month ?? '-'}</div>
+          <div className="v">{lastMonth ? signed(lastMonth.delta) : '-'}</div>
+          <div className="d up">{lastMonth ? `${lastMonth.month} · 전월 대비` : '-'}</div>
         </div>
       </div>
 
       <div className="filter-row" style={{ background: '#fff', borderRadius: 12, marginBottom: 14, border: 'none' }}>
-        {/* 지점은 하드코딩하지 않는다 — 권한에 맞는 목록을 서버가 준다.
-            전에는 실재하지 않는 대치·평촌이 박혀 있었다 */}
-        {['전체', ...academies.map((a) => a.acadNm)].map((b) => (
-          <button key={b} type="button" className={`chip${branch === b ? ' on' : ''}`} onClick={() => setBranch(b)}>
-            {b}
+        {/* 지점은 하드코딩하지 않는다 — 권한에 맞는 목록을 서버가 준다 */}
+        <button type="button" className={`chip${branchId === null ? ' on' : ''}`} onClick={() => setBranchId(null)}>
+          전체
+        </button>
+        {academies.map((a) => (
+          <button
+            key={a.id}
+            type="button"
+            className={`chip${branchId === a.id ? ' on' : ''}`}
+            onClick={() => setBranchId(a.id)}
+          >
+            {a.acadNm}
           </button>
         ))}
         <span style={{ marginLeft: 'auto', fontSize: 11.5, color: 'var(--muted)', alignSelf: 'center' }}>
@@ -258,18 +307,20 @@ function Content() {
         <DataTable
           columns={CLASS_COLUMNS}
           rows={classRows}
-          rowKey={(r) => r.classNo}
+          rowKey={(r) => r.key}
           masked={false}
+          loading={loading}
           pageSize={10}
+          emptyText={`${year}년에 만든 반이 없습니다.`}
           countLabel={
             <>
-              {branch} · 반 <b>{classRows.length}</b>개
+              {branchName} · 반 <b>{classRows.length}</b>개 · <span style={{ color: 'var(--muted)' }}>재원생 기준</span>
             </>
           }
           toolbar={
             <>
               <PrintButton />
-              <ExcelButton filename={`학원생현황_반별_${branch}`} columns={CLASS_COLUMNS} rows={classRows} masked={false} />
+              <ExcelButton filename={`학원생현황_반별_${branchName}`} columns={CLASS_COLUMNS} rows={classRows} masked={false} />
             </>
           }
         />
@@ -282,7 +333,7 @@ function Content() {
               <span className="ico">
                 <Icon name="table-2" size={15} />
               </span>
-              계열 × 재수 구분 — 재원생 {cross.total}명
+              계열 × 재수 구분 — 재원생 {trackTotal}명
             </div>
             <div className="r">
               <span className="mk supplement">휴원 · 퇴원 제외</span>
@@ -294,38 +345,39 @@ function Content() {
                 <thead>
                   <tr>
                     <th className="area">계열</th>
-                    {cross.repeats.map((r) => (
+                    {['재수', '삼수', 'N수'].map((r) => (
                       <th key={r}>{r}</th>
                     ))}
                     <th>합계</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {cross.tracks.map((t) => (
-                    <tr key={t}>
+                  {byTrack.map((t) => (
+                    <tr key={t.key}>
                       <th className="area">
-                        {t}
-                        <span className="an">{t === '자연' ? '수학 미적/기하 · 과탐' : '수학 확통 · 사탐'}</span>
+                        {TRACK_LABEL[t.key] ?? t.label}
+                        <span className="an">{t.key === 'SCIENCE' ? '수학 미적/기하 · 과탐' : '수학 확통 · 사탐'}</span>
                       </th>
-                      {cross.repeats.map((r) => (
+                      {/* 계열 × 재수 구분 교차는 서버가 주지 않는다 — 계열 합계만 온다 */}
+                      {['재수', '삼수', 'N수'].map((r) => (
                         <td key={r}>
-                          <span className={`pm ${cross.cell(t, r) === 0 ? 'p-none' : 'p-own'}`}>{cross.cell(t, r)}</span>
+                          <Unfilled reason="재수 구분별 인원을 서버가 주지 않는다" />
                         </td>
                       ))}
                       <td>
-                        <span className="pm p-full">{cross.rowSum(t)}</span>
+                        <span className="pm p-full">{t.count}</span>
                       </td>
                     </tr>
                   ))}
                   <tr>
                     <th className="area">합계</th>
-                    {cross.repeats.map((r) => (
+                    {['재수', '삼수', 'N수'].map((r) => (
                       <td key={r}>
-                        <span className="pm p-read">{cross.colSum(r)}</span>
+                        <Unfilled reason="재수 구분별 인원을 서버가 주지 않는다" />
                       </td>
                     ))}
                     <td>
-                      <span className="pm p-full">{cross.total}</span>
+                      <span className="pm p-full">{trackTotal}</span>
                     </td>
                   </tr>
                 </tbody>
@@ -333,13 +385,7 @@ function Content() {
             </div>
             <div className="mx-legend">
               <span>
-                <span className="pm p-own">n</span> 계열 × 구분 교차 인원
-              </span>
-              <span>
-                <span className="pm p-read">n</span> 구분 소계
-              </span>
-              <span>
-                <span className="pm p-full">n</span> 합계
+                <span className="pm p-full">n</span> 계열 합계 (재원생)
               </span>
             </div>
           </div>
@@ -353,13 +399,24 @@ function Content() {
               <span className="ico">
                 <Icon name="trending-up" size={15} />
               </span>
-              월별 신규 등원 · 누계
+              월별 등록 인원 · 증감
             </div>
             <div className="r">
-              <ExcelButton filename={`학원생현황_월별_${branch}`} columns={MONTH_COLUMNS} rows={months} masked={false} />
+              <ExcelButton filename={`학원생현황_월별_${branchName}`} columns={MONTH_COLUMNS} rows={months} masked={false} />
             </div>
           </div>
           <div className="card-sec-b" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {/* ★ 반별·계열과 기준이 다르다 — 이쪽은 휴원·퇴원까지 센다. 밝히지 않으면 같은 달이
+                   탭마다 다른 숫자로 보인다 */}
+            <div className="note-box">
+              <div>
+                그달 말 기준 <b>등록 인원(휴원·퇴원 포함)</b>입니다. 재원생만 센 반별·계열 탭과는 숫자가
+                다를 수 있습니다.
+              </div>
+            </div>
+            {months.length === 0 && !loading && (
+              <div style={{ color: 'var(--muted)', fontSize: 13 }}>{year}년 등록 기록이 없습니다.</div>
+            )}
             {months.map((m) => (
               <div key={m.month} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <span style={{ width: 68, fontSize: 12, fontWeight: 700, color: 'var(--ink-2)' }}>{m.month}</span>
@@ -367,15 +424,22 @@ function Content() {
                   <span
                     style={{
                       display: 'block',
-                      width: `${(m.added / maxAdded) * 100}%`,
+                      width: `${(m.count / maxCount) * 100}%`,
                       height: '100%',
                       background: 'var(--mint)',
                     }}
                   />
                 </span>
-                <span style={{ width: 58, fontSize: 12.5, fontWeight: 800, textAlign: 'right' }}>{m.added}명</span>
-                <span style={{ width: 92, fontSize: 11.5, color: 'var(--muted)', textAlign: 'right' }}>
-                  누계 {m.cumulative}명
+                <span style={{ width: 58, fontSize: 12.5, fontWeight: 800, textAlign: 'right' }}>{m.count}명</span>
+                <span
+                  style={{
+                    width: 92,
+                    fontSize: 11.5,
+                    textAlign: 'right',
+                    color: m.delta === null || m.delta === 0 ? 'var(--muted)' : m.delta > 0 ? 'var(--mint-d)' : 'var(--red)',
+                  }}
+                >
+                  {m.delta === null ? '첫 달' : `전월 대비 ${signed(m.delta)}`}
                 </span>
               </div>
             ))}
@@ -388,6 +452,9 @@ function Content() {
 
 export const studentStatusMockup: Mockup = {
   Content,
+  /* 자체 지점 칩(전체·분당…)으로 조회한다 — 상단 지점 선택이 비어 있어도 멀쩡히 돈다.
+     그대로 두면 "고르기 전에는 조회를 시작하지 않습니다" 가 떠서 실제 숫자를 가짜로 읽게 된다 */
+  allBranches: true,
   actions: (
     <>
       <button className="btn" disabled data-soon title="준비 중입니다">기수 선택 ▾</button>
