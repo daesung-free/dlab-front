@@ -62,7 +62,13 @@ import {
   renameCurriculum,
   renameDepartment,
   renameTrack,
-  updateRoom,
+  setTrackActive,
+  setDepartmentActive,
+  setCourseTypeActive,
+  setCurriculumActive,
+  setTuitionMasterActive,
+  setRoomActive,
+  patchRoom,
   updateScholarshipMaster,
   updateTuitionMaster,
 } from '../../api/masters'
@@ -73,6 +79,7 @@ import {
   updateLectureCategory,
 } from '../../api/lectureCategories'
 import type { Mockup } from './types'
+import { createScreenSignal } from './screenSignal'
 
 /* F-4.10-1 기초 관리 — 신규개발-요구사항검증됨
  * 학과계열·학과·과정(전형)·반·강의실·사물함·장학 마스터 + 전년도 복사.
@@ -116,6 +123,19 @@ interface MasterRow {
   discountRate?: number
   memo?: string | null
   active?: boolean | null
+}
+
+/*
+ * 코드·비고 — 계열·학과·과정·교육과정은 등록·수정 창에서 이름과 함께 받는다.
+ * ★ 서버 수정(PUT)이 **안 보낸 칸을 지운다.** 이름만 보내면 코드·비고가 사라졌다(2026-09-21 확인).
+ *   그래서 수정 창이 지금 값을 채워 두고, 셋을 늘 함께 보낸다. 칸을 비우면 지우는 것이다.
+ */
+const CODE_MEMO: NonNullable<MasterDef['createExtra']> = [
+  { key: 'code', label: '코드', placeholder: '예: A01 (비워도 됩니다)' },
+  { key: 'memo', label: '비고', placeholder: '비워도 됩니다' },
+]
+function naming(name: string, extra?: Record<string, string>) {
+  return { name, code: extra?.code?.trim() || null, memo: extra?.memo?.trim() || null }
 }
 
 interface MasterDef {
@@ -169,6 +189,8 @@ interface MasterDef {
    *   있는 마스터까지 미제공으로 두면 그게 거짓말이 된다.
    */
   has?: { code?: boolean; memo?: boolean; active?: boolean }
+  /** 사용/중지 전환. 지우지 않고 목록에서만 빼고 싶을 때 쓴다 */
+  setActive?: (id: number, active: boolean) => Promise<unknown>
   /** 왜 등록·수정이 없는지 */
   note?: string
 }
@@ -181,10 +203,12 @@ const MASTERS: MasterDef[] = [
     copyOrder: 1,
     global: true,
     load: () => listTracks(),
-    create: (_a, _y, name) => createTrack(name),
-    rename: renameTrack,
+    create: (_a, _y, name, extra) => createTrack(naming(name, extra)),
+    createExtra: CODE_MEMO,
+    rename: (id, name, _row, extra) => renameTrack(id, naming(name, extra)),
     remove: deleteTrack,
     has: { code: true, memo: true, active: true },
+    setActive: setTrackActive,
     note: '학과계열은 전 지점·전 연도 공통입니다. 전년도 복사 대상이 아닙니다.',
   },
   {
@@ -193,10 +217,12 @@ const MASTERS: MasterDef[] = [
     icon: 'graduation-cap',
     copyOrder: 2,
     load: (a, y) => listDepartments(a, y),
-    create: (academyId, year, name) => createDepartment({ academyId, year, name }),
-    rename: renameDepartment,
+    create: (academyId, year, name, extra) => createDepartment({ academyId, year, ...naming(name, extra) }),
+    createExtra: CODE_MEMO,
+    rename: (id, name, _row, extra) => renameDepartment(id, naming(name, extra)),
     remove: deleteDepartment,
     has: { code: true, memo: true, active: true },
+    setActive: setDepartmentActive,
   },
   {
     key: 'course_type',
@@ -204,10 +230,12 @@ const MASTERS: MasterDef[] = [
     icon: 'layers',
     copyOrder: 3,
     load: (a, y) => listCourseTypes(a, y),
-    create: (academyId, year, name) => createCourseType({ academyId, year, name }),
-    rename: renameCourseType,
+    create: (academyId, year, name, extra) => createCourseType({ academyId, year, ...naming(name, extra) }),
+    createExtra: CODE_MEMO,
+    rename: (id, name, _row, extra) => renameCourseType(id, naming(name, extra)),
     remove: deleteCourseType,
     has: { code: true, memo: true, active: true },
+    setActive: setCourseTypeActive,
   },
   {
     key: 'class_group',
@@ -235,10 +263,12 @@ const MASTERS: MasterDef[] = [
     icon: 'book-open',
     copyOrder: 5,
     load: (a, y) => listCurriculums(a, y),
-    create: (academyId, year, name) => createCurriculum({ academyId, year, name }),
-    rename: renameCurriculum,
+    create: (academyId, year, name, extra) => createCurriculum({ academyId, year, ...naming(name, extra) }),
+    createExtra: CODE_MEMO,
+    rename: (id, name, _row, extra) => renameCurriculum(id, naming(name, extra)),
     remove: deleteCurriculum,
     has: { code: true, memo: true, active: true },
+    setActive: setCurriculumActive,
     extra: {
       key: 'className',
       header: '소속 반',
@@ -277,6 +307,7 @@ const MASTERS: MasterDef[] = [
     rename: (id, name) => updateTuitionMaster(id, { name }),
     remove: deleteTuitionMaster,
     has: { code: true, memo: true, active: true },
+    setActive: setTuitionMasterActive,
     extra: {
       key: 'amount',
       header: '금액',
@@ -311,12 +342,13 @@ const MASTERS: MasterDef[] = [
       return createRoom({ academyId, roomNo, name })
     },
     createExtra: [{ key: 'roomNo', label: '호실 번호', placeholder: '201', required: true }],
-    // ★ PUT 의 필수값이 roomNo 라 지금 번호를 함께 실어야 이름만 바꿀 수 있다
+    // ★ PATCH 로 바꾼다 — PUT 은 통째로 바꿔 정원·비고를 안 실으면 지웠다
     rename: (id, name, row, extra) =>
-      updateRoom(id, { roomNo: (extra?.roomNo ?? row?.roomNo ?? name).trim(), name }),
+      patchRoom(id, { roomNo: (extra?.roomNo ?? row?.roomNo ?? name).trim(), name }),
     remove: deleteRoom,
     // 코드 자리는 roomNo 가 대신하므로 code 컬럼은 안 쓴다
     has: { memo: true, active: true },
+    setActive: setRoomActive,
     extra: {
       key: 'roomNo',
       header: '호실',
@@ -640,6 +672,11 @@ function Content() {
   const [removing, setRemoving] = useState<MasterRow | null>(null)
   /** 전년도 복사 확인 모달 */
   const [copying, setCopying] = useState(false)
+  /* 헤더 '전체 전년도 복사' 가 누르면 같은 확인 창을 띄운다 — 헤더는 본문 상태를 못 만진다(CLAUDE.md 5-1) */
+  const copyAskVer = copyAsk.useVersion()
+  useEffect(() => {
+    if (copyAskVer > 0) setCopying(true)
+  }, [copyAskVer])
 
   function setActive(m: MasterDef) {
     setParams({ tab: m.key }, { replace: true })
@@ -757,6 +794,24 @@ function Content() {
     }
   }
 
+  async function toggleActive(r: MasterRow) {
+    if (!active.setActive || typeof r.active !== 'boolean') return
+    setBusy(true)
+    try {
+      await active.setActive(r.id, !r.active)
+      setNotice(
+        r.active
+          ? `'${r.name}' 을(를) 중지했습니다. 새로 고를 때 목록에서 빠지고, 이미 쓰인 곳은 그대로입니다.`
+          : `'${r.name}' 을(를) 다시 쓸 수 있게 했습니다.`,
+      )
+      await load()
+    } catch (err) {
+      setNotice(err instanceof ApiError ? err.message : '바꾸지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   /**
    * 전년도 복사.
    * ⚠️ 되돌릴 수 없다. 대상 연도에 데이터가 있으면 서버가 409 로 막으므로 덮어쓰진 않는다.
@@ -823,17 +878,29 @@ function Content() {
           ),
       },
     )
-    if (active.rename || active.remove) {
+    if (active.rename || active.remove || active.setActive) {
       base.push({
         key: 'act',
         header: '',
         /* ★ 수정·삭제 두 버튼이 들어갈 폭이다. 92px 이면 모자라서 **세로로 줄바꿈**됐다 —
              가로로 두려던 것이 화면에서는 두 줄로 쌓여 보였다. */
-        width: '128px',
+        width: active.setActive ? '184px' : '128px',
         align: 'center',
         value: () => '',
         render: (r) => (
           <div style={{ display: 'flex', gap: 4, justifyContent: 'center', flexWrap: 'nowrap' }}>
+            {/* 지우지 않고 목록에서만 빼는 것 — 이미 쓰인 반·학생 기록은 그대로 남는다 */}
+            {active.setActive && typeof r.active === 'boolean' && (
+              <button
+                className="btn"
+                style={{ padding: '4px 9px', fontSize: 11.5, whiteSpace: 'nowrap' }}
+                disabled={busy}
+                title={r.active ? '새로 고를 때 목록에서 빠집니다. 이미 쓰인 곳은 그대로입니다' : '다시 고를 수 있게 합니다'}
+                onClick={() => void toggleActive(r)}
+              >
+                {r.active ? '중지' : '다시 사용'}
+              </button>
+            )}
             {active.rename && (
               <button
                 className="btn"
@@ -874,8 +941,9 @@ function Content() {
       })
     }
     return base
+    /* ★ load 를 빼면 '중지' 가 **처음 그렸을 때의 load**(지점 고르기 전)를 불러 목록을 비웠다 */
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, busy])
+  }, [active, busy, load])
 
   return (
     <>
@@ -1153,12 +1221,15 @@ function Content() {
   )
 }
 
+const copyAsk = createScreenSignal()
+
 export const basicSettingsMockup: Mockup = {
   Content,
   actions: (
     <>
       <button className="btn" disabled data-soon title="준비 중입니다">기수 선택 ▾</button>
-      <button className="btn" disabled data-soon title="준비 중입니다">
+      {/* 본문의 '전년도 복사' 와 같은 일이다 — 기초 데이터 전체를 한 번에 넘긴다 */}
+      <button className="btn" onClick={() => copyAsk.bump()} title="과정·학과·반·교육과정 등 기초 데이터를 작년에서 올해로 한 번에 복사합니다">
         <Icon name="history" size={14} /> 전체 전년도 복사
       </button>
     </>

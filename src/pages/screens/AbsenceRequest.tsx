@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { DataTable, Unfilled, useServerData, type Column, Modal } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
@@ -11,11 +11,19 @@ import {
   APPROVER_TYPE_LABEL,
   approveRequest,
   fetchAbsenceRequests,
+  registerAbsenceRequest,
   rejectRequest,
   type AbsenceRequestRow,
+  type AbsenceType,
   type ApprovalStatus,
 } from '../../api/absenceRequests'
 import type { Mockup } from './types'
+import { createScreenSignal } from './screenSignal'
+import { searchStudents, type Student } from '../../api/students'
+import { listAbsenceCategories, type AbsenceCategory } from '../../api/schoolMasters'
+
+/* 헤더 '관리자 직접 등록' 이 넣은 뒤 본문 목록을 다시 읽게 잇는다(CLAUDE.md 5-1) */
+const registered = createScreenSignal()
 
 /* F-4.1-5 사유 신청 관리 — GET /api/v1/admin/absence-requests
  *
@@ -97,6 +105,11 @@ function Content() {
     enabled: academyId !== null,
     errorMessage: '사유 신청 목록을 불러오지 못했습니다.',
   })
+  const regVer = registered.useVersion()
+  useEffect(() => {
+    if (regVer > 0) board.reload()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [regVer])
 
   const all = board.data?.rows ?? []
   const summary = board.data?.summary
@@ -340,6 +353,148 @@ function Content() {
   )
 }
 
+/**
+ * 관리자 직접 등록 — 학생 대신 사유를 넣는다.
+ *
+ * ★ **자동 승인이 아니다.** 서버가 승인 라우팅을 그대로 태운다 — 관리자가 넣었다고 건너뛰면
+ *   학부모 승인이 필요한 유형에서 학부모가 모르는 사이에 처리된다. 화면에도 그렇게 적는다.
+ * ★ 그 해·지점에 승인 정책이 없으면 서버가 막는다 — 문구를 그대로 보인다.
+ */
+function RegisterButton() {
+  const { academyId } = useAcademy()
+  const [open, setOpen] = useState(false)
+  const [students, setStudents] = useState<Student[] | null>(null)
+  const [cats, setCats] = useState<AbsenceCategory[]>([])
+  const [f, setF] = useState({ enrollmentId: '', date: '', type: 'ABSENCE' as AbsenceType, categoryId: '', startTime: '', endTime: '', reason: '' })
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const [done, setDone] = useState<string | null>(null)
+
+  function openIt() {
+    if (academyId === null) return
+    setOpen(true)
+    setErr(null)
+    setF({ enrollmentId: '', date: localDate(new Date()), type: 'ABSENCE', categoryId: '', startTime: '', endTime: '', reason: '' })
+    searchStudents({ academyId, status: 'ENROLLED', size: 500, sort: 'studentNo,asc' })
+      .then((p) => setStudents(p.rows))
+      .catch(() => setStudents([]))
+    listAbsenceCategories({ academyId, activeOnly: true })
+      .then(setCats)
+      .catch(() => setCats([]))
+  }
+
+  /* 시간은 외출·조퇴만 받는다 — 결석·지각은 종일이다. 조퇴는 돌아오지 않아 끝 시간이 없다 */
+  const needStart = f.type === 'EARLY_LEAVE' || f.type === 'OUTING'
+  const needEnd = f.type === 'OUTING'
+
+  async function submit() {
+    setBusy(true)
+    setErr(null)
+    try {
+      await registerAbsenceRequest({
+        enrollmentId: Number(f.enrollmentId),
+        date: f.date,
+        type: f.type,
+        reason: f.reason.trim() || undefined,
+        startTime: needStart && f.startTime ? f.startTime : undefined,
+        endTime: needEnd && f.endTime ? f.endTime : undefined,
+        categoryId: f.categoryId ? Number(f.categoryId) : undefined,
+      })
+      const who = students?.find((x) => String(x.enrollmentId) === f.enrollmentId)?.name ?? ''
+      setDone(`${who} ${f.date} ${ABSENCE_TYPE_LABEL[f.type]} 사유를 등록했습니다. 승인 절차는 학생이 낸 것과 똑같이 진행됩니다.`)
+      setOpen(false)
+      registered.bump()
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : '등록하지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <button className="btn pri" disabled={academyId === null} onClick={openIt} title={academyId === null ? '지점을 먼저 선택하세요' : undefined}>
+        <Icon name="plus" size={14} /> 관리자 직접 등록
+      </button>
+      {done && !open && (
+        <Modal title="등록했습니다" hideCancel confirmLabel="확인" onConfirm={() => setDone(null)} onClose={() => setDone(null)}>
+          <div className="note-box">
+            <div>{done}</div>
+          </div>
+        </Modal>
+      )}
+      {open && (
+        <Modal
+          title="사유 신청 — 관리자 직접 등록"
+          sub="학생이 앱에서 낸 것과 똑같이 승인 절차(학부모·담임)를 거칩니다. 바로 승인되지 않습니다."
+          confirmLabel="등록"
+          busy={busy}
+          error={err}
+          confirmDisabled={f.enrollmentId === '' || f.date === '' || (needStart && f.startTime === '') || (needEnd && f.endTime === '')}
+          onConfirm={() => void submit()}
+          onClose={() => setOpen(false)}
+        >
+          <div className="frow">
+            <label className="req">학생</label>
+            <select className="sel" value={f.enrollmentId} disabled={students === null} onChange={(e) => setF({ ...f, enrollmentId: e.target.value })}>
+              <option value="">{students === null ? '불러오는 중…' : '학생 선택'}</option>
+              {(students ?? []).map((st) => (
+                <option key={st.enrollmentId} value={st.enrollmentId}>
+                  {st.name} · {st.studentNo ?? '학번 없음'}
+                  {st.className ? ` · ${st.className}` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="frow">
+            <label className="req">날짜</label>
+            <input className="inp" type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} />
+          </div>
+          <div className="frow">
+            <label className="req">유형</label>
+            <select className="sel" value={f.type} onChange={(e) => setF({ ...f, type: e.target.value as AbsenceType })}>
+              {(Object.keys(ABSENCE_TYPE_LABEL) as AbsenceType[]).map((t) => (
+                <option key={t} value={t}>
+                  {ABSENCE_TYPE_LABEL[t]}
+                </option>
+              ))}
+            </select>
+          </div>
+          {needStart && (
+            <div className="frow">
+              <label className="req">{needEnd ? '외출 시간' : '조퇴 시각'}</label>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <input className="inp" type="time" value={f.startTime} onChange={(e) => setF({ ...f, startTime: e.target.value })} />
+                {needEnd && (
+                  <>
+                    <span>~</span>
+                    <input className="inp" type="time" value={f.endTime} onChange={(e) => setF({ ...f, endTime: e.target.value })} />
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+          <div className="frow">
+            <label>분류</label>
+            <select className="sel" value={f.categoryId} onChange={(e) => setF({ ...f, categoryId: e.target.value })}>
+              <option value="">선택 안 함</option>
+              {cats.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="frow">
+            <label>사유</label>
+            <input className="inp" maxLength={500} value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} />
+          </div>
+        </Modal>
+      )}
+    </>
+  )
+}
+
 export const absenceMockup: Mockup = {
   Content,
   actions: (
@@ -348,9 +503,7 @@ export const absenceMockup: Mockup = {
       <Link className="btn" to="/s/approval" title="사유 신청을 누가 승인하는지 정합니다">
         <Icon name="settings" size={14} /> 승인 항목 설정
       </Link>
-      <button className="btn pri" disabled data-soon title="준비 중입니다">
-        <Icon name="plus" size={14} /> 관리자 직접 등록
-      </button>
+      <RegisterButton />
     </>
   ),
 }

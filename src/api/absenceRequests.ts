@@ -130,6 +130,8 @@ export function registerAbsenceRequest(body: {
   startTime?: string
   /** 외출 종료. 조퇴는 복귀가 없어 비운다 */
   endTime?: string
+  /** 사유 분류(기초 관리 > 사유 분류). 비워도 된다 */
+  categoryId?: number
 }): Promise<number> {
   return request<number>('/api/v1/admin/absence-requests', { method: 'POST', body })
 }
