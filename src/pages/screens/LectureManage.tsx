@@ -326,6 +326,12 @@ function Content() {
   /* ── 실연동 ── */
   const { academyId } = useAcademy()
   const [lectures, setLectures] = useState<ApiLecture[]>([])
+  /* 헤더 '기간 선택' 이 정하는 연도 — 예전엔 올해로 고정이라 작년 특강을 볼 방법이 없었다 */
+  const [lectureYear, setLectureYear] = useState(new Date().getFullYear())
+  const yearVer = yearSignal.useVersion()
+  useEffect(() => {
+    if (yearVer > 0 && pickedYear !== null) setLectureYear(pickedYear)
+  }, [yearVer])
   /* 설명회만 보기 — 헤더 '설명회 신청 관리' 가 켠다. 설명회는 특강과 같은 목록에 유형만 다르게 온다 */
   const [briefingOnly, setBriefingOnly] = useState(false)
   const briefingVer = briefingSignal.useVersion()
@@ -438,7 +444,7 @@ function Content() {
     }
     setLoading(true)
     try {
-      const list = await listLectures(academyId, new Date().getFullYear())
+      const list = await listLectures(academyId, lectureYear)
       setLectures(list)
       setLectureId((prev) => (list.some((l) => l.id === prev) ? prev : (list[0]?.id ?? null)))
       setError(null)
@@ -450,7 +456,7 @@ function Content() {
     } finally {
       setLoading(false)
     }
-  }, [academyId])
+  }, [academyId, lectureYear])
 
   useEffect(() => {
     void loadLectures()
@@ -1267,7 +1273,7 @@ function Content() {
               emptyText={academyId === null ? '지점을 먼저 선택하세요.' : '등록된 특강이 없습니다.'}
               countLabel={
                 <>
-                  {briefingOnly ? '설명회' : '특강'}{' '}
+                  {lectureYear}년 {briefingOnly ? '설명회' : '특강'}{' '}
                   <b>{briefingOnly ? lectures.filter((l) => l.lectureType === 'BRIEFING').length : lectures.length}</b>건
                   {selectedLecture && (
                     <span style={{ color: 'var(--muted)' }}> · 선택: {selectedLecture.name}</span>
@@ -1913,12 +1919,30 @@ function PromoteConfirm({
 }
 
 const briefingSignal = createScreenSignal()
+const yearSignal = createScreenSignal()
+let pickedYear: number | null = null
 
 export const lectureMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled data-soon title="준비 중입니다">기간 선택 ▾</button>
+      <select
+        className="sel"
+        style={{ width: 130 }}
+        value=""
+        onChange={(e) => {
+          if (e.target.value === '') return
+          pickedYear = Number(e.target.value)
+          yearSignal.bump()
+        }}
+      >
+        <option value="">기간 선택 ▾</option>
+        {[-1, 0, 1].map((d) => (
+          <option key={d} value={new Date().getFullYear() + d}>
+            {new Date().getFullYear() + d}년 특강
+          </option>
+        ))}
+      </select>
       <button className="btn" onClick={() => briefingSignal.bump()} title="설명회만 모아 봅니다. 줄을 누르면 신청 명단을 볼 수 있습니다">
         <Icon name="megaphone" size={14} /> 설명회 신청 관리
       </button>
