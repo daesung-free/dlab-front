@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Modal } from './common'
 import { ApiError } from '../api/client'
 import { listAccountHistory, parseAccountChanges, type AccountHistory } from '../api/accounts'
+import { changeFieldLabel, changeValueLabel } from '../lib/changeLabels'
 
 /*
  * 계정 변경 이력 창 — 사용자 관리의 줄 '이력 보기' 와 헤더 '권한 변경 이력' 이 같이 쓴다.
@@ -9,39 +10,6 @@ import { listAccountHistory, parseAccountChanges, type AccountHistory } from '..
  * ★ 서버는 칸 이름·값을 코드로 준다(status · locked · ACTIVE …). 행정 선생님이 읽을 말로 바꾼다.
  *   모르는 코드는 그대로 보인다 — 숨기면 무슨 일이 있었는지 아예 사라진다.
  */
-
-const FIELD: Record<string, string> = {
-  status: '계정 상태',
-  locked: '로그인 잠금',
-  roles: '역할',
-  menus: '메뉴 권한',
-  temporaryPassword: '임시 비밀번호',
-  academyId: '지점',
-  mustChangePassword: '비밀번호 변경 요구',
-}
-
-const VALUE: Record<string, string> = {
-  ACTIVE: '사용',
-  PENDING: '승인 대기',
-  WITHDRAWN: '탈퇴',
-  LOCKED: '잠김',
-  true: '예',
-  false: '아니요',
-  reissued: '재발급',
-  SUPER_ADMIN: '최고관리자',
-  BRANCH_ADMIN: '지점관리자',
-  TEACHER: '담임',
-  STAFF: '행정',
-  READONLY: '조회 전용',
-}
-
-function word(v: string | null): string {
-  if (v === null || v === '') return '-'
-  return v
-    .split(',')
-    .map((x) => VALUE[x.trim()] ?? x.trim())
-    .join(', ')
-}
 
 function when(iso: string): string {
   const d = new Date(iso)
@@ -104,9 +72,9 @@ export function AccountHistoryModal({
                 return list.map((c, i) => (
                   <tr key={`${h.id}-${i}`}>
                     <td style={{ whiteSpace: 'nowrap' }}>{i === 0 ? when(h.occurredAt) : ''}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{FIELD[c.field] ?? c.field}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{changeFieldLabel(c.field)}</td>
                     <td>
-                      {word(c.before)} → <b>{word(c.after)}</b>
+                      {changeValueLabel(c.before)} → <b>{changeValueLabel(c.after)}</b>
                     </td>
                     <td style={{ whiteSpace: 'nowrap' }}>{i === 0 ? (h.actorName ?? '-') : ''}</td>
                   </tr>

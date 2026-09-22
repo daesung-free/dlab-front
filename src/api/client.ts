@@ -1,5 +1,6 @@
 import type { ApiEnvelope, Paged, SpringPage } from './types'
 import { clearTokens, getAccessToken, getRefreshToken, setTokens } from './tokens'
+import { importFieldLabel } from '../lib/importFields'
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080').replace(/\/$/, '')
 
@@ -16,9 +17,18 @@ const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080').
  */
 function readable(msg: string | undefined): string | undefined {
   if (!msg) return undefined
+  /* 칸 이름을 떼기만 하면 '1990 이상이어야 합니다' 처럼 **어느 칸인지** 가 사라진다.
+     아는 칸이면 한글 이름을 붙이고, 모르는 칸만 뗀다 */
   const parts = msg
     .split(/,\s*(?=[A-Za-z_][A-Za-z0-9_.]*:)/)
-    .map((p) => p.replace(/^[A-Za-z_][A-Za-z0-9_.]*:\s*/, '').trim())
+    .map((p) =>
+      p
+        .replace(/^([A-Za-z_][A-Za-z0-9_.]*):\s*/, (_all, f: string) => {
+          const label = importFieldLabel(f.split('.').pop() ?? f)
+          return /^[A-Za-z]/.test(label) ? '' : `${label}: `
+        })
+        .trim(),
+    )
     .filter(Boolean)
   const joined = parts.join(' ')
   return joined || msg

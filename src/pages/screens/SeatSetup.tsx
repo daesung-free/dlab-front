@@ -74,6 +74,8 @@ export function SeatSetup({ onChanged }: Props) {
   /** 단건 등록이 채울 빈칸. 배치도에서 그 자리를 눌러서 정한다 */
   const [spot, setSpot] = useState<{ xPos: number; yPos: number } | null>(null)
   const [modalError, setModalError] = useState<string | null>(null)
+  /* 삭제는 한 번 묻는다 — 누르자마자 지워졌고, 좌석을 지우면 배치도에 구멍이 남는다 */
+  const [delAsk, setDelAsk] = useState<{ title: string; sub: string; run: () => Promise<unknown> } | null>(null)
 
   const load = useCallback(async () => {
     if (academyId === null) {
@@ -192,7 +194,9 @@ export function SeatSetup({ onChanged }: Props) {
             setModal('building')
           }}
           onToggle={(b) => act(() => updateBuilding(b.id, { active: !b.active }))}
-          onDelete={(b) => act(() => deleteBuilding(b.id))}
+          onDelete={(b) =>
+            setDelAsk({ title: `${b.name} 을 삭제할까요?`, sub: '되돌릴 수 없습니다. 구역이 남아 있으면 지워지지 않습니다.', run: () => deleteBuilding(b.id) })
+          }
         />
       )}
 
@@ -207,7 +211,9 @@ export function SeatSetup({ onChanged }: Props) {
             setModal('area')
           }}
           onToggle={(a) => act(() => updateSeatArea(a.id, { active: !a.active }))}
-          onDelete={(a) => act(() => deleteSeatArea(a.id))}
+          onDelete={(a) =>
+            setDelAsk({ title: `${a.buildingName} ${a.areaCd} 구역을 삭제할까요?`, sub: '되돌릴 수 없습니다. 좌석이 남아 있으면 지워지지 않습니다.', run: () => deleteSeatArea(a.id) })
+          }
         />
       )}
 
@@ -228,7 +234,25 @@ export function SeatSetup({ onChanged }: Props) {
             setSpot({ xPos, yPos })
             setModal('seat')
           }}
-          onDelete={(s) => act(() => deleteSeatMaster(s.id))}
+          onDelete={(s) =>
+            setDelAsk({
+              title: `${s.seatCd} 좌석을 삭제할까요?`,
+              sub: '되돌릴 수 없습니다. 배치도에서 그 자리가 빈칸으로 남습니다.',
+              run: () => deleteSeatMaster(s.id),
+            })
+          }
+        />
+      )}
+
+      {delAsk && (
+        <Modal
+          title={delAsk.title}
+          sub={delAsk.sub}
+          confirmLabel="삭제"
+          danger
+          busy={busy}
+          onConfirm={() => void act(delAsk.run).then(() => setDelAsk(null))}
+          onClose={() => setDelAsk(null)}
         />
       )}
 

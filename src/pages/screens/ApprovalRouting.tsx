@@ -961,7 +961,7 @@ function HistoryButton() {
                   <b>{rows.length}</b>건
                 </>
               }
-              emptyText={err ?? (status === 'PENDING' ? '지금 대기 중인 승인이 없습니다.' : '최근 30일에 처리된 승인이 없습니다.')}
+              emptyText={err ?? (status === 'PENDING' ? '지금 대기 중인 승인이 없습니다.' : status === '' ? '최근 30일 승인 요청이 없습니다.' : '최근 30일에 처리된 승인이 없습니다.')}
             />
           </div>
         </Modal>

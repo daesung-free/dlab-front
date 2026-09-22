@@ -703,7 +703,7 @@ function Content() {
               <div className="frow">
                 <label>권한</label>
                 <div style={{ fontSize: 12, color: 'var(--muted)', paddingTop: 9 }}>
-                  <code style={{ fontSize: 11 }}>scope: {scope}</code> — 발송 권한 <b>{target.desc}</b>
+                  발송 권한 <b>{target.desc}</b>
                   {' · '}전체=본사 / 지점=지점관리자 / 반=담임
                 </div>
               </div>
@@ -790,7 +790,8 @@ function Content() {
               <div className="frow">
                 <label>&nbsp;</label>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <button className="btn pri" disabled={blocked}>
+                  {/* 이 탭은 예시다 — 발송 업체가 붙기 전까지 눌러도 나가는 게 없다 */}
+                  <button className="btn pri" disabled data-soon title="준비 중입니다">
                     <Icon name="send" size={14} /> {target.count.toLocaleString()}명에게 발송
                   </button>
                   <button className="btn" disabled data-soon title="준비 중입니다">테스트 발송</button>

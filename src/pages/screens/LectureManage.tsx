@@ -29,7 +29,7 @@ import {
   type LectureSession,
 } from '../../api/lectures'
 import { listTeachers, type TeacherRow } from '../../api/accounts'
-import { createBilling } from '../../api/billing'
+import { createBilling, listStudentBillings } from '../../api/billing'
 import { searchStudents } from '../../api/students'
 import type { Mockup } from './types'
 import { createScreenSignal } from './screenSignal'
@@ -379,6 +379,13 @@ function Content() {
           continue
         }
         try {
+          /* 서버는 특강비 중복을 막지 않는다 — 두 번 누르거나 같은 학생을 다시 고르면 두 건이 된다.
+             학생별 청구(취소분 제외)에 같은 이름의 특강비가 있으면 건너뛴다 */
+          const existing = await listStudentBillings(enrollmentId)
+          if (existing.some((b) => b.billingType === 'LECTURE' && b.name.trim() === billing.name.trim())) {
+            results.push({ name: r.studentName, ok: false, msg: '같은 이름의 특강비 청구가 이미 있어 건너뛰었습니다' })
+            continue
+          }
           await createBilling({
             enrollmentId,
             name: billing.name.trim(),
@@ -1183,7 +1190,7 @@ function Content() {
             <Icon name="presentation" size={13} /> 개설 특강
           </div>
           <div className="v">{lectures.length}</div>
-          <div className="d">{new Date().getFullYear()}년</div>
+          <div className="d">{lectureYear}년</div>
         </div>
         <div className="stat">
           <div className="l">
@@ -1209,7 +1216,7 @@ function Content() {
           <div className="v" style={{ fontSize: 14, paddingTop: 8 }}>
             <Unfilled reason="수납 현황은 수납 화면에서 확인하세요" />
           </div>
-          <div className="d">수납현황(F-4.8) 참조</div>
+          <div className="d">수납현황 화면에서 확인</div>
         </div>
         <div className="stat">
           <div className="l">

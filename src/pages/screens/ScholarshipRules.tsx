@@ -258,7 +258,7 @@ function Content() {
         setDone('기준을 만들었습니다. 확인하고 켜 주세요 — 만든 기준은 꺼진 상태입니다.')
       } else {
         await updateScholarshipRule(draft.id, body)
-        setDone('기준을 고쳤습니다.')
+        setDone('기준을 수정했습니다.')
       }
       setDraft(null)
       await load()

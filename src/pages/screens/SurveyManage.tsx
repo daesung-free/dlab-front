@@ -632,7 +632,7 @@ function Content() {
                 <Icon name="save" size={14} /> {isTemplate ? '템플릿 저장' : '저장'}
               </button>
               {!isTemplate && (
-                <button className="btn" disabled={!draft.title.trim() || draft.questions.length === 0}>
+                <button className="btn" disabled data-soon title="준비 중입니다">
                   <Icon name="send" size={14} /> 저장 후 배포
                 </button>
               )}

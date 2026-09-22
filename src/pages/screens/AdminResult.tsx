@@ -224,7 +224,7 @@ function Content() {
     try {
       if (draft.resultId === null) await createResult(Number(draft.enrollmentId), body)
       else await updateResult(draft.resultId, body)
-      setNotice(draft.resultId === null ? '지원을 추가했습니다.' : '고쳤습니다. 이 줄은 이제 직원 확인 값입니다.')
+      setNotice(draft.resultId === null ? '지원을 추가했습니다.' : '수정했습니다. 이 줄은 이제 직원 확인 값입니다.')
       table.reload()
       await loadStats()
       return true

@@ -125,7 +125,7 @@ function Content() {
     if (!academyReady) return
     setListLoading(true)
     try {
-      const page = await searchStudents({ status: 'ENROLLED', size: 100, academyId: academyId ?? undefined })
+      const page = await searchStudents({ status: 'ENROLLED', size: 2000, academyId: academyId ?? undefined })
       setStudents(page.rows)
       // 지점을 바꾸면 이전 선택이 새 목록에 없다 — 그대로 두면 목록에 없는 학생의 성적이 오른쪽에 남는다
       setSelectedId((prev) =>

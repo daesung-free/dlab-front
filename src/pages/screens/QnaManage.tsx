@@ -9,6 +9,7 @@ import {
   listQnaSlotsBetween,
   openQnaSlots,
   setQnaSlotClosed,
+  type QnaReservation,
   type QnaSlot,
 } from '../../api/qna'
 import { maskName } from '../../lib/mask'
@@ -212,6 +213,8 @@ function Content() {
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  /* 예약 칸을 누르면 바로 취소되던 것을 한 번 묻게 한다 — 이름을 확인하려고 누르는 경우가 많다 */
+  const [cancelAsk, setCancelAsk] = useState<{ r: QnaReservation; slot: QnaSlot } | null>(null)
 
   const dates = useMemo(() => weekDates(anchor), [anchor])
 
@@ -272,9 +275,11 @@ function Content() {
     setBusy(true)
     try {
       await cancelQnaReservation(reservationId)
+      setCancelAsk(null)
       await load()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '예약을 취소하지 못했습니다.')
+      setCancelAsk(null)
     } finally {
       setBusy(false)
     }
@@ -359,6 +364,23 @@ function Content() {
 
   return (
     <>
+      {cancelAsk && (
+        <Modal
+          title={`${cancelAsk.r.studentName} 학생의 예약을 취소할까요?`}
+          sub={[cancelAsk.slot.teacherName, cancelAsk.slot.room].filter(Boolean).join(' · ') || undefined}
+          confirmLabel="예약 취소"
+          danger
+          busy={busy}
+          onConfirm={() => void cancelReservation(cancelAsk.r.id)}
+          onClose={() => setCancelAsk(null)}
+        >
+          {cancelAsk.r.question && (
+            <div className="note-box">
+              <div>{cancelAsk.r.question}</div>
+            </div>
+          )}
+        </Modal>
+      )}
       <div className="stat-strip">
         <div className="stat">
           <div className="l">
@@ -502,7 +524,7 @@ function Content() {
                                   className="mk verified"
                                   title={`${booked[0].studentName} · ${slot.teacherName ?? ''} · ${slot.room ?? ''}\n${booked[0].question ?? ''}`}
                                   style={{ cursor: 'pointer' }}
-                                  onClick={() => void cancelReservation(booked[0].id)}
+                                  onClick={() => setCancelAsk({ r: booked[0], slot })}
                                 >
                                   {masked ? maskName(booked[0].studentName) : booked[0].studentName}
                                 </span>

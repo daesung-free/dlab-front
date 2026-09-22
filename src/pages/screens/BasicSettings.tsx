@@ -4,6 +4,7 @@ import { DataTable, ExcelButton, Modal, Unfilled, type Column } from '../../comp
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
+import { useAuth } from '../../auth/AuthContext'
 import { listClasses, setClassRoom } from '../../api/classes'
 import { fetchPenaltyItems } from '../../api/penalties'
 import {
@@ -198,6 +199,8 @@ interface MasterDef {
   /** 왜 등록·수정이 없는지 */
   note?: string
 }
+
+const SUPER_ONLY = '본사 관리자만 바꿀 수 있습니다'
 
 const MASTERS: MasterDef[] = [
   {
@@ -666,6 +669,11 @@ function Content() {
   const [params, setParams] = useSearchParams()
   const { academyId, ready: academyReady } = useAcademy()
   const active = MASTERS.find((m) => m.key === params.get('tab')) ?? MASTERS[0]
+  /* 학과계열(전 지점 공통)과 전년도 복사는 서버가 본사만 받는다. 지점 계정에 버튼을 열어 두면
+     누를 때마다 '권한이 없습니다' 만 떠서 고장으로 읽힌다 — 미리 막고 이유를 적는다 */
+  const { principal, me } = useAuth()
+  const isSuper = (me?.roles ?? principal?.roles ?? []).some((r) => r === 'SUPER_ADMIN')
+  const locked = !!active.global && !isSuper
 
   const [year, setYear] = useState(new Date().getFullYear())
   const [rows, setRows] = useState<MasterRow[]>([])
@@ -718,7 +726,10 @@ function Content() {
   /* 헤더 '전체 전년도 복사' 가 누르면 같은 확인 창을 띄운다 — 헤더는 본문 상태를 못 만진다(CLAUDE.md 5-1) */
   const copyAskVer = copyAsk.useVersion()
   useEffect(() => {
-    if (copyAskVer > 0) setCopying(true)
+    if (copyAskVer === 0) return
+    if (isSuper) setCopying(true)
+    else setNotice(SUPER_ONLY.replace('바꿀', '복사할'))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [copyAskVer])
 
   function setActive(m: MasterDef) {
@@ -947,8 +958,8 @@ function Content() {
               <button
                 className="btn"
                 style={{ padding: '4px 9px', fontSize: 11.5, whiteSpace: 'nowrap' }}
-                disabled={busy}
-                title={r.active ? '새로 고를 때 목록에서 빠집니다. 이미 쓰인 곳은 그대로입니다' : '다시 고를 수 있게 합니다'}
+                disabled={busy || locked}
+                title={locked ? SUPER_ONLY : r.active ? '새로 고를 때 목록에서 빠집니다. 이미 쓰인 곳은 그대로입니다' : '다시 고를 수 있게 합니다'}
                 onClick={() => void toggleActive(r)}
               >
                 {r.active ? '중지' : '다시 사용'}
@@ -958,7 +969,8 @@ function Content() {
               <button
                 className="btn"
                 style={{ padding: '4px 9px', fontSize: 11.5 }}
-                disabled={busy}
+                disabled={busy || locked}
+                title={locked ? SUPER_ONLY : undefined}
                 onClick={() => {
                   setAddErr(null)
                   setRenaming({
@@ -980,7 +992,8 @@ function Content() {
               <button
                 className="btn"
                 style={{ padding: '4px 9px', fontSize: 11.5, color: 'var(--red)' }}
-                disabled={busy}
+                disabled={busy || locked}
+                title={locked ? SUPER_ONLY : undefined}
                 onClick={() => {
                   setAddErr(null)
                   setRemoving(r)
@@ -996,7 +1009,7 @@ function Content() {
     return base
     /* ★ load 를 빼면 '중지' 가 **처음 그렸을 때의 load**(지점 고르기 전)를 불러 목록을 비웠다 */
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, busy, load])
+  }, [active, busy, load, locked])
 
   return (
     <>
@@ -1243,14 +1256,19 @@ function Content() {
                     </option>
                   ))}
                 </select>
-                <button className="btn" disabled={busy || academyId === null} onClick={() => setCopying(true)}>
+                <button
+                  className="btn"
+                  disabled={busy || academyId === null || !isSuper}
+                  title={isSuper ? undefined : SUPER_ONLY.replace('바꿀', '복사할')}
+                  onClick={() => setCopying(true)}
+                >
                   <Icon name="history" size={14} /> 전년도 복사
                 </button>
                 <ExcelButton filename={`기초_${active.label}`} columns={COLUMNS} rows={rows} masked={false} />
                 <button
                   className="btn pri"
-                  disabled={busy || !active.create}
-                  title={active.create ? undefined : '이 마스터는 여기서 등록할 수 없습니다'}
+                  disabled={busy || !active.create || locked}
+                  title={locked ? SUPER_ONLY : active.create ? undefined : '이 마스터는 여기서 등록할 수 없습니다'}
                   onClick={add}
                 >
                   <Icon name="plus" size={14} /> 등록

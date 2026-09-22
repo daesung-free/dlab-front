@@ -17,6 +17,7 @@ import { useAcademy } from '../../auth/AcademyContext'
 import { listAuditLogs, type AuditAction, type AuditLog } from '../../api/auditLogs'
 import type { Mockup } from './types'
 import { createScreenSignal } from './screenSignal'
+import { AUDIT_AREAS, auditAreaLabel, changeFieldLabel, changeValueLabel } from '../../lib/changeLabels'
 
 /* 학원생 관리 > 메모/기타 > 금일 수정 이력 — 클라이언트 메뉴표 기준 추가 화면
  *
@@ -43,7 +44,6 @@ const ACTION_META: Record<Action, { label: string; cls: string; icon: string }> 
    '상벌점' · '공지' · '학생 등록' 이었다. 감사 로그가 opt-in 이라 아래 7개만 남는다
    (auditLogs.ts 첫 주석). 목업의 '출결 · 반 배정 · 급식 · 특강'은 대상이 아니라 뺐다 —
    골라도 항상 0건이면 "그날 변경이 없었다"로 잘못 읽힌다. */
-const AREAS = ['학생 등록', '사유신청', '상벌점', '청구', '성적', '공지', '직원 계정'] as const
 
 const FIELDS: Field[] = [
   { type: 'dateRange', name: 'date', label: '조회 기간', presets: true, span: 2 },
@@ -60,7 +60,8 @@ const FIELDS: Field[] = [
     type: 'select',
     name: 'area',
     label: '업무 영역',
-    options: AREAS.map((v) => ({ value: v, label: v })),
+    // ★ 값은 서버 원래 이름이다 — '사유신청'(붙여 씀)·'직원 계정' 으로 보내 항상 0건이었다
+    options: AUDIT_AREAS,
   },
   {
     type: 'select',
@@ -118,7 +119,7 @@ const COLUMNS: Column<LogRow>[] = [
          오해를 만든다. 그 값만 따로 알린다. */
     render: (r) => r.actorName ?? '-',
   },
-  { key: 'area', header: '업무 영역', width: '100px', align: 'center', value: (r) => r.entityType },
+  { key: 'area', header: '업무 영역', width: '100px', align: 'center', value: (r) => auditAreaLabel(r.entityType) },
   {
     key: 'action',
     header: '유형',
@@ -138,14 +139,14 @@ const COLUMNS: Column<LogRow>[] = [
     key: 'field',
     header: '변경 항목',
     width: '120px',
-    value: (r) => changesOf(r.changes).map((c) => c.field).join(', ') || '-',
+    value: (r) => changesOf(r.changes).map((c) => changeFieldLabel(c.field)).join(', ') || '-',
   },
   {
     key: 'diff',
     header: '변경 전 → 변경 후',
     value: (r) =>
       changesOf(r.changes)
-        .map((c) => `${c.before ?? '-'} → ${c.after ?? '-'}`)
+        .map((c) => `${changeValueLabel(c.before)} → ${changeValueLabel(c.after)}`)
         .join(' / ') || '-',
   },
   {
@@ -296,8 +297,8 @@ function Content() {
           <div className="tt">주요 변경이 자동으로 기록됩니다</div>
           <div className="tx">
             학생 등록 · 사유신청 · 상벌점 · 청구 · 성적 · 공지 · 직원 계정에서 생긴 변경이 남습니다.
-            담당자가 따로 기록할 필요는 없습니다. <b>무엇을 어떤 값으로 바꿨는지</b>는 아직
-            기록되지 않아 지금은 비어 있습니다.
+            담당자가 따로 기록할 필요는 없습니다. <b>어느 학생의 기록인지</b>는 2026-09-21 이후 기록부터 남고,
+            <b>무엇을 어떤 값으로 바꿨는지</b>는 지금은 직원 계정 변경에만 남습니다.
           </div>
         </div>
       </div>

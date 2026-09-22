@@ -601,7 +601,16 @@ function PenaltyActions() {
     }
   }
 
+  /* 항목·규칙 삭제는 모달 안이라 확인 창을 또 띄우지 않고 **두 번 누르게** 한다.
+     누르자마자 지워졌었다 — 점수를 준 기록이 걸린 항목이면 되돌릴 수 없다 */
+  const [delArm, setDelArm] = useState<string | null>(null)
+
   async function removeItem(row: PenaltyItemRow) {
+    if (delArm !== `item:${row.id}`) {
+      setDelArm(`item:${row.id}`)
+      return
+    }
+    setDelArm(null)
     setBusy(true)
     setErr(null)
     try {
@@ -652,6 +661,11 @@ function PenaltyActions() {
   }
 
   async function removeRule(row: PenaltyRuleRow) {
+    if (delArm !== `rule:${row.id}`) {
+      setDelArm(`rule:${row.id}`)
+      return
+    }
+    setDelArm(null)
     setBusy(true)
     setErr(null)
     try {
@@ -802,8 +816,13 @@ function PenaltyActions() {
                       >
                         수정
                       </button>{' '}
-                      <button className="btn" disabled={busy} onClick={() => void removeItem(it)}>
-                        삭제
+                      <button
+                        className="btn"
+                        style={delArm === `item:${it.id}` ? { color: 'var(--red)', fontWeight: 700 } : undefined}
+                        disabled={busy}
+                        onClick={() => void removeItem(it)}
+                      >
+                        {delArm === `item:${it.id}` ? '한 번 더 눌러 삭제' : '삭제'}
                       </button>
                     </td>
                   </tr>
@@ -900,8 +919,13 @@ function PenaltyActions() {
                           <button className="btn" disabled={busy} onClick={() => void toggleRule(r)}>
                             {r.active ? '끄기' : '켜기'}
                           </button>{' '}
-                          <button className="btn" disabled={busy} onClick={() => void removeRule(r)}>
-                            삭제
+                          <button
+                            className="btn"
+                            style={delArm === `rule:${r.id}` ? { color: 'var(--red)', fontWeight: 700 } : undefined}
+                            disabled={busy}
+                            onClick={() => void removeRule(r)}
+                          >
+                            {delArm === `rule:${r.id}` ? '한 번 더 눌러 삭제' : '삭제'}
                           </button>
                         </td>
                       </tr>

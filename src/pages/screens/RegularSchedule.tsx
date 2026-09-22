@@ -112,7 +112,7 @@ function Content() {
     setError(null)
     const [r, s] = await Promise.allSettled([
       listSchedules({ academyId, month }),
-      searchStudents({ status: 'ENROLLED', size: 200, academyId }),
+      searchStudents({ status: 'ENROLLED', size: 2000, academyId }),
     ])
     setRows(r.status === 'fulfilled' ? r.value : [])
     setStudents(s.status === 'fulfilled' ? s.value.rows : [])
@@ -150,7 +150,7 @@ function Content() {
       } else {
         /* ★ 전량을 보낸다. 통째로 갈아끼우는 API 라 일부만 보내면 나머지가 사라진다 */
         await replaceScheduleItems(edit.scheduleId, items)
-        setDone('일정을 고쳤습니다.')
+        setDone('일정을 수정했습니다.')
       }
       setEdit(null)
       await load()

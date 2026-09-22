@@ -195,7 +195,7 @@ export interface YearlyCopyResult {
  */
 export const COPIED_LABEL: Record<string, string> = {
   department: '학과',
-  curriculum: '학과계열',
+  curriculum: '교육과정',
   courseType: '과정',
   class: '반',
   period: '교시',
@@ -206,6 +206,7 @@ export const COPIED_LABEL: Record<string, string> = {
   scholarshipMaster: '장학',
   billingStandard: '청구 기준',
   staff: '직원',
+  annualEvent: '연간 행사',
 }
 
 /** `{ class: 4, period: 34 }` → `반 4건 · 교시 34건`. 0 건은 뺀다 */

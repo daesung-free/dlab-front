@@ -476,7 +476,12 @@ function Content() {
   }
 
   async function copyStandards() {
-    if (academyId === null) return
+    // 헤더 버튼은 지점을 안 골라도 창을 연다 — 조용히 멈추면 '복사'가 안 먹는 것처럼 보인다
+    if (academyId === null) {
+      setNotice('먼저 위에서 지점을 고르세요.')
+      setCopyAsk(false)
+      return
+    }
     setCopyBusy(true)
     try {
       const r = await copyBillingStandardsYear({ academyId, fromYear: year - 1, toYear: year })

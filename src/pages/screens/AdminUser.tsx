@@ -84,7 +84,7 @@ interface Area {
 const AREAS: Area[] = [
   { name: '학생 관리', perms: { SUPER_ADMIN: 'full', BRANCH_ADMIN: 'full', TEACHER: 'own', STAFF: 'read', READONLY: 'read' } },
   {
-    name: '개인정보 필드',
+    name: '개인정보 항목',
     note: '전화·주소·생년월일',
     perms: { SUPER_ADMIN: 'full', BRANCH_ADMIN: 'full', TEACHER: 'own', STAFF: 'none', READONLY: 'none' },
   },
