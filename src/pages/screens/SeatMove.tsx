@@ -1,8 +1,31 @@
-import { useMemo, useState } from 'react'
-import { DataTable, ExcelButton, MaskToggle, type Column } from '../../components/common'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  DataTable,
+  ExcelButton,
+  MaskToggle,
+  MockNotice,
+  SearchForm,
+  Unfilled,
+  useServerData,
+  type Column,
+  type DateRangeValue,
+  type Field,
+  type SearchValues,
+} from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
-import { MOCK_STUDENTS } from './mockStudents'
+import { useAcademy } from '../../auth/AcademyContext'
+import { ApiError } from '../../api/client'
+import { listClasses } from '../../api/classes'
+import { getSeatLayout, listSeatAreas, type SeatArea, type SeatCell } from '../../api/facility'
+import {
+  SEAT_LEAVE_STATUS,
+  SEAT_LEAVE_STATUS_LABEL,
+  fetchCurrentSeatLeaves,
+  fetchSeatLeaves,
+  type SeatLeaveRow,
+  type SeatLeaveStatus,
+} from '../../api/seatLeaves'
 import type { Mockup } from './types'
 import './seat.css'
 
@@ -11,54 +34,72 @@ import './seat.css'
  * 배경: 키오스크 증설이 중단(잔여 6대)돼 앱으로 대체한다.
  *       패드 소지 = 앱 신청 / 미소지 = 키오스크 병행.
  *
+ * 연동(2026-09-22) — GET /api/v1/admin/seat-leaves · /current. src/api/seatLeaves.ts 참고.
+ *   · 이동 신청 내역 탭 = 이탈 이력. 서버가 이탈·복귀를 한 행으로 짝지어 준다
+ *   · 실시간 좌석표 탭 = 좌석 배치(/seats/layout) 위에 '지금 이탈 중'을 겹친다.
+ *     ★ 겹치는 기준은 enrollmentId 다. 이탈 행의 seatCd 는 **키오스크 번호**라
+ *       별관이면 1000번대로 와서 배치도의 seatCd 와 안 맞는다
+ *     ★ 배치도의 presence 는 이탈 기록을 모른다(출결 외출만 본다). 그래서 이탈 중인지는
+ *       이 화면이 current 로 따로 받아 덮는다 — 서버가 합쳐 주면 이 겹치기를 걷어낸다(API_GAPS 37부)
+ *   · 키오스크 관리 탭 = 아직 서버에 없다. 예시 값 그대로 두고 탭 안에 표시한다
+ *
+ * ⚠ 이탈 위치(강의실·화장실·공용공간·교과실)는 아직 정해지지 않았다(I-16). 위치별 칸·필터는
+ *   지우지 않고 <Unfilled/> · data-soon 으로 둔다 — 정해지면 바로 채운다.
+ * ⚠ 지금 이탈 기록은 **키오스크 태깅으로만** 생긴다. 앱 신청은 2차라 '경로' 는 전부 키오스크다.
+ *
  * ⚠ 화면 문구에서 내부 사정을 뺐다(2026-09-10). 클라이언트가 보는 URL 이라
  *   'I-16' · '재실 센서' · '범위에서 제외' 같은 말을 화면에 두지 않는다. 남은 문구는
  *   "기록에 남는 것과 안 남는 것"만 말한다 — 행정 선생님이 좌석표를 읽는 데 필요한 것은 그뿐이다.
  *
  * ⚠ 사감 순찰기록은 범위에서 제외한다.
  *   순찰로 '좌석없음'을 잡아 미신고 이탈을 추정하던 방식을 쓰지 않는다.
- *   → 이탈 정보의 출처는 앱 신청과 키오스크 태깅 2개뿐이다.
- *   → 따라서 "신청 없이 자리를 비운 상태"를 시스템이 알 방법이 없다.
+ *   → "신청 없이 자리를 비운 상태"를 시스템이 알 방법이 없다.
  *     좌석표의 빈 자리는 '미신고 이탈'이 아니라 '데이터 없음'으로 읽어야 한다.
  *
  * ⚠ 키오스크 관리자 페이지를 이 관리자 화면 안에 내장한다.
  *   별도 키오스크 관리 콘솔로 나가지 않고, 여기서 단말을 등록·모니터링하며
- *   좌석 이탈 정보도 그 단말들에서 수신한다(단일 진입점).
- *
- * ⚠ #36 / I-16 (높음) — 위치 구분값·좌석표 실시간 반영·앱↔키오스크 병행 처리·
- *   잔여 키오스크 연동 범위가 미확정. D-2(키오스크 스펙)에도 종속된다.
- *   실행가이드: "D-2 종속 — 미확정 시 앱만 우선". */
+ *   좌석 이탈 정보도 그 단말들에서 수신한다(단일 진입점). */
 
-/** 위치 구분값 — 확정 대상 enum (I-16) */
-const LOCATIONS = [
-  { key: 'SEAT', label: '본인좌석', cls: 'at-seat', color: 'var(--mint-wash)' },
-  { key: 'CLASSROOM', label: '강의실', cls: 'at-class', color: 'var(--blue-wash)' },
-  { key: 'RESTROOM', label: '화장실', cls: 'at-rest', color: 'var(--amber-wash)' },
-  { key: 'COMMON', label: '공용공간', cls: 'at-common', color: 'var(--violet-wash)' },
-  { key: 'SUBJECT', label: '교과실', cls: 'at-subject', color: '#e9f7ee' },
-] as const
+/** 이탈 위치 — 구분값이 아직 정해지지 않았다(I-16). 정해지면 이 목록으로 칸과 필터를 채운다 */
+const AWAY_LOCATIONS = ['강의실', '화장실', '공용공간', '교과실'] as const
 
-type LocKey = (typeof LOCATIONS)[number]['key']
+/** 좌석표를 다시 읽는 간격. 키오스크가 태깅을 바로 올리므로 1분이면 현장과 크게 어긋나지 않는다 */
+const REFRESH_MS = 60_000
 
-interface Seat {
-  code: string
-  name?: string
-  loc?: LocKey
+type SeatView = 'seat' | 'away' | 'absent' | 'free' | 'off'
+
+const VIEW_META: Record<SeatView, { label: string; cls: string; color: string }> = {
+  seat: { label: '본인좌석', cls: 'at-seat', color: 'var(--mint-wash)' },
+  away: { label: '이탈 중', cls: 'at-rest', color: 'var(--amber-wash)' },
+  absent: { label: '미등원', cls: '', color: '#fff' },
+  free: { label: '공석', cls: 'empty', color: 'var(--line-2)' },
+  off: { label: '사용중지', cls: 'empty', color: 'var(--line-2)' },
 }
 
-const SEATS: Seat[] = Array.from({ length: 60 }, (_, i) => {
-  const code = `${i < 30 ? 'A' : 'B'}-${String((i % 30) + 1).padStart(2, '0')}`
-  if (i % 11 === 10) return { code }
-  const s = MOCK_STUDENTS[i % MOCK_STUDENTS.length]
-  const locIdx = i % 13 === 3 ? 1 : i % 17 === 5 ? 2 : i % 19 === 7 ? 3 : i % 23 === 11 ? 4 : 0
-  return {
-    code,
-    name: s.name,
-    loc: LOCATIONS[locIdx].key,
-  }
-})
+/** 배정 × 재실 × 이탈 중 → 좌석표 한 칸 */
+function seatView(cell: SeatCell, leaving: boolean): SeatView {
+  if (cell.assignmentState === 'DISABLED') return 'off'
+  if (cell.assignmentState !== 'ASSIGNED' || cell.enrollmentId === null) return 'free'
+  if (leaving) return 'away'
+  return cell.presence === 'PRESENT' ? 'seat' : 'absent'
+}
 
-/* ── 키오스크 단말 관리 — 별도 콘솔 없이 이 화면에 내장한다 ── */
+/** ISO(UTC) → 'yyyy-MM-dd HH:mm' (로컬) */
+function dateTime(iso: string | null): string {
+  if (!iso) return '-'
+  const d = new Date(iso)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+function one(v: unknown): string | undefined {
+  if (Array.isArray(v)) return v.length > 0 ? String(v[0]) : undefined
+  if (typeof v === 'string' && v !== '') return v
+  return undefined
+}
+
+/* ── 키오스크 단말 관리 — 별도 콘솔 없이 이 화면에 내장한다 ──
+ * 서버에 단말 관리가 없다(API_GAPS 2부). 아래는 예시 값이고 탭 안에 MockNotice 로 알린다. */
 
 interface Kiosk {
   id: string
@@ -156,65 +197,44 @@ const KIOSK_COLUMNS: Column<Kiosk>[] = [
   },
 ]
 
-/* ── 이동 신청 내역 ── */
-type Channel = '앱' | '키오스크'
+/* ── 이동 신청 내역(이탈 이력) ── */
 
-interface MoveLog {
-  id: string
-  at: string
-  studentNo: string
-  name: string
-  seat: string
-  from: string
-  to: string
-  channel: Channel
-  returned: boolean
-  minutes: number
-}
+const STATUS_CHIPS = SEAT_LEAVE_STATUS.map((s) => SEAT_LEAVE_STATUS_LABEL[s])
+const CHIP_TO_STATUS = new Map<string, SeatLeaveStatus>(SEAT_LEAVE_STATUS.map((s) => [SEAT_LEAVE_STATUS_LABEL[s], s]))
 
-const MOVES: MoveLog[] = MOCK_STUDENTS.slice(0, 28).map((s, i) => {
-  const loc = LOCATIONS[(i % 4) + 1]
-  const returned = i % 5 !== 4
-  return {
-    id: `mv-${i + 1}`,
-    at: `2026-05-28 ${String(9 + (i % 12)).padStart(2, '0')}:${String((i * 13) % 60).padStart(2, '0')}`,
-    studentNo: s.studentNo,
-    name: s.name,
-    seat: s.seat,
-    from: '본인좌석',
-    to: loc.label,
-    channel: i % 3 === 2 ? '키오스크' : '앱',
-    returned,
-    minutes: returned ? 5 + ((i * 7) % 40) : 12 + ((i * 5) % 60),
-  }
-})
+/** 오래 비운 이탈을 붉게 표시하는 기준(분) */
+const LONG_AWAY_MIN = 30
 
-const COLUMNS: Column<MoveLog>[] = [
-  { key: 'at', header: '신청시각', width: '146px', sortable: true, value: (r) => r.at },
-  { key: 'studentNo', header: '학번', width: '100px', value: (r) => r.studentNo },
-  { key: 'name', header: '이름', width: '84px', mask: 'name', value: (r) => r.name },
-  { key: 'seat', header: '좌석', width: '68px', align: 'center', value: (r) => r.seat },
+const COLUMNS: Column<SeatLeaveRow>[] = [
+  { key: 'leftAt', header: '이탈 시각', width: '146px', sortable: true, value: (r) => dateTime(r.leftAt) },
+  { key: 'studentNo', header: '학번', width: '100px', value: (r) => r.studentNo ?? '-' },
+  {
+    key: 'name',
+    header: '이름',
+    width: '96px',
+    mask: 'name',
+    // 키오스크가 보낸 카드·학번으로 학생을 못 찾은 건이다. 기록은 남아 있어 행은 보여준다
+    value: (r) => r.name ?? '학생 미확인',
+    render: (r, v) =>
+      r.resolved ? v : <span style={{ color: 'var(--muted)' }} title="등록된 학생과 연결되지 않은 태깅입니다">학생 미확인</span>,
+  },
+  { key: 'seat', header: '좌석', width: '68px', align: 'center', value: (r) => r.seatCd ?? '-' },
   {
     key: 'to',
     header: '이동 위치',
     width: '104px',
     align: 'center',
-    sortable: true,
-    value: (r) => r.to,
-    render: (r) => <span className="mk supplement">{r.to}</span>,
+    value: () => '',
+    render: () => <Unfilled reason="이탈 위치 구분값이 아직 정해지지 않았다(I-16)" />,
   },
   {
     key: 'channel',
     header: '경로',
     width: '86px',
     align: 'center',
-    sortable: true,
-    value: (r) => r.channel,
-    render: (r) => (
-      <span style={{ fontSize: 11.5, fontWeight: 700, color: r.channel === '앱' ? 'var(--violet)' : 'var(--amber)' }}>
-        {r.channel}
-      </span>
-    ),
+    // 지금은 키오스크 태깅만 들어온다. 앱 신청이 열리면 서버가 경로를 줘야 한다
+    value: () => '키오스크',
+    render: () => <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--amber)' }}>키오스크</span>,
   },
   {
     key: 'minutes',
@@ -222,43 +242,221 @@ const COLUMNS: Column<MoveLog>[] = [
     width: '80px',
     align: 'right',
     sortable: true,
-    value: (r) => r.minutes,
-    render: (r) => (
-      <span style={{ color: !r.returned && r.minutes > 30 ? 'var(--red)' : undefined, fontWeight: r.returned ? 400 : 700 }}>
-        {r.minutes}분
-      </span>
-    ),
+    value: (r) => r.minutes ?? -1,
+    render: (r) =>
+      r.minutes === null ? (
+        // 자동 마감·복귀 기록 없음은 언제 돌아왔는지 모른다 — 0분이 아니다
+        <span style={{ color: 'var(--muted)' }}>-</span>
+      ) : (
+        <span
+          style={{
+            color: r.status === 'OPEN' && r.minutes > LONG_AWAY_MIN ? 'var(--red)' : undefined,
+            fontWeight: r.status === 'OPEN' ? 700 : 400,
+          }}
+        >
+          {r.minutes}분
+        </span>
+      ),
   },
   {
     key: 'returned',
     header: '복귀',
-    width: '86px',
+    width: '110px',
     align: 'center',
-    value: (r) => (r.returned ? '복귀' : '미복귀'),
+    sortable: true,
+    value: (r) => SEAT_LEAVE_STATUS_LABEL[r.status],
     render: (r) =>
-      r.returned ? (
-        <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>복귀</span>
+      r.status === 'RETURNED' ? (
+        <span style={{ fontSize: 11.5, color: 'var(--muted)' }} title={`${dateTime(r.closedAt)} 복귀`}>
+          복귀 {dateTime(r.closedAt).slice(11)}
+        </span>
+      ) : r.status === 'OPEN' ? (
+        <span className="mk brandnew">이탈 중</span>
+      ) : r.status === 'AUTO_CLOSED' ? (
+        <span className="mk brandnew" title="밤 12시 30분까지 복귀 태깅이 없어 키오스크가 닫은 건입니다">
+          미복귀 마감
+        </span>
       ) : (
-        <span className="mk brandnew">미복귀</span>
+        <span className="mk supplement" title="복귀 태깅 없이 다음 이탈이 찍혔습니다">
+          복귀 기록 없음
+        </span>
       ),
   },
 ]
 
-function Content() {
+const fetchClasses = ({ year }: { year: number }) => listClasses(year)
+
+function LeaveLog({ academyId }: { academyId: number | null }) {
+  const [query, setQuery] = useState<SearchValues>({})
   const [masked, setMasked] = useState(true)
-  const [filter, setFilter] = useState<LocKey | 'ALL'>('ALL')
+
+  // 반 드롭다운은 하드코딩하지 않는다 — 지점·연도마다 다르다
+  const classParams = useMemo(() => ({ year: new Date().getFullYear() }), [])
+  const classes = useServerData({
+    fetcher: fetchClasses,
+    params: classParams,
+    enabled: academyId !== null,
+    errorMessage: '반 목록을 불러오지 못했습니다.',
+  })
+  const classOptions = useMemo(
+    () =>
+      (classes.data ?? [])
+        .filter((c) => c.academyId === academyId)
+        .map((c) => ({ value: String(c.id), label: c.name })),
+    [classes.data, academyId],
+  )
+
+  const fields: Field[] = useMemo(
+    () => [
+      { type: 'dateRange', name: 'date', label: '조회 기간', presets: true, span: 2 },
+      { type: 'text', name: 'keyword', label: '이름 · 학번 · 좌석', placeholder: '예: 이승민 / A04', span: 2 },
+      { type: 'select', name: 'classId', label: '반', options: classOptions },
+      { type: 'chips', name: 'status', label: '상태', options: STATUS_CHIPS, multiple: true },
+    ],
+    [classOptions],
+  )
+
+  // ★ useMemo 필수 — 매 렌더 새 객체면 무한 요청이 된다
+  const params = useMemo(() => {
+    const range = query.date as DateRangeValue | undefined
+    const chips = Array.isArray(query.status) ? query.status : []
+    const statuses = chips.map((c) => CHIP_TO_STATUS.get(c)).filter((s): s is SeatLeaveStatus => s !== undefined)
+    const classId = one(query.classId)
+    const from = range?.from || undefined
+    const to = range?.to || from
+    return {
+      academyId: academyId ?? undefined,
+      // date 와 from/to 를 같이 보내면 기간이 이긴다 — 헷갈리지 않게 하나만 보낸다. 안 고르면 오늘
+      ...(from && to && from !== to ? { from, to } : { date: from }),
+      classId: classId ? Number(classId) : undefined,
+      statuses: statuses.length > 0 ? statuses : undefined,
+      keyword: one(query.keyword),
+    }
+  }, [query, academyId])
+
+  const board = useServerData({
+    fetcher: fetchSeatLeaves,
+    params,
+    enabled: academyId !== null,
+    errorMessage: '좌석 이탈 내역을 불러오지 못했습니다.',
+  })
+
+  const rows = board.data?.rows ?? []
+  const summary = board.data?.summary
+
+  return (
+    <>
+      <SearchForm fields={fields} onSearch={setQuery} presetKey="seat-leave" />
+
+      {board.error && (
+        <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+          {board.error}
+        </div>
+      )}
+
+      <DataTable
+        columns={COLUMNS}
+        rows={rows}
+        rowKey={(r) => String(r.leaveLogId)}
+        masked={masked}
+        loading={board.loading}
+        pageSize={12}
+        emptyText="조회 기간에 좌석 이탈 기록이 없습니다"
+        countLabel={
+          <>
+            이탈 <b>{summary?.total ?? 0}</b>건 · 이탈 중{' '}
+            <b style={{ color: summary?.OPEN ? 'var(--red)' : undefined }}>{summary?.OPEN ?? 0}</b>건 · 미복귀 마감{' '}
+            <b style={{ color: summary?.AUTO_CLOSED ? 'var(--red)' : undefined }}>{summary?.AUTO_CLOSED ?? 0}</b>건
+          </>
+        }
+        toolbar={
+          <>
+            <MaskToggle masked={masked} onChange={setMasked} />
+            <ExcelButton filename="좌석_이탈현황" columns={COLUMNS} rows={rows} masked={masked} />
+          </>
+        }
+      />
+    </>
+  )
+}
+
+function Content() {
+  const { academyId, ready: academyReady } = useAcademy()
+  const [masked, setMasked] = useState(true)
+  const [onlySeated, setOnlySeated] = useState(false)
   const [tab, setTab] = useState('map')
 
-  const occupied = SEATS.filter((s) => s.name)
-  const byLoc = useMemo(() => {
-    const m = new Map<LocKey, number>()
-    for (const l of LOCATIONS) m.set(l.key, 0)
-    for (const s of occupied) if (s.loc) m.set(s.loc, (m.get(s.loc) ?? 0) + 1)
-    return m
-  }, [occupied])
+  const [areas, setAreas] = useState<SeatArea[]>([])
+  const [areaId, setAreaId] = useState<number | null>(null)
+  /** 구역 id → 배치. 상단 '재실' 은 지점 전체라 구역을 다 읽는다 */
+  const [layouts, setLayouts] = useState<Map<number, SeatCell[]>>(new Map())
+  const [current, setCurrent] = useState<SeatLeaveRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [loadedAt, setLoadedAt] = useState<Date | null>(null)
 
-  const notReturned = MOVES.filter((m) => !m.returned).length
-  const onlineKiosks = KIOSKS.filter((k) => k.online).length
+  useEffect(() => {
+    if (academyId === null) {
+      setAreas([])
+      setLoading(false)
+      return
+    }
+    let alive = true
+    listSeatAreas(academyId)
+      .then((list) => {
+        if (!alive) return
+        // 반 교실 좌석은 좌석 이탈 대상이 아니다 — 독서실(STUDY)만. 값이 없으면 예전 응답이라 독서실로 본다
+        const study = list.filter((a) => (a.areaType ?? 'STUDY') === 'STUDY')
+        setAreas(study)
+        setAreaId((prev) => (study.some((a) => a.id === prev) ? prev : (study[0]?.id ?? null)))
+      })
+      .catch((err) => alive && setError(err instanceof ApiError ? err.message : '좌석 구역을 불러오지 못했습니다.'))
+    return () => {
+      alive = false
+    }
+  }, [academyId])
+
+  const refresh = useCallback(async () => {
+    if (academyId === null) return
+    setLoading(true)
+    try {
+      const [cur, ...lays] = await Promise.all([
+        fetchCurrentSeatLeaves({ academyId }),
+        ...areas.map((a) => getSeatLayout(a.id, !masked)),
+      ])
+      setCurrent(cur)
+      setLayouts(new Map(areas.map((a, i) => [a.id, lays[i]])))
+      setLoadedAt(new Date())
+      setError(null)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '좌석표를 불러오지 못했습니다.')
+    } finally {
+      setLoading(false)
+    }
+  }, [academyId, areas, masked])
+
+  useEffect(() => {
+    void refresh()
+    const t = window.setInterval(() => void refresh(), REFRESH_MS)
+    return () => window.clearInterval(t)
+  }, [refresh])
+
+  const leavingBy = useMemo(() => {
+    const m = new Map<number, SeatLeaveRow>()
+    for (const r of current) if (r.enrollmentId !== null) m.set(r.enrollmentId, r)
+    return m
+  }, [current])
+
+  const allCells = useMemo(() => [...layouts.values()].flat(), [layouts])
+  const seated = allCells.filter((c) => seatView(c, c.enrollmentId !== null && leavingBy.has(c.enrollmentId)) === 'seat').length
+
+  const cells = useMemo(
+    () =>
+      [...(areaId !== null ? (layouts.get(areaId) ?? []) : [])]
+        // 좌표 순서(위→아래, 왼→오른)로 늘어놓는다. 좌표가 없으면 번호순
+        .sort((a, b) => (a.yPos ?? 0) - (b.yPos ?? 0) || (a.xPos ?? 0) - (b.xPos ?? 0) || a.seatCd.localeCompare(b.seatCd)),
+    [layouts, areaId],
+  )
 
   return (
     <div className="p-seat">
@@ -268,37 +466,35 @@ function Content() {
             <Icon name="armchair" size={13} /> 재실
           </div>
           <div className="v" style={{ color: 'var(--mint-d)' }}>
-            {byLoc.get('SEAT')}
+            {seated}
           </div>
-          <div className="d">본인좌석</div>
+          <div className={current.length ? 'd warn' : 'd'}>본인좌석 · 이탈 중 {current.length}명</div>
         </div>
-        {LOCATIONS.slice(1).map((l) => (
-          <div className="stat" key={l.key}>
+        {AWAY_LOCATIONS.map((l) => (
+          <div className="stat" key={l}>
             <div className="l">
-              <Icon name="map-pin" size={13} /> {l.label}
+              <Icon name="map-pin" size={13} /> {l}
             </div>
-            <div className="v">{byLoc.get(l.key)}</div>
-            <div className="d" style={{ fontFamily: 'ui-monospace, monospace', fontSize: 10 }}>
-              {l.key}
+            <div className="v">
+              <Unfilled reason="이탈 위치 구분값이 아직 정해지지 않았다(I-16)" />
             </div>
+            <div className="d">이탈 위치</div>
           </div>
         ))}
         <div className="stat">
           <div className="l">
             <Icon name="monitor" size={13} /> 키오스크
           </div>
-          <div className="v" style={{ color: onlineKiosks === KIOSKS.length ? 'var(--mint-d)' : 'var(--amber)' }}>
-            {onlineKiosks}
-            <span style={{ fontSize: 13, color: 'var(--muted)' }}>/{KIOSKS.length}</span>
+          <div className="v">
+            <Unfilled reason="키오스크 단말 상태가 서버에 없다" />
           </div>
-          <div className={onlineKiosks === KIOSKS.length ? 'd' : 'd warn'}>온라인 / 전체</div>
+          <div className="d">온라인 / 전체</div>
         </div>
       </div>
 
       <Tabs
         items={[
           { key: 'map', label: '실시간 좌석표' },
-          // 목업 배열 길이를 배지로 쓰면 없는 건수가 실재하는 것처럼 보인다
           { key: 'log', label: '이동 신청 내역' },
           { key: 'kiosk', label: '키오스크 관리' },
         ]}
@@ -307,101 +503,132 @@ function Content() {
         standalone
       />
 
+      {academyId === null && academyReady && (
+        <div className="note-box">지점을 먼저 선택하세요. 좌석 이탈은 지점 단위로 조회합니다.</div>
+      )}
+
       {tab === 'map' && (
-      <div className="card-sec">
-        <div className="card-sec-h">
-          <div className="t">
-            <span className="ico">
-              <Icon name="armchair" size={15} />
-            </span>
-            실시간 좌석표
-          </div>
-          <div className="r">
-            <button className={`chip${filter === 'ALL' ? ' on' : ''}`} onClick={() => setFilter('ALL')}>
-              전체
-            </button>
-            {LOCATIONS.map((l) => (
-              <button
-                key={l.key}
-                className={`chip${filter === l.key ? ' on' : ''}`}
-                onClick={() => setFilter(filter === l.key ? 'ALL' : l.key)}
-              >
-                {l.label}
-              </button>
-            ))}
-            <span className="mk verified" style={{ marginLeft: 4 }}>
-              <Icon name="zap" size={11} /> 실시간
-            </span>
-          </div>
-        </div>
-        <div className="card-sec-b">
-          <div className="seatmap">
-            {SEATS.map((s) => {
-              const loc = LOCATIONS.find((l) => l.key === s.loc)
-              const dim = filter !== 'ALL' && s.loc !== filter
-              return (
-                <div
-                  key={s.code}
-                  className={`seat ${s.name ? loc?.cls ?? '' : 'empty'}`}
-                  style={dim ? { opacity: 0.28 } : undefined}
-                  title={s.name ? `${s.code} · ${s.name} · ${loc?.label}` : `${s.code} · 공석`}
-                >
-                  <span className="sc">{s.code}</span>
-                  <span className="sn">{s.name ? (masked ? `${s.name[0]}*${s.name.slice(2)}` : s.name) : '공석'}</span>
-                  {s.name && s.loc !== 'SEAT' && (
-                    <span className="sl" style={{ color: 'var(--ink-2)' }}>
-                      {loc?.label}
-                    </span>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-
-          <div className="loc-legend">
-            {LOCATIONS.map((l) => (
-              <span key={l.key}>
-                <span className="sw" style={{ background: l.color }} />
-                {l.label}
-                <code>{l.key}</code>
+        <div className="card-sec">
+          <div className="card-sec-h">
+            <div className="t">
+              <span className="ico">
+                <Icon name="armchair" size={15} />
               </span>
-            ))}
-            <span>
-              <span className="sw" style={{ background: 'var(--line-2)' }} />
-              공석
-            </span>
-            <span style={{ marginLeft: 'auto', color: 'var(--muted)' }}>
-              앱 신청 · 키오스크 태깅으로 수신된 상태만 표시됩니다
-            </span>
+              실시간 좌석표
+              {areas.length > 0 && (
+                <select
+                  className="sel"
+                  style={{ width: 150, marginLeft: 8 }}
+                  value={areaId ?? ''}
+                  onChange={(e) => setAreaId(Number(e.target.value))}
+                  aria-label="좌석 구역"
+                >
+                  {areas.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.buildingName} {a.areaNm}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+            <div className="r">
+              <button className={`chip${!onlySeated ? ' on' : ''}`} onClick={() => setOnlySeated(false)}>
+                전체
+              </button>
+              <button className={`chip${onlySeated ? ' on' : ''}`} onClick={() => setOnlySeated(!onlySeated)}>
+                본인좌석
+              </button>
+              {AWAY_LOCATIONS.map((l) => (
+                <button key={l} className="chip" disabled data-soon title="준비 중입니다">
+                  {l}
+                </button>
+              ))}
+              <MaskToggle masked={masked} onChange={setMasked} />
+              <span
+                className="mk verified"
+                style={{ marginLeft: 4 }}
+                title={loadedAt ? `${dateTime(loadedAt.toISOString())} 기준 · 1분마다 새로 읽습니다` : undefined}
+              >
+                <Icon name="zap" size={11} /> 실시간
+              </span>
+            </div>
+          </div>
+          <div className="card-sec-b">
+            {error && (
+              <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)', marginBottom: 10 }}>
+                {error}
+              </div>
+            )}
+            {!loading && academyId !== null && areas.length === 0 && !error && (
+              <div className="note-box">이 지점에 등록된 독서실 좌석 구역이 없습니다.</div>
+            )}
+            <div className="seatmap">
+              {cells.map((c) => {
+                const leave = c.enrollmentId !== null ? leavingBy.get(c.enrollmentId) : undefined
+                const view = seatView(c, leave !== undefined)
+                const meta = VIEW_META[view]
+                const dim = onlySeated && view !== 'seat'
+                const who = c.studentName ?? ''
+                return (
+                  <div
+                    key={c.seatId}
+                    className={`seat ${meta.cls}`}
+                    style={{
+                      ...(dim ? { opacity: 0.28 } : undefined),
+                      ...(view === 'absent' ? { borderStyle: 'dashed' } : undefined),
+                    }}
+                    title={
+                      view === 'free' || view === 'off'
+                        ? `${c.seatCd} · ${meta.label}`
+                        : leave
+                          ? `${c.seatCd} · ${who} · ${dateTime(leave.leftAt).slice(11)} 이탈 · ${leave.minutes ?? 0}분째`
+                          : `${c.seatCd} · ${who} · ${meta.label}`
+                    }
+                  >
+                    <span className="sc">{c.seatCd}</span>
+                    <span className="sn">{view === 'free' || view === 'off' ? meta.label : who}</span>
+                    {leave && (
+                      <span
+                        className="sl"
+                        style={{ color: (leave.minutes ?? 0) > LONG_AWAY_MIN ? 'var(--red)' : 'var(--ink-2)' }}
+                      >
+                        이탈 {leave.minutes ?? 0}분
+                      </span>
+                    )}
+                    {view === 'absent' && (
+                      <span className="sl" style={{ color: 'var(--muted)' }}>
+                        미등원
+                      </span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="loc-legend">
+              {(['seat', 'away', 'absent', 'free'] as const).map((v) => (
+                <span key={v}>
+                  <span
+                    className="sw"
+                    style={{ background: VIEW_META[v].color, ...(v === 'absent' ? { border: '1px dashed var(--line)' } : undefined) }}
+                  />
+                  {VIEW_META[v].label}
+                </span>
+              ))}
+              <span style={{ marginLeft: 'auto', color: 'var(--muted)' }}>
+                키오스크 태깅으로 수신된 상태만 표시됩니다
+              </span>
+            </div>
           </div>
         </div>
-      </div>
       )}
 
-      {tab === 'log' && (
-        <DataTable
-          columns={COLUMNS}
-          rows={MOVES}
-          rowKey={(r) => r.id}
-          masked={masked}
-          pageSize={12}
-          countLabel={
-            <>
-              이동 신청 <b>{MOVES.length}</b>건 · 미복귀{' '}
-              <b style={{ color: notReturned ? 'var(--red)' : undefined }}>{notReturned}</b>건
-            </>
-          }
-          toolbar={
-            <>
-              <MaskToggle masked={masked} onChange={setMasked} />
-              <ExcelButton filename="좌석_이탈현황" columns={COLUMNS} rows={MOVES} masked={masked} />
-            </>
-          }
-        />
-      )}
+      {tab === 'log' && <LeaveLog academyId={academyId} />}
 
       {tab === 'kiosk' && (
         <>
+          <MockNotice reason="키오스크 단말 등록·상태·펌웨어를 관리하는 API가 없다" />
+
           <div className="note-box plain">
             <div className="ic">
               <Icon name="monitor" size={17} />
@@ -423,7 +650,7 @@ function Content() {
             <div>
               <div className="tt">자리를 비운 것이 모두 기록되지는 않습니다</div>
               <div className="tx">
-                기록에 남는 것은 <b>학생이 앱으로 신청했거나 키오스크에 태깅한 경우</b>입니다.
+                기록에 남는 것은 <b>학생이 키오스크에 태깅한 경우</b>입니다.
                 아무 것도 하지 않고 자리를 비우면 남지 않으므로, 좌석표의 빈 자리는
                 <b> &lsquo;자리를 비웠다&rsquo;가 아니라 &lsquo;기록이 없다&rsquo;</b>로 보셔야 합니다.
               </div>
@@ -438,9 +665,7 @@ function Content() {
             pageSize={10}
             countLabel={
               <>
-                등록 단말 <b>{KIOSKS.length}</b>대 · 온라인{' '}
-                <b style={{ color: onlineKiosks === KIOSKS.length ? 'var(--mint-d)' : 'var(--amber)' }}>{onlineKiosks}</b>
-                대 · 금일 수신 <b>{KIOSKS.reduce((a, k) => a + k.todayEvents, 0)}</b>건
+                등록 단말 <b>{KIOSKS.length}</b>대
               </>
             }
             toolbar={
