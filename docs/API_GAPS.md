@@ -1201,7 +1201,12 @@ API는 준비됐으므로 승인되면 붙인다.
 > 요청: `PUT /admin/students/{enrollmentId}/grades` 같은 직원 수정 경로.
 > 회신이 "직원을 통해서"라고 못박았으므로 **누가 고쳤는지도 남아야 한다.**
 
-## 12-2. 외부 성적 연동·엑셀 업로드 — **요청 취소**
+## 12-2. 외부 성적 연동·엑셀 업로드 — **요청 취소** → ⚠ 0921 성적 문서로 **뒤집힘**
+
+> **2026-09-21 갱신.** 0921 성적 문서로 방향이 바뀌었다 — 디랩에서 본 시험(더프리미엄·평가원)의
+> 결과를 **학원이 받은 파일 그대로 올린다.** 서버가 업로드 API 3종을 만들었고 '성적 업로드'
+> 화면을 새로 붙였다(32부). **입학 전 성적**(학생이 가입 때 앱에 넣는 것)은 아래 결론 그대로다.
+> 단원별 정답률(12-2-a)도 문항분석표·정오표로 출처가 생겼다 — 학생 앱 채점 탭이 쓴다.
 
 앞서 "더프리미엄 API 자동 조회·엑셀 업로드가 없다"고 적었는데, **둘 다 요청할 것이 아니었다.**
 
@@ -2837,3 +2842,52 @@ GET 상세 → homeroomTeacher:"박담임", homeroomOverridden:true, homeroomOve
 DELETE → GET 상세 → homeroomTeacher:"이담임", homeroomOverridden:false, homeroomOverride:null
 PUT {reason:""} → 400 "지정 사유를 입력해 주세요."
 ```
+
+# 32부. 성적 업로드 (F-4.6 부속 · 관리자 > 성적 업로드) — 2026-09-21
+
+0921 성적 문서로 새로 생긴 화면이다(12-2 갱신 참고). 학원이 **받은 파일 그대로** 올린다.
+
+```
+POST /admin/exam-forms                         디랩 시험 회차 등록 (purpose: ACADEMY, examDate 필수)
+GET  /admin/exam-forms/subject-presets         학년별 기본 과목 (조회 실패·빈 값이면 입학 양식 과목으로)
+POST /admin/grades/exam-scores/upload/preview  ① 성적 미리보기 — 저장 안 함        (file)
+POST /admin/grades/exam-scores/upload          ① 성적 반영 — 찾은 학생만 저장      (file)
+POST /admin/grades/exam-scores/upload/links    못 찾은 행을 학생에 잇기 — 그해 다음 회차부터 자동
+POST /admin/grades/exam-items/upload           ② 문항분석표(필수) + 정답률(선택)   (analysis, rates)
+POST /admin/grades/exam-responses/upload       ③ 정오표(필수) + 답안표(선택)       (results, answers)
+```
+
+- **③은 ②가 있어야 한다** — 국어·수학 공통/선택 경계(1~34 / 35~45번)를 문항분석표에서 안다.
+  처음엔 확인할 조회가 없었는데, 요청 후 `GET /exam-forms` 에 `itemCount`·`itemsUploadedAt` 이
+  추가됐다(✅ 같은 날). 화면은 `itemCount === 0` 이면 ③을 잠그고, ② 카드에 "문항 N개 · M/D 올림" 을 보인다
+- 학년별 기본 과목(`subject-presets`) 로컬 반영 확인 — 고3: 국어·수학·영어·한국사·탐구1·탐구2
+- 업로드는 `purpose: ACADEMY` 회차에만 된다. 성적 관리 화면은 입학 전 성적 전용이라 ACADEMY 를 거른다
+- `GET /exam-forms` 는 `academyId` 를 붙이면 **그 지점 전용만**, 빼면 **공통만** 준다 — 둘 다 불러 합친다
+
+## 32-1. 회차 등록 500 — ✅ 서버 수정(같은 날)
+
+`POST /exam-forms` 에서 **회차의 `sortOrder`(과목 것 말고)를 빼면 500.** 백엔드가 "빼면 0" 으로
+고쳤다(로컬 반영 대기). 화면은 `sortOrder: 1` 을 보낸다.
+
+## 32-2. 실제 확인 (로컬, 백엔드 md/ 샘플 파일)
+
+| 단계 | 결과 |
+|---|---|
+| 회차 등록 고3 · 6월 · 분당 | 200, examMasterId 13 |
+| ① 6월 모의평가 성적표 미리보기 | 605행 · 찾음 0 · 못 찾음 605 (로컬 학생 이름이 가짜라 정상) |
+| 한 행을 학생에 연결 → 다시 미리보기 | 찾음 1 · 못 찾음 604 (연결은 확인 후 삭제) |
+| ② 문항분석표 + 정답률(202608) | 문항 507 · 정답률 507 |
+| ③ 정오표(202606) | 저장 0 · 못 찾음 108 |
+| ①  반영(샘플 이름으로 고3 테스트 학생을 만들어) | 찾음 1 → 저장 1. 반영 뒤 버튼 잠김. 테스트 학생은 삭제 |
+| 새 회차(고3 월례) | 과목 = 학년별 기본 과목 · ② "아직 올리지 않았습니다" · ③ 잠김. 회차는 삭제 |
+
+## 32-3. 올린 디랩 시험 성적을 관리자 웹에서 볼 곳이 없다 ★ 요청
+
+`GET /admin/students/{id}/grades` 는 **입학 전 성적만** 준다. 디랩 시험(ACADEMY) 점수·채점은
+학생 앱 조회(`/app/grades/exams`, `/app/grades/exams/{id}/scoring`)에만 있다.
+반영 응답은 "저장 1명"인데, 무엇이 들어갔는지 웹에서 확인할 수 없다 — 잘못 올린 파일을
+알아챌 방법이 앱뿐이다.
+
+> 요청: 관리자용 조회 — 학생별 `GET /admin/students/{id}/grades/exams`(앱과 같은 모양) 또는
+> 회차별 `GET /admin/exam-forms/{id}/scores`(올라간 학생 목록 · 과목 점수).
+

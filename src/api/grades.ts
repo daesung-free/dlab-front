@@ -11,13 +11,15 @@ import type { GradeType } from './students'
  * ★ `subjectCode` 와 `subjectName` 이 분리돼 있다. 표시명("통합사회")은 해마다 바뀌는데
  *   통계는 국어끼리 묶여야 해서, 축은 코드가 갖는다. */
 
-export type ExamCode = 'JUNE' | 'SEPT' | 'OCT' | 'CSAT'
+/** MONTHLY(월례고사)는 디랩 시험에만 있다 — 입학 전 성적 양식에는 안 나온다 */
+export type ExamCode = 'JUNE' | 'SEPT' | 'OCT' | 'CSAT' | 'MONTHLY'
 
 export const EXAM_CODE_LABEL: Record<ExamCode, string> = {
   JUNE: '6월',
   SEPT: '9월',
   OCT: '10월',
   CSAT: '수능',
+  MONTHLY: '월례',
 }
 
 export interface ExamSubject {
@@ -33,6 +35,17 @@ export interface ExamSubject {
 
 export interface ExamForm {
   examMasterId: number
+  /**
+   * ADMISSION = 입학 전 성적(학생이 가입 때 넣는 것), ACADEMY = 디랩에서 본 시험.
+   * ★ 성적 파일 업로드는 ACADEMY 에만 된다 — 입학 전 양식에 올리면 학생이 넣은 입학 성적이 교체된다
+   */
+  purpose?: 'ADMISSION' | 'ACADEMY'
+  /** 시행일(yyyy-MM-dd). ACADEMY 는 필수 — 월례고사는 코드만으로 달이 구분되지 않는다 */
+  examDate?: string | null
+  /** 올라간 문항 정보(문항분석표) 수. 0 이면 정오·답안을 올릴 수 없다 */
+  itemCount?: number
+  /** 문항 정보를 마지막으로 올린 시각(ISO). 없으면 null */
+  itemsUploadedAt?: string | null
   /** null이면 전 지점 공통. 지점 행이 있으면 그 지점에서는 공통본 대신 그것이 쓰인다 */
   academyId: number | null
   year: number
@@ -139,5 +152,188 @@ export function updateExamScores(enrollmentId: number, scores: ScoreInput[]): Pr
   return request<GradeSubmission>(`/api/v1/admin/students/${enrollmentId}/grades/exam-scores`, {
     method: 'PUT',
     body: { scores },
+  })
+}
+
+/* ── 디랩 시험 회차 · 성적 파일 업로드 (F-4.6 부속 — 0921 성적 문서) ─────────────────────────
+ *
+ * 학원이 더프리미엄·평가원 파일을 **받은 그대로** 올린다. 양식을 우리가 새로 만들지 않는다.
+ *
+ * ★ 순서가 있다: ① 성적(학생별 점수) · ② 문항 정보(문항분석표 + 정답률) · ③ 정오·답안.
+ *   ③은 ②가 없으면 서버가 거절한다 — 국어·수학의 공통/선택 경계(1~34 / 35~45번)를
+ *   문항분석표에서 알아내기 때문이다. ①은 ②·③과 무관하다.
+ * ★ 학생은 **이름**으로 찾는다. 파일의 학교코드·반·번호는 우리 학번과 체계가 달라 못 쓴다.
+ *   동명이인은 자동으로 넣지 않고 멈춘다 — 사람이 한 번 이어주면(links) 다음 회차부터 자동이다.
+ */
+
+export interface ExamFormSubjectInput {
+  subjectCode: string
+  subjectName: string
+  sortOrder?: number
+  hasStandardScore?: boolean
+  hasPercentile?: boolean
+  hasGradeLevel?: boolean
+  /** 원점수를 받는가. 비우면 디랩 시험은 켠다 */
+  hasRawScore?: boolean
+}
+
+/** 학년별 기본 과목 구성 — 디랩 시험 회차를 만들 때 과목을 비우면 서버가 이것으로 채운다 */
+export interface SubjectPreset extends ExamFormSubjectInput {
+  presetId: number
+  /** null 이면 전 지점 공통본 */
+  academyId: number | null
+  gradeType: GradeType
+}
+
+export function listSubjectPresets(year: number, gradeType: GradeType, academyId: number | null): Promise<SubjectPreset[]> {
+  return request<SubjectPreset[]>('/api/v1/admin/exam-forms/subject-presets', {
+    query: { year, gradeType, academyId: academyId ?? undefined },
+  })
+}
+
+export interface ExamFormCreate {
+  /** 비우면 전 지점 공통 */
+  academyId?: number
+  year: number
+  gradeType: GradeType
+  examCode: ExamCode
+  examName: string
+  /**
+   * ★ 보내야 한다. 빼면 서버가 500 을 냈다(2026-09-21, 백엔드 수정 중 — 고친 뒤엔 0 으로 들어간다).
+   *   과목 안의 sortOrder 와 다른 값이다 — 이건 회차의 순서다
+   */
+  sortOrder: number
+  subjects: ExamFormSubjectInput[]
+  purpose: 'ACADEMY'
+  examDate: string
+}
+
+/**
+ * 지점 회차까지 합쳐서 받는다.
+ *
+ * ★ `academyId` 를 붙이면 **그 지점 전용 회차만** 오고, 빼면 **전 지점 공통만** 온다
+ *   (2026-09-21 실호출: 빼면 9건 · `academyId=8` 이면 분당 전용 3건). 둘 다 불러 합친다.
+ */
+export async function listAllExamForms(year: number, academyId: number | null): Promise<ExamForm[]> {
+  const [common, mine] = await Promise.all([
+    request<ExamForm[]>('/api/v1/admin/exam-forms', { query: { year } }),
+    academyId === null
+      ? Promise.resolve([] as ExamForm[])
+      : request<ExamForm[]>('/api/v1/admin/exam-forms', { query: { year, academyId } }),
+  ])
+  const byId = new Map<number, ExamForm>()
+  for (const f of [...common, ...mine]) byId.set(f.examMasterId, f)
+  return [...byId.values()]
+}
+
+/** 디랩 시험 회차 등록. 과목 없이는 만들 수 없다 */
+export function createExamForm(body: ExamFormCreate): Promise<ExamForm> {
+  return request<ExamForm>('/api/v1/admin/exam-forms', { method: 'POST', body })
+}
+
+export interface ScoreUploadMatched {
+  rowNumber: number
+  enrollmentId: number
+  studentNo: string | null
+  name: string
+  subjectCount: number
+}
+
+export interface ScoreUploadUnmatched {
+  /** 엑셀 기준 행 번호 */
+  rowNumber: number
+  /** 연결(links)에 필요하다 — 학교코드·반·번호 세 값이 키다 */
+  schoolCode: string
+  name: string
+  classNo: string
+  /** 파일의 번호("반 번호 + 3자리 순번"). 우리 학번과 다른 체계다 */
+  studentNo: string
+  /** 서버가 적어 준 사유 — 그대로 보여준다 */
+  reason: string
+}
+
+export interface ScoreUploadResult {
+  examName: string
+  totalRows: number
+  /** 외부생이라 건너뛴 행. 안 보여주면 "왜 인원이 다르냐" 가 된다 */
+  skippedExternal: number
+  matched: ScoreUploadMatched[]
+  unmatched: ScoreUploadUnmatched[]
+}
+
+function fileForm(parts: Record<string, File | null | undefined>): FormData {
+  const fd = new FormData()
+  for (const [k, f] of Object.entries(parts)) if (f) fd.append(k, f)
+  return fd
+}
+
+/** ① 성적 파일 미리보기 — **저장하지 않는다.** 누가 매칭됐는지 먼저 본다 */
+export function previewScoreUpload(academyId: number, examMasterId: number, file: File): Promise<ScoreUploadResult> {
+  return request<ScoreUploadResult>('/api/v1/admin/grades/exam-scores/upload/preview', {
+    method: 'POST',
+    query: { academyId, examMasterId },
+    body: fileForm({ file }),
+  })
+}
+
+/**
+ * ① 성적 파일 반영. **매칭된 학생만** 저장한다 — 못 찾은 행은 사유와 함께 돌아온다.
+ * 같은 회차를 다시 올리면 그 회차 점수가 교체된다.
+ */
+export function applyScoreUpload(academyId: number, examMasterId: number, file: File): Promise<ScoreUploadResult> {
+  return request<ScoreUploadResult>('/api/v1/admin/grades/exam-scores/upload', {
+    method: 'POST',
+    query: { academyId, examMasterId },
+    body: fileForm({ file }),
+  })
+}
+
+/** 못 찾은 행을 학생에 잇는다. **한 번 이으면 다음 회차부터 자동**이다(연도 단위) */
+export function linkUploadRow(body: {
+  academyId: number
+  year: number
+  schoolCode: string
+  classNo: string
+  studentNo: string
+  enrollmentId: number
+}): Promise<unknown> {
+  return request('/api/v1/admin/grades/exam-scores/upload/links', { method: 'POST', body })
+}
+
+export interface ExamItemResult {
+  itemCount: number
+  ratesApplied: number
+  /** 이어지지 않은 정답률. 비어 있지 않으면 경고 — 과목명 표기가 달라 전국 정답률이 안 붙었다 */
+  unmatchedRates: string[]
+}
+
+/** ② 문항 정보 — 문항분석표(필수) + 정답률(선택). 다시 올리면 그 회차 문항이 통째로 교체된다 */
+export function uploadExamItems(examMasterId: number, analysis: File, rates: File | null): Promise<ExamItemResult> {
+  return request<ExamItemResult>('/api/v1/admin/grades/exam-items/upload', {
+    method: 'POST',
+    query: { examMasterId },
+    body: fileForm({ analysis, rates }),
+  })
+}
+
+export interface ExamResponseResult {
+  savedStudents: number
+  skippedExternal: number
+  unmatched: { rowNumber: number; name: string; reason: string }[]
+  /** 대응표에 없는 과목 약어. 비어 있지 않으면 그 과목 채점이 빠졌다 — 경고할 것 */
+  unknownSubjects: string[]
+}
+
+/** ③ 정오·답안 — 정오표(필수) + 답안표(선택). ②가 없으면 서버가 거절한다 */
+export function uploadExamResponses(
+  academyId: number,
+  examMasterId: number,
+  results: File,
+  answers: File | null,
+): Promise<ExamResponseResult> {
+  return request<ExamResponseResult>('/api/v1/admin/grades/exam-responses/upload', {
+    method: 'POST',
+    query: { academyId, examMasterId },
+    body: fileForm({ results, answers }),
   })
 }

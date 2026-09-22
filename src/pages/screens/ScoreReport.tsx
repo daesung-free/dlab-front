@@ -148,7 +148,9 @@ function Content() {
   useEffect(() => {
     let cancelled = false
     listExamForms(year)
-      .then((f) => !cancelled && setForms(f))
+      // 디랩에서 본 시험(ACADEMY)은 성적 업로드 화면이 맡는다 — 여기는 입학 전 성적만.
+      // 섞이면 회차 버튼에 업로드용 회차가 끼어 직원이 손으로 고치게 된다
+      .then((f) => !cancelled && setForms(f.filter((x) => x.purpose !== 'ACADEMY')))
       .catch(() => !cancelled && setForms([]))
     return () => {
       cancelled = true

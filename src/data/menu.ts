@@ -400,6 +400,17 @@ export const SCREENS: Screen[] = [
     feOrder: 3,
     summary: '합격 실적 입력·현황·통계',
   },
+  {
+    id: 'exam-upload',
+    code: 'F-4.6-부속',
+    groupId: 'admin',
+    name: '성적 업로드',
+    icon: 'upload',
+    kind: 'verified',
+    phase: 2,
+    feOrder: 3,
+    summary: '디랩에서 본 시험 회차 등록, 성적·문항분석표·정오표 파일 업로드(0921 성적 문서)',
+  },
 
   /* ─────────────── 4.11 신규 확장 ─────────────── */
   {
