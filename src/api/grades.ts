@@ -337,3 +337,69 @@ export function uploadExamResponses(
     body: fileForm({ results, answers }),
   })
 }
+
+/* ── 디랩 시험 성적 조회 (관리자) — 2026-09-21 추가. 앱 /app/grades/exams* 와 같은 모양 ── */
+
+export interface AcademyExam {
+  examMasterId: number
+  examCode: ExamCode
+  examName: string
+  examDate: string | null
+  /** 평가원 시험인가(아니면 사설 — 더프리미엄 등) */
+  kice: boolean
+}
+
+export interface AcademyExamSubject {
+  subjectCode: string
+  subjectName: string
+  rawScore: number | null
+  standardScore: number | null
+  percentile: number | null
+  gradeLevel: number | null
+}
+
+/** 지망대학 진단 한 줄 — 파일에 적힌 그대로다 */
+export interface AcademyExamChoice {
+  rank: number
+  universityName: string
+  departmentName: string
+  recruitQuota: number | null
+  applicantCount: number | null
+  applicantRank: number | null
+  appliedAreas: string | null
+  expectedScore: number | null
+  cutoffScore: number | null
+  /** 예상점수 − 합격선. 음수면 모자란다 */
+  gapToCutoff: number | null
+  diagnosis: string | null
+}
+
+export interface AcademyExamDetail {
+  exam: AcademyExam
+  subjects: AcademyExamSubject[]
+  choices: AcademyExamChoice[]
+  /** 이 시험 종류는 진단 자체가 없다(비어 있는 것과 다르다) */
+  noDiagnosisByType: boolean
+}
+
+export interface AcademyExamTrend {
+  exam: AcademyExam
+  values: { subjectCode: string; subjectName: string; gradeLevel: number | null; percentile: number | null }[]
+}
+
+/**
+ * 성적 업로드로 반영된 회차, **최근순.** 입학 전 성적은 여기 없다 — `getStudentGrades` 가 따로 준다.
+ */
+export function listAcademyExams(enrollmentId: number): Promise<AcademyExam[]> {
+  return request<AcademyExam[]>(`/api/v1/admin/students/${enrollmentId}/grades/exams`)
+}
+
+export function getAcademyExam(enrollmentId: number, examMasterId: number): Promise<AcademyExamDetail> {
+  return request<AcademyExamDetail>(`/api/v1/admin/students/${enrollmentId}/grades/exams/${examMasterId}`)
+}
+
+/** 회차별 과목 등급·백분위, **오래된 순** */
+export function getAcademyTrend(enrollmentId: number): Promise<AcademyExamTrend[]> {
+  return request<AcademyExamTrend[]>(`/api/v1/admin/students/${enrollmentId}/grades/trend`)
+}
+

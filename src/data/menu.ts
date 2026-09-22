@@ -592,6 +592,8 @@ export const SCREENS: Screen[] = [
     kind: 'brandnew',
     phase: 4,
     summary: 'FCM 푸시 발송·예약, 앱 버전 / 강제 업데이트 게이트, 홈 배너·팝업, 약관·동의 버전 관리',
+    /* 서버 app-config 가 SUPER_ADMIN 전용이다 — 지점 관리자에게 열면 전부 403 인 빈 화면이 된다 */
+    superOnly: true,
   },
 ]
 
