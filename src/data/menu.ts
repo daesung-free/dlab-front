@@ -474,7 +474,7 @@ export const SCREENS: Screen[] = [
     id: 'daily-report',
     code: 'F-4.11-6',
     groupId: 'expand',
-    name: 'Daily Report 집계(서버)',
+    name: 'Daily Report 집계',
     icon: 'gauge',
     kind: 'brandnew',
     phase: 3,

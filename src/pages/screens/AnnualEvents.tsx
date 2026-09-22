@@ -101,6 +101,21 @@ function Content() {
   const [busy, setBusy] = useState(false)
   /** 삭제 확인 모달. null 이면 닫힌 상태 */
   const [removing, setRemoving] = useState<Row | null>(null)
+  /*
+   * 수정 — 이름·날짜·유형(·비고)을 고친다. 전에는 표시/차단 전환과 삭제만 있어서 설명회 날짜가
+   * 밀리면 지우고 다시 넣어야 했다. 서버는 둘 다 고칠 수 있었다(PATCH).
+   * ★ 쉬는 날은 하루 한 줄이라 날짜 하나, 행사는 기간.
+   * ★ 해를 넘겨 옮기지 않는다 — 목록이 연도로 나뉘어 있어 옮긴 줄이 '사라진' 것처럼 보인다
+   */
+  const [editing, setEditing] = useState<{
+    row: Row
+    name: string
+    from: string
+    to: string
+    type: string
+    memo: string
+    error: string | null
+  } | null>(null)
   const [result, setResult] = useState<string | null>(null)
   /*
    * 전년도 복사 — 행사만 옮긴다(`/annual-events/copy-year`). 쉬는 날(휴일)은 옮기지 않는다.
@@ -215,6 +230,53 @@ function Content() {
       setResult(null)
     } catch (err) {
       setResult(err instanceof ApiError ? `바꾸지 못했습니다 — ${err.message}` : '바꾸지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function openEdit(r: Row) {
+    setEditing(
+      r.kind === 'holiday'
+        ? { row: r, name: r.h.name, from: r.h.date, to: r.h.date, type: r.h.type, memo: '', error: null }
+        : { row: r, name: r.e.name, from: r.e.startDate, to: r.e.endDate, type: r.e.eventType, memo: r.e.memo ?? '', error: null },
+    )
+  }
+
+  async function saveEdit() {
+    if (!editing) return
+    const { row, name: nm, from: f, memo: mm } = editing
+    const t = row.kind === 'holiday' ? f : editing.to || f
+    if (t < f) return setEditing({ ...editing, error: '시작일이 종료일보다 뒤입니다.' })
+    if (f.slice(0, 4) !== row.from.slice(0, 4) || t.slice(0, 4) !== row.from.slice(0, 4)) {
+      return setEditing({ ...editing, error: `${row.from.slice(0, 4)}년 안에서만 고칠 수 있습니다. 다른 해로 옮기려면 지우고 새로 등록하세요.` })
+    }
+    setBusy(true)
+    try {
+      if (row.kind === 'holiday') {
+        await updateHoliday(row.h.id, {
+          academyId: row.h.academyId ?? undefined,
+          date: f,
+          name: nm.trim(),
+          type: editing.type as HolidayType,
+          planExcluded: row.h.planExcluded,
+        })
+      } else {
+        // ★ memo 는 안 보내면 지워진다 — 늘 함께 보낸다
+        await updateAnnualEvent(row.e.id, {
+          name: nm.trim(),
+          startDate: f,
+          endDate: t,
+          eventType: editing.type as AnnualEventType,
+          memo: mm.trim(),
+        })
+      }
+      const span = (a: string, b: string) => (b !== a ? `${a} ~ ${b}` : a)
+      setResult(`'${row.name} (${span(row.from, row.to)})' 을 '${nm.trim()} (${span(f, t)})' 로 고쳤습니다.`)
+      setEditing(null)
+      await load()
+    } catch (err) {
+      setEditing({ ...editing, error: err instanceof ApiError ? err.message : '고치지 못했습니다.' })
     } finally {
       setBusy(false)
     }
@@ -374,7 +436,7 @@ function Content() {
       {
         key: 'act',
         header: '',
-        width: '160px',
+        width: '206px',
         align: 'center',
         value: () => '',
         render: (r) => (
@@ -400,6 +462,15 @@ function Content() {
                 {r.e.showInPlan ? '숨기기' : '표시'}
               </button>
             )}
+            <button
+              className="btn"
+              style={{ padding: '4px 9px', fontSize: 11.5 }}
+              disabled={busy}
+              onClick={() => openEdit(r)}
+              title="이름·날짜·유형을 고칩니다"
+            >
+              수정
+            </button>
             <button
               className="btn"
               style={{ padding: '4px 9px', fontSize: 11.5, color: 'var(--red)' }}
@@ -443,6 +514,52 @@ function Content() {
               달라 새로 등록하세요. 위에서 고른 시즌({year})이 옮겨 갈 연도입니다.
             </div>
           </div>
+        </Modal>
+      )}
+
+      {editing && (
+        <Modal
+          title={`${editing.row.kind === 'holiday' ? '쉬는 날' : '행사'} 수정`}
+          sub={`${editing.row.name} · ${editing.row.from}${editing.row.to !== editing.row.from ? ` ~ ${editing.row.to}` : ''}`}
+          confirmLabel="저장"
+          busy={busy}
+          error={editing.error}
+          confirmDisabled={editing.name.trim() === '' || editing.from === ''}
+          onConfirm={() => void saveEdit()}
+          onClose={() => setEditing(null)}
+        >
+          <div className="frow">
+            <label className="req">이름</label>
+            <input className="inp" value={editing.name} maxLength={50} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
+          </div>
+          <div className="frow">
+            <label className="req">{editing.row.kind === 'holiday' ? '날짜' : '기간'}</label>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input className="inp" type="date" value={editing.from} onChange={(e) => setEditing({ ...editing, from: e.target.value })} />
+              {editing.row.kind === 'event' && (
+                <>
+                  ~
+                  <input className="inp" type="date" value={editing.to} min={editing.from} onChange={(e) => setEditing({ ...editing, to: e.target.value })} />
+                </>
+              )}
+            </div>
+          </div>
+          <div className="frow">
+            <label>유형</label>
+            <select className="sel" value={editing.type} onChange={(e) => setEditing({ ...editing, type: e.target.value })}>
+              {Object.entries(editing.row.kind === 'holiday' ? HOLIDAY_TYPE_LABEL : ANNUAL_EVENT_TYPE_LABEL).map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </div>
+          {editing.row.kind === 'event' && (
+            <div className="frow">
+              <label>비고</label>
+              <input className="inp" value={editing.memo} onChange={(e) => setEditing({ ...editing, memo: e.target.value })} />
+            </div>
+          )}
         </Modal>
       )}
 

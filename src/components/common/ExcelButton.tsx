@@ -67,7 +67,7 @@ export function CopyButton<T>({ columns, rows, masked = true }: Omit<Props<T>, '
       }}
     >
       <Icon name={done ? 'check' : 'clipboard-list'} size={14} />
-      {done ? '복사됨' : 'Copy'}
+      {done ? '복사됨' : '복사'}
     </button>
   )
 }
