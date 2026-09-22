@@ -272,7 +272,7 @@ function Content() {
         })
       }
       const span = (a: string, b: string) => (b !== a ? `${a} ~ ${b}` : a)
-      setResult(`'${row.name} (${span(row.from, row.to)})' 을 '${nm.trim()} (${span(f, t)})' 로 고쳤습니다.`)
+      setResult(`수정했습니다 — ${row.name} (${span(row.from, row.to)}) → ${nm.trim()} (${span(f, t)})`)
       setEditing(null)
       await load()
     } catch (err) {
@@ -439,12 +439,14 @@ function Content() {
         width: '206px',
         align: 'center',
         value: () => '',
+        /* 첫 버튼 글자 수가 줄마다 달라(차단 해제 · 숨기기 · 표시) 가운데 정렬이면 수정·삭제가
+           줄마다 밀렸다 — 첫 버튼 폭을 '차단 해제' 에 맞춰 고정한다 */
         render: (r) => (
           <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
             {r.kind === 'holiday' ? (
               <button
                 className="btn"
-                style={{ padding: '4px 9px', fontSize: 11.5, whiteSpace: 'nowrap' }}
+                style={{ padding: '4px 9px', fontSize: 11.5, whiteSpace: 'nowrap', minWidth: 70, justifyContent: 'center' }}
                 disabled={busy}
                 onClick={() => void toggleBlock(r.h)}
                 title="학습계획 차단을 켜고 끕니다"
@@ -454,7 +456,7 @@ function Content() {
             ) : (
               <button
                 className="btn"
-                style={{ padding: '4px 9px', fontSize: 11.5, whiteSpace: 'nowrap' }}
+                style={{ padding: '4px 9px', fontSize: 11.5, whiteSpace: 'nowrap', minWidth: 70, justifyContent: 'center' }}
                 disabled={busy}
                 onClick={() => void toggleShow(r.e)}
                 title="학생 달력·학습계획에 보일지 정합니다"

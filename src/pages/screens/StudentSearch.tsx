@@ -432,7 +432,7 @@ function Content() {
     try {
       await updateStudent(infoEdit.loaded.enrollmentId, body)
       table.reload()
-      setInfoDone(`${infoEdit.loaded.name} 학생 정보를 고쳤습니다.`)
+      setInfoDone(`${infoEdit.loaded.name} 학생 정보를 수정했습니다.`)
       setInfoEdit(null)
     } catch (e) {
       setInfoErr(e instanceof ApiError ? e.message : '저장하지 못했습니다.')
