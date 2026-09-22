@@ -405,7 +405,14 @@ function RegisterButton() {
       setOpen(false)
       registered.bump()
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : '등록하지 못했습니다.')
+      /* 서버 문구가 '승인 정책이 없습니다: ABSENCE' 처럼 유형 코드를 달고 온다 — 할 일이 보이게 바꾼다 */
+      setErr(
+        e instanceof ApiError
+          ? e.message.startsWith('승인 정책이 없습니다')
+            ? '이 지점에 사유 신청 승인 설정이 없습니다. 승인 라우팅 화면에서 먼저 정해 주세요.'
+            : e.message
+          : '등록하지 못했습니다.',
+      )
     } finally {
       setBusy(false)
     }

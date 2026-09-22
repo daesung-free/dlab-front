@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DataTable, ExcelButton, MaskToggle, type Column } from '../../components/common'
+import { DataTable, ExcelButton, MaskToggle, Modal, type Column } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
@@ -285,8 +285,10 @@ const TAG_COLUMNS: Column<TagLog>[] = [
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
 
+/* toISOString 은 UTC 라 매월 1일 오전 9시 전에는 지난달이 나왔다 — 로컬 날짜로 만든다 */
 function thisMonth(): string {
-  return new Date().toISOString().slice(0, 7)
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
 function Content() {
@@ -311,6 +313,10 @@ function Content() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  /* 중단일 등록 확인 — ★ 서버는 등록하는 순간 그날 신청을 전부 취소하고, 중단을 풀어도
+       되살리지 않는다. 날짜 한 번 눌러 수십 건이 취소되던 것을 막으려고 먼저 묻는다 */
+  const [closureAsk, setClosureAsk] = useState<MealDay | null>(null)
+  const [closureNote, setClosureNote] = useState<string | null>(null)
 
   /**
    * 마감 정책 저장.
@@ -388,11 +394,19 @@ function Content() {
   async function addClosure(date: string) {
     if (academyId === null) return
     setBusy(true)
+    setClosureNote(null)
     try {
-      await createMealClosure(academyId, date, reason)
+      const saved = await createMealClosure(academyId, date, reason)
+      setClosureNote(
+        saved.canceledCount > 0
+          ? `${date} 을 중단일로 등록했습니다 — 신청 ${saved.canceledCount}건이 취소됐습니다. 결제된 건은 환불해 주세요.`
+          : `${date} 을 중단일로 등록했습니다. 취소된 신청은 없습니다.`,
+      )
+      setClosureAsk(null)
       await load()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '중단일을 등록하지 못했습니다.')
+      setClosureAsk(null)
     } finally {
       setBusy(false)
     }
@@ -400,8 +414,10 @@ function Content() {
 
   async function removeClosure(closureId: number) {
     setBusy(true)
+    setClosureNote(null)
     try {
       await deleteMealClosure(closureId)
+      setClosureNote('중단을 풀었습니다. 중단 때 취소된 신청은 되살아나지 않으니, 필요한 학생은 다시 신청해야 합니다.')
       await load()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '중단일을 해제하지 못했습니다.')
@@ -432,7 +448,7 @@ function Content() {
     if (d.closedReason === 'WEEKEND' || d.closedReason === 'HOLIDAY') return
     const existing = closureList.find((c) => c.date === d.date)
     if (existing) void removeClosure(existing.id)
-    else void addClosure(d.date)
+    else setClosureAsk(d)
   }
 
   return (
@@ -501,6 +517,38 @@ function Content() {
         <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
           {error}
         </div>
+      )}
+      {closureNote && (
+        <div className="note-box" role="status">
+          <div>{closureNote}</div>
+        </div>
+      )}
+
+      {closureAsk && (
+        <Modal
+          title={`${closureAsk.date} 급식을 중단할까요?`}
+          sub={`사유: ${reason}`}
+          confirmLabel="중단일로 등록"
+          danger
+          busy={busy}
+          onConfirm={() => void addClosure(closureAsk.date)}
+          onClose={() => setClosureAsk(null)}
+        >
+          <div className="note-box">
+            <div>
+              {closureAsk.lunchCount + closureAsk.dinnerCount > 0 ? (
+                <>
+                  그날 신청 <b>{closureAsk.lunchCount + closureAsk.dinnerCount}건</b>(점심 {closureAsk.lunchCount} · 저녁{' '}
+                  {closureAsk.dinnerCount})이 <b>바로 취소</b>됩니다. 결제된 건은 환불해야 합니다.
+                </>
+              ) : (
+                <>그날 들어온 신청은 없습니다.</>
+              )}
+              <br />
+              중단을 나중에 풀어도 <b>취소된 신청은 되살아나지 않습니다.</b>
+            </div>
+          </div>
+        </Modal>
       )}
 
       <div className="card-sec">
@@ -603,8 +651,8 @@ function Content() {
                 <div className="tx">
                   날짜를 눌러 <b>운영 ↔ 중단</b>을 전환합니다. 주말·공휴일은 정책상 이미 제외돼 있어 손댈 수 없습니다.
                   <br />
-                  <b>이미 결제된 날을 중단으로 바꾸면 해당 건은 전부 환불 대상</b>이 되므로, 결제건을 확인해 환불한 뒤
-                  중단이 확정됩니다. 누르자마자 바로 확정되지는 않습니다.
+                  <b>중단일로 등록하면 그날 신청이 바로 취소</b>되고, 결제된 건은 환불 대상이 됩니다. 등록 전에 건수를
+                  한 번 더 보여 드립니다. 중단을 풀어도 취소된 신청은 되살아나지 않습니다.
                 </div>
               </div>
             </div>
@@ -718,8 +766,9 @@ function Content() {
                   <Icon name="calendar-range" size={15} /> 월 접수 기간
                 </div>
                 <div className="two" style={{ margin: '4px 0 10px' }}>
-                  <input className="inp" type="date" defaultValue="2026-05-18" />
-                  <input className="inp" type="date" defaultValue="2026-05-27" />
+                  {/* 저장할 곳이 없는 값이다 — 고칠 수 있게 두면 저장된 줄 안다 */}
+                  <input className="inp" type="date" defaultValue="2026-05-18" disabled data-soon title="준비 중입니다" />
+                  <input className="inp" type="date" defaultValue="2026-05-27" disabled data-soon title="준비 중입니다" />
                 </div>
                 <ul>
                   <li>기간 밖에는 다음 달 신청 화면이 열리지 않음</li>

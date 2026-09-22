@@ -112,7 +112,7 @@ function Content() {
     setError(null)
     const [r, s] = await Promise.allSettled([
       listSchedules({ academyId, month }),
-      searchStudents({ status: 'ENROLLED', size: 200, academyId }),
+      searchStudents({ status: 'ENROLLED', size: 2000, academyId }),
     ])
     setRows(r.status === 'fulfilled' ? r.value : [])
     setStudents(s.status === 'fulfilled' ? s.value.rows : [])

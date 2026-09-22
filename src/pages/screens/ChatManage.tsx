@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { DataTable, type Column } from '../../components/common'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { DataTable, Modal, type Column } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
@@ -160,8 +160,8 @@ const REQUEST_COLUMNS: Column<AdminRequest>[] = [
     width: '80px',
     align: 'center',
     value: () => '',
-    render: (r) => (
-      <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled={r.status === '완료'}>
+    render: () => (
+      <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled data-soon title="준비 중입니다">
         처리
       </button>
     ),
@@ -182,6 +182,17 @@ function Content() {
   // 전체 발송은 본사만 가능하다 — 서버가 경로 단위로 권한을 건다
   const [scope, setScope] = useState<'ALL' | 'BRANCH'>('BRANCH')
   const [saving, setSaving] = useState(false)
+  /* 삭제는 되돌릴 수 없고 학생 앱에서도 빠진다 — 한 번 묻는다 */
+  const [removing, setRemoving] = useState<ApiNotice | null>(null)
+  /* '이번 주 공지' — 올해 전체 건수를 이번 주라고 써 두었었다. 월요일부터 센다 */
+  const weekCount = useMemo(() => {
+    const now = new Date()
+    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7))
+    return notices.filter((n) => {
+      const at = n.publishedAt ?? n.createdAt
+      return at !== null && new Date(at) >= monday
+    }).length
+  }, [notices])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -242,21 +253,33 @@ function Content() {
   async function remove(id: number) {
     try {
       await deleteNotice(id)
+      setRemoving(null)
       await load()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '삭제하지 못했습니다.')
+      setRemoving(null)
     }
   }
 
   return (
     <>
+      {removing && (
+        <Modal
+          title={`'${removing.title}' 공지를 삭제할까요?`}
+          sub="학생·학부모 앱에서도 빠집니다. 되돌릴 수 없습니다."
+          confirmLabel="삭제"
+          danger
+          onConfirm={() => void remove(removing.id)}
+          onClose={() => setRemoving(null)}
+        />
+      )}
       <div className="stat-strip">
         <div className="stat">
           <div className="l">
             <Icon name="bell" size={13} /> 이번 주 공지
           </div>
-          <div className="v">{notices.length}</div>
-          <div className="d">범위별 발송</div>
+          <div className="v">{weekCount}</div>
+          <div className="d">올해 {notices.length}건</div>
         </div>
         <div className="stat">
           <div className="l">
@@ -274,9 +297,7 @@ function Content() {
           <div className="v" style={{ fontSize: 15, paddingTop: 6 }}>
             선정 대기
           </div>
-          <div className="d down" style={{ fontFamily: 'ui-monospace, monospace', fontSize: 9.5 }}>
-            DIRECT_1TO1
-          </div>
+          <div className="d down">메신저 선정 후 착수</div>
         </div>
         <div className="stat">
           <div className="l">
@@ -294,7 +315,7 @@ function Content() {
           <div className="v" style={{ fontSize: 15, paddingTop: 6 }}>
             벤더
           </div>
-          <div className="d">chat_threads — 메타만</div>
+          <div className="d">대화 내용은 메신저 업체에 보관</div>
         </div>
       </div>
 
@@ -404,7 +425,7 @@ function Content() {
                         <button
                           className="btn"
                           style={{ padding: '4px 8px', fontSize: 11, color: 'var(--red)' }}
-                          onClick={() => void remove(r.id)}
+                          onClick={() => setRemoving(r)}
                         >
                           삭제
                         </button>

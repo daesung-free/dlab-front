@@ -218,6 +218,13 @@ function Content() {
   const setCell = (enrollmentId: number, patch: Partial<RoutineResult>) =>
     setGrid((g) => (g ? g.map((x) => (x.enrollmentId === enrollmentId ? { ...x, ...patch } : x)) : g))
   const num = (v: string) => (v.trim() === '' ? null : Number(v))
+  /* 서버 오류 문구가 학생을 '학생(등록 건 123)' 으로 부른다 — 내부 번호라 누군지 알 수 없다.
+     격자에 있는 이름·학번으로 바꿔 보여준다 */
+  const withNames = (msg: string) =>
+    msg.replace(/학생\(등록 건 (\d+)\)/g, (all, id: string) => {
+      const r = grid?.find((x) => x.enrollmentId === Number(id))
+      return r ? `${r.studentName}${r.studentNo ? `(${r.studentNo})` : ''}` : all
+    })
 
   async function saveGrid() {
     if (editRoutine === null || !grid) return
@@ -239,7 +246,7 @@ function Content() {
       setGrid(await listRoutineResults(editRoutine, date))
       void load()
     } catch (e) {
-      setGridMsg({ text: e instanceof ApiError ? e.message : '저장하지 못했습니다.', error: true })
+      setGridMsg({ text: e instanceof ApiError ? withNames(e.message) : '저장하지 못했습니다.', error: true })
     } finally {
       setGridBusy(false)
     }
@@ -251,9 +258,11 @@ function Content() {
     setGridMsg(null)
     try {
       await publishRoutineResults(editRoutine, date)
-      const n = grid.filter((r) => r.status === 'REVIEWED').length
-      setGridMsg({ text: `검수까지 끝난 ${n}명의 결과를 학생 앱에 공개했습니다. 검수 전인 학생은 공개되지 않았습니다.` })
-      setGrid(await listRoutineResults(editRoutine, date))
+      /* 화면 값으로 세면 저장 안 한 '검수' 까지 들어가 실제보다 많게 나온다 — 다시 받아서 센다 */
+      const fresh = await listRoutineResults(editRoutine, date)
+      const n = fresh.filter((r) => r.status === 'PUBLISHED').length
+      setGridMsg({ text: `학생 앱에 공개된 결과는 ${n}명입니다. 검수 전인 학생은 공개되지 않았습니다.` })
+      setGrid(fresh)
       void load()
     } catch (e) {
       setGridMsg({ text: e instanceof ApiError ? e.message : '공개하지 못했습니다.', error: true })

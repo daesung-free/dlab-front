@@ -460,7 +460,9 @@ function Content() {
                     <tr key={t.key}>
                       <th className="area">
                         {TRACK_LABEL[t.key] ?? t.label}
-                        <span className="an">{t.key === 'SCIENCE' ? '수학 미적/기하 · 과탐' : '수학 확통 · 사탐'}</span>
+                        {/* 예체능·공통에도 인문 설명이 붙었었다 — 두 계열에만 단다 */}
+                        {t.key === 'SCIENCE' && <span className="an">수학 미적/기하 · 과탐</span>}
+                        {t.key === 'HUMANITIES' && <span className="an">수학 확통 · 사탐</span>}
                       </th>
                       {/* 교차는 서버가 안 준다 — 학생 목록의 재수 횟수로 센다(1 재수 · 2 삼수 · 3 이상 N수) */}
                       {RETAKE_COLS.map((r) => (

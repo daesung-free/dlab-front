@@ -142,6 +142,8 @@ const STATUS_TONE: Record<string, string> = {
 const wonOf = (n: number) => `${n.toLocaleString()}원`
 
 /** 목업의 항목 이름 → 서버 billingType. 등록비는 서버에 대응 값이 없어 기타로 간다 */
+const METHOD_TO_CODE: Record<Method, PayMethod> = { 카드: 'CARD', 가상계좌: 'VBANK', 현금: 'CASH' }
+
 const KIND_TO_TYPE: Record<Kind, BillingType> = {
   등록비: 'ETC',
   교습비: 'TUITION',
@@ -453,10 +455,12 @@ function Content() {
   const period = query.period as DateRangeValue | undefined
   const params = useMemo(() => {
     const kind = query.kind
-    // chips 는 배열이다. 서버는 type 하나만 받으므로 첫 값만 보낸다
-    const type = Array.isArray(kind) && kind.length > 0 ? (KIND_TO_TYPE[kind[0] as Kind] ?? undefined) : undefined
+    // chips 는 배열이다. 서버는 type 하나만 받는다 — 하나일 때만 보내고, 여럿이면 전부 받아 화면에서 거른다.
+    // (예전에는 첫 값만 보내 '교습비 + 급식비' 가 교습비만 나왔다)
+    const type = Array.isArray(kind) && kind.length === 1 ? (KIND_TO_TYPE[kind[0] as Kind] ?? undefined) : undefined
     return {
-      year: 2026,
+      // 연도를 2026 으로 박아 두었었다 — 해가 바뀌면 조용히 작년 것을 보여준다. 기간 시작일의 해를 쓴다
+      year: period?.from ? Number(period.from.slice(0, 4)) : new Date().getFullYear(),
       academyId: academyId ?? undefined,
       from: period?.from || undefined,
       to: period?.to || undefined,
@@ -495,7 +499,27 @@ function Content() {
 
   // 미납은 서버 조건(unpaidOnly)이 있지만, 같은 조회 결과에서 걸러도 값이 같다.
   // 요청을 하나 아끼려고 여기서 거른다 — unpaid 는 서버가 계산해준 값이다.
-  const unpaid = useMemo(() => rows.filter((r) => r.unpaid > 0), [rows])
+  /* 서버가 안 받는 조건(검색어 · 결제수단 · 항목 여럿)은 여기서 거른다. 이 목록은 서버가 조건 안의
+     전량을 주므로 화면에서 걸러도 빠지는 줄이 없다. ★ 청구기수는 뜻이 정해지지 않아 아직 안 먹는다 */
+  const filtered = useMemo(() => {
+    const kw = typeof query.keyword === 'string' ? query.keyword.trim() : ''
+    const kinds = Array.isArray(query.kind) ? (query.kind as Kind[]) : []
+    const methods = Array.isArray(query.method) ? (query.method as Method[]).map((m) => METHOD_TO_CODE[m]) : []
+    return rows.filter(
+      (r) =>
+        (kw === '' ||
+          r.studentName.includes(kw) ||
+          (r.studentNo ?? '').includes(kw) ||
+          r.name.includes(kw) ||
+          String(r.billingId) === kw) &&
+        (kinds.length < 2 || kinds.some((k) => KIND_TO_TYPE[k] === r.billingType)) &&
+        (methods.length === 0 || r.payments.some((p) => methods.includes(p.method))),
+    )
+  }, [rows, query.keyword, query.kind, query.method])
+  /** 화면에서 걸렀으면 서버 요약과 줄이 달라진다 — 그때는 합계를 걸러진 줄로 낸다 */
+  const clientFiltered = filtered.length !== rows.length
+
+  const unpaid = useMemo(() => filtered.filter((r) => r.unpaid > 0), [filtered])
 
   /* ── 청구 등록 · 수납 · 취소 ── */
 
@@ -522,7 +546,7 @@ function Content() {
       return
     }
     let cancelled = false
-    searchStudents({ status: 'ENROLLED', size: 200, academyId })
+    searchStudents({ status: 'ENROLLED', size: 2000, academyId })
       .then((p) => !cancelled && setStudents(p.rows))
       .catch(() => !cancelled && setStudents([]))
     return () => {
@@ -681,19 +705,19 @@ function Content() {
     // 결제수단별 집계는 서버 요약에 없다. 행의 payments[] 를 더해 만든다 —
     // 조회 조건 안에서만 맞는 값이라 "조회 조건 기준"이라고 적어둔다
     const byMethod = new Map<string, number>()
-    for (const r of rows) {
+    for (const r of filtered) {
       for (const p of r.payments) byMethod.set(p.method, (byMethod.get(p.method) ?? 0) + p.amount)
     }
+    const add = (f: (r: ReceiptRow) => number) => filtered.reduce((a, r) => a + f(r), 0)
     return {
-      total: summary?.receivedAmount ?? 0,
-      billed: summary?.billedAmount ?? 0,
-      due: summary?.unpaidAmount ?? 0,
-      unpaidCount: summary?.unpaidCount ?? 0,
-      byType: summary?.unpaidByType ?? {},
+      total: clientFiltered ? add((r) => r.receivedAmount) : (summary?.receivedAmount ?? 0),
+      billed: clientFiltered ? add((r) => r.billedAmount) : (summary?.billedAmount ?? 0),
+      due: clientFiltered ? add((r) => r.unpaid) : (summary?.unpaidAmount ?? 0),
+      unpaidCount: clientFiltered ? filtered.filter((r) => r.unpaid > 0).length : (summary?.unpaidCount ?? 0),
       card: byMethod.get('CARD') ?? 0,
       vbank: byMethod.get('VBANK') ?? 0,
     }
-  }, [summary, rows])
+  }, [summary, filtered, clientFiltered])
 
   return (
     <>
@@ -758,7 +782,7 @@ function Content() {
       <div className="card-sec">
         <Tabs
           items={[
-            { key: 'all', label: '통합 매출장', count: rows.length },
+            { key: 'all', label: '통합 매출장', count: filtered.length },
             { key: 'unpaid', label: '미납자 관리', count: unpaid.length },
             { key: 'discount', label: '할인 정책 · 청구액 계산', count: DISCOUNTS.filter((d) => d.active).length },
           ]}
@@ -953,14 +977,14 @@ function Content() {
             <DataTable
               nowrap
               columns={columnsWithAct}
-              rows={rows}
+              rows={filtered}
               rowKey={(r) => String(r.billingId)}
               masked={masked}
               loading={loading}
               pageSize={12}
               countLabel={
                 <>
-                  청구 <b>{rows.length}</b>건 · 수납 {sum.total.toLocaleString()}원
+                  청구 <b>{filtered.length}</b>건 · 수납 {sum.total.toLocaleString()}원
                 </>
               }
               toolbar={
@@ -977,7 +1001,7 @@ function Content() {
                     <Icon name="plus" size={14} /> 청구 등록
                   </button>
                   <MaskToggle masked={masked} onChange={setMasked} />
-                  <ExcelButton filename="통합_매출장" columns={COLUMNS} rows={rows} masked={masked} />
+                  <ExcelButton filename="통합_매출장" columns={COLUMNS} rows={filtered} masked={masked} />
                 </>
               }
             />
