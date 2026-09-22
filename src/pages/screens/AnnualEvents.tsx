@@ -272,7 +272,7 @@ function Content() {
         })
       }
       const span = (a: string, b: string) => (b !== a ? `${a} ~ ${b}` : a)
-      setResult(`'${row.name} (${span(row.from, row.to)})' 을 '${nm.trim()} (${span(f, t)})' 로 수정했습니다.`)
+      setResult(`'${row.name} (${span(row.from, row.to)})' → '${nm.trim()} (${span(f, t)})' 로 수정했습니다.`)
       setEditing(null)
       await load()
     } catch (err) {
