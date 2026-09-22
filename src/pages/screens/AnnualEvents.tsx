@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { DataTable, Modal, ExcelButton, type Column, toDateStr } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
@@ -535,9 +536,13 @@ function Content() {
                         </option>
                       ))}
                     </select>
-                    <button className="btn" disabled title="준비 중입니다">
-                      <Icon name="history" size={14} /> 전년도 복사
-                    </button>
+                    <Link
+                        className="btn"
+                        to="/s/admin-basic"
+                        title="연간 행사는 기초 관리의 전년도 복사에 함께 넘어갑니다(이 지점 행사만, 날짜는 한 해 뒤로)"
+                      >
+                        <Icon name="history" size={14} /> 전년도 복사
+                      </Link>
                   </>
                 }
               />
@@ -717,9 +722,14 @@ export const annualEventsMockup: Mockup = {
   actions: (
     <>
       <button className="btn" disabled data-soon title="준비 중입니다">기수 선택 ▾</button>
-      <button className="btn" disabled data-soon title="준비 중입니다">
+      {/* 따로 복사하는 경로가 없다 — 기초 데이터 전체 복사에 함께 넘어간다(API_GAPS 34부) */}
+      <Link
+        className="btn"
+        to="/s/admin-basic"
+        title="연간 행사는 기초 관리의 전년도 복사에 함께 넘어갑니다(이 지점 행사만, 날짜는 한 해 뒤로)"
+      >
         <Icon name="history" size={14} /> 전년도 복사
-      </button>
+      </Link>
     </>
   ),
 }

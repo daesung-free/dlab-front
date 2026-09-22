@@ -83,7 +83,17 @@ export function publishRoutineResults(routineId: number, date: string): Promise<
 export function saveRoutineResults(
   routineId: number,
   date: string,
-  results: { enrollmentId: number; status: RoutineStatus; selfScore?: number; reviewedScore?: number; memo?: string }[],
+  /**
+   * ★ 점수를 지우려면 **null 을 실어 보낸다**(빼고 보내면 그대로다). 모순된 입력은 400 과 이유가 온다 —
+   *   제출 전 상태에 점수, 제출 상태에 검수 점수, 공개된 결과를 검수 전으로(2026-09-21 서버 수정)
+   */
+  results: {
+    enrollmentId: number
+    status: RoutineStatus
+    selfScore: number | null
+    reviewedScore: number | null
+    memo?: string
+  }[],
 ): Promise<void> {
   return request<void>(`/api/v1/admin/routines/${routineId}/results`, {
     method: 'PUT',

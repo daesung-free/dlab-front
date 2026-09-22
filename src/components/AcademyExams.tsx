@@ -3,11 +3,13 @@ import { Icon } from './Icon'
 import { ApiError } from '../api/client'
 import {
   getAcademyExam,
+  getAcademyScoring,
   getAcademyTrend,
   listAcademyExams,
   type AcademyExam,
   type AcademyExamDetail,
   type AcademyExamTrend,
+  type ScoringArea,
 } from '../api/grades'
 import '../pages/screens/score.css'
 
@@ -28,6 +30,8 @@ export function AcademyExams({ enrollmentId }: { enrollmentId: number }) {
   const [trend, setTrend] = useState<AcademyExamTrend[]>([])
   const [sel, setSel] = useState<number | null>(null)
   const [detail, setDetail] = useState<AcademyExamDetail | null>(null)
+  /* 채점 — 문항 정보와 정오표가 둘 다 있어야 나온다. 없으면 빈 목록(오류 아님) */
+  const [scoring, setScoring] = useState<ScoringArea[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
 
   useEffect(() => {
@@ -49,9 +53,13 @@ export function AcademyExams({ enrollmentId }: { enrollmentId: number }) {
     if (sel === null) return
     let alive = true
     setDetail(null)
+    setScoring(null)
     getAcademyExam(enrollmentId, sel)
       .then((d) => alive && setDetail(d))
       .catch((e) => alive && setErr(e instanceof ApiError ? e.message : '회차 성적을 불러오지 못했습니다.'))
+    getAcademyScoring(enrollmentId, sel)
+      .then((a) => alive && setScoring(a))
+      .catch(() => alive && setScoring([]))
     return () => {
       alive = false
     }
@@ -183,6 +191,92 @@ export function AcademyExams({ enrollmentId }: { enrollmentId: number }) {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ── 채점 — 영역별 맞은 수 · 틀린 문항 · 단원별 정답률(전국 대비) ── */}
+          {detail !== null && (
+            <>
+              <div style={{ margin: '16px 0 8px', fontWeight: 700, fontSize: 13 }}>채점</div>
+              {scoring === null ? (
+                <div style={{ color: 'var(--muted)', fontSize: 12.5 }}>불러오는 중…</div>
+              ) : scoring.length === 0 ? (
+                <div style={{ color: 'var(--muted)', fontSize: 12.5 }}>
+                  이 회차는 채점 결과가 없습니다. 성적 업로드에서 문항 정보와 정오표를 올리면 나옵니다.
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gap: 12 }}>
+                  {scoring.map((a) => (
+                    <div key={`${a.name}-${a.elective ?? ''}`} style={{ border: '1px solid var(--line)', borderRadius: 12, padding: '10px 12px' }}>
+                      <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                        <b>
+                          {a.name}
+                          {a.elective ? ` · ${a.elective}` : ''}
+                        </b>
+                        <span style={{ fontSize: 12.5 }}>
+                          맞음 <b style={{ color: 'var(--mint-d)' }}>{a.correct}</b> / {a.total} · 틀림{' '}
+                          <b style={{ color: a.wrong ? 'var(--red)' : undefined }}>{a.wrong}</b> · 잃은 점수 {a.lostPoints}점
+                        </span>
+                      </div>
+                      {a.review.length > 0 && (
+                        <div className="table-scroll" style={{ marginTop: 8 }}>
+                          <table className="rtable">
+                            <thead>
+                              <tr>
+                                <th>번호</th>
+                                <th>내 답</th>
+                                <th>정답</th>
+                                <th>전국 정답률</th>
+                                <th>배점</th>
+                                <th className="rd">단원</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {a.review.map((q) => (
+                                <tr key={`${q.subjectName}-${q.questionNo}`}>
+                                  <td>
+                                    {q.questionNo}
+                                    {/* 전국은 잘 맞혔는데 틀린 문항 — 실수로 본다 */}
+                                    {q.trap && (
+                                      <span className="mk brandnew" style={{ marginLeft: 4 }} title="전국 정답률이 높은데 틀린 문항입니다">
+                                        실수
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td>{q.myAnswer ?? '-'}</td>
+                                  <td>{q.correctAnswer ?? '-'}</td>
+                                  <td>{q.nationalRate == null ? '-' : `${Math.round(q.nationalRate)}%`}</td>
+                                  <td>{q.points ?? '-'}</td>
+                                  <td className="rd" style={{ whiteSpace: 'nowrap' }}>
+                                    {q.unitName ?? '-'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                      {a.byUnit.length > 0 && (
+                        <div style={{ marginTop: 8, display: 'grid', gap: 4 }}>
+                          {a.byUnit.map((u) => (
+                            <div key={u.name} style={{ display: 'grid', gridTemplateColumns: '160px 1fr 110px', gap: 8, alignItems: 'center', fontSize: 12 }}>
+                              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={u.name}>
+                                {u.name}
+                              </span>
+                              <span style={{ height: 8, background: 'var(--line-2)', borderRadius: 4, position: 'relative' }}>
+                                <span style={{ position: 'absolute', inset: 0, width: `${u.myRate ?? 0}%`, background: 'var(--mint)', borderRadius: 4 }} />
+                              </span>
+                              <span style={{ color: 'var(--muted)' }}>
+                                {u.myRate == null ? '-' : `${Math.round(u.myRate)}%`} · 전국 {u.nationalRate == null ? '-' : `${Math.round(u.nationalRate)}%`}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
             </>

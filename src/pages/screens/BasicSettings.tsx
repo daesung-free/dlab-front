@@ -4,7 +4,7 @@ import { DataTable, ExcelButton, Modal, Unfilled, type Column } from '../../comp
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
-import { listClasses } from '../../api/classes'
+import { listClasses, setClassRoom } from '../../api/classes'
 import { fetchPenaltyItems } from '../../api/penalties'
 import {
   createSeatArea,
@@ -55,6 +55,7 @@ import {
   listCurriculums,
   listDepartments,
   listRooms,
+  type Room,
   listScholarshipMasters,
   listTracks,
   listTuitionMasters,
@@ -116,6 +117,9 @@ interface MasterRow {
   className?: string | null
   point?: number
   memberCount?: number
+  /** 반 — 지정된 강의실(2026-09-21 추가) */
+  roomId?: number | null
+  roomName?: string | null
   /** 강의실 — 코드 자리를 대신하고, 수정할 때 PUT 에 함께 실어야 한다 */
   roomNo?: string
   code?: string
@@ -245,17 +249,23 @@ const MASTERS: MasterDef[] = [
     load: async (a, y) => {
       const list = await listClasses(y, a)
       /* memberCount 는 목록에서만 채워진다. 단건 응답은 null 이라 undefined 로 맞춰 둔다 */
-      return list.map((c) => ({ id: c.id, name: c.name, memberCount: c.memberCount ?? undefined }))
+      return list.map((c) => ({
+        id: c.id,
+        name: c.name,
+        memberCount: c.memberCount ?? undefined,
+        roomId: c.roomId ?? null,
+        roomName: c.roomName ?? null,
+      }))
     },
     extra: {
       key: 'memberCount',
-      header: '인원',
-      width: '76px',
+      header: '인원 · 강의실',
+      width: '150px',
       align: 'center',
       sortable: true,
-      value: (r) => r.memberCount ?? '',
+      value: (r) => `${r.memberCount ?? 0}명 · ${r.roomName ?? '강의실 미지정'}`,
     },
-    note: '반은 반 배정 화면에서 관리합니다. 여기서는 목록만 봅니다.',
+    note: '반은 반 배정 화면에서 관리합니다. 여기서는 목록과 강의실 지정만 합니다.',
   },
   {
     key: 'curriculum',
@@ -670,6 +680,39 @@ function Content() {
   const [addErr, setAddErr] = useState<string | null>(null)
   const [renaming, setRenaming] = useState<{ row: MasterRow; name: string; extra: Record<string, string> } | null>(null)
   const [removing, setRemoving] = useState<MasterRow | null>(null)
+  /* 반 강의실 지정 — 강의실 마스터에서 고른다. 비우면 해제 */
+  const [roomFor, setRoomFor] = useState<{ row: MasterRow; roomId: string; rooms: Room[] | null } | null>(null)
+  const [roomErr, setRoomErr] = useState<string | null>(null)
+
+  function openRoom(row: MasterRow) {
+    setRoomErr(null)
+    setRoomFor({ row, roomId: row.roomId ? String(row.roomId) : '', rooms: null })
+    if (academyId !== null)
+      listRooms(academyId, true)
+        .then((rooms) => setRoomFor((cur) => (cur ? { ...cur, rooms } : cur)))
+        .catch(() => setRoomFor((cur) => (cur ? { ...cur, rooms: [] } : cur)))
+  }
+
+  async function saveRoom() {
+    if (!roomFor) return
+    setBusy(true)
+    setRoomErr(null)
+    try {
+      await setClassRoom(roomFor.row.id, roomFor.roomId ? Number(roomFor.roomId) : null)
+      const nm = roomFor.rooms?.find((r) => String(r.id) === roomFor.roomId)
+      setNotice(
+        roomFor.roomId
+          ? `${roomFor.row.name} 강의실을 ${nm?.name ?? nm?.roomNo ?? ''}(으)로 지정했습니다.`
+          : `${roomFor.row.name} 강의실 지정을 풀었습니다.`,
+      )
+      setRoomFor(null)
+      await load()
+    } catch (e) {
+      setRoomErr(e instanceof ApiError ? e.message : '강의실을 지정하지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
   /** 전년도 복사 확인 모달 */
   const [copying, setCopying] = useState(false)
   /* 헤더 '전체 전년도 복사' 가 누르면 같은 확인 창을 띄운다 — 헤더는 본문 상태를 못 만진다(CLAUDE.md 5-1) */
@@ -878,7 +921,7 @@ function Content() {
           ),
       },
     )
-    if (active.rename || active.remove || active.setActive) {
+    if (active.rename || active.remove || active.setActive || active.key === 'class_group') {
       base.push({
         key: 'act',
         header: '',
@@ -889,6 +932,16 @@ function Content() {
         value: () => '',
         render: (r) => (
           <div style={{ display: 'flex', gap: 4, justifyContent: 'center', flexWrap: 'nowrap' }}>
+            {active.key === 'class_group' && (
+              <button
+                className="btn"
+                style={{ padding: '4px 9px', fontSize: 11.5, whiteSpace: 'nowrap' }}
+                disabled={busy}
+                onClick={() => openRoom(r)}
+              >
+                강의실 지정
+              </button>
+            )}
             {/* 지우지 않고 목록에서만 빼는 것 — 이미 쓰인 반·학생 기록은 그대로 남는다 */}
             {active.setActive && typeof r.active === 'boolean' && (
               <button
@@ -1016,6 +1069,40 @@ function Content() {
               )}
             </div>
           ))}
+        </Modal>
+      )}
+
+      {roomFor && (
+        <Modal
+          title={`${roomFor.row.name} 강의실`}
+          sub="반이 주로 쓰는 강의실입니다. 반 배정 화면의 반 카드에 함께 보입니다."
+          confirmLabel="저장"
+          busy={busy}
+          error={roomErr}
+          onConfirm={() => void saveRoom()}
+          onClose={() => setRoomFor(null)}
+        >
+          <div className="frow">
+            <label>강의실</label>
+            <div>
+              <select
+                className="sel"
+                value={roomFor.roomId}
+                disabled={roomFor.rooms === null}
+                onChange={(e) => setRoomFor({ ...roomFor, roomId: e.target.value })}
+              >
+                <option value="">{roomFor.rooms === null ? '불러오는 중…' : '지정 안 함'}</option>
+                {(roomFor.rooms ?? []).map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name ?? r.roomNo} ({r.roomNo})
+                  </option>
+                ))}
+              </select>
+              {roomFor.rooms !== null && roomFor.rooms.length === 0 && (
+                <div className="hint">이 지점에 등록된 강의실이 없습니다. 왼쪽 목록의 &lsquo;강의실&rsquo;에서 먼저 등록하세요.</div>
+              )}
+            </div>
+          </div>
         </Modal>
       )}
 

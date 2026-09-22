@@ -230,8 +230,8 @@ function Content() {
         grid.map((r) => ({
           enrollmentId: r.enrollmentId,
           status: r.status,
-          selfScore: r.selfScore ?? undefined,
-          reviewedScore: r.reviewedScore ?? undefined,
+          selfScore: r.selfScore,
+          reviewedScore: r.reviewedScore,
           memo: r.memo?.trim() || undefined,
         })),
       )
@@ -593,11 +593,10 @@ function Content() {
                   </table>
                 </div>
               )}
-              {/* ★ 서버가 빈 점수·'계획' 으로 되돌리기를 조용히 무시한다(저장 1건이라고 답한다) — API_GAPS 33-2.
-                     저장 뒤 다시 읽어 실제 값을 보여 주고, 미리 알린다 */}
+              {/* 서버가 모순된 입력을 이유와 함께 막는다(API_GAPS 33-2 해결) — 미리 알려 헛걸음을 줄인다 */}
               <div className="hint" style={{ marginTop: 6 }}>
-                한 번 저장한 점수는 칸을 비워도 지워지지 않고, 상태를 &lsquo;계획&rsquo;으로 되돌릴 수 없습니다. 저장한 뒤
-                보이는 값이 실제로 저장된 값입니다.
+                점수는 &lsquo;제출&rsquo; 이후 상태에서만, 검수 점수는 &lsquo;검수&rsquo; 이후에만 넣을 수 있습니다. 칸을 비우고
+                저장하면 점수가 지워집니다.
               </div>
             </div>
           ) : tab === 'result' ? (

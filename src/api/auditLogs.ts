@@ -34,6 +34,13 @@ export interface AuditLog {
   changes: string | null
   /** UTC instant */
   occurredAt: string
+  /**
+   * 대상 학생(2026-09-21 추가). 학생에 딸린 기록(상벌점·출결·학생 정보)만 채워진다.
+   * ★ 그 전에 쌓인 기록은 비어 있다 — 소급되지 않는다
+   */
+  targetEnrollmentId?: number | null
+  targetStudentName?: string | null
+  targetStudentNo?: string | null
 }
 
 export interface AuditLogParams {

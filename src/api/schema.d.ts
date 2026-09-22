@@ -1126,6 +1126,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/classes/{classId}/room": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 강의실 지정·해제.
+         * @description 강의실 지정·해제. <code>roomId</code>를 비우면 해제다. 같은 지점 강의실만 붙는다.
+         */
+        put: operations["assignRoom"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/classes/{classId}/homeroom": {
         parameters: {
             query?: never;
@@ -5289,6 +5309,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/admission-results/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 반영 — <b>오류행이 있어도 정상행은 넣는다.</b> 결과는 미리보기와 같은 모양이다.
+         * @description 반영 — <b>오류행이 있어도 정상행은 넣는다.</b> 결과는 미리보기와 같은 모양이다.
+         */
+        post: operations["importResults"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/admission-results/import/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 엑셀 일괄 등록 미리보기 — <b>아무것도 저장하지 않는다
+         * @description 엑셀 일괄 등록 미리보기 — <b>아무것도 저장하지 않는다.</b>
+         *
+         *      <p>열: 학번(필수) · 구분(수시/정시, 필수) · 대학명(필수) · 학과명(필수) · 이름 · 전형명 ·
+         *      결과(합격/불합격/발표전/등록포기, 비우면 발표전) · 메모. 열 순서는 상관없다(헤더명으로 찾는다).
+         *
+         *      <p>이름 칸이 있으면 학번의 학생과 대조한다 — 학번 오타로 다른 학생 실적이 들어가지 않게.
+         *      정원 초과·이미 있는 지원(같은 구분·대학·학과)은 오류로 잡혀, 같은 파일을 다시 올려도 중복이 안 쌓인다.
+         */
+        post: operations["previewImport_1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/admission-reservations/{reservationId}/status": {
         parameters: {
             query?: never;
@@ -7350,6 +7416,27 @@ export interface paths {
          * @description 한 회차 — 과목별 성적 + 지망대학 진단. 앱 <code>GET /app/grades/exams/{id</code>} 와 같은 모양.
          */
         get: operations["studentAcademyExam"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/students/{enrollmentId}/grades/exams/{examMasterId}/scoring": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 채점 — 영역별 맞은 수·틀린 문항·단원별 정답률(전국 대비).
+         * @description 채점 — 영역별 맞은 수·틀린 문항·단원별 정답률(전국 대비).
+         *      앱 <code>GET /app/grades/exams/{id</code>/scoring} 과 같은 모양이다.
+         */
+        get: operations["studentScoring"];
         put?: never;
         post?: never;
         delete?: never;
@@ -10190,7 +10277,7 @@ export interface components {
              */
             point?: number;
         };
-        ChangeActive: {
+        NotificationTemplateChangeActive: {
             active: boolean;
         };
         /**
@@ -10231,6 +10318,11 @@ export interface components {
              *                      화면에서 이 값 하나만 보면 "왜 알림이 안 가지"를 바로 알 수 있다
              */
             sendable?: boolean;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** Format: int64 */
+            updatedBy?: number;
+            updatedByName?: string;
         };
         NoticeUpdateRequest: {
             title: string;
@@ -11058,6 +11150,16 @@ export interface components {
              *                         성적 업로드가 이름 매칭으로 떨어진다
              */
             examClassNo?: number;
+            /** Format: int64 */
+            roomId?: number;
+            roomName?: string;
+        };
+        ClassRoom: {
+            /**
+             * Format: int64
+             * @description 강의실 마스터 id. 비우면 해제
+             */
+            roomId?: number;
         };
         AssignHomeroom: {
             /** Format: int64 */
@@ -11225,6 +11327,42 @@ export interface components {
         ApiResponseAcademyResponse: {
             success?: boolean;
             data?: components["schemas"]["AcademyResponse"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        AbsenceCategoryUpdate: {
+            name?: string;
+            /** Format: int32 */
+            sortOrder?: number;
+            active?: boolean;
+        };
+        AbsenceCategoryResponse: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            academyId?: number;
+            /** @description 전 지점 공통인지. 지점 관리자는 이 항목을 못 고친다 */
+            nationwide?: boolean;
+            /** Format: int32 */
+            year?: number;
+            name?: string;
+            /** Format: int32 */
+            sortOrder?: number;
+            active?: boolean;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseAbsenceCategoryResponse: {
+            success?: boolean;
+            data?: components["schemas"]["AbsenceCategoryResponse"];
             meta?: components["schemas"]["PageMeta"];
             error?: components["schemas"]["ErrorBody"];
         };
@@ -11817,20 +11955,25 @@ export interface components {
         RosterRow: {
             /** Format: int64 */
             applicationId?: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description 사람(student) id
+             */
             studentId?: number;
+            /**
+             * Format: int64
+             * @description 등록 건 id — 학생 상세·출결 등 다른 관리자 화면으로 넘어갈 때 쓴다
+             */
+            enrollmentId?: number;
             studentNo?: string;
             studentName?: string;
-            /** @description 고정반. 반 미배정이면 비어 있다 */
             className?: string;
-            /** @description 연락처. <code>masked</code>가 참이면 가려진 값이다 */
             phone?: string;
             status?: string;
             waitlisted?: boolean;
             /** Format: date-time */
             appliedAt?: string;
             memo?: string;
-            /** @description 실제로 가려졌는지. 화면이 또 가리지 않도록 알려준다 */
             masked?: boolean;
         };
         /**
@@ -12306,6 +12449,9 @@ export interface components {
              *                           실제 등원일과 어긋나면 교습비 일할 계산까지 틀어진다
              */
             admissionDate?: string;
+            englishName?: string;
+            /** Format: int32 */
+            graduationYear?: number;
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -12356,6 +12502,9 @@ export interface components {
             birthDate?: string;
             gender?: string;
             schoolName?: string;
+            englishName?: string;
+            /** Format: int32 */
+            graduationYear?: number;
             /** Format: int32 */
             year?: number;
             /** @enum {string} */
@@ -13994,14 +14143,47 @@ export interface components {
             meta?: components["schemas"]["PageMeta"];
             error?: components["schemas"]["ErrorBody"];
         };
+        ItemResponseUnmatched: {
+            /** Format: int32 */
+            rowNumber?: number;
+            name?: string;
+            reason?: string;
+        };
         Result: {
             /** Format: int32 */
             savedStudents?: number;
             /** Format: int32 */
             skippedExternal?: number;
-            unmatched?: components["schemas"]["Unmatched"][];
+            unmatched?: components["schemas"]["ItemResponseUnmatched"][];
             /** @description 대응표에 없는 과목 약어. 비어 있지 않으면 <b>그 과목 채점이 빠졌다</b> */
             unknownSubjects?: string[];
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseExamItemUploadResult: {
+            success?: boolean;
+            data?: components["schemas"]["ExamItemUploadResult"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        ExamItemUploadResult: {
+            /** Format: int32 */
+            itemCount?: number;
+            /** Format: int32 */
+            ratesApplied?: number;
+            /**
+             * @description 문항분석표에 없는 정답률 행. 과목명 표기가 달라졌을 가능성이 크다 —
+             *                            비어 있지 않으면 화면이 경고해야 한다
+             */
+            unmatchedRates?: string[];
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -14470,6 +14652,19 @@ export interface components {
             clientId?: string;
             secret?: string;
         };
+        BillingCreateRequest: {
+            /** Format: int64 */
+            enrollmentId: number;
+            name: string;
+            /** @enum {string} */
+            billingType: "TUITION" | "MEAL" | "LECTURE" | "ETC";
+            /** Format: int32 */
+            suppliedAmount: number;
+            /** Format: int32 */
+            discountAmount?: number;
+            /** Format: date */
+            dueDate?: string;
+        };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
          *      성공: { "success": true, "data": ... }
@@ -14749,6 +14944,79 @@ export interface components {
             source?: "STUDENT" | "STAFF";
             memo?: string;
         };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseImportPreviewParsedResult: {
+            success?: boolean;
+            data?: components["schemas"]["ImportPreviewParsedResult"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        /**
+         * @description 업로드 미리보기 결과. 요구사항 F-4.1-2의 <code>ImportPreviewResult</code>에 대응한다.
+         *
+         *      <p><b>오류행이 있어도 정상행은 반영할 수 있다.</b> 100건 중 3건이 틀렸다고 전부
+         *      되돌리면 사용자가 파일을 고쳐 다시 올려야 하는데, 실무에서는 나머지 97건을 먼저
+         *      넣고 3건만 손보는 쪽이 훨씬 낫다(실행가이드 완료기준: "오류행 표시 후 정상행만 반영").
+         */
+        ImportPreviewParsedResult: {
+            /** @description 확정 요청에 쓰는 식별자. 파일을 두 번 올리지 않게 파싱 결과를 보관한다 */
+            importId?: string;
+            /**
+             * Format: int32
+             * @description 빈 줄을 뺀 전체 행 수
+             */
+            totalRows?: number;
+            /**
+             * Format: int32
+             * @description 반영 가능한 행 수
+             */
+            validRows?: number;
+            /** Format: int32 */
+            errorRows?: number;
+            /** @description 행 단위 오류. 한 행에 여러 개일 수 있다 */
+            errors?: components["schemas"]["RowError"][];
+            valid?: components["schemas"]["ParsedResult"][];
+            /** @description 반영할 게 하나도 없으면 확정 단계로 넘길 이유가 없다. */
+            applicable?: boolean;
+        };
+        /** @description 반영될(또는 반영된) 한 행. */
+        ParsedResult: {
+            /** Format: int32 */
+            rowNumber?: number;
+            /** Format: int64 */
+            enrollmentId?: number;
+            studentNo?: string;
+            studentName?: string;
+            /** @enum {string} */
+            admissionType?: "EARLY" | "REGULAR";
+            universityName?: string;
+            departmentName?: string;
+            trackName?: string;
+            /** @enum {string} */
+            result?: "PENDING" | "PASSED" | "FAILED" | "GAVE_UP";
+            memo?: string;
+        };
+        /** @description 행 단위 오류. */
+        RowError: {
+            /**
+             * Format: int32
+             * @description 엑셀 기준 행 번호(1-based). 화면에서 "3행: ..."으로 그대로 보여준다 —
+             *                       0-based로 바꾸면 사용자가 엑셀에서 그 행을 못 찾는다
+             */
+            rowNumber?: number;
+            /** @description 내부 필드명. 화면은 이걸 헤더명으로 되돌려 표시한다 */
+            field?: string;
+            message?: string;
+        };
         ChangeStatus: {
             /** @enum {string} */
             status: "CALL_NEEDED" | "CANCELED" | "CONSULTED" | "ON_HOLD" | "CONFIRMED" | "NOT_REGISTERED";
@@ -14883,6 +15151,18 @@ export interface components {
             meta?: components["schemas"]["PageMeta"];
             error?: components["schemas"]["ErrorBody"];
         };
+        AbsenceCategoryRequest: {
+            /**
+             * Format: int64
+             * @description 비우면 <b>전 지점 공통</b>이다. 본사만 만들 수 있다
+             */
+            academyId?: number;
+            /** Format: int32 */
+            year?: number;
+            name: string;
+            /** Format: int32 */
+            sortOrder?: number;
+        };
         /** @description 이행 O/X. 되돌릴 수 있어야 해서 boolean으로 받는다. */
         Mark: {
             done: boolean;
@@ -14928,6 +15208,10 @@ export interface components {
             track?: "HUMANITIES" | "SCIENCE" | "ART" | "COMMON";
             /** @enum {string} */
             status?: "ENROLLED" | "LEAVE" | "WITHDRAWN" | "EXPELLED" | "GRADUATED";
+            englishName?: string;
+            /** Format: int32 */
+            graduationYear?: number;
+            clearGraduationYear?: boolean;
         };
         /**
          * @description 인적사항 수정. <code>null</code>은 "변경하지 않음"이다.
@@ -15048,6 +15332,15 @@ export interface components {
             amount?: number;
             code?: string;
             memo?: string;
+        };
+        /**
+         * @description 사용/중지.
+         *
+         *      <p>삭제와 다르다 — 중지는 "새로 고를 수 없다"는 뜻이고 이미 그 값을 쓰는
+         *      데이터는 그대로 남는다.
+         */
+        ChangeActive: {
+            active: boolean;
         };
         /**
          * @description 장학 종류 부분 수정 — <b>안 보낸 값은 그대로 둔다.</b>
@@ -15285,6 +15578,9 @@ export interface components {
         };
         ValueRequest: {
             value: string;
+        };
+        BillingStandardChangeActive: {
+            active: boolean;
         };
         /** @description <code>null</code>은 "변경하지 않음"이다 — 점검만 켜려다 최소 버전이 지워지면 안 된다. */
         UpdateVersions: {
@@ -16638,6 +16934,50 @@ export interface components {
          *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
          *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
          */
+        ApiResponseSurveyResultResponse: {
+            success?: boolean;
+            data?: components["schemas"]["SurveyResultResponse"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        OptionCount: {
+            /** Format: int64 */
+            optionId?: number;
+            label?: string;
+            /** Format: int64 */
+            count?: number;
+        };
+        /** @description 문항별 집계. 유형에 따라 채워지는 칸이 다르다. */
+        QuestionResult: {
+            /** Format: int64 */
+            questionId?: number;
+            title?: string;
+            /** @enum {string} */
+            type?: "SINGLE_CHOICE" | "MULTI_CHOICE" | "TEXT" | "NUMBER";
+            /** Format: int64 */
+            answerCount?: number;
+            options?: components["schemas"]["OptionCount"][];
+            average?: number;
+            min?: number;
+            max?: number;
+            texts?: string[];
+        };
+        SurveyResultResponse: {
+            survey?: components["schemas"]["AdminSurveySummary"];
+            /** Format: int32 */
+            responseCount?: number;
+            questions?: components["schemas"]["QuestionResult"][];
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
         ApiResponseListParticipant: {
             success?: boolean;
             data?: components["schemas"]["Participant"][];
@@ -16916,6 +17256,20 @@ export interface components {
              * @description 전월 대비 증감. 월별에만 있고, 첫 달은 비교 대상이 없어 비어 있다
              */
             delta?: number;
+            /**
+             * Format: int64
+             * @description 반별에만 있다 — 그 반 휴원 인원. <code>count</code>(재원)에는 안 들어간다
+             */
+            onLeave?: number;
+            /**
+             * Format: int64
+             * @description 반별에만 있다 — 그 반에서 나간 인원(퇴원 + 제적). 나가기 직전 반으로 센다
+             */
+            withdrawn?: number;
+            /** @description 반별에만 있다 — 재원생의 계열별 인원. 계열이 없으면 <code>UNASSIGNED</code> */
+            tracks?: {
+                [key: string]: number;
+            };
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -17736,11 +18090,38 @@ export interface components {
          *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
          *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
          */
-        ApiResponseListLogResponse: {
+        ApiResponseListNotificationLogResponse: {
             success?: boolean;
-            data?: components["schemas"]["LogResponse"][];
+            data?: components["schemas"]["NotificationLogResponse"][];
             meta?: components["schemas"]["PageMeta"];
             error?: components["schemas"]["ErrorBody"];
+        };
+        NotificationLogResponse: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            academyId?: number;
+            /** @enum {string} */
+            event?: "MISSING_ATTENDANCE" | "APPROVAL_REQUEST_CREATED" | "APPROVAL_APPROVED_BY_PARENT" | "APPROVAL_APPROVED_AFTER_TIMEOUT" | "APPROVAL_APPROVED_BEFORE_TIMEOUT" | "APPROVAL_REMINDER" | "APPROVAL_HANDED_OVER" | "APPROVAL_APPROVED_BY_STAFF_PRIMARY" | "APPROVAL_APPROVED_BY_ADMIN" | "APPROVAL_REJECTED" | "CONSULT_RESERVED" | "CONSULT_CANCELED";
+            /** @enum {string} */
+            channel?: "KAKAO_ALIMTALK" | "FCM_PUSH";
+            /** @enum {string} */
+            status?: "PENDING" | "SENT" | "FAILED" | "SKIPPED";
+            /** Format: int64 */
+            studentId?: number;
+            studentName?: string;
+            title?: string;
+            body?: string;
+            /** @description <code>SKIPPED</code>면 왜 안 보냈는지가 여기 있다(문구 미확정 등) */
+            failReason?: string;
+            /**
+             * Format: date-time
+             * @description 실제 나간 시각. <b>실패·건너뜀이면 비어 있다</b> — 그래도 이력이라
+             *                        목록에는 남는다("왜 안 왔지"에 답해야 한다)
+             */
+            sentAt?: string;
+            /** Format: date-time */
+            createdAt?: string;
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -18417,6 +18798,22 @@ export interface components {
          *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
          *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
          */
+        ApiResponseListLogResponse: {
+            success?: boolean;
+            data?: components["schemas"]["LogResponse"][];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
         ApiResponseListTagResponse: {
             success?: boolean;
             data?: components["schemas"]["TagResponse"][];
@@ -18723,6 +19120,10 @@ export interface components {
             changes?: string;
             /** Format: date-time */
             occurredAt?: string;
+            /** Format: int64 */
+            targetEnrollmentId?: number;
+            targetStudentName?: string;
+            targetStudentNo?: string;
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -18828,8 +19229,43 @@ export interface components {
             meta?: components["schemas"]["PageMeta"];
             error?: components["schemas"]["ErrorBody"];
         };
+        ApprovalBoardRow: {
+            /** Format: int64 */
+            id?: number;
+            /** @enum {string} */
+            requestType?: "FIREWALL_UNLOCK" | "ABSENCE_REASON" | "REGULAR_SCHEDULE";
+            /** @enum {string} */
+            status?: "PENDING" | "APPROVED" | "REJECTED" | "CANCELED";
+            /** Format: int64 */
+            enrollmentId?: number;
+            studentNo?: string;
+            studentName?: string;
+            /** Format: date-time */
+            requestedAt?: string;
+            /** Format: date-time */
+            escalationAt?: string;
+            /** Format: int32 */
+            timeoutMinutes?: number;
+            /** @enum {string} */
+            primaryApprover?: "PARENT" | "TEACHER" | "AUTO" | "ADMIN";
+            /**
+             * @description 지금 공을 쥔 쪽. 이양 전이면 우선 승인자, 이양 뒤면 직원이다 —
+             *                             <b>우선 승인자만 보여주면 "왜 학부모가 안 하지"로 읽힌다</b>
+             * @enum {string}
+             */
+            currentApprover?: "PARENT" | "TEACHER" | "AUTO" | "ADMIN";
+            /** Format: date-time */
+            reminderSentAt?: string;
+            /** Format: date-time */
+            handedOverAt?: string;
+            /** Format: date-time */
+            resolvedAt?: string;
+            rejectReason?: string;
+            /** @description 대기 중인데 에스컬레이션 시각이 지났는가. 화면이 이 값으로 강조한다 */
+            overdue?: boolean;
+        };
         BoardResponse: {
-            rows?: components["schemas"]["Row"][];
+            rows?: components["schemas"]["ApprovalBoardRow"][];
             summary?: {
                 [key: string]: number;
             };
@@ -19047,6 +19483,40 @@ export interface components {
             universities?: string[];
             departments?: string[];
         };
+        AdmissionResultStatistics: {
+            /** Format: int32 */
+            total?: number;
+            /** Format: int64 */
+            early?: number;
+            /** Format: int64 */
+            regular?: number;
+            /** Format: int64 */
+            decided?: number;
+            /** Format: int64 */
+            passed?: number;
+            byResult?: {
+                [key: string]: number;
+            };
+            passedByUniversity?: {
+                [key: string]: number;
+            };
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseAdmissionResultStatistics: {
+            success?: boolean;
+            data?: components["schemas"]["AdmissionResultStatistics"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
          *      성공: { "success": true, "data": ... }
@@ -19171,6 +19641,22 @@ export interface components {
                 [key: string]: number;
             };
             masked?: boolean;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseListAbsenceCategoryResponse: {
+            success?: boolean;
+            data?: components["schemas"]["AbsenceCategoryResponse"][];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
         };
         RemovePushToken: {
             token: string;
@@ -19986,7 +20472,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ChangeActive"];
+                "application/json": components["schemas"]["NotificationTemplateChangeActive"];
             };
         };
         responses: {
@@ -21068,6 +21554,32 @@ export interface operations {
             };
         };
     };
+    assignRoom: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                classId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClassRoom"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseClassResponse"];
+                };
+            };
+        };
+    };
     assignHomeroom: {
         parameters: {
             query?: never;
@@ -21382,7 +21894,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CategoryUpdate"];
+                "application/json": components["schemas"]["AbsenceCategoryUpdate"];
             };
         };
         responses: {
@@ -21392,7 +21904,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseCategoryResponse"];
+                    "*/*": components["schemas"]["ApiResponseAbsenceCategoryResponse"];
                 };
             };
         };
@@ -25735,7 +26247,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseResult"];
+                    "*/*": components["schemas"]["ApiResponseExamItemUploadResult"];
                 };
             };
         };
@@ -26323,7 +26835,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CreateRequest"];
+                "application/json": components["schemas"]["BillingCreateRequest"];
             };
         };
         responses: {
@@ -26820,6 +27332,64 @@ export interface operations {
             };
         };
     };
+    importResults: {
+        parameters: {
+            query?: {
+                academyId?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseImportPreviewParsedResult"];
+                };
+            };
+        };
+    };
+    previewImport_1: {
+        parameters: {
+            query?: {
+                academyId?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseImportPreviewParsedResult"];
+                };
+            };
+        };
+    };
     changeStatus_2: {
         parameters: {
             query?: never;
@@ -26994,7 +27564,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseListCategoryResponse"];
+                    "*/*": components["schemas"]["ApiResponseListAbsenceCategoryResponse"];
                 };
             };
         };
@@ -27008,7 +27578,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CategoryRequest"];
+                "application/json": components["schemas"]["AbsenceCategoryRequest"];
             };
         };
         responses: {
@@ -27018,7 +27588,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseCategoryResponse"];
+                    "*/*": components["schemas"]["ApiResponseAbsenceCategoryResponse"];
                 };
             };
         };
@@ -28223,7 +28793,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ChangeActive"];
+                "application/json": components["schemas"]["BillingStandardChangeActive"];
             };
         };
         responses: {
@@ -29316,7 +29886,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseResult"];
+                    "*/*": components["schemas"]["ApiResponseSurveyResultResponse"];
                 };
             };
         };
@@ -29472,6 +30042,29 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseExamDetail"];
+                };
+            };
+        };
+    };
+    studentScoring: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enrollmentId: number;
+                examMasterId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListArea"];
                 };
             };
         };
@@ -30087,7 +30680,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseListLogResponse"];
+                    "*/*": components["schemas"]["ApiResponseListNotificationLogResponse"];
                 };
             };
         };
@@ -31025,7 +31618,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseStatistics"];
+                    "*/*": components["schemas"]["ApiResponseAdmissionResultStatistics"];
                 };
             };
         };

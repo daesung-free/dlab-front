@@ -58,6 +58,9 @@ export interface Student {
   birthDate: string | null
   /** 'M' | 'F'. 목록·상세 모두 온다(2026-09-21 확인 — 예전엔 없었다) */
   gender?: string | null
+  /** 영문 이름 · 졸업(예정) 연도 (2026-09-21 추가) */
+  englishName?: string | null
+  graduationYear?: number | null
   schoolName: string | null
   year: number
   grade: GradeType
@@ -163,6 +166,8 @@ export interface AdmitRequest {
   address?: string
   /** 지정하지 않으면 서버가 등록일로 잡는다 */
   admissionDate?: string
+  englishName?: string
+  graduationYear?: number
 }
 
 /** 접수 후 상세를 채운다. 넘긴 필드만 바뀐다 */
@@ -177,6 +182,8 @@ export interface StudentUpdateRequest {
   grade?: GradeType
   track?: TrackType
   status?: EnrollmentStatus
+  englishName?: string
+  graduationYear?: number
 }
 
 export function admitStudent(body: AdmitRequest): Promise<Student> {

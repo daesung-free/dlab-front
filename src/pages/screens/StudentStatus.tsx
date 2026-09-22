@@ -253,6 +253,24 @@ function Content() {
     return m
   }, [students])
 
+  /*
+   * 반별 휴원·퇴원·계열 — **서버 반별 통계 값이 기준**이다(2026-09-21 추가). 서버 행이 없는 반(반 목록에는
+   * 있고 통계에는 없는 경우)만 학생 목록으로 센 값을 쓴다. 둘은 셈이 다를 수 있다 — 서버는 퇴원 처리된
+   * 학생까지 세고, 학생 목록은 그해 등록만 온다(분당 N수 1반 퇴원: 서버 2 · 목록 0).
+   */
+  const countsOf = (row: StudentStatRow | undefined, key: string) => {
+    if (row && row.onLeave !== undefined) {
+      return {
+        onLeave: row.onLeave,
+        withdrawn: row.withdrawn ?? 0,
+        nature: row.tracks?.SCIENCE ?? 0,
+        humanity: row.tracks?.HUMANITIES ?? 0,
+      }
+    }
+    if (students === null) return { onLeave: null, withdrawn: null, nature: null, humanity: null }
+    return { onLeave: 0, withdrawn: 0, nature: 0, humanity: 0, ...tally.get(key) }
+  }
+
   const classRows: ClassRow[] = useMemo(() => {
     const stat = new Map(byClass.map((r) => [r.key, r]))
     /* 전 지점이면 반 이름이 겹친다(분당 고3 1반 · 이매 고3 1반) — 지점을 앞에 붙인다 */
@@ -263,9 +281,7 @@ function Content() {
       teacher: c.homeroomTeacherName,
       capacity: c.capacity,
       enrolled: stat.get(String(c.id))?.count ?? 0,
-      ...(students === null
-        ? { onLeave: null, withdrawn: null, nature: null, humanity: null }
-        : { onLeave: 0, withdrawn: 0, nature: 0, humanity: 0, ...tally.get(`${c.academyId}:${c.name}`) }),
+      ...countsOf(stat.get(String(c.id)), `${c.academyId}:${c.name}`),
     }))
   }, [classes, byClass, branchId, academies, tally, students])
 

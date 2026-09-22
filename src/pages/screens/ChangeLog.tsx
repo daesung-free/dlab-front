@@ -4,7 +4,6 @@ import {
   ExcelButton,
   MaskToggle,
   SearchForm,
-  Unfilled,
   addDaysStr,
   toDateStr,
   todayStr,
@@ -96,6 +95,17 @@ function localAt(iso: string): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
 
+/** `changes` 는 JSON 문자열(`[{field, before, after}]`)이다. 깨졌거나 비었으면 빈 목록 */
+function changesOf(raw: string | null): { field: string; before: string | null; after: string | null }[] {
+  if (!raw) return []
+  try {
+    const v = JSON.parse(raw) as unknown
+    return Array.isArray(v) ? (v as { field: string; before: string | null; after: string | null }[]) : []
+  } catch {
+    return []
+  }
+}
+
 const COLUMNS: Column<LogRow>[] = [
   { key: 'at', header: '변경 시각', width: '164px', value: (r) => r.at },
   {
@@ -106,12 +116,7 @@ const COLUMNS: Column<LogRow>[] = [
     /* ★ 서버가 계정 유형('EMPLOYEE')을 이름 자리에 넣어 보내던 때가 있었다. 고쳐졌지만
          배포가 안 올라간 환경에서는 그대로 오므로, 사람 이름이 아닌 것이 그대로 보이면
          오해를 만든다. 그 값만 따로 알린다. */
-    render: (r) =>
-      !r.actorName || r.actorName === 'EMPLOYEE' ? (
-        <Unfilled reason="바꾼 사람의 이름을 아직 안 준다" />
-      ) : (
-        r.actorName
-      ),
+    render: (r) => r.actorName ?? '-',
   },
   { key: 'area', header: '업무 영역', width: '100px', align: 'center', value: (r) => r.entityType },
   {
@@ -125,34 +130,23 @@ const COLUMNS: Column<LogRow>[] = [
       return m ? <span className={`mk ${m.cls}`}>{m.label}</span> : <span>{r.action}</span>
     },
   },
-  {
-    key: 'targetNo',
-    header: '대상 학번',
-    width: '100px',
-    value: () => '',
-    render: () => <Unfilled reason="기록에 학번이 없다" />,
-  },
-  {
-    key: 'target',
-    header: '대상',
-    width: '80px',
-    value: () => '',
-    render: () => <Unfilled reason="기록에 대상 이름이 없다" />,
-  },
+  /* ★ 대상·변경 내용은 2026-09-21 부터 쌓인다. 그 전 기록과 학생과 무관한 기록(청구 설정 등)은
+       값이 원래 없어 '-' 다 — '미제공' 이 아니다 */
+  { key: 'targetNo', header: '대상 학번', width: '100px', value: (r) => r.targetStudentNo ?? '-' },
+  { key: 'target', header: '대상', width: '80px', mask: 'name', value: (r) => r.targetStudentName ?? '-' },
   {
     key: 'field',
     header: '변경 항목',
-    width: '96px',
-    value: () => '',
-    render: () => <Unfilled reason="어느 항목을 바꿨는지 안 준다" />,
+    width: '120px',
+    value: (r) => changesOf(r.changes).map((c) => c.field).join(', ') || '-',
   },
   {
     key: 'diff',
     header: '변경 전 → 변경 후',
-    /* ★ 이 화면의 존재 이유인 열이다. 서버가 changes 를 채우면 여기부터 살아난다 —
-         지금은 전 건 null 이다(API_GAPS 24-1). 열을 지우지 않는 이유가 그것이다. */
-    value: () => '',
-    render: () => <Unfilled reason="변경 전후 값을 아직 안 준다" />,
+    value: (r) =>
+      changesOf(r.changes)
+        .map((c) => `${c.before ?? '-'} → ${c.after ?? '-'}`)
+        .join(' / ') || '-',
   },
   {
     key: 'ip',

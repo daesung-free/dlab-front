@@ -98,6 +98,8 @@ export type ApplicationStatus = 'APPLIED' | 'WAITLISTED' | 'CANCELED'
 export interface LectureApplicant {
   applicationId: number
   studentId: number
+  /** 등록 건 id(2026-09-21 추가) — 청구는 이걸로 한다. 학생 id 로는 재등록한 학생의 어느 등록인지 모른다 */
+  enrollmentId?: number
   studentNo: string | null
   studentName: string
   className: string | null

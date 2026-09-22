@@ -267,15 +267,19 @@ const API_TEMPLATE_COLUMNS: Column<NotificationTemplate>[] = [
     header: '최종 수정',
     width: '100px',
     align: 'center',
-    value: () => '',
-    render: () => <Unfilled reason="템플릿 수정 시각이 응답에 없다" />,
+    // UTC 로 온다 — 한국 날짜로. 자르기만 하면 자정 근처가 하루 밀린다
+    value: (r) => {
+      if (!r.updatedAt) return '-'
+      const d = new Date(r.updatedAt)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    },
   },
   {
     key: 'updatedBy',
     header: '수정자',
     width: '80px',
-    value: () => '',
-    render: () => <Unfilled reason="템플릿 수정자가 응답에 없다" />,
+    // 2026-09-21 이전에 고친 문구는 누가 고쳤는지 기록이 없다
+    value: (r) => r.updatedByName ?? '-',
   },
 ]
 
