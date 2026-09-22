@@ -892,6 +892,8 @@ function HistoryButton() {
   const [rows, setRows] = useState<ApprovalBoardRow[]>([])
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  /* 상태로 거른다 — '대기 중' 이 관리자용 진행 중 목록이다(/admin/approvals 는 담임 전용이라 이걸 쓴다) */
+  const [status, setStatus] = useState<'' | 'PENDING' | 'APPROVED' | 'REJECTED'>('')
 
   useEffect(() => {
     if (!open || academyId === null) return
@@ -899,14 +901,14 @@ function HistoryButton() {
     setLoading(true)
     setErr(null)
     /* 기본 30일. 기간을 안 주면 서버가 전체를 훑어 느려지고, 이력은 최근 것부터 본다 */
-    listApprovalBoard({ academyId, from: addDaysStr(todayStr(), -30), to: todayStr() })
+    listApprovalBoard({ academyId, from: addDaysStr(todayStr(), -30), to: todayStr(), status: status || undefined })
       .then((v) => alive && setRows(v.rows))
       .catch((e) => alive && setErr(e instanceof ApiError ? e.message : '승인 이력을 불러오지 못했습니다.'))
       .finally(() => alive && setLoading(false))
     return () => {
       alive = false
     }
-  }, [open, academyId])
+  }, [open, academyId, status])
 
   return (
     <>
@@ -933,14 +935,33 @@ function HistoryButton() {
           onClose={() => setOpen(false)}
         >
           <div>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+              {(
+                [
+                  ['', '전체'],
+                  ['PENDING', '대기 중'],
+                  ['APPROVED', '승인'],
+                  ['REJECTED', '반려'],
+                ] as const
+              ).map(([k, label]) => (
+                <button key={k} type="button" className={`chip${status === k ? ' on' : ''}`} onClick={() => setStatus(k)}>
+                  {label}
+                </button>
+              ))}
+            </div>
             <DataTable
               columns={HISTORY_COLUMNS}
               rows={rows}
               rowKey={(r) => String(r.id)}
               loading={loading}
               pageSize={10}
-              countLabel={<>최근 30일 <b>{rows.length}</b>건</>}
-              emptyText={err ?? '최근 30일에 처리된 승인이 없습니다.'}
+              countLabel={
+                <>
+                  최근 30일 {status === 'PENDING' ? '대기 중' : status === 'APPROVED' ? '승인' : status === 'REJECTED' ? '반려' : ''}{' '}
+                  <b>{rows.length}</b>건
+                </>
+              }
+              emptyText={err ?? (status === 'PENDING' ? '지금 대기 중인 승인이 없습니다.' : '최근 30일에 처리된 승인이 없습니다.')}
             />
           </div>
         </Modal>

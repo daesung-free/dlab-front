@@ -160,6 +160,21 @@ function standardColumns(
   ]
 }
 
+/*
+ * 단가표의 결제 채널 · 납기 — 단가표 행에는 없고 **교습비 청구 기준**(itemType TUITION)에 있다
+ * (paymentMethod · dueDesc). 단가표는 학년 × 좌석 금액표라 청구 방법은 교습비 기준 하나를 따른다.
+ * 교습비 기준이 없으면 '-' — 청구 기준 탭에서 등록하면 채워진다.
+ */
+function priceColumns(tuition: BillingStandard | undefined): Column<TuitionPrice>[] {
+  return PRICE_COLUMNS.map((c) =>
+    c.key === 'pg'
+      ? { ...c, value: () => (tuition?.paymentMethod ? PAYMENT_METHOD_LABEL[tuition.paymentMethod] : '-'), render: undefined }
+      : c.key === 'dueDay'
+        ? { ...c, value: () => tuition?.dueDesc ?? '-', render: undefined }
+        : c,
+  )
+}
+
 const PRICE_COLUMNS: Column<TuitionPrice>[] = [
   {
     key: 'grade',
@@ -302,6 +317,10 @@ function Content() {
   const [prices, setPrices] = useState<TuitionPrice[]>([])
   const [months, setMonths] = useState<TuitionMonth[]>([])
   const [standards, setStandards] = useState<BillingStandard[]>([])
+  const priceCols = useMemo(
+    () => priceColumns(standards.find((x) => x.itemType === 'TUITION' && x.active) ?? standards.find((x) => x.itemType === 'TUITION')),
+    [standards],
+  )
   const [refunds, setRefunds] = useState<RefundRule[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -758,7 +777,7 @@ function Content() {
               {/* 위 목록의 '단가표' 행이 여기서 갈린다 — 학년 × 좌석유형 */}
               <div style={{ marginTop: 14 }} />
               <DataTable
-                columns={PRICE_COLUMNS}
+                columns={priceCols}
                 rows={prices}
                 rowKey={(r) => String(r.id)}
                 masked={false}
@@ -771,7 +790,7 @@ function Content() {
                 }
                 toolbar={
                   <>
-                    <ExcelButton filename={`청구기준_${year}`} columns={PRICE_COLUMNS} rows={prices} masked={false} />
+                    <ExcelButton filename={`청구기준_${year}`} columns={priceCols} rows={prices} masked={false} />
                     <select
                       className="sel"
                       value={year}
