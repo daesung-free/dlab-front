@@ -19,6 +19,14 @@ const FIELD_LABEL: Record<string, string> = {
   trackName: '전형명',
   result: '결과',
   memo: '메모',
+  // 학생 정보 수정·신규 접수의 검증 오류('graduationYear: 1990 이상이어야 합니다')에도 쓴다
+  englishName: '영문명',
+  graduationYear: '졸업(예정) 연도',
+  address: '주소',
+  guardianPhone: '학부모 연락처',
+  admissionDate: '입학일',
+  retakeCount: '재수 횟수',
+  reason: '사유',
 }
 
 export function importFieldLabel(field: string): string {

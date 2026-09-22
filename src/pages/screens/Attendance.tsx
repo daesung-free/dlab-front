@@ -445,8 +445,9 @@ function Content() {
               <Icon name={STATUS_META[s].icon} size={13} /> {ATTENDANCE_STATUS_LABEL[s]}
             </div>
             <div className="v">{summary?.[s] ?? 0}</div>
-            <div className="d" style={{ fontFamily: 'ui-monospace, monospace', fontSize: 10 }}>
-              {s}
+            {/* 여기에 상태 코드(ON_TIME 등)를 찍어 두었었다 — 화면이다. 전체 대비 비율을 쓴다 */}
+            <div className="d">
+              {summary?.total ? `조회 대상의 ${Math.round(((summary[s] ?? 0) / summary.total) * 100)}%` : '-'}
             </div>
           </div>
         ))}

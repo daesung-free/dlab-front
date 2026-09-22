@@ -1216,7 +1216,7 @@ function Content() {
           <div className="v" style={{ fontSize: 14, paddingTop: 8 }}>
             <Unfilled reason="수납 현황은 수납 화면에서 확인하세요" />
           </div>
-          <div className="d">수납현황(F-4.8) 참조</div>
+          <div className="d">수납현황 화면에서 확인</div>
         </div>
         <div className="stat">
           <div className="l">

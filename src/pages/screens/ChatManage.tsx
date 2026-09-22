@@ -480,7 +480,7 @@ function Content() {
                   <div className="tx">
                     대화 내용은 <b>메신저 업체가 보관</b>하고, 이 시스템에는 언제 누구와 나눴는지만
                     남습니다. 대화는 <b>학생 ↔ 담임 1:1</b> 한 종류뿐입니다.
-                    <b> 가족 채팅방(그룹 스레드)은 범위에서 제외</b>되어, 학부모는 채팅 참여자가 아니라 알림톡
+                    <b> 가족 채팅방은 만들지 않아</b>, 학부모는 채팅 참여자가 아니라 알림톡
                     수신자로만 남습니다. 이 구조는 제품이 바뀌어도 유지됩니다.
                   </div>
                 </div>
@@ -493,7 +493,7 @@ function Content() {
                     code: 'DIRECT_1TO1',
                     icon: 'message-square',
                     members: '학생 ↔ 담임',
-                    notes: ['외부 메신저 React 위젯 임베드', '담임별 스레드 목록', '읽음·미응답 알림'],
+                    notes: ['메신저 업체 채팅 창을 이 화면에 붙입니다', '담임별 대화 목록', '읽음·미응답 알림'],
                   },
                   {
                     t: '학부모 소통',
@@ -501,8 +501,8 @@ function Content() {
                     icon: 'message-circle',
                     members: '학부모 — 수신 전용',
                     notes: [
-                      '가족 채팅방 제외 — 그룹 스레드 없음',
-                      '출결·성적 알림은 알림톡(F-4.4)으로 전달',
+                      '가족 채팅방은 만들지 않습니다',
+                      '출결·성적 알림은 알림톡으로 전달',
                       '학부모 문의는 행정 요청 수신함으로 접수',
                     ],
                   },
@@ -519,7 +519,6 @@ function Content() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}>
                       <Icon name={c.icon} size={17} />
                       <b style={{ fontSize: 14 }}>{c.t}</b>
-                      <code style={{ fontSize: 10.5, marginLeft: 'auto' }}>{c.code}</code>
                     </div>
                     <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>참여: {c.members}</div>
                     <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
