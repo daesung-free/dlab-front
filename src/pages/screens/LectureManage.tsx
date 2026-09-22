@@ -29,7 +29,10 @@ import {
   type LectureSession,
 } from '../../api/lectures'
 import { listTeachers, type TeacherRow } from '../../api/accounts'
+import { createBilling } from '../../api/billing'
+import { searchStudents } from '../../api/students'
 import type { Mockup } from './types'
+import { createScreenSignal } from './screenSignal'
 import '../../styles/forms.css'
 
 /* F-4.7 특강 관리 — 신규개발-요구사항보완
@@ -323,6 +326,14 @@ function Content() {
   /* ── 실연동 ── */
   const { academyId } = useAcademy()
   const [lectures, setLectures] = useState<ApiLecture[]>([])
+  /* 설명회만 보기 — 헤더 '설명회 신청 관리' 가 켠다. 설명회는 특강과 같은 목록에 유형만 다르게 온다 */
+  const [briefingOnly, setBriefingOnly] = useState(false)
+  const briefingVer = briefingSignal.useVersion()
+  useEffect(() => {
+    if (briefingVer === 0) return
+    setBriefingOnly(true)
+    setTab('list')
+  }, [briefingVer])
   const [lectureId, setLectureId] = useState<number | null>(null)
   const [applicants, setApplicants] = useState<LectureApplicant[]>([])
   const [sessionList, setSessionList] = useState<LectureSession[]>([])
@@ -330,6 +341,54 @@ function Content() {
   const [error, setError] = useState<string | null>(null)
   /* 확정 전에 한 번 묻는다. 정원을 넘기는 경우가 있어서다 — 아래 confirmPromote 주석 참고 */
   const [promoting, setPromoting] = useState<{ ids: number[] } | null>(null)
+  /*
+   * 수납청구 — 고른 신청자에게 특강비 청구를 한 명씩 만든다(일괄 API 가 없다).
+   * ★ 건별 결과를 모아 보여준다. 중간에 실패하면 일부만 청구된 채 남는데, 안 알리면 전부 된 줄 안다.
+   * ★ 신청자 응답에 등록 ID(enrollmentId)가 없고 학생 ID만 있다 — 재원생 목록에서 학생 ID로 찾는다
+   *   (API_GAPS 33-4). 못 찾으면 그 학생은 실패로 남긴다.
+   */
+  const [billing, setBilling] = useState<{
+    rows: ApplicantRow[]
+    name: string
+    amount: string
+    dueDate: string
+    results: { name: string; ok: boolean; msg: string }[] | null
+  } | null>(null)
+  const [billBusy, setBillBusy] = useState(false)
+
+  async function runBilling() {
+    if (!billing || academyId === null) return
+    setBillBusy(true)
+    const results: { name: string; ok: boolean; msg: string }[] = []
+    try {
+      const page = await searchStudents({ academyId, size: 1000 })
+      const enrollmentOf = new Map(page.rows.map((st) => [st.studentId, st.enrollmentId]))
+      for (const r of billing.rows) {
+        const enrollmentId = enrollmentOf.get(r.studentId)
+        if (enrollmentId === undefined) {
+          results.push({ name: r.studentName, ok: false, msg: '재원생 목록에서 찾지 못했습니다' })
+          continue
+        }
+        try {
+          await createBilling({
+            enrollmentId,
+            name: billing.name.trim(),
+            billingType: 'LECTURE',
+            suppliedAmount: Number(billing.amount),
+            dueDate: billing.dueDate || undefined,
+          })
+          results.push({ name: r.studentName, ok: true, msg: '청구함' })
+        } catch (e) {
+          results.push({ name: r.studentName, ok: false, msg: e instanceof ApiError ? e.message : '청구하지 못했습니다' })
+        }
+      }
+    } catch (e) {
+      results.push({ name: '전체', ok: false, msg: e instanceof ApiError ? e.message : '재원생 목록을 불러오지 못했습니다' })
+    } finally {
+      setBilling((b) => (b ? { ...b, results } : b))
+      setBillBusy(false)
+    }
+  }
   const [promoteBusy, setPromoteBusy] = useState(false)
 
   /* 담당 강사는 서버가 **id 로** 받는다. 이름 문자열을 보내면 조용히 무시되고 '미지정'이 된다 */
@@ -982,14 +1041,12 @@ function Content() {
                     />
                     정원 초과 시 대기자 접수
                   </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
-                    <input
-                      type="checkbox"
-                      checked={draft.withBriefing}
-                      onChange={(e) => patch({ withBriefing: e.target.checked })}
-                    />
+                  {/* ★ 이 값은 서버로 가지 않는다 — 켜도 아무 일이 없는데 켜지는 것처럼 보였다.
+                         '함께 받기' 가 무엇인지(설명회를 따로 만드는지, 한 특강에 두 신청을 받는지)
+                         정해지기 전까지 막아 둔다. 설명회는 목록에서 유형 '설명회' 로 관리한다 */}
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--muted)' }} title="준비 중입니다">
+                    <input type="checkbox" checked={false} disabled data-soon readOnly />
                     설명회 신청도 함께 받기
-                    <span className="mk brandnew">보완 개발</span>
                   </label>
                 </div>
               </div>
@@ -1149,10 +1206,10 @@ function Content() {
           <div className="l">
             <Icon name="megaphone" size={13} /> 설명회 신청
           </div>
-          <div className="v" style={{ fontSize: 15, paddingTop: 6 }}>
-            보완 개발
+          <div className="v">
+            {lectures.filter((l) => l.lectureType === 'BRIEFING').reduce((n, l) => n + (l.confirmedCount ?? 0), 0)}
           </div>
-          <div className="d warn">신규</div>
+          <div className="d">설명회 {lectures.filter((l) => l.lectureType === 'BRIEFING').length}개 · 확정 인원</div>
         </div>
       </div>
 
@@ -1195,7 +1252,7 @@ function Content() {
           {tab === 'list' && (
             <DataTable
               columns={columns}
-              rows={lectures}
+              rows={briefingOnly ? lectures.filter((l) => l.lectureType === 'BRIEFING') : lectures}
               rowKey={(r) => String(r.id)}
               masked={false}
               loading={loading}
@@ -1210,7 +1267,8 @@ function Content() {
               emptyText={academyId === null ? '지점을 먼저 선택하세요.' : '등록된 특강이 없습니다.'}
               countLabel={
                 <>
-                  특강 <b>{lectures.length}</b>건
+                  {briefingOnly ? '설명회' : '특강'}{' '}
+                  <b>{briefingOnly ? lectures.filter((l) => l.lectureType === 'BRIEFING').length : lectures.length}</b>건
                   {selectedLecture && (
                     <span style={{ color: 'var(--muted)' }}> · 선택: {selectedLecture.name}</span>
                   )}
@@ -1218,6 +1276,9 @@ function Content() {
               }
               toolbar={
                 <>
+                  <button type="button" className={`chip${briefingOnly ? ' on' : ''}`} onClick={() => setBriefingOnly((v) => !v)}>
+                    설명회만
+                  </button>
                   <ExcelButton filename="특강_목록" columns={LECTURE_COLUMNS} rows={lectures} masked={false} />
                   <button className="btn pri" onClick={() => setDraft({ ...EMPTY_DRAFT })}>
                     <Icon name="plus" size={14} /> 특강 개설
@@ -1259,8 +1320,21 @@ function Content() {
                   >
                     <Icon name="arrow-right" size={14} /> 선택 확정
                   </button>
-                  {/* 누르면 아무 일도 안 하던 버튼이다 — 붙일 때까지 막아 둔다 */}
-                  <button className="btn" disabled data-soon title="준비 중입니다">
+                  <button
+                    className="btn"
+                    disabled={tab !== 'apply' || selectedApply.length === 0 || !selectedLecture}
+                    title={tab === 'apply' ? '고른 신청자에게 특강비 청구를 만듭니다' : '신청자 탭에서 사용합니다'}
+                    onClick={() =>
+                      selectedLecture &&
+                      setBilling({
+                        rows: applied.filter((a) => selectedApply.includes(String(a.applicationId))),
+                        name: `${selectedLecture.name} 특강비`,
+                        amount: String(selectedLecture.fee ?? ''),
+                        dueDate: '',
+                        results: null,
+                      })
+                    }
+                  >
                     수납청구
                   </button>
                   <MaskToggle masked={masked} onChange={setMasked} />
@@ -1708,6 +1782,65 @@ function Content() {
         </Modal>
       )}
 
+      {billing && (
+        <Modal
+          title={billing.results ? '수납청구 결과' : `특강비 청구 — ${billing.rows.length}명`}
+          sub={billing.results ? undefined : '학생마다 청구가 하나씩 만들어집니다. 수납현황의 미납자 관리에 바로 잡힙니다.'}
+          confirmLabel={billing.results ? '닫기' : '청구'}
+          busy={billBusy}
+          confirmDisabled={!billing.results && (billing.name.trim() === '' || !(Number(billing.amount) > 0))}
+          onConfirm={() => (billing.results ? setBilling(null) : void runBilling())}
+          onClose={() => setBilling(null)}
+        >
+          {billing.results ? (
+            <>
+              <div className="note-box" role="status">
+                <div>
+                  <b>{billing.results.filter((x) => x.ok).length}명 청구</b> · 실패{' '}
+                  <b style={{ color: billing.results.some((x) => !x.ok) ? 'var(--red)' : undefined }}>
+                    {billing.results.filter((x) => !x.ok).length}명
+                  </b>
+                  {billing.results.some((x) => !x.ok) && ' — 실패한 학생은 청구되지 않았습니다. 이유를 확인하고 다시 청구하세요.'}
+                </div>
+              </div>
+              <div style={{ maxHeight: 260, overflow: 'auto' }}>
+                {billing.results.map((x, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 10, fontSize: 12.5, padding: '4px 0' }}>
+                    <span style={{ width: 90 }}>{x.name}</span>
+                    <span style={{ color: x.ok ? 'var(--mint-d)' : 'var(--red)' }}>{x.msg}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="frow">
+                <label className="req">청구명</label>
+                <input className="inp" maxLength={100} value={billing.name} onChange={(e) => setBilling({ ...billing, name: e.target.value })} />
+              </div>
+              <div className="frow">
+                <label className="req">금액</label>
+                <div>
+                  <input
+                    className="inp"
+                    type="number"
+                    min={1}
+                    value={billing.amount}
+                    onChange={(e) => setBilling({ ...billing, amount: e.target.value })}
+                  />
+                  <div className="hint">특강에 적힌 금액을 채워 뒀습니다. 할인이 있으면 수납현황에서 조정합니다.</div>
+                </div>
+              </div>
+              <div className="frow">
+                <label>납기</label>
+                <input className="inp" type="date" value={billing.dueDate} onChange={(e) => setBilling({ ...billing, dueDate: e.target.value })} />
+              </div>
+              <div className="hint">대상: {billing.rows.map((r) => r.studentName).join(', ')}</div>
+            </>
+          )}
+        </Modal>
+      )}
+
       {promoting && (
         <PromoteConfirm
           count={promoting.ids.length}
@@ -1779,12 +1912,14 @@ function PromoteConfirm({
   )
 }
 
+const briefingSignal = createScreenSignal()
+
 export const lectureMockup: Mockup = {
   Content,
   actions: (
     <>
       <button className="btn" disabled data-soon title="준비 중입니다">기간 선택 ▾</button>
-      <button className="btn" disabled data-soon title="준비 중입니다">
+      <button className="btn" onClick={() => briefingSignal.bump()} title="설명회만 모아 봅니다. 줄을 누르면 신청 명단을 볼 수 있습니다">
         <Icon name="megaphone" size={14} /> 설명회 신청 관리
       </button>
     </>
