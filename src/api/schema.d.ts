@@ -7800,6 +7800,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/seat-leaves": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 이탈 이력.
+         * @description 이탈 이력. 이탈 한 건이 한 행이고 복귀 시각·이탈 시간이 붙는다. 최근 건이 위로 온다.
+         */
+        get: operations["history"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/seat-leaves/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 지금 이탈 중인 학생.
+         * @description 지금 이탈 중인 학생. 오래 나가 있는 학생이 위로 온다.
+         */
+        get: operations["current"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/scholarship/reviews": {
         parameters: {
             query?: never;
@@ -8513,7 +8553,7 @@ export interface paths {
          * 변경 이력(감사로그).
          * @description 변경 이력(감사로그). 값은 남기지 않고 "언제 누가 무엇을"만 남는다.
          */
-        get: operations["history"];
+        get: operations["history_1"];
         put?: never;
         post?: never;
         delete?: never;
@@ -8629,7 +8669,7 @@ export interface paths {
          * 한 건이 어떻게 바뀌어 왔나 — 학생 상세에서 "이 기록의 이력".
          * @description 한 건이 어떻게 바뀌어 왔나 — 학생 상세에서 "이 기록의 이력".
          */
-        get: operations["history_1"];
+        get: operations["history_2"];
         put?: never;
         post?: never;
         delete?: never;
@@ -12603,6 +12643,7 @@ export interface components {
             studentNo?: string;
             name?: string;
             phone?: string;
+            guardianPhone?: string;
             address?: string;
             /**
              * @description <b>문자열</b>이다 — 마스킹되면 <code>2007-**-**</code>이라 날짜 타입에
@@ -17738,6 +17779,75 @@ export interface components {
              * @description 구역 수용인원. 좌석 수에서 센다 — 별도 컬럼이면 어긋난다
              */
             seatCount?: number;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseSeatLeaveBoardResponse: {
+            success?: boolean;
+            data?: components["schemas"]["SeatLeaveBoardResponse"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        LeaveRow: {
+            /** Format: int64 */
+            leaveLogId?: number;
+            /**
+             * Format: int64
+             * @description <code>null</code>이면 키오스크가 보낸 카드·학번으로 학생을 못 찾은 건이다
+             */
+            enrollmentId?: number;
+            /** @description 학생을 못 찾았으면 키오스크가 보낸 학번 원본 */
+            studentNo?: string;
+            name?: string;
+            className?: string;
+            areaCd?: string;
+            seatCd?: string;
+            /** Format: date-time */
+            leftAt?: string;
+            /**
+             * Format: date-time
+             * @description 복귀 또는 자동 마감 시각. 열려 있으면 <code>null</code>
+             */
+            closedAt?: string;
+            /** @enum {string} */
+            status?: "OPEN" | "RETURNED" | "AUTO_CLOSED" | "NO_RETURN_RECORD";
+            /**
+             * Format: int64
+             * @description 이탈 시간(분). <code>OPEN</code>이면 지금까지 경과, <code>RETURNED</code>면 실제 이탈 시간,
+             *                           그 외에는 알 수 없어 <code>null</code>
+             */
+            minutes?: number;
+            resolved?: boolean;
+        };
+        SeatLeaveBoardResponse: {
+            rows?: components["schemas"]["LeaveRow"][];
+            summary?: {
+                [key: string]: number;
+            };
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseListLeaveRow: {
+            success?: boolean;
+            data?: components["schemas"]["LeaveRow"][];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -30634,6 +30744,62 @@ export interface operations {
             };
         };
     };
+    history: {
+        parameters: {
+            query?: {
+                /** @description 비우면 내 지점. 전 지점 권한자는 지정해야 한다 */
+                academyId?: number;
+                /** @description 하루 조회. <code>from</code>·<code>to</code>를 주면 그쪽이 우선한다. 둘 다 없으면 오늘 */
+                date?: string;
+                from?: string;
+                /** @description 기간 끝(포함). 최대 {@value SeatLeaveBoardService#MAX_RANGE_DAYS}일 */
+                to?: string;
+                classId?: number;
+                /** @description 상태 필터 */
+                statuses?: ("OPEN" | "RETURNED" | "AUTO_CLOSED" | "NO_RETURN_RECORD")[];
+                /** @description 이름·학번·좌석 통합 검색 */
+                keyword?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseSeatLeaveBoardResponse"];
+                };
+            };
+        };
+    };
+    current: {
+        parameters: {
+            query?: {
+                academyId?: number;
+                classId?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListLeaveRow"];
+                };
+            };
+        };
+    };
     reviews: {
         parameters: {
             query: {
@@ -31408,7 +31574,7 @@ export interface operations {
             };
         };
     };
-    history: {
+    history_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -31521,7 +31687,7 @@ export interface operations {
             };
         };
     };
-    history_1: {
+    history_2: {
         parameters: {
             query?: never;
             header?: never;
