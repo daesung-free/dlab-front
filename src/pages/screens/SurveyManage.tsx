@@ -10,6 +10,7 @@ import {
   SURVEY_RUN_STATE_LABEL,
   SURVEY_TYPE_LABEL,
   closeSurvey,
+  exportSurveyResponses,
   createSurvey as createSurveyApi,
   getSurveyResult,
   listSurveys,
@@ -373,6 +374,7 @@ function Content() {
   const [resultId, setResultId] = useState<number | null>(null)
   const [apiLoading, setApiLoading] = useState(true)
   const [apiError, setApiError] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
   const [apiNotice, setApiNotice] = useState<string | null>(null)
 
   const loadSurveys = useCallback(async () => {
@@ -1072,8 +1074,21 @@ function Content() {
                       </option>
                     ))}
                   </select>
-                  <button className="btn" style={{ padding: '5px 11px', fontSize: 11.5 }} disabled data-soon title="준비 중입니다">
-                    <Icon name="file-spreadsheet" size={12} /> 원시 응답 다운로드
+                  <button
+                    className="btn"
+                    style={{ padding: '5px 11px', fontSize: 11.5 }}
+                    disabled={resultId === null || exporting}
+                    title="응답을 한 줄씩 엑셀로 받습니다. 익명 설문은 학번·이름이 비어 있습니다"
+                    onClick={() => {
+                      const sv = surveys.find((x) => x.id === resultId)
+                      if (!sv) return
+                      setExporting(true)
+                      exportSurveyResponses(sv.id, sv.title)
+                        .catch((err) => setApiError(err instanceof ApiError ? err.message : '응답을 내려받지 못했습니다.'))
+                        .finally(() => setExporting(false))
+                    }}
+                  >
+                    <Icon name="file-spreadsheet" size={12} /> {exporting ? '받는 중…' : '원시 응답 다운로드'}
                   </button>
                 </div>
               </div>

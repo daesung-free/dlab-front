@@ -2944,3 +2944,20 @@ POST /admin/grades/exam-responses/upload       ③ 정오표(필수) + 답안표
 > 요청: 관리자용 조회 — 학생별 `GET /admin/students/{id}/grades/exams`(앱과 같은 모양) 또는
 > 회차별 `GET /admin/exam-forms/{id}/scores`(올라간 학생 목록 · 과목 점수).
 
+# 33부. '준비 중' 버튼 정리 중 발견 — 2026-09-21
+
+## 33-1. 계정 변경 이력의 '바꾼 사람' 이 이름이 아니다 ★ 요청
+
+`GET /staff/accounts/{accountId}/history` 의 `actorName` 에 사람 이름이 아니라 **계정 종류**가 온다.
+
+```
+GET /api/v1/admin/staff/accounts/{bundang}/history
+→ [{"id":123,"action":"UPDATE","changes":"[{\"field\":\"locked\",\"before\":\"true\",\"after\":\"false\"}]",
+    "actorId":1,"actorName":"EMPLOYEE","occurredAt":"2026-09-18T03:45:51Z"}, …]
+```
+
+> 요청: `actorName` 에 바꾼 사람 이름(또는 로그인 ID). 사용자 관리 '권한 변경 이력' 창의 '바꾼 사람' 칸.
+
+덧붙여 — 프론트 타입이 이 응답과 **달랐다**(beforeValue·afterValue·changedAt 을 읽었다). 그래서 예전
+'이력 보기' 는 "- → -" 만 찍었다. 실제 모양(`changes` JSON 문자열)으로 고쳤다.
+

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   DataTable,
   ExcelButton,
@@ -526,8 +527,9 @@ function Content() {
 export const attendanceMockup: Mockup = {
   Content,
   actions: (
-    <button className="btn" disabled data-soon title="준비 중입니다">
+    // 출결 알림(등원·하원·지각)도 알림 템플릿 중 하나다 — 따로 두지 않고 그 화면으로 보낸다
+    <Link className="btn" to="/s/message-send?tab=tpl" title="등원·하원·지각 알림 문구는 알림 발송의 템플릿 관리에서 고칩니다">
       <Icon name="bell" size={14} /> 출결 알림 템플릿
-    </button>
+    </Link>
   ),
 }

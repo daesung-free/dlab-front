@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { DataTable, ExcelButton, MaskToggle, useServerData, type Column, Modal } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
+import { AccountHistoryModal } from '../../components/AccountHistoryModal'
 import { useAcademy } from '../../auth/AcademyContext'
 import { useAuth } from '../../auth/AuthContext'
 import { SCREEN_MENU_CODES } from '../../data/menuCodes'
@@ -22,7 +23,6 @@ import {
   createStaff,
   listGrantableRoles,
   issueTemporaryPassword,
-  listAccountHistory,
   listAccounts,
   replaceRoles,
   unlockAccount,
@@ -484,24 +484,10 @@ function Content() {
     }
   }
 
-  async function showHistory(row: AccountRow) {
-    setBusy(row.accountId)
-    setActionMsg(null)
-    try {
-      const rows = await listAccountHistory(row.accountId)
-      setActionMsg(
-        rows.length === 0
-          ? `${row.loginId} 의 권한 변경 이력이 없습니다.`
-          : `${row.loginId} 권한 변경 이력 — ` +
-            rows
-              .map((h) => `${localDateTime(h.changedAt)} ${h.action} ${h.beforeValue ?? '-'} → ${h.afterValue ?? '-'}`)
-              .join(' / '),
-      )
-    } catch (err) {
-      setActionMsg(err instanceof ApiError ? err.message : '이력을 불러오지 못했습니다.')
-    } finally {
-      setBusy(null)
-    }
+  /* 이력은 창으로 보여준다 — 예전엔 한 줄 글로 이어 붙여 알림 칸에 찍었다 */
+  const [historyOf, setHistoryOf] = useState<AccountRow | null>(null)
+  function showHistory(row: AccountRow) {
+    setHistoryOf(row)
   }
 
   async function reissuePassword(row: AccountRow): Promise<boolean> {
@@ -609,7 +595,7 @@ function Content() {
             className="btn"
             style={{ padding: '3px 8px', fontSize: 11 }}
             disabled={busy === r.accountId}
-            onClick={() => void showHistory(r)}
+            onClick={() => showHistory(r)}
           >
             이력 보기
           </button>
@@ -1176,7 +1162,64 @@ function Content() {
         )}
       </div>
 
+      {historyOf && (
+        <AccountHistoryModal
+          accountId={historyOf.accountId}
+          title={`${historyOf.name ?? historyOf.loginId} (${historyOf.loginId}) 변경 이력`}
+          onClose={() => setHistoryOf(null)}
+        />
+      )}
     </div>
+  )
+}
+
+/**
+ * 헤더 '권한 변경 이력' — 계정을 골라 이력을 본다. 서버 이력이 계정 단위라 전 계정을 한 번에
+ * 보려면 계정 수만큼 불러야 한다 — 그래서 고르게 한다. 헤더는 본문과 상태를 못 나눠
+ * (CLAUDE.md 5-1) 계정 목록을 따로 읽는다.
+ */
+function AccountHistoryButton() {
+  const { academyId } = useAcademy()
+  const [open, setOpen] = useState(false)
+  const [accounts, setAccounts] = useState<AccountRow[] | null>(null)
+  const [pick, setPick] = useState<number | null>(null)
+
+  function openIt() {
+    setOpen(true)
+    setPick(null)
+    setAccounts(null)
+    listAccounts({ academyId: academyId ?? undefined })
+      .then(setAccounts)
+      .catch(() => setAccounts([]))
+  }
+
+  return (
+    <>
+      <button className="btn" onClick={openIt}>
+        <Icon name="history" size={14} /> 권한 변경 이력
+      </button>
+      {open && (
+        <AccountHistoryModal accountId={pick} title="권한 변경 이력" onClose={() => setOpen(false)}>
+          <div className="frow">
+            <label>계정</label>
+            <select
+              className="sel"
+              value={pick ?? ''}
+              disabled={accounts === null}
+              onChange={(e) => setPick(e.target.value === '' ? null : Number(e.target.value))}
+            >
+              <option value="">{accounts === null ? '불러오는 중…' : '계정 선택'}</option>
+              {(accounts ?? []).map((a) => (
+                <option key={a.accountId} value={a.accountId}>
+                  {a.name ?? '-'} · {a.loginId}
+                  {a.academyName ? ` · ${a.academyName}` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        </AccountHistoryModal>
+      )}
+    </>
   )
 }
 
@@ -1184,9 +1227,7 @@ export const adminUserMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled data-soon title="준비 중입니다">
-        <Icon name="history" size={14} /> 권한 변경 이력
-      </button>
+      <AccountHistoryButton />
     </>
   ),
 }

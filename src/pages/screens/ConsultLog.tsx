@@ -5,6 +5,7 @@ import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { Unfilled, todayStr } from '../../components/common'
 import { ApiError } from '../../api/client'
+import { clearDraft, loadDraft, saveDraft } from '../../lib/draft'
 import { useAcademy } from '../../auth/AcademyContext'
 import {
   CONSULT_METHOD_LABEL,
@@ -139,6 +140,54 @@ function Content() {
     }
   }, [selectedId])
 
+  /*
+   * 임시저장 — 학생별. 학생을 바꾸면 그 학생 것을 불러오고 없으면 비운다.
+   * ★ 예전엔 폼을 안 비워서 A 학생에게 쓰던 내용이 B 학생을 눌러도 그대로 남았다(그대로 저장하면
+   *   남의 학생 일지가 된다).
+   */
+  type ConsultDraft = {
+    type: ConsultType
+    method: ConsultMethod
+    placeNote: string
+    durationMinutes: string
+    parentShare: ParentShare
+    content: string
+    actionPlan: string
+    nextDueDate: string
+  }
+  useEffect(() => {
+    if (selectedId === null) return
+    const d = loadDraft<ConsultDraft>(`consult.${selectedId}`)
+    setType(d?.type ?? 'REGULAR')
+    setMethod(d?.method ?? 'FACE')
+    setPlaceNote(d?.placeNote ?? '')
+    setDurationMinutes(d?.durationMinutes ?? '')
+    setParentShare(d?.parentShare ?? 'NONE')
+    setContent(d?.content ?? '')
+    setActionPlan(d?.actionPlan ?? '')
+    setNextDueDate(d?.nextDueDate ?? '')
+    setSaveMsg(d ? `${d.savedAt}에 임시저장한 내용을 불러왔습니다.` : null)
+  }, [selectedId])
+
+  function saveTemp() {
+    if (selectedId === null) return
+    const at = saveDraft<ConsultDraft>(`consult.${selectedId}`, {
+      type,
+      method,
+      placeNote,
+      durationMinutes,
+      parentShare,
+      content,
+      actionPlan,
+      nextDueDate,
+    })
+    setSaveMsg(
+      at
+        ? `${at} 임시저장했습니다. 이 컴퓨터에서만 다시 불러올 수 있습니다.`
+        : '임시저장하지 못했습니다. 브라우저 저장 공간을 확인해 주세요.',
+    )
+  }
+
   const filtered = useMemo(() => {
     if (filter === '상담 필요') return status.filter((s) => s.overdueDays > 0)
     if (filter === '미상담') return status.filter((s) => s.neverConsulted)
@@ -170,6 +219,7 @@ function Content() {
       setDurationMinutes('')
       setParentShare('NONE')
       setNextDueDate('')
+      clearDraft(`consult.${selected.enrollmentId}`)
       setSaveMsg('상담일지를 저장했습니다.')
       setLogs(await listStudentConsults(selected.enrollmentId))
       await loadStatus()
@@ -358,7 +408,13 @@ function Content() {
                       {saveMsg ?? '저장 시 학생 앱 · 학부모 앱(공유 설정에 따라)에 즉시 반영됩니다.'}
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button className="btn" disabled data-soon title="준비 중입니다">
+                      <button
+                        className="btn"
+                        type="button"
+                        disabled={saving || selected === null}
+                        onClick={saveTemp}
+                        title="이 컴퓨터에 잠시 저장합니다. 학생 앱에는 나가지 않습니다"
+                      >
                         임시저장
                       </button>
                       <button

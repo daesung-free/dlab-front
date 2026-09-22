@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { DataTable, Unfilled, useServerData, type Column, Modal } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
@@ -343,9 +344,10 @@ export const absenceMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled data-soon title="준비 중입니다">
+      {/* 누가 승인하는지는 승인 라우팅 화면이 정한다 — 같은 설정을 두 곳에 두지 않는다 */}
+      <Link className="btn" to="/s/approval" title="사유 신청을 누가 승인하는지 정합니다">
         <Icon name="settings" size={14} /> 승인 항목 설정
-      </button>
+      </Link>
       <button className="btn pri" disabled data-soon title="준비 중입니다">
         <Icon name="plus" size={14} /> 관리자 직접 등록
       </button>
