@@ -67,3 +67,14 @@ export function updateAnnualEvent(
 export function deleteAnnualEvent(id: number): Promise<void> {
   return request<void>(`/api/v1/admin/annual-events/${id}`, { method: 'DELETE' })
 }
+
+/**
+ * 연간 행사만 전년도 → 올해로 복사(2026-09-21 추가). 날짜는 한 해 뒤로 민다.
+ * ★ 같은 이름·시작일이 이미 있으면 건너뛴다 — 두 번 눌러도 두 벌이 되지 않는다.
+ * ★ 기초 데이터 전체 복사(yearly-copy)와 달리 새 해에 다른 데이터가 있어도 된다.
+ * ★ academyId 를 비우면 전 지점 공통 행사(본사만).
+ */
+export function copyAnnualEventsYear(body: { academyId?: number; fromYear: number; toYear: number }): Promise<{ copied: number; skipped: number }> {
+  return request<{ copied: number; skipped: number }>('/api/v1/admin/annual-events/copy-year', { method: 'POST', body })
+}
+

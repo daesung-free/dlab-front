@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { DataTable, Modal, ExcelButton, type Column, toDateStr } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
@@ -16,6 +15,7 @@ import {
 } from '../../api/holidays'
 import {
   ANNUAL_EVENT_TYPE_LABEL,
+  copyAnnualEventsYear,
   createAnnualEvent,
   deleteAnnualEvent,
   listAnnualEvents,
@@ -24,6 +24,7 @@ import {
   type AnnualEventType,
 } from '../../api/annualEvents'
 import type { Mockup } from './types'
+import { createScreenSignal } from './screenSignal'
 import '../../styles/forms.css'
 
 /* F-4.11-10 연간 행사 마스터 → 학습계획 반영 — /api/v1/admin/holidays + /annual-events
@@ -101,6 +102,37 @@ function Content() {
   /** 삭제 확인 모달. null 이면 닫힌 상태 */
   const [removing, setRemoving] = useState<Row | null>(null)
   const [result, setResult] = useState<string | null>(null)
+  /*
+   * 전년도 복사 — 행사만 옮긴다(`/annual-events/copy-year`). 쉬는 날(휴일)은 옮기지 않는다.
+   * ★ 같은 이름·시작일은 건너뛰어 두 번 눌러도 두 벌이 되지 않는다. 헤더 버튼은 신호로 이 창을 연다
+   */
+  const [copyAsk, setCopyAsk] = useState(false)
+  const copyVer = copySignal.useVersion()
+  useEffect(() => {
+    if (copyVer > 0) setCopyAsk(true)
+  }, [copyVer])
+
+  async function copyYear() {
+    if (academyId === null) return
+    setBusy(true)
+    try {
+      const r = await copyAnnualEventsYear({ academyId, fromYear: year - 1, toYear: year })
+      setResult(
+        r.copied === 0
+          ? `새로 옮길 행사가 없습니다${r.skipped ? ` — ${year - 1}년 행사 ${r.skipped}건은 이미 ${year}년에 있습니다` : ` — ${year - 1}년에 등록된 행사가 없습니다`}.`
+          : `${year - 1}년 행사를 ${year}년으로 옮겼습니다 — ${r.copied}건 복사` +
+              (r.skipped ? ` · ${r.skipped}건은 이미 있어 건너뜀` : '') +
+              '. 날짜가 한 해 뒤로 밀렸으니 요일이 바뀐 행사는 확인하세요.',
+      )
+      setCopyAsk(false)
+      await load()
+    } catch (err) {
+      setResult(err instanceof ApiError ? `복사하지 못했습니다 — ${err.message}` : '복사하지 못했습니다.')
+      setCopyAsk(false)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   /* 등록 폼 */
   const [name, setName] = useState('')
@@ -391,6 +423,24 @@ function Content() {
 
   return (
     <>
+      {copyAsk && (
+        <Modal
+          title={`${year - 1}년 행사를 ${year}년으로 복사할까요?`}
+          sub="날짜는 한 해 뒤로 밀립니다. 같은 이름·시작일의 행사가 이미 있으면 건너뜁니다."
+          confirmLabel="복사"
+          busy={busy}
+          onConfirm={() => void copyYear()}
+          onClose={() => setCopyAsk(false)}
+        >
+          <div className="note-box">
+            <div>
+              <b>행사</b>(시험·학원 행사 등)만 옮깁니다. 공휴일·학원 휴원 같은 <b>쉬는 날은 옮기지 않습니다</b> — 해마다 날짜가
+              달라 새로 등록하세요. 위에서 고른 시즌({year})이 옮겨 갈 연도입니다.
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {removing && (
         <Modal
           title={`${removing.name} 을 삭제할까요?`}
@@ -536,13 +586,9 @@ function Content() {
                         </option>
                       ))}
                     </select>
-                    <Link
-                        className="btn"
-                        to="/s/admin-basic"
-                        title="연간 행사는 기초 관리의 전년도 복사에 함께 넘어갑니다(이 지점 행사만, 날짜는 한 해 뒤로)"
-                      >
-                        <Icon name="history" size={14} /> 전년도 복사
-                      </Link>
+                    <button className="btn" disabled={busy || academyId === null} onClick={() => setCopyAsk(true)}>
+                      <Icon name="history" size={14} /> 전년도 복사
+                    </button>
                   </>
                 }
               />
@@ -717,19 +763,16 @@ function Content() {
   )
 }
 
+const copySignal = createScreenSignal()
+
 export const annualEventsMockup: Mockup = {
   Content,
   actions: (
     <>
       <button className="btn" disabled data-soon title="준비 중입니다">기수 선택 ▾</button>
-      {/* 따로 복사하는 경로가 없다 — 기초 데이터 전체 복사에 함께 넘어간다(API_GAPS 34부) */}
-      <Link
-        className="btn"
-        to="/s/admin-basic"
-        title="연간 행사는 기초 관리의 전년도 복사에 함께 넘어갑니다(이 지점 행사만, 날짜는 한 해 뒤로)"
-      >
+      <button className="btn" onClick={() => copySignal.bump()} title="작년 행사를 올해로 옮깁니다. 같은 행사는 건너뜁니다">
         <Icon name="history" size={14} /> 전년도 복사
-      </Link>
+      </button>
     </>
   ),
 }
