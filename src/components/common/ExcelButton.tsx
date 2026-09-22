@@ -72,8 +72,8 @@ export function CopyButton<T>({ columns, rows, masked = true }: Omit<Props<T>, '
   )
 }
 
-/** 인쇄 — 교무업무 명단조회의 Print 버튼 */
-export function PrintButton({ label = 'Print' }: { label?: string }) {
+/** 인쇄 — 교무업무 명단조회의 인쇄 버튼. 목업은 "Print" 였는데 화면 문구는 한글로 쓴다(2026-09-22 결정) */
+export function PrintButton({ label = '인쇄' }: { label?: string }) {
   return (
     <button type="button" className="btn" onClick={() => window.print()}>
       <Icon name="printer" size={14} />
