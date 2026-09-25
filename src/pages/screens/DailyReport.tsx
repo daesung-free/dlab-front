@@ -5,7 +5,7 @@ import { Icon } from '../../components/Icon'
 import { MOCK_STUDENTS } from './mockStudents'
 import type { Mockup } from './types'
 
-/* F-4.11-6 Daily Report 집계(서버) — 신규개발-요구사항신규
+/* F-4.11-6 Daily Report 집계 — 신규개발-요구사항신규
  *
  * 앱 Daily Report(대시보드)의 데이터 원천. 이 화면은 관리자가 집계 결과를 확인하는 곳이다.
  * ⚠ #26 / I-6 (중) — 순공시간 산출 정의(입퇴실/좌석없음 반영 기준) 미확정.

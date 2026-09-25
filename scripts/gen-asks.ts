@@ -12,18 +12,20 @@
 import { writeFileSync, mkdirSync } from 'node:fs'
 import { SCREENS, PHASE } from '../src/data/menu.ts'
 import { ISSUES, PRIORITY_ORDER, resolveIssue, type Issue } from '../src/data/issues.ts'
+/* ★ 화면별 오픈이슈는 menu.internal.ts 에 있다 — menu.ts 는 번들에 들어가서 떼어냈다 */
+import { internalOf } from '../src/data/menu.internal.ts'
 
 const out: string[] = []
 const w = (s = '') => out.push(s)
 
 /** 이슈가 걸려 있는 화면 코드 */
 function blockedScreens(code: string): string[] {
-  return SCREENS.filter((s) => s.issues.some((r) => resolveIssue(r)?.code === code)).map((s) => s.code)
+  return SCREENS.filter((s) => (internalOf(s.id).issues ?? []).some((r) => resolveIssue(r)?.code === code)).map((s) => s.code)
 }
 
 /** 이슈가 가장 먼저 필요한 Phase */
 function earliestPhase(code: string): number | null {
-  const ps = SCREENS.filter((s) => s.issues.some((r) => resolveIssue(r)?.code === code)).map((s) => s.phase)
+  const ps = SCREENS.filter((s) => (internalOf(s.id).issues ?? []).some((r) => resolveIssue(r)?.code === code)).map((s) => s.phase)
   return ps.length ? Math.min(...ps) : null
 }
 
