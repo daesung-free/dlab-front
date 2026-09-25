@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DataTable, ExcelButton, MaskToggle, Modal, type Column } from '../../components/common'
+import { DataTable, ExcelButton, MaskToggle, Modal, Unfilled, type Column } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
@@ -488,23 +488,26 @@ function Content() {
           </div>
           <div className="d warn">10분 주기 스케줄러</div>
         </div>
+        {/* ★ 이 두 칸은 **예시 값이었다.** 배식 태깅 기록이 서버에 없어(키오스크 대기) 아래
+               '배식 체크' 탭은 예시로 두는데, 위 통계 줄은 실데이터 칸과 나란히 있어
+               **예시인 줄 모르고 읽힌다.** 월 총 식수 0 인데 배식 확인 31 로 보였다(09-25). */}
         <div className="stat">
           <div className="l">
             <Icon name="qr-code" size={13} /> 금일 배식 확인
           </div>
-          <div className="v">{check.confirmed}</div>
-          <div className="d">
-            신청 {check.ordered}명 중 · 수기 {check.manual}
+          <div className="v">
+            <Unfilled reason="배식 태깅 기록이 서버에 없다 (키오스크 대기)" />
           </div>
+          <div className="d">신청 인원 중 확인</div>
         </div>
         <div className="stat">
           <div className="l">
             <Icon name="triangle-alert" size={13} /> 확인 필요
           </div>
-          <div className="v" style={{ color: 'var(--red)' }}>
-            {check.pending}
+          <div className="v">
+            <Unfilled reason="배식 태깅 기록이 서버에 없다 (키오스크 대기)" />
           </div>
-          <div className="d down">태깅 실패 — 즉시 처리</div>
+          <div className="d">태깅 실패</div>
         </div>
       </div>
 

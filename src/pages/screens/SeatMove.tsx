@@ -456,13 +456,23 @@ function Content() {
   // 지점 전체 기준이다 — 구역을 바꿔도 이 숫자는 그대로여야 한다
   const away = allCells.filter((c) => seatView(c) === 'away').length
 
-  const cells = useMemo(
-    () =>
-      [...(areaId !== null ? (layouts.get(areaId) ?? []) : [])]
-        // 좌표 순서(위→아래, 왼→오른)로 늘어놓는다. 좌표가 없으면 번호순
-        .sort((a, b) => (a.yPos ?? 0) - (b.yPos ?? 0) || (a.xPos ?? 0) - (b.xPos ?? 0) || a.seatCd.localeCompare(b.seatCd)),
-    [layouts, areaId],
-  )
+  /* 도면 좌표대로 **줄을 맞춰** 그린다.
+     ★ 한 줄로 흘려보내면 같은 좌석이 독서실 좌석배치표와 다른 모양이 되어,
+       두 화면을 번갈아 보는 사람이 자리를 못 찾는다(09-25 확인). */
+  const rows = useMemo(() => {
+    const list = areaId !== null ? (layouts.get(areaId) ?? []) : []
+    const byRow = new Map<number, SeatCell[]>()
+    for (const c of list) {
+      const y = c.yPos ?? 1
+      byRow.set(y, [...(byRow.get(y) ?? []), c])
+    }
+    return [...byRow.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([y, cs]) => ({
+        y,
+        cells: cs.sort((a, b) => (a.xPos ?? 0) - (b.xPos ?? 0) || a.seatCd.localeCompare(b.seatCd)),
+      }))
+  }, [layouts, areaId])
 
   return (
     <div className="p-seat">
@@ -568,8 +578,9 @@ function Content() {
             {!loading && academyId !== null && areas.length === 0 && !error && (
               <div className="note-box">이 지점에 등록된 독서실 좌석 구역이 없습니다.</div>
             )}
-            <div className="seatmap">
-              {cells.map((c) => {
+            {rows.map((row) => (
+            <div className="seatmap" key={row.y}>
+              {row.cells.map((c) => {
                 const view = seatView(c)
                 const awayMin = view === 'away' ? minutesSince(c.seatLeftAt) : 0
                 const meta = VIEW_META[view]
@@ -607,6 +618,7 @@ function Content() {
                 )
               })}
             </div>
+            ))}
 
             <div className="loc-legend">
               {(['seat', 'away', 'absent', 'free'] as const).map((v) => (
