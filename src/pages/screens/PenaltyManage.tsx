@@ -398,7 +398,7 @@ function Content() {
         </div>
       </div>
 
-      <SearchForm fields={fields} onSearch={setQuery} presetKey="penalty" />
+      <SearchForm fields={fields} onSearch={setQuery} presetKey="PENALTY" />
 
       {academyId === null && academyReady && (
         <div className="note-box">지점을 먼저 선택하세요. 상벌점은 지점 단위로 조회합니다.</div>

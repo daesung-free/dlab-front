@@ -23,6 +23,7 @@ import {
   FIXABLE_STATUS_LABEL,
   TAGGING_EVENT_LABEL,
   addTagging,
+  exportAttendance,
   fetchAttendanceBoard,
   fixAttendanceStatus,
   recalculateStudyTime,
@@ -464,7 +465,7 @@ function Content() {
       <SearchForm
         fields={fields}
         onSearch={setQuery}
-        presetKey="attendance"
+        presetKey="ATTENDANCE"
         headerRight={
           <span className="mk verified" title="키오스크에서 자동으로 받습니다">
             <Icon name="zap" size={11} /> 실시간 수신 중
@@ -515,9 +516,15 @@ function Content() {
             ) : (
               <MaskToggle masked={masked} onChange={setMasked} />
             )}
-            {/* ⚠️ 현재 페이지가 아니라 조회된 전량이 담긴다 — 서버가 전량을 주기 때문이다.
-                서버 엑셀(/attendance/export)로 바꾸면 마스킹 해제 권한까지 서버가 판단한다 */}
-            <ExcelButton filename="출결_현황" columns={columns} rows={rows} masked={effectiveMasked} />
+            {/* 서버 엑셀이다(2026-09-25) — 조회와 같은 조건을 서버가 타고, 마스킹 해제 권한도
+                서버가 판단한다. 파일은 회수가 안 되므로 화면 토글보다 기준이 높다 */}
+            <ExcelButton
+              filename="출결_현황"
+              columns={columns}
+              rows={rows}
+              masked={effectiveMasked}
+              download={() => exportAttendance({ ...params, unmask: !effectiveMasked || undefined }, '출결_현황.xlsx')}
+            />
           </>
         }
       />

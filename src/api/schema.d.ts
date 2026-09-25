@@ -2958,8 +2958,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 본인이 저장한 조건만 나온다 — 개인 설정이다.
+         * 본인이 저장한 조건만 나온다 — 개인 설정이다
          * @description 본인이 저장한 조건만 나온다 — 개인 설정이다.
+         *
+         *      <p><b>학생 검색 전용이 아니다.</b> 조건 저장은 출결·상벌점·수납현황 등 <b>공통 검색창을
+         *      쓰는 화면 전체</b>가 쓴다(실행가이드 P1-01). 여기서 화면을 못 고르면 나머지 화면은
+         *      브라우저에만 저장하게 되어 <b>다른 PC에서는 안 보인다</b>.
          */
         get: operations["savedSearches"];
         put?: never;
@@ -8550,8 +8554,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 변경 이력(감사로그).
+         * 변경 이력(감사로그)
          * @description 변경 이력(감사로그). 값은 남기지 않고 "언제 누가 무엇을"만 남는다.
+         *
+         *      <p><b>사람 이름을 붙여 내린다.</b> 계정 번호만 주면 화면에서 누가 바꿨는지 알 수 없어
+         *      이력의 쓸모가 없다. 이름은 <b>조회 시점에</b> 붙인다 — 이력에 박아두면 개인정보가
+         *      복제되고, 계정 이름이 바뀌어도 옛 이름이 남는다.
          */
         get: operations["history_1"];
         put?: never;
@@ -12780,6 +12788,11 @@ export interface components {
         SavedSearchResponse: {
             /** Format: int64 */
             id?: number;
+            /**
+             * @description 어느 화면의 조건인가. 화면이 섞어 받지 않도록 함께 내린다
+             * @enum {string}
+             */
+            searchType?: "STUDENT" | "ATTENDANCE" | "PENALTY" | "RECEIPT_STATUS" | "PAYMENT" | "ROSTER" | "AUDIT_LOG" | "SEAT_LEAVE";
             name?: string;
             conditions?: string;
         };
@@ -16321,9 +16334,9 @@ export interface components {
          *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
          *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
          */
-        ApiResponseStatistics: {
+        ApiResponseLearningPlanStatistics: {
             success?: boolean;
-            data?: components["schemas"]["Statistics"];
+            data?: components["schemas"]["LearningPlanStatistics"];
             meta?: components["schemas"]["PageMeta"];
             error?: components["schemas"]["ErrorBody"];
         };
@@ -16342,7 +16355,11 @@ export interface components {
             /** Format: int32 */
             plannedPercent?: number;
         };
-        Statistics: {
+        /**
+         * @description ★ 스키마 이름을 고정한다. 그냥 두면 학습계획·실적 등 여러 <code>Statistics</code>가 한 이름으로
+         *      합쳐져, 스펙에서 <code>ApiResponseStatistics</code>가 무엇의 통계인지 알 수 없다.
+         */
+        LearningPlanStatistics: {
             /** Format: date */
             from?: string;
             /** Format: date */
@@ -17489,6 +17506,12 @@ export interface components {
             tracks?: {
                 [key: string]: number;
             };
+            /**
+             * Format: int64
+             * @description 월별에만 있다 — 그 달 신규 등록 인원. <b><code>delta</code>로는 알 수 없다</b>:
+             *                      10명 들어오고 10명 나간 달은 증감이 0이라 아무 일도 없던 달로 보인다
+             */
+            admitted?: number;
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -19280,6 +19303,8 @@ export interface components {
              * @description 계정 ID. 배치·시스템 경로면 <code>0</code>이다
              */
             changedBy?: number;
+            /** @description 바꾼 사람 이름. 시스템이거나 계정이 지워졌으면 비어 있다 */
+            changedByName?: string;
             /** Format: date-time */
             changedAt?: string;
         };
@@ -24087,7 +24112,10 @@ export interface operations {
     };
     savedSearches: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 어느 화면의 조건인가. 비우면 학생 검색이다(기존 호출 호환) */
+                searchType?: "STUDENT" | "ATTENDANCE" | "PENALTY" | "RECEIPT_STATUS" | "PAYMENT" | "ROSTER" | "AUDIT_LOG" | "SEAT_LEAVE";
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -24107,7 +24135,9 @@ export interface operations {
     };
     saveSearch: {
         parameters: {
-            query?: never;
+            query?: {
+                searchType?: "STUDENT" | "ATTENDANCE" | "PENALTY" | "RECEIPT_STATUS" | "PAYMENT" | "ROSTER" | "AUDIT_LOG" | "SEAT_LEAVE";
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -29743,7 +29773,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseStatistics"];
+                    "*/*": components["schemas"]["ApiResponseLearningPlanStatistics"];
                 };
             };
         };
@@ -30891,7 +30921,12 @@ export interface operations {
                  */
                 from?: string;
                 to?: string;
-                type?: "TUITION" | "MEAL" | "LECTURE" | "ETC";
+                /** @description 청구 항목. <b>여러 개를 보낼 수 있다</b> — 화면이 체크박스로 고른다 */
+                type?: ("TUITION" | "MEAL" | "LECTURE" | "ETC")[];
+                /** @description 이름·학번·청구항목·전표번호 통합 검색 */
+                keyword?: string;
+                /** @description 결제수단. 취소된 거래는 세지 않는다 */
+                method?: "CARD" | "VBANK" | "CASH" | "TRANSFER" | "ETC";
                 /** @description 미납 건만. 미납자 추출·독촉이 쓴다 */
                 unpaidOnly?: boolean;
             };
@@ -30919,7 +30954,9 @@ export interface operations {
                 year: number;
                 from?: string;
                 to?: string;
-                type?: "TUITION" | "MEAL" | "LECTURE" | "ETC";
+                type?: ("TUITION" | "MEAL" | "LECTURE" | "ETC")[];
+                keyword?: string;
+                method?: "CARD" | "VBANK" | "CASH" | "TRANSFER" | "ETC";
             };
             header?: never;
             path?: never;
@@ -30945,7 +30982,9 @@ export interface operations {
                 year: number;
                 from?: string;
                 to?: string;
-                type?: "TUITION" | "MEAL" | "LECTURE" | "ETC";
+                type?: ("TUITION" | "MEAL" | "LECTURE" | "ETC")[];
+                keyword?: string;
+                method?: "CARD" | "VBANK" | "CASH" | "TRANSFER" | "ETC";
                 unpaidOnly?: boolean;
             };
             header?: never;
@@ -31393,7 +31432,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseStatistics"];
+                    "*/*": components["schemas"]["ApiResponseLearningPlanStatistics"];
                 };
             };
         };
@@ -31672,6 +31711,8 @@ export interface operations {
                 /** @description <code>상벌점</code>·<code>성적</code>처럼 화면에 보이는 이름 그대로다 */
                 entityType?: string;
                 actorId?: number;
+                /** @description <code>CREATE</code>·<code>UPDATE</code>·<code>DELETE</code>. 비우면 전부다 */
+                action?: "CREATE" | "UPDATE" | "DELETE";
                 pageable: components["schemas"]["Pageable"];
             };
             header?: never;
@@ -31789,7 +31830,12 @@ export interface operations {
             query?: {
                 academyId?: number;
                 date?: string;
+                from?: string;
+                to?: string;
                 classId?: number;
+                statuses?: ("ON_TIME" | "LATE" | "ABSENT" | "OUT" | "EARLY_LEAVE" | "NOT_YET")[];
+                excused?: boolean;
+                keyword?: string;
                 unmask?: boolean;
             };
             header?: never;

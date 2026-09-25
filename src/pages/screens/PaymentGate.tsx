@@ -276,7 +276,7 @@ function Content() {
       <SearchForm
         fields={FIELDS}
         onSearch={setQuery}
-        presetKey="payment-gate"
+        presetKey="PAYMENT"
         headerRight={
           <span className="mk supplement" title="가상계좌 만료 스케줄러 10분 주기">
             <Icon name="timer" size={11} /> 만료 스케줄러 10분 주기

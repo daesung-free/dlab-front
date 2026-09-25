@@ -912,7 +912,7 @@ function Content() {
         </div>
       )}
 
-      <SearchForm fields={FIELDS} onSearch={setQuery} initial={DEFAULT_QUERY} presetKey="student-search" />
+      <SearchForm fields={FIELDS} onSearch={setQuery} initial={DEFAULT_QUERY} presetKey="STUDENT" />
 
       {exportError && (
         <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>

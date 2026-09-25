@@ -354,7 +354,7 @@ function LeaveLog({ academyId }: { academyId: number | null }) {
 
   return (
     <>
-      <SearchForm fields={fields} onSearch={setQuery} presetKey="seat-leave" />
+      <SearchForm fields={fields} onSearch={setQuery} presetKey="SEAT_LEAVE" />
 
       {board.error && (
         <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>

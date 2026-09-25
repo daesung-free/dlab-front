@@ -253,7 +253,7 @@ function Content() {
           {exportError}
         </div>
       )}
-      <SearchForm fields={fields} onSearch={setQuery} presetKey="affairs" />
+      <SearchForm fields={fields} onSearch={setQuery} presetKey="ROSTER" />
 
       {table.error && (
         <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>

@@ -22,6 +22,7 @@ import {
   PAY_METHOD_LABEL,
   createBilling,
   deleteBilling,
+  exportReceiptStatus,
   deletePayment,
   getReceiptSummary,
   listReceiptStatus,
@@ -476,19 +477,22 @@ function Content() {
 
   const period = query.period as DateRangeValue | undefined
   const params = useMemo(() => {
-    const kind = query.kind
-    // chips 는 배열이다. 서버는 type 하나만 받는다 — 하나일 때만 보내고, 여럿이면 전부 받아 화면에서 거른다.
-    // (예전에는 첫 값만 보내 '교습비 + 급식비' 가 교습비만 나왔다)
-    const type = Array.isArray(kind) && kind.length === 1 ? (KIND_TO_TYPE[kind[0] as Kind] ?? undefined) : undefined
+    /* ★ 2026-09-25 부터 서버가 항목 **여럿**·검색어·결제수단을 받는다(목록·합계·엑셀이 같은 조건).
+         그전에는 항목 하나만 받아 나머지를 화면에서 걸렀고, 그래서 합계가 목록과 어긋났다.
+         결제수단만 아직 하나라 여럿 고르면 그것만 화면에서 거른다. */
+    const kinds = Array.isArray(query.kind) ? (query.kind as Kind[]) : []
+    const methods = Array.isArray(query.method) ? (query.method as Method[]) : []
     return {
       // 연도를 2026 으로 박아 두었었다 — 해가 바뀌면 조용히 작년 것을 보여준다. 기간 시작일의 해를 쓴다
       year: period?.from ? Number(period.from.slice(0, 4)) : new Date().getFullYear(),
       academyId: academyId ?? undefined,
       from: period?.from || undefined,
       to: period?.to || undefined,
-      type,
+      type: kinds.length > 0 ? kinds.map((k) => KIND_TO_TYPE[k]) : undefined,
+      keyword: typeof query.keyword === 'string' && query.keyword.trim() !== '' ? query.keyword.trim() : undefined,
+      method: methods.length === 1 ? METHOD_TO_CODE[methods[0]] : undefined,
     }
-  }, [academyId, period?.from, period?.to, query.kind])
+  }, [academyId, period?.from, period?.to, query.kind, query.keyword, query.method])
 
   const load = useCallback(async () => {
     /* ★ 지점을 고르기 전에는 부르지 않는다. 예전에는 academyId 없이 먼저 던지고
@@ -523,21 +527,13 @@ function Content() {
   // 요청을 하나 아끼려고 여기서 거른다 — unpaid 는 서버가 계산해준 값이다.
   /* 서버가 안 받는 조건(검색어 · 결제수단 · 항목 여럿)은 여기서 거른다. 이 목록은 서버가 조건 안의
      전량을 주므로 화면에서 걸러도 빠지는 줄이 없다. ★ 청구기수는 뜻이 정해지지 않아 아직 안 먹는다 */
+  /* 서버가 못 받는 조건만 남았다 — 결제수단을 **둘 이상** 고른 경우다.
+     하나면 서버가 거르므로 여기서는 아무것도 안 한다 */
   const filtered = useMemo(() => {
-    const kw = typeof query.keyword === 'string' ? query.keyword.trim() : ''
-    const kinds = Array.isArray(query.kind) ? (query.kind as Kind[]) : []
     const methods = Array.isArray(query.method) ? (query.method as Method[]).map((m) => METHOD_TO_CODE[m]) : []
-    return rows.filter(
-      (r) =>
-        (kw === '' ||
-          r.studentName.includes(kw) ||
-          (r.studentNo ?? '').includes(kw) ||
-          r.name.includes(kw) ||
-          String(r.billingId) === kw) &&
-        (kinds.length < 2 || kinds.some((k) => KIND_TO_TYPE[k] === r.billingType)) &&
-        (methods.length === 0 || r.payments.some((p) => methods.includes(p.method))),
-    )
-  }, [rows, query.keyword, query.kind, query.method])
+    if (methods.length < 2) return rows
+    return rows.filter((r) => r.payments.some((p) => methods.includes(p.method)))
+  }, [rows, query.method])
   /** 화면에서 걸렀으면 서버 요약과 줄이 달라진다 — 그때는 합계를 걸러진 줄로 낸다 */
   const clientFiltered = filtered.length !== rows.length
 
@@ -845,7 +841,7 @@ function Content() {
       <SearchForm
         fields={FIELDS}
         onSearch={setQuery}
-        presetKey="payment"
+        presetKey="RECEIPT_STATUS"
         headerRight={
           <span className="mk supplement" title="직원 계정은 조회만 할 수 있습니다">
             <Icon name="shield-check" size={11} /> STAFF 조회 전용
@@ -1075,7 +1071,19 @@ function Content() {
                     <Icon name="plus" size={14} /> 청구 등록
                   </button>
                   <MaskToggle masked={masked} onChange={setMasked} />
-                  <ExcelButton filename="통합_매출장" columns={COLUMNS} rows={filtered} masked={masked} />
+                  {/* 서버 엑셀(2026-09-25). 결제수단을 둘 이상 고른 경우만 화면이 거르므로,
+                      그때는 파일이 화면보다 넓어진다 — 그 경우에만 화면 값으로 만든다 */}
+                  <ExcelButton
+                    filename="통합_매출장"
+                    columns={COLUMNS}
+                    rows={filtered}
+                    masked={masked}
+                    download={
+                      clientFiltered
+                        ? undefined
+                        : () => exportReceiptStatus({ ...params, unmask: !masked || undefined }, '통합_매출장.xlsx')
+                    }
+                  />
                 </>
               }
             />

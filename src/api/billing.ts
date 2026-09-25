@@ -1,4 +1,4 @@
-import { request } from './client'
+import { downloadFile, request } from './client'
 
 /* 수납 (F-4.8) — /api/v1/admin/receipt-status · /billings
  *
@@ -92,16 +92,43 @@ export interface ReceiptParams {
   academyId?: number
   from?: string
   to?: string
-  type?: BillingType
+  /** ★ 여러 개 보낼 수 있다(2026-09-25). 그전에는 하나뿐이라 화면에서 걸렀다 */
+  type?: BillingType[]
+  /** 이름·학번·청구항목·전표번호 */
+  keyword?: string
+  /** 결제수단 코드(CARD·VIRTUAL_ACCOUNT·CASH). 목록·합계·엑셀이 같은 값을 받는다 */
+  method?: string
   unpaidOnly?: boolean
 }
 
 export function listReceiptStatus(params: ReceiptParams): Promise<ReceiptRow[]> {
-  return request<ReceiptRow[]>('/api/v1/admin/receipt-status', { query: { ...params } })
+  const { type, ...rest } = params
+  return request<ReceiptRow[]>('/api/v1/admin/receipt-status', { query: { ...rest }, repeatable: { type } })
 }
 
 export function getReceiptSummary(params: Omit<ReceiptParams, 'unpaidOnly'>): Promise<ReceiptSummary> {
-  return request<ReceiptSummary>('/api/v1/admin/receipt-status/summary', { query: { ...params } })
+  const { type, ...rest } = params
+  return request<ReceiptSummary>('/api/v1/admin/receipt-status/summary', {
+    query: { ...rest },
+    repeatable: { type },
+  })
+}
+
+/**
+ * 조회 조건 그대로 서버 엑셀을 받는다(2026-09-25).
+ *
+ * ★ 합계·목록과 **같은 조건**이라 화면과 파일이 어긋나지 않는다.
+ * ★ 마스킹 해제 권한은 서버가 판단한다 — 파일은 회수가 안 된다.
+ */
+export function exportReceiptStatus(
+  params: ReceiptParams & { unmask?: boolean },
+  filename = '통합_매출장.xlsx',
+): Promise<void> {
+  const { type, ...rest } = params
+  return downloadFile('/api/v1/admin/receipt-status/export', filename, {
+    query: { ...rest },
+    repeatable: { type },
+  })
 }
 
 /** 수납 등록. 부분납이면 여러 번 쌓인다 */
