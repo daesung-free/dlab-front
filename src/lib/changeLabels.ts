@@ -54,7 +54,9 @@ export const AUDIT_AREAS: { value: string; label: string }[] = [
   { value: '청구', label: '청구' },
   { value: '성적', label: '성적' },
   { value: '공지', label: '공지' },
-  { value: 'Account', label: '직원 계정' },
+  // 예전에는 이 값만 영어(`Account`)로 와서 화면 선택지도 영어였다. 2026-09-25 에 서버가
+  // 한국어로 바꾸고 기존 행도 변환했다 — 영어로 보내면 이제 0건이다
+  { value: '직원 계정', label: '직원 계정' },
 ]
 
 export function auditAreaLabel(entityType: string): string {

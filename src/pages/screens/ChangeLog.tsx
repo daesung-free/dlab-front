@@ -39,6 +39,11 @@ const ACTION_META: Record<Action, { label: string; cls: string; icon: string }> 
   DELETE: { label: '삭제', cls: 'brandnew', icon: 'trash-2' },
 }
 
+const ACTION_CHIPS = (Object.keys(ACTION_META) as Action[]).map((a) => ACTION_META[a].label)
+const CHIP_TO_ACTION: Record<string, Action> = Object.fromEntries(
+  (Object.keys(ACTION_META) as Action[]).map((a) => [ACTION_META[a].label, a]),
+)
+
 /** 변경이 발생한 업무 영역 — 화면이 아니라 도메인 기준으로 묶는다 */
 /* 업무 영역 = 서버의 entityType 이다. **서버가 한국어로 준다** — 목록에서 실제로 온 값이
    '상벌점' · '공지' · '학생 등록' 이었다. 감사 로그가 opt-in 이라 아래 7개만 남는다
@@ -75,10 +80,10 @@ const FIELDS: Field[] = [
     type: 'chips',
     name: 'action',
     label: '변경 유형',
-    options: ['등록', '수정', '삭제'],
-    multiple: true,
-    disabled: true,
-    disabledReason: '유형별 조회는 아직 지원되지 않습니다.',
+    options: ACTION_CHIPS,
+    // ★ 서버가 하나만 받는다. 여럿 고르면 걸러진 것처럼 보이는데 결과가 그대로가 되므로
+    //   하나만 고르게 둔다(2026-09-25 서버가 받기 시작했다)
+    multiple: false,
   },
 ]
 
@@ -226,15 +231,16 @@ function Content() {
 
   /* ★ useMemo 필수 — 매 렌더 새 객체를 넘기면 무한 요청이 된다.
      ★ 기간을 안 보내면 서버가 오늘분만 준다. 화면 이름이 '금일 수정 이력'이라 그게 맞다.
-     ★ action 은 **일부러 안 보낸다.** 서버가 받지 않고 조용히 무시해서, 보내면 걸러진
-       것처럼 보이는데 결과가 그대로다(auditLogs.ts 주석). */
+     ★ action 은 2026-09-25 부터 서버가 받는다. 그전에는 조용히 무시돼서 안 보냈다. */
   const params = useMemo(() => {
     const d = query.date as { from?: string; to?: string } | undefined
     const area = typeof query.area === 'string' ? query.area : ''
+    const act = Array.isArray(query.action) ? query.action[0] : query.action
     return {
       from: d?.from || undefined,
       to: d?.to || undefined,
       entityType: area || undefined,
+      action: typeof act === 'string' && act !== '' ? CHIP_TO_ACTION[act] : undefined,
       academyId: academyId ?? undefined,
     }
   }, [query, academyId])
