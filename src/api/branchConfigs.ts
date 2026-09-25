@@ -48,6 +48,8 @@ export interface BranchConfigHistory {
   detail: string
   /** 계정 번호. 이름은 안 온다 */
   changedBy: number | null
+  /** 바꾼 사람 이름(2026-09-25 추가). 예전에는 계정 번호만 와서 화면에 '계정 #12' 가 찍혔다 */
+  changedByName: string | null
   changedAt: string
 }
 

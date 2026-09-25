@@ -33,6 +33,9 @@ const VALUE: Record<string, string> = {
 
 export function changeValueLabel(v: string | null): string {
   if (v === null || v === '') return '-'
+  /* 연락처·생년월일·주소는 서버가 값을 안 남기고 `***` 만 남긴다(개인정보). 그대로 두면
+     "*** → ***" 가 되어 고장으로 읽힌다 — 바뀐 사실만 남았다는 뜻을 글로 쓴다 */
+  if (v === '***') return '가려진 값'
   return v
     .split(',')
     .map((x) => VALUE[x.trim()] ?? x.trim())
@@ -48,6 +51,9 @@ export function changeFieldLabel(field: string): string {
  * (StaffAccountService 의 AUDIT_ACCOUNT). 검색 조건에도 이 원래 값을 보내야 걸린다.
  */
 export const AUDIT_AREAS: { value: string; label: string }[] = [
+  /* ★ '학생' 과 '학생 등록' 은 다르다 — 사람(이름·연락처·영문명)과 그해 등록 건이
+     서로 다른 행이라 서버도 따로 남긴다(2026-09-25). 하나로 합치면 어느 쪽이 바뀐 건지 못 읽는다 */
+  { value: '학생', label: '학생 정보' },
   { value: '학생 등록', label: '학생 등록' },
   { value: '사유 신청', label: '사유 신청' },
   { value: '상벌점', label: '상벌점' },

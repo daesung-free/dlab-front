@@ -84,6 +84,13 @@ export interface StudentStatRow {
   withdrawn?: number
   /** { SCIENCE: 3, HUMANITIES: 1 } — 없는 계열은 키가 없다 */
   tracks?: Record<string, number>
+  /**
+   * 월별(groupBy=MONTH)에만 온다(2026-09-25 추가) — **그달 새로 등록한 인원**.
+   *
+   * ★ `delta`(전월 대비)와 다르다. delta 는 들어온 사람에서 나간 사람을 뺀 값이라
+   *   신규가 있어도 0 이 될 수 있다. '신규' 칸에 delta 를 넣으면 거짓말이 된다.
+   */
+  admitted?: number | null
 }
 
 export function getStudentStatistics(params: {
