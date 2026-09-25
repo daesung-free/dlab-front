@@ -1,4 +1,4 @@
-import { request } from './client'
+import { downloadFile, request } from './client'
 
 /* 수납 (F-4.8) — /api/v1/admin/receipt-status · /billings
  *
@@ -92,16 +92,43 @@ export interface ReceiptParams {
   academyId?: number
   from?: string
   to?: string
-  type?: BillingType
+  /** ★ 여러 개 보낼 수 있다(2026-09-25). 그전에는 하나뿐이라 화면에서 걸렀다 */
+  type?: BillingType[]
+  /** 이름·학번·청구항목·전표번호 */
+  keyword?: string
+  /** 결제수단 코드(CARD·VIRTUAL_ACCOUNT·CASH). 목록·합계·엑셀이 같은 값을 받는다 */
+  method?: string
   unpaidOnly?: boolean
 }
 
 export function listReceiptStatus(params: ReceiptParams): Promise<ReceiptRow[]> {
-  return request<ReceiptRow[]>('/api/v1/admin/receipt-status', { query: { ...params } })
+  const { type, ...rest } = params
+  return request<ReceiptRow[]>('/api/v1/admin/receipt-status', { query: { ...rest }, repeatable: { type } })
 }
 
 export function getReceiptSummary(params: Omit<ReceiptParams, 'unpaidOnly'>): Promise<ReceiptSummary> {
-  return request<ReceiptSummary>('/api/v1/admin/receipt-status/summary', { query: { ...params } })
+  const { type, ...rest } = params
+  return request<ReceiptSummary>('/api/v1/admin/receipt-status/summary', {
+    query: { ...rest },
+    repeatable: { type },
+  })
+}
+
+/**
+ * 조회 조건 그대로 서버 엑셀을 받는다(2026-09-25).
+ *
+ * ★ 합계·목록과 **같은 조건**이라 화면과 파일이 어긋나지 않는다.
+ * ★ 마스킹 해제 권한은 서버가 판단한다 — 파일은 회수가 안 된다.
+ */
+export function exportReceiptStatus(
+  params: ReceiptParams & { unmask?: boolean },
+  filename = '통합_매출장.xlsx',
+): Promise<void> {
+  const { type, ...rest } = params
+  return downloadFile('/api/v1/admin/receipt-status/export', filename, {
+    query: { ...rest },
+    repeatable: { type },
+  })
 }
 
 /** 수납 등록. 부분납이면 여러 번 쌓인다 */
@@ -110,4 +137,100 @@ export function recordPayment(billingId: number, amount: number, method: PayMeth
     method: 'POST',
     body: { amount, method },
   })
+}
+
+/* ─────────── 청구 생성·취소 (/billings) ─────────── */
+
+/**
+ * 청구 한 건.
+ *
+ * ★ `receipt-status` 의 `ReceiptRow` 와 **다른 표다.** 이쪽은 결제 거래(`payments[]`)가
+ *   없고 금액만 온다. 화면의 매출장은 여전히 `receipt-status` 를 본다 —
+ *   여기는 "방금 만든 것이 제대로 들어갔나"를 확인하는 용도다.
+ */
+export interface BillingRow {
+  id: number
+  studentNo: string | null
+  studentName: string
+  /** 청구서에 찍히는 이름. "2026년 9월 교습비" 처럼 사람이 읽는 문장이다 */
+  name: string
+  billingType: BillingType
+  suppliedAmount: number
+  discountAmount: number
+  /** 공급가 - 할인. 화면이 다시 계산하지 않는다 */
+  billedAmount: number
+  receivedAmount: number
+  unpaidAmount: number
+  dueDate: string | null
+  status: string
+}
+
+/**
+ * 연도별 청구 전량.
+ *
+ * ★ `year` 가 **필수**다. 안 보내면 400.
+ *
+ * ★ **취소분(`CANCELLED`)까지 들어온다.** `/billings/students/{id}` 와 `/receipt-status` 는
+ *   취소분을 빼고 주므로 같은 조건인데 건수가 다르다 — 실측 12건 / 2건 / 9건(2026-09-14).
+ *   매출 합계를 여기서 내면 취소한 청구가 섞인다.
+ */
+export function listBillings(params: { academyId?: number; year: number }): Promise<BillingRow[]> {
+  return request<BillingRow[]>('/api/v1/admin/billings', { query: { ...params } })
+}
+
+/** 한 학생의 청구 전체. 연도를 안 받는다 — 재등록 전 기수 것까지 다 온다 */
+export function listStudentBillings(enrollmentId: number): Promise<BillingRow[]> {
+  return request<BillingRow[]>(`/api/v1/admin/billings/students/${enrollmentId}`)
+}
+
+/**
+ * 청구를 직접 만든다.
+ *
+ * ★ **금액을 직접 적는 경로다.** 교습비는 단가표가 있으므로 `issueMonthlyBilling` 을 쓴다 —
+ *   이쪽으로 만들면 단가표와 어긋난 금액이 조용히 들어간다.
+ *   특강비·급식비처럼 단가표가 없는 것, 그리고 예외 청구에 쓴다.
+ *
+ * ★ `discountAmount` 는 **금액**이다(율이 아니다). 월 청구 쪽은 반대로 `discountRate` 가 율이다.
+ */
+export function createBilling(body: {
+  enrollmentId: number
+  /** 청구서에 찍히는 이름 */
+  name: string
+  billingType: BillingType
+  suppliedAmount: number
+  discountAmount?: number
+  /** yyyy-MM-dd. 비우면 납기일 없이 만들어진다 */
+  dueDate?: string
+}): Promise<BillingRow> {
+  return request<BillingRow>('/api/v1/admin/billings', { method: 'POST', body })
+}
+
+/**
+ * 청구 취소.
+ *
+ * ★ 지우는 게 아니라 **상태를 `CANCELLED` 로 바꾼다.** 행은 남는다.
+ *
+ * ★ **수납이 남아 있으면 400** (`BILLING_HAS_PAYMENT`, "수납 3,000원이 남아 있어 청구를
+ *   취소할 수 없습니다"). 2026-09-16 에 서버가 막아줬다.
+ *
+ *   그 전에는 200 이었고, 취소된 청구는 `/receipt-status` 에서 빠지므로 **돈은 받았는데
+ *   매출장 어디에도 안 보이는 상태**가 만들어졌다. 되돌리는 API 는 여전히 없다.
+ *
+ *   화면은 수납 거래를 먼저 지우고 청구를 취소한다 — 이제 서버도 같은 순서를 강제한다.
+ */
+export function deleteBilling(billingId: number): Promise<void> {
+  return request<void>(`/api/v1/admin/billings/${billingId}`, { method: 'DELETE' })
+}
+
+/**
+ * 수납 취소.
+ *
+ * ★ 청구 id 가 아니라 **거래 id** 를 받는다 — `ReceiptRow.payments[].id` 다.
+ *   둘 다 작은 정수라 섞어 넣어도 200 이 날 수 있다. 남의 거래를 지우게 된다.
+ *
+ * ★ 취소하면 청구가 `PAID` → `PENDING` 으로 돌아가고 `receivedAmount` 가 0 이 된다
+ *   (2026-09-14 확인). 청구 자체는 남는다.
+ */
+export function deletePayment(transactionId: number): Promise<void> {
+  return request<void>(`/api/v1/admin/billings/payments/${transactionId}`, { method: 'DELETE' })
 }

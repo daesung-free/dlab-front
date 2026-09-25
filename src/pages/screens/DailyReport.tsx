@@ -5,7 +5,7 @@ import { Icon } from '../../components/Icon'
 import { MOCK_STUDENTS } from './mockStudents'
 import type { Mockup } from './types'
 
-/* F-4.11-6 Daily Report 집계(서버) — 신규개발-요구사항신규
+/* F-4.11-6 Daily Report 집계 — 신규개발-요구사항신규
  *
  * 앱 Daily Report(대시보드)의 데이터 원천. 이 화면은 관리자가 집계 결과를 확인하는 곳이다.
  * ⚠ #26 / I-6 (중) — 순공시간 산출 정의(입퇴실/좌석없음 반영 기준) 미확정.
@@ -256,6 +256,7 @@ function Content() {
         {tab === 'rank' ? (
           <div style={{ padding: 14 }}>
             <DataTable
+              nowrap
               columns={COLUMNS}
               rows={rows}
               rowKey={(r) => r.id}
@@ -291,7 +292,7 @@ function Content() {
         ) : (
           <div className="card-sec-b">
             <div style={{ fontSize: 12.5, marginBottom: 12, color: 'var(--muted)' }}>
-              학생 1명(이승민)의 2026-05 일자별 집계 — 앱 Daily Report 달력이 그리는 데이터입니다.
+              학생 1명의 2026-05 일자별 집계 — 앱 Daily Report 달력이 그리는 데이터입니다.
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 5 }}>
               {DOW.map((d, i) => (

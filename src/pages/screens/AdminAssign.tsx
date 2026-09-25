@@ -128,7 +128,10 @@ function Content() {
         return
       }
       const layout = await getSeatLayout(target)
-      const areaNm = list.find((a) => a.id === target)?.areaNm ?? '좌석'
+      // ★ 관을 빼면 본관 A 와 별관 A 가 똑같은 이름으로 보인다 — 어느 관에 배정하는지
+      //   모른 채 좌석을 주게 된다
+      const picked = list.find((a) => a.id === target)
+      const areaNm = picked ? `${picked.buildingName} ${picked.areaNm}` : '좌석'
       setBlocks([
         {
           name: areaNm,
@@ -328,7 +331,7 @@ function Content() {
               <select className="sel" style={{ width: 160 }} value={areaId ?? ''} onChange={(e) => setAreaId(Number(e.target.value))}>
                 {areas.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.areaNm}
+                    {a.buildingName} {a.areaNm}
                   </option>
                 ))}
               </select>
@@ -386,7 +389,8 @@ function Content() {
               <span className="sw" /> 빈 {unit}
             </span>
             <span style={{ marginLeft: 'auto', color: 'var(--muted)' }}>
-              독서실 좌석은 <b>입학예약 좌석배정(F-4.2)</b> · <b>좌석 이탈/복귀(F-4.11-8)</b>와 같은 좌석표를 공유합니다.
+              {/* ★ 화면 코드(F-4.2)는 우리 문서 번호다. 행정 선생님이 읽을 이유가 없다(CLAUDE.md 1-1) */}
+              독서실 좌석은 <b>대기자 관리</b> · <b>독서실 좌석배치</b>와 같은 좌석표를 씁니다.
             </span>
           </div>
         </div>

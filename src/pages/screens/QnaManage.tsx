@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DataTable, ExcelButton, MaskToggle, Unfilled, type Column, toDateStr, todayStr } from '../../components/common'
+import { DataTable, ExcelButton, MaskToggle, Modal, type Column, toDateStr, todayStr } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
@@ -9,9 +9,11 @@ import {
   listQnaSlotsBetween,
   openQnaSlots,
   setQnaSlotClosed,
+  type QnaReservation,
   type QnaSlot,
 } from '../../api/qna'
 import { maskName } from '../../lib/mask'
+import { createScreenSignal } from './screenSignal'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
 
@@ -64,6 +66,8 @@ interface ReqRow {
   name: string
   className: string
   question: string
+  subject: string
+  photos: { attachmentId: number; name: string; url: string }[]
   teacher: string
   slot: string
   canceled: boolean
@@ -101,14 +105,31 @@ const REQ_COLUMNS: Column<ReqRow>[] = [
     header: '과목',
     width: '72px',
     align: 'center',
-    value: () => '',
-    render: () => <Unfilled reason="예약에 과목 항목이 없다" />,
+    value: (r) => r.subject || '-',
   },
   {
     key: 'question',
     header: '질문 내용',
     value: (r) => r.question,
-    render: (r) => (r.question ? r.question : <span style={{ color: 'var(--muted)' }}>-</span>),
+    render: (r) => (
+      <span>
+        {r.question ? r.question : <span style={{ color: 'var(--muted)' }}>-</span>}
+        {/* 사진 주소는 잠깐만 유효하다 — 안 열리면 목록을 다시 불러온다 */}
+        {r.photos.map((ph, i) => (
+          <a
+            key={ph.attachmentId}
+            href={ph.url}
+            target="_blank"
+            rel="noreferrer"
+            className="mk supplement"
+            style={{ marginLeft: 6 }}
+            title={`${ph.name} — 안 열리면 새로고침 후 다시 누르세요`}
+          >
+            사진 {i + 1}
+          </a>
+        ))}
+      </span>
+    ),
   },
   { key: 'teacher', header: '담당', width: '86px', align: 'center', value: (r) => r.teacher },
   { key: 'slot', header: '예약 타임', width: '150px', align: 'center', sortable: true, value: (r) => r.slot },
@@ -141,6 +162,9 @@ function weekDates(anchor: string): string[] {
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
 
+/* 헤더 「타임 개설」 → 본문 모달. 헤더는 본문과 상태를 공유하지 못한다(screenSignal.ts) */
+const openSlotSignal = createScreenSignal()
+
 function Content() {
   const { academyId } = useAcademy()
   const [tab, setTab] = useState('slot')
@@ -151,12 +175,46 @@ function Content() {
   /* ★ 15분이 현재 운영값이다(클라이언트 회신, 파일 상단 주석). 초기값이 30이라 격자는 15분인데
        상단 카드만 '30분 간격'이라고 말하고 있었다. 상수로 박지 않는 이유도 위 주석에 있다. */
   const [interval, setIntervalMin] = useState(15)
+  /* 시각·간격·정원을 골라 여는 모달. 그리드의 '하루 열기' 는 운영 기본값으로 바로 연다 */
+  const [opening, setOpening] = useState<{
+    date: string
+    from: string
+    to: string
+    intervalMinutes: string
+    capacity: string
+    room: string
+  } | null>(null)
+  const [openErr, setOpenErr] = useState<string | null>(null)
+
+  /** 모달을 연다. 날짜는 지금 보고 있는 기준일, 시각은 운영 기본값으로 채워 둔다 */
+  function openSlotModal(date?: string) {
+    setOpenErr(null)
+    setOpening({
+      date: date ?? anchor,
+      from: '18:00',
+      to: '20:00',
+      intervalMinutes: String(interval),
+      capacity: '1',
+      room: '',
+    })
+  }
+
+  /* 헤더 버튼이 누르면 본문 모달을 연다. 첫 렌더의 0 은 건너뛴다 */
+  const openVer = openSlotSignal.useVersion()
+  useEffect(() => {
+    if (openVer > 0) openSlotModal()
+    // openSlotModal 은 매 렌더 새로 만들어지지만 신호 값만 보면 된다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openVer])
 
   const [anchor, setAnchor] = useState(() => todayStr())
   const [byDate, setByDate] = useState<Map<string, QnaSlot[]>>(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [done, setDone] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  /* 예약 칸을 누르면 바로 취소되던 것을 한 번 묻게 한다 — 이름을 확인하려고 누르는 경우가 많다 */
+  const [cancelAsk, setCancelAsk] = useState<{ r: QnaReservation; slot: QnaSlot } | null>(null)
 
   const dates = useMemo(() => weekDates(anchor), [anchor])
 
@@ -217,9 +275,11 @@ function Content() {
     setBusy(true)
     try {
       await cancelQnaReservation(reservationId)
+      setCancelAsk(null)
       await load()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '예약을 취소하지 못했습니다.')
+      setCancelAsk(null)
     } finally {
       setBusy(false)
     }
@@ -247,6 +307,39 @@ function Content() {
     }
   }
 
+  /**
+   * 시각을 골라 개설한다.
+   *
+   * ★ **이미 있는 시각은 서버가 건너뛴다.** 오전을 열어둔 뒤 오후를 더하는 흐름이 있는데,
+   *   중복이라고 통째로 거절하면 그때마다 시각을 손으로 맞춰야 한다(서버 주석).
+   *   그래서 화면도 "겹치니 다시 하세요" 로 막지 않는다.
+   */
+  async function submitOpen() {
+    if (!opening || academyId === null) return
+    setBusy(true)
+    setOpenErr(null)
+    try {
+      const res = await openQnaSlots({
+        academyId,
+        year: Number(opening.date.slice(0, 4)),
+        date: opening.date,
+        from: opening.from,
+        to: opening.to,
+        intervalMinutes: Number(opening.intervalMinutes) || 15,
+        capacity: Number(opening.capacity) || 1,
+        room: opening.room.trim() || undefined,
+      })
+      setOpening(null)
+      /* 건너뛴 것이 있으면 만든 개수가 기대와 다르다 — 숫자를 그대로 알린다 */
+      setDone(`${res.length}개 타임을 열었습니다. 이미 있던 시각은 그대로 뒀습니다.`)
+      await load()
+    } catch (err) {
+      setOpenErr(err instanceof ApiError ? err.message : '개설하지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   /** 슬롯의 예약자를 펼쳐 신청 내역으로 만든다 */
   const reqRows: ReqRow[] = useMemo(
     () =>
@@ -258,6 +351,8 @@ function Content() {
           name: r.studentName,
           className: r.className ?? '-',
           question: r.question ?? '',
+          subject: r.subject ?? '',
+          photos: r.photos ?? [],
           teacher: s.teacherName ?? '미지정',
           slot: `${s.date.slice(5)} ${s.startTime.slice(0, 5)}`,
           canceled: r.canceledAt !== null,
@@ -269,6 +364,23 @@ function Content() {
 
   return (
     <>
+      {cancelAsk && (
+        <Modal
+          title={`${cancelAsk.r.studentName} 학생의 예약을 취소할까요?`}
+          sub={[cancelAsk.slot.teacherName, cancelAsk.slot.room].filter(Boolean).join(' · ') || undefined}
+          confirmLabel="예약 취소"
+          danger
+          busy={busy}
+          onConfirm={() => void cancelReservation(cancelAsk.r.id)}
+          onClose={() => setCancelAsk(null)}
+        >
+          {cancelAsk.r.question && (
+            <div className="note-box">
+              <div>{cancelAsk.r.question}</div>
+            </div>
+          )}
+        </Modal>
+      )}
       <div className="stat-strip">
         <div className="stat">
           <div className="l">
@@ -297,11 +409,8 @@ function Content() {
           <div className="l">
             <Icon name="upload" size={13} /> 사진 첨부
           </div>
-          {/* 사진 첨부는 예약 응답에 없다 — 앱에서 올린다면 서버가 개수를 실어줘야 한다 */}
-          <div className="v" style={{ fontSize: 14, paddingTop: 8 }}>
-            <Unfilled reason="예약에 사진 첨부 정보가 없다" />
-          </div>
-          <div className="d">문제 사진</div>
+          <div className="v">{activeReq.filter((r) => r.photos.length > 0).length}</div>
+          <div className="d">사진을 올린 신청 · {activeReq.reduce((n, r) => n + r.photos.length, 0)}장</div>
         </div>
         <div className="stat">
           <div className="l">
@@ -415,7 +524,7 @@ function Content() {
                                   className="mk verified"
                                   title={`${booked[0].studentName} · ${slot.teacherName ?? ''} · ${slot.room ?? ''}\n${booked[0].question ?? ''}`}
                                   style={{ cursor: 'pointer' }}
-                                  onClick={() => void cancelReservation(booked[0].id)}
+                                  onClick={() => setCancelAsk({ r: booked[0], slot })}
                                 >
                                   {masked ? maskName(booked[0].studentName) : booked[0].studentName}
                                 </span>
@@ -459,11 +568,16 @@ function Content() {
 
               <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
                 <MaskToggle masked={masked} onChange={setMasked} />
-                <button className="btn" disabled data-soon title="준비 중입니다">
+                <button
+                  className="btn"
+                  disabled={academyId === null}
+                  title={academyId === null ? '지점을 먼저 선택하세요' : undefined}
+                  onClick={() => openSlotModal()}
+                >
                   <Icon name="plus" size={14} /> 타임 일괄 개설
                 </button>
+                {/* ★ 테이블명(qna_slots)이 화면에 나와 있었다 — 클라이언트가 읽을 이유가 없다(CLAUDE.md 1-1) */}
                 <span style={{ fontSize: 11.5, color: 'var(--muted)', marginLeft: 'auto' }}>
-                  <code style={{ fontSize: 11 }}>qna_slots</code> · <code style={{ fontSize: 11 }}>qna_reservations</code> —
                   학생은 앱에서 희망 타임을 예약합니다
                 </span>
               </div>
@@ -665,16 +779,107 @@ function Content() {
           )}
         </div>
       </div>
+
+      {/* ── 타임 일괄 개설 ── */}
+      {opening && (
+        <Modal
+          title="가능 타임 개설"
+          sub="시작·종료·간격을 주면 그 사이를 쪼개 만듭니다."
+          confirmLabel="개설"
+          busy={busy}
+          error={openErr}
+          confirmDisabled={opening.date === '' || opening.from === '' || opening.to === ''}
+          onConfirm={() => void submitOpen()}
+          onClose={() => setOpening(null)}
+        >
+          <div className="frow">
+            <label className="req">날짜</label>
+            <input
+              className="inp"
+              type="date"
+              value={opening.date}
+              onChange={(e) => setOpening({ ...opening, date: e.target.value })}
+            />
+          </div>
+          <div className="frow">
+            <label className="req">시간</label>
+            <div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input
+                  className="inp"
+                  type="time"
+                  value={opening.from}
+                  onChange={(e) => setOpening({ ...opening, from: e.target.value })}
+                />
+                <span style={{ color: 'var(--muted)' }}>~</span>
+                <input
+                  className="inp"
+                  type="time"
+                  value={opening.to}
+                  onChange={(e) => setOpening({ ...opening, to: e.target.value })}
+                />
+              </div>
+              {/* 이미 있는 시각은 서버가 건너뛴다 — 오전을 연 뒤 오후를 더하는 흐름이 있다 */}
+              <div className="hint">이미 열어 둔 시각은 건드리지 않고 넘어갑니다.</div>
+            </div>
+          </div>
+          <div className="frow">
+            <label className="req">간격 · 정원</label>
+            <div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <select
+                  className="sel"
+                  value={opening.intervalMinutes}
+                  onChange={(e) => setOpening({ ...opening, intervalMinutes: e.target.value })}
+                >
+                  {['15', '30', '40'].map((m) => (
+                    <option key={m} value={m}>
+                      {m}분
+                    </option>
+                  ))}
+                </select>
+                <input
+                  className="inp"
+                  type="number"
+                  min={1}
+                  value={opening.capacity}
+                  onChange={(e) => setOpening({ ...opening, capacity: e.target.value })}
+                />
+              </div>
+              {/* 간격은 클라이언트 회신 대기 중이라 고정하지 않고 고르게 둔다 */}
+              <div className="hint">한 타임에 몇 명까지 받을지도 정합니다. 보통 1명입니다.</div>
+            </div>
+          </div>
+          <div className="frow">
+            <label>상담실</label>
+            <div>
+              <input
+                className="inp"
+                placeholder="나중에 정해도 됩니다"
+                value={opening.room}
+                onChange={(e) => setOpening({ ...opening, room: e.target.value })}
+              />
+              <div className="hint">타임만 먼저 열고 담당·상담실은 나중에 붙일 수 있습니다.</div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {done && (
+        <Modal title="타임을 열었습니다" hideCancel confirmLabel="닫기" onConfirm={() => setDone(null)} onClose={() => setDone(null)}>
+          <div style={{ fontSize: 13.5 }}>{done}</div>
+        </Modal>
+      )}
     </>
   )
 }
 
 export const qnaMockup: Mockup = {
   Content,
+  /* 본문에 주 선택이 이미 있다. 헤더 것은 같은 일을 하는 중복이라 「타임 개설」만 남긴다 */
   actions: (
     <>
-      <button className="btn" disabled data-soon title="준비 중입니다">주 선택 ▾</button>
-      <button className="btn pri" disabled data-soon title="준비 중입니다">
+      <button className="btn pri" onClick={() => openSlotSignal.bump()}>
         <Icon name="plus" size={14} /> 타임 개설
       </button>
     </>

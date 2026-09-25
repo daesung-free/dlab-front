@@ -136,3 +136,13 @@ export function listRefundRules(): Promise<RefundRule[]> {
  * 청구기준의 교습비 행(amountSource=PRICE_MATRIX)은 금액을 한 칸에 못 넣어 단가표로 내려온다.
  * ★ 그 단가표는 **src/api/tuition.ts 가 정본이다** — 여기에 또 두면 두 벌이 된다.
  *   화면은 listTuitionPrices·listTuitionMonths 를 그쪽에서 가져다 쓴다. */
+
+/**
+ * 청구 기준만 전년도 → 올해로 복사(2026-09-21 추가). 사용 중지 상태도 그대로 옮긴다.
+ * ★ 같은 코드가 이미 있으면 건너뛴다 — 두 번 눌러도 두 벌이 되지 않는다.
+ * ★ academyId 를 비우면 전 지점 공통(본사만).
+ */
+export function copyBillingStandardsYear(body: { academyId?: number; fromYear: number; toYear: number }): Promise<{ copied: number; skipped: number }> {
+  return request<{ copied: number; skipped: number }>('/api/v1/admin/billing-standards/copy-year', { method: 'POST', body })
+}
+

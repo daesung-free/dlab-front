@@ -70,6 +70,14 @@ export interface Screen {
    *   다시 `public/` 으로 옮기지 말 것 — public 은 통째로 배포된다.
    */
   refHtml?: string
+  /**
+   * 본사 계정(SUPER_ADMIN)만 쓸 수 있는 화면인가.
+   *
+   * ★ `groupId: 'admin'` 은 **지점 관리자도 본다.** 그것보다 좁은 칸이 필요해서 따로 둔다 —
+   *   지점 설정은 결제·방화벽·키오스크라 지점 계정에는 서버가 403 을 준다. 메뉴만 띄워두면
+   *   눌러도 아무것도 못 하는 칸이 된다.
+   */
+  superOnly?: boolean
 }
 
 export const GROUPS: Group[] = [
@@ -309,6 +317,29 @@ export const SCREENS: Screen[] = [
     summary: '특강·설명회 기초 설정, 설명회 신청 항목 추가',
   },
   {
+    id: 'admin-branch-config',
+    code: 'F-4.10-부속',
+    groupId: 'admin',
+    name: '지점 설정',
+    icon: 'settings',
+    kind: 'verified',
+    phase: 2,
+    feOrder: 4,
+    summary: 'PG 가맹점 코드 · 와이파이 장비 ID · 키오스크 자격증명. 본사 전용',
+    superOnly: true,
+  },
+  {
+    id: 'admin-meal-vendor',
+    code: 'F-4.5-부속',
+    groupId: 'admin',
+    name: '급식 업체 · 지점 배정',
+    icon: 'utensils',
+    kind: 'verified',
+    phase: 2,
+    feOrder: 3,
+    summary: '급식 업체 등록, 지점별 업체·1식 단가 배정(연도별)',
+  },
+  {
     id: 'admin-billing',
     code: 'F-4.10-5',
     groupId: 'admin',
@@ -320,6 +351,45 @@ export const SCREENS: Screen[] = [
     summary: '교습비·특강비·환불 기준 관리, 4.8 수납현황과 연계',
   },
   {
+    /* 2026-09-16 추가. 요구사항정의서 36개 화면에 없다 — 기초 관리의 '장학 종류'(종류·할인율)와
+       다른 축이라 탭으로 못 넣는다. 저쪽은 "어떤 장학이 있는가", 이쪽은 "언제 취소하는가"다. */
+    id: 'admin-scholarship',
+    code: 'F-4.10-7',
+    groupId: 'admin',
+    name: '장학 관리(취소 기준·검토)',
+    icon: 'award',
+    kind: 'verified',
+    phase: 2,
+    feOrder: 3,
+    summary: '장학 취소 기준 등록, 학기별 판정과 건별 취소·예외 인정',
+  },
+  {
+    /* 2026-09-16 추가. 사유 신청(F-4.1-5)과 다른 축이다 — 저쪽은 하루짜리 사후 신고,
+       이쪽은 미리 내는 요일 단위 반복이다. 그래서 지난 달 등록이 서버에서 거절된다. */
+    id: 'regular-schedule',
+    code: 'F-4.11-8',
+    groupId: 'expand',
+    name: '정기일정 · 인정 판정',
+    icon: 'calendar-clock',
+    kind: 'verified',
+    phase: 2,
+    feOrder: 3,
+    summary: '요일 단위 반복 일정 등록·수정, 날짜별 인정 판정',
+  },
+  {
+    /* 2026-09-16 추가. 사용자 관리(F-4.10-2)와 다른 축이다 — 저쪽은 "웹에 로그인하는 계정",
+       이쪽은 "키오스크에 카드를 찍는 사람"이다. 계정 없이 카드만 쓰는 직원이 있다. */
+    id: 'admin-staff-card',
+    code: 'F-4.10-8',
+    groupId: 'admin',
+    name: '직원 카드 · 출퇴근',
+    icon: 'id-card',
+    kind: 'verified',
+    phase: 2,
+    feOrder: 3,
+    summary: '직원 카드 발급·교체, 키오스크 출퇴근 기록 조회',
+  },
+  {
     id: 'admin-result',
     code: 'F-4.10-6',
     groupId: 'admin',
@@ -329,6 +399,17 @@ export const SCREENS: Screen[] = [
     phase: 2,
     feOrder: 3,
     summary: '합격 실적 입력·현황·통계',
+  },
+  {
+    id: 'exam-upload',
+    code: 'F-4.6-부속',
+    groupId: 'admin',
+    name: '성적 업로드',
+    icon: 'upload',
+    kind: 'verified',
+    phase: 2,
+    feOrder: 3,
+    summary: '디랩에서 본 시험 회차 등록, 성적·문항분석표·정오표 파일 업로드(0921 성적 문서)',
   },
 
   /* ─────────────── 4.11 신규 확장 ─────────────── */
@@ -393,7 +474,7 @@ export const SCREENS: Screen[] = [
     id: 'daily-report',
     code: 'F-4.11-6',
     groupId: 'expand',
-    name: 'Daily Report 집계(서버)',
+    name: 'Daily Report 집계',
     icon: 'gauge',
     kind: 'brandnew',
     phase: 3,
@@ -511,6 +592,8 @@ export const SCREENS: Screen[] = [
     kind: 'brandnew',
     phase: 4,
     summary: 'FCM 푸시 발송·예약, 앱 버전 / 강제 업데이트 게이트, 홈 배너·팝업, 약관·동의 버전 관리',
+    /* 서버 app-config 가 SUPER_ADMIN 전용이다 — 지점 관리자에게 열면 전부 403 인 빈 화면이 된다 */
+    superOnly: true,
   },
 ]
 

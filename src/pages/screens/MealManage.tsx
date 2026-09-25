@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DataTable, ExcelButton, MaskToggle, type Column } from '../../components/common'
+import { DataTable, ExcelButton, MaskToggle, Modal, Unfilled, type Column } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
@@ -21,6 +21,7 @@ import {
 } from '../../api/meals'
 import { MOCK_STUDENTS } from './mockStudents'
 import type { Mockup } from './types'
+import { createScreenSignal } from './screenSignal'
 import './meal.css'
 
 /* F-4.5 급식 관리 — 신규개발-요구사항신규 (디멤버 급식신청 대체)
@@ -197,7 +198,7 @@ interface TagLog {
   handledBy?: string
 }
 
-const STAFF = ['강민서', '정하람', '박서영']
+const STAFF = ['담임 E', '정하람', '담임 D']
 
 const TAG_LOGS: TagLog[] = MOCK_STUDENTS.filter((s) => s.status === '재원')
   .slice(0, 38)
@@ -284,8 +285,10 @@ const TAG_COLUMNS: Column<TagLog>[] = [
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
 
+/* toISOString 은 UTC 라 매월 1일 오전 9시 전에는 지난달이 나왔다 — 로컬 날짜로 만든다 */
 function thisMonth(): string {
-  return new Date().toISOString().slice(0, 7)
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
 function Content() {
@@ -295,6 +298,11 @@ function Content() {
   const [reason, setReason] = useState(CLOSURE_REASONS[0])
   const [deadlineDays, setDeadlineDays] = useState(3)
   const [month, setMonth] = useState(thisMonth())
+  /* 헤더 '기간 선택' — 이번 달·지난 달·다음 달을 한 번에. 본문 월 칸과 같은 값을 쓴다 */
+  const monthVer = monthSignal.useVersion()
+  useEffect(() => {
+    if (monthVer > 0 && pickedMonth) setMonth(pickedMonth)
+  }, [monthVer])
 
   const [dayList, setDayList] = useState<MealDay[]>([])
   const [closureList, setClosureList] = useState<MealClosure[]>([])
@@ -305,6 +313,10 @@ function Content() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  /* 중단일 등록 확인 — ★ 서버는 등록하는 순간 그날 신청을 전부 취소하고, 중단을 풀어도
+       되살리지 않는다. 날짜 한 번 눌러 수십 건이 취소되던 것을 막으려고 먼저 묻는다 */
+  const [closureAsk, setClosureAsk] = useState<MealDay | null>(null)
+  const [closureNote, setClosureNote] = useState<string | null>(null)
 
   /**
    * 마감 정책 저장.
@@ -382,11 +394,19 @@ function Content() {
   async function addClosure(date: string) {
     if (academyId === null) return
     setBusy(true)
+    setClosureNote(null)
     try {
-      await createMealClosure(academyId, date, reason)
+      const saved = await createMealClosure(academyId, date, reason)
+      setClosureNote(
+        saved.canceledCount > 0
+          ? `${date} 을 중단일로 등록했습니다 — 신청 ${saved.canceledCount}건이 취소됐습니다. 결제된 건은 환불해 주세요.`
+          : `${date} 을 중단일로 등록했습니다. 취소된 신청은 없습니다.`,
+      )
+      setClosureAsk(null)
       await load()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '중단일을 등록하지 못했습니다.')
+      setClosureAsk(null)
     } finally {
       setBusy(false)
     }
@@ -394,8 +414,10 @@ function Content() {
 
   async function removeClosure(closureId: number) {
     setBusy(true)
+    setClosureNote(null)
     try {
       await deleteMealClosure(closureId)
+      setClosureNote('중단을 풀었습니다. 중단 때 취소된 신청은 되살아나지 않으니, 필요한 학생은 다시 신청해야 합니다.')
       await load()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '중단일을 해제하지 못했습니다.')
@@ -426,7 +448,7 @@ function Content() {
     if (d.closedReason === 'WEEKEND' || d.closedReason === 'HOLIDAY') return
     const existing = closureList.find((c) => c.date === d.date)
     if (existing) void removeClosure(existing.id)
-    else void addClosure(d.date)
+    else setClosureAsk(d)
   }
 
   return (
@@ -466,23 +488,26 @@ function Content() {
           </div>
           <div className="d warn">10분 주기 스케줄러</div>
         </div>
+        {/* ★ 이 두 칸은 **예시 값이었다.** 배식 태깅 기록이 서버에 없어(키오스크 대기) 아래
+               '배식 체크' 탭은 예시로 두는데, 위 통계 줄은 실데이터 칸과 나란히 있어
+               **예시인 줄 모르고 읽힌다.** 월 총 식수 0 인데 배식 확인 31 로 보였다(09-25). */}
         <div className="stat">
           <div className="l">
             <Icon name="qr-code" size={13} /> 금일 배식 확인
           </div>
-          <div className="v">{check.confirmed}</div>
-          <div className="d">
-            신청 {check.ordered}명 중 · 수기 {check.manual}
+          <div className="v">
+            <Unfilled reason="배식 태깅 기록이 서버에 없다 (키오스크 대기)" />
           </div>
+          <div className="d">신청 인원 중 확인</div>
         </div>
         <div className="stat">
           <div className="l">
             <Icon name="triangle-alert" size={13} /> 확인 필요
           </div>
-          <div className="v" style={{ color: 'var(--red)' }}>
-            {check.pending}
+          <div className="v">
+            <Unfilled reason="배식 태깅 기록이 서버에 없다 (키오스크 대기)" />
           </div>
-          <div className="d down">태깅 실패 — 즉시 처리</div>
+          <div className="d">태깅 실패</div>
         </div>
       </div>
 
@@ -495,6 +520,38 @@ function Content() {
         <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
           {error}
         </div>
+      )}
+      {closureNote && (
+        <div className="note-box" role="status">
+          <div>{closureNote}</div>
+        </div>
+      )}
+
+      {closureAsk && (
+        <Modal
+          title={`${closureAsk.date} 급식을 중단할까요?`}
+          sub={`사유: ${reason}`}
+          confirmLabel="중단일로 등록"
+          danger
+          busy={busy}
+          onConfirm={() => void addClosure(closureAsk.date)}
+          onClose={() => setClosureAsk(null)}
+        >
+          <div className="note-box">
+            <div>
+              {closureAsk.lunchCount + closureAsk.dinnerCount > 0 ? (
+                <>
+                  그날 신청 <b>{closureAsk.lunchCount + closureAsk.dinnerCount}건</b>(점심 {closureAsk.lunchCount} · 저녁{' '}
+                  {closureAsk.dinnerCount})이 <b>바로 취소</b>됩니다. 결제된 건은 환불해야 합니다.
+                </>
+              ) : (
+                <>그날 들어온 신청은 없습니다.</>
+              )}
+              <br />
+              중단을 나중에 풀어도 <b>취소된 신청은 되살아나지 않습니다.</b>
+            </div>
+          </div>
+        </Modal>
       )}
 
       <div className="card-sec">
@@ -597,8 +654,8 @@ function Content() {
                 <div className="tx">
                   날짜를 눌러 <b>운영 ↔ 중단</b>을 전환합니다. 주말·공휴일은 정책상 이미 제외돼 있어 손댈 수 없습니다.
                   <br />
-                  <b>이미 결제된 날을 중단으로 바꾸면 해당 건은 전부 환불 대상</b>이 되므로, 서버가 결제건을 확인해 환불
-                  배치를 태운 뒤 중단 처리합니다. 화면에서 바로 확정되지 않습니다.
+                  <b>중단일로 등록하면 그날 신청이 바로 취소</b>되고, 결제된 건은 환불 대상이 됩니다. 등록 전에 건수를
+                  한 번 더 보여 드립니다. 중단을 풀어도 취소된 신청은 되살아나지 않습니다.
                 </div>
               </div>
             </div>
@@ -692,7 +749,7 @@ function Content() {
                     <span style={{ fontSize: 12.5 }}>23:59까지</span>
                     {/* registered=false 면 지점 정책이 없어 서버 기본값을 쓰는 중이다 */}
                     {policy && !policy.registered && (
-                      <span className="mk supplement" title="지점 정책이 등록되지 않아 서버 기본값을 사용 중입니다">
+                      <span className="mk supplement" title="지점 정책이 등록되지 않아 기본값을 쓰고 있습니다">
                         기본값
                       </span>
                     )}
@@ -712,8 +769,9 @@ function Content() {
                   <Icon name="calendar-range" size={15} /> 월 접수 기간
                 </div>
                 <div className="two" style={{ margin: '4px 0 10px' }}>
-                  <input className="inp" type="date" defaultValue="2026-05-18" />
-                  <input className="inp" type="date" defaultValue="2026-05-27" />
+                  {/* 저장할 곳이 없는 값이다 — 고칠 수 있게 두면 저장된 줄 안다 */}
+                  <input className="inp" type="date" defaultValue="2026-05-18" disabled data-soon title="준비 중입니다" />
+                  <input className="inp" type="date" defaultValue="2026-05-27" disabled data-soon title="준비 중입니다" />
                 </div>
                 <ul>
                   <li>기간 밖에는 다음 달 신청 화면이 열리지 않음</li>
@@ -1034,7 +1092,7 @@ function Content() {
                   관리자가 <b>운영일 → 중단일</b>로 바꾸면 해당일 결제건은 전액 환불 대상
                 </li>
                 <li>
-                  화면 저장 즉시 확정되지 않고, 서버가 <b>결제건 확인 → 환불 배치 → 중단 확정</b> 순으로 처리
+                  저장 즉시 확정되지 않고, <b>결제건 확인 → 환불 → 중단 확정</b> 순으로 처리
                 </li>
                 <li>환불 실패 건은 데스크 수기 처리 목록으로 넘어감</li>
               </ul>
@@ -1046,11 +1104,40 @@ function Content() {
   )
 }
 
+const monthSignal = createScreenSignal()
+let pickedMonth: string | null = null
+
+function monthShift(delta: number): string {
+  const d = new Date()
+  const t = new Date(d.getFullYear(), d.getMonth() + delta, 1)
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}`
+}
+
+function MonthMenu() {
+  return (
+    <select
+      className="sel"
+      style={{ width: 130 }}
+      value=""
+      onChange={(e) => {
+        if (e.target.value === '') return
+        pickedMonth = monthShift(Number(e.target.value))
+        monthSignal.bump()
+      }}
+    >
+      <option value="">기간 선택 ▾</option>
+      <option value="-1">지난 달</option>
+      <option value="0">이번 달</option>
+      <option value="1">다음 달</option>
+    </select>
+  )
+}
+
 export const mealMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled data-soon title="준비 중입니다">기간 선택 ▾</button>
+      <MonthMenu />
       <button className="btn" disabled data-soon title="준비 중입니다">
         <Icon name="utensils" size={14} /> 식수 마감
       </button>

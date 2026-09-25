@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DataTable, ExcelButton, MaskToggle, Modal, Unfilled, type Column } from '../../components/common'
+import { DataTable, ExcelButton, MaskToggle, Modal, PrintButton, Unfilled, type Column } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
@@ -10,6 +10,10 @@ import {
   LECTURE_TYPE_LABEL,
   listLectureApplicants,
   listLectureSessions,
+  listSessionAttendances,
+  saveSessionAttendance,
+  LECTURE_ATTENDANCE_LABEL,
+  type LectureAttendanceStatus,
   listLectures,
   changeLectureStatus,
   createLecture,
@@ -17,6 +21,7 @@ import {
   deleteLectureSession,
   createLectureSession,
   setLectureVisible,
+  cancelApplication,
   promoteApplicant,
   updateLecture,
   type Lecture as ApiLecture,
@@ -24,7 +29,10 @@ import {
   type LectureSession,
 } from '../../api/lectures'
 import { listTeachers, type TeacherRow } from '../../api/accounts'
+import { createBilling, listStudentBillings } from '../../api/billing'
+import { searchStudents } from '../../api/students'
 import type { Mockup } from './types'
+import { createScreenSignal } from './screenSignal'
 import '../../styles/forms.css'
 
 /* F-4.7 특강 관리 — 신규개발-요구사항보완
@@ -44,6 +52,9 @@ import '../../styles/forms.css'
  * ⚠ 개설 후 정원을 줄이는 것은 막아야 한다.
  *   이미 신청한 인원보다 적게 줄이면 누구를 대기자로 밀어낼지 결정할 수 없다.
  *   서버에서 capacity >= applied 제약을 걸고, 줄이려면 개별 취소를 먼저 하게 한다. */
+
+/** 출결 배지 색. 미입력은 아무 색도 안 준다 — 결석과 구분해야 한다 */
+const ATT_TONE: Record<string, string> = { PRESENT: 'verified', LATE: 'supplement', ABSENT: 'brandnew' }
 
 const won = (n: number) => `${n.toLocaleString()}원`
 
@@ -175,6 +186,20 @@ const ROOMS = ['201호', '202호', '301호', '302호', '401호']
 const TRACK_TARGETS = ['전체', '자연계열', '인문계열']
 const DOW_LABELS = ['월', '화', '수', '목', '금', '토']
 
+/** 상세 모달의 수정 폼. 서버가 PATCH 로 받는 것만 든다 */
+interface LectureEdit {
+  name: string
+  description: string
+  capacity: string
+  fee: string
+  startDate: string
+  endDate: string
+  /** 접수 기간은 **날짜가 아니라 시점**이다 — 저장할 때 변환한다 */
+  applyFrom: string
+  applyTo: string
+  teacherId: number | null
+}
+
 interface LectureDraft {
   name: string
   month: string
@@ -222,6 +247,35 @@ const EMPTY_DRAFT: LectureDraft = {
 }
 
 /**
+ * UTC 시점 → 한국 날짜 `yyyy-MM-dd`.
+ *
+ * ★ 문자열을 그냥 자르면 UTC 날짜가 나온다. 접수 시작이 한국 09-20 00:00 이면 서버에는
+ *   `09-19T15:00Z` 로 있어서, 자르면 **하루 전으로 보인다.**
+ */
+function localDay(iso: string): string {
+  if (!iso) return '-'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+/** 상세(서버 값) → 수정 폼. 접수 기간은 시점이라 날짜만 떼어 입력칸에 넣는다 */
+function toEdit(l: ApiLecture): LectureEdit {
+  return {
+    name: l.name,
+    description: l.description ?? '',
+    capacity: l.capacity === null ? '' : String(l.capacity),
+    fee: String(l.fee ?? 0),
+    startDate: l.startDate ?? '',
+    endDate: l.endDate ?? '',
+    applyFrom: l.applyFrom ? localDay(l.applyFrom) : '',
+    applyTo: l.applyTo ? localDay(l.applyTo) : '',
+    teacherId: l.teacherId,
+  }
+}
+
+/**
  * `yyyy-MM-dd` + 시각 → UTC 시점.
  *
  * ★ 문자열에 `Z` 를 이어 붙이면 안 된다. 입력은 한국 시각인데 `…T00:00:00Z` 로 보내면
@@ -257,12 +311,35 @@ function buildSessions(d: LectureDraft): string[] {
 function Content() {
   const [tab, setTab] = useState('list')
   const [masked, setMasked] = useState(true)
-  const [selected, setSelected] = useState<string[]>([])
+  /**
+   * 선택은 **탭마다 따로 갖는다.**
+   *
+   * ★ 예전에는 하나를 두 탭이 같이 썼다. 신청자 탭에서 한 명, 대기자 탭에서 한 명을 고른 뒤
+   *   「선택 확정」을 누르면 **신청자 탭에서 고른 사람까지 승격 대상에 들어가** 정원 경고가
+   *   '2명 추가'로 떴다. 이미 확정된 사람을 다시 올리는 셈이라 인원이 어긋난다(2026-09-14).
+   *   표는 탭마다 행이 다르므로 선택도 탭에 속한다.
+   */
+  const [selectedApply, setSelectedApply] = useState<string[]>([])
+  const [selectedWait, setSelectedWait] = useState<string[]>([])
   const [draft, setDraft] = useState<LectureDraft | null>(null)
 
   /* ── 실연동 ── */
   const { academyId } = useAcademy()
   const [lectures, setLectures] = useState<ApiLecture[]>([])
+  /* 헤더 '기간 선택' 이 정하는 연도 — 예전엔 올해로 고정이라 작년 특강을 볼 방법이 없었다 */
+  const [lectureYear, setLectureYear] = useState(new Date().getFullYear())
+  const yearVer = yearSignal.useVersion()
+  useEffect(() => {
+    if (yearVer > 0 && pickedYear !== null) setLectureYear(pickedYear)
+  }, [yearVer])
+  /* 설명회만 보기 — 헤더 '설명회 신청 관리' 가 켠다. 설명회는 특강과 같은 목록에 유형만 다르게 온다 */
+  const [briefingOnly, setBriefingOnly] = useState(false)
+  const briefingVer = briefingSignal.useVersion()
+  useEffect(() => {
+    if (briefingVer === 0) return
+    setBriefingOnly(true)
+    setTab('list')
+  }, [briefingVer])
   const [lectureId, setLectureId] = useState<number | null>(null)
   const [applicants, setApplicants] = useState<LectureApplicant[]>([])
   const [sessionList, setSessionList] = useState<LectureSession[]>([])
@@ -270,6 +347,64 @@ function Content() {
   const [error, setError] = useState<string | null>(null)
   /* 확정 전에 한 번 묻는다. 정원을 넘기는 경우가 있어서다 — 아래 confirmPromote 주석 참고 */
   const [promoting, setPromoting] = useState<{ ids: number[] } | null>(null)
+  /*
+   * 수납청구 — 고른 신청자에게 특강비 청구를 한 명씩 만든다(일괄 API 가 없다).
+   * ★ 건별 결과를 모아 보여준다. 중간에 실패하면 일부만 청구된 채 남는데, 안 알리면 전부 된 줄 안다.
+   * ★ 청구는 등록 ID(enrollmentId)로 한다. 신청자 응답에 2026-09-21 부터 온다(API_GAPS 33-4).
+   *   비어 있으면 재원생 목록에서 학생 ID로 찾고, 못 찾으면 그 학생은 실패로 남긴다.
+   */
+  const [billing, setBilling] = useState<{
+    rows: ApplicantRow[]
+    name: string
+    amount: string
+    dueDate: string
+    results: { name: string; ok: boolean; msg: string }[] | null
+  } | null>(null)
+  const [billBusy, setBillBusy] = useState(false)
+
+  async function runBilling() {
+    if (!billing || academyId === null) return
+    setBillBusy(true)
+    const results: { name: string; ok: boolean; msg: string }[] = []
+    try {
+      // 신청자에 등록 ID 가 온다(2026-09-21). 비어 있는 줄이 있을 때만 재원생 목록으로 찾는다
+      const needLookup = billing.rows.some((r) => r.enrollmentId == null)
+      const enrollmentOf = needLookup
+        ? new Map((await searchStudents({ academyId, size: 1000 })).rows.map((st) => [st.studentId, st.enrollmentId]))
+        : new Map<number, number>()
+      for (const r of billing.rows) {
+        const enrollmentId = r.enrollmentId ?? enrollmentOf.get(r.studentId)
+        if (enrollmentId === undefined) {
+          results.push({ name: r.studentName, ok: false, msg: '재원생 목록에서 찾지 못했습니다' })
+          continue
+        }
+        try {
+          /* 서버는 특강비 중복을 막지 않는다 — 두 번 누르거나 같은 학생을 다시 고르면 두 건이 된다.
+             학생별 청구(취소분 제외)에 같은 이름의 특강비가 있으면 건너뛴다 */
+          const existing = await listStudentBillings(enrollmentId)
+          if (existing.some((b) => b.billingType === 'LECTURE' && b.name.trim() === billing.name.trim())) {
+            results.push({ name: r.studentName, ok: false, msg: '같은 이름의 특강비 청구가 이미 있어 건너뛰었습니다' })
+            continue
+          }
+          await createBilling({
+            enrollmentId,
+            name: billing.name.trim(),
+            billingType: 'LECTURE',
+            suppliedAmount: Number(billing.amount),
+            dueDate: billing.dueDate || undefined,
+          })
+          results.push({ name: r.studentName, ok: true, msg: '청구함' })
+        } catch (e) {
+          results.push({ name: r.studentName, ok: false, msg: e instanceof ApiError ? e.message : '청구하지 못했습니다' })
+        }
+      }
+    } catch (e) {
+      results.push({ name: '전체', ok: false, msg: e instanceof ApiError ? e.message : '재원생 목록을 불러오지 못했습니다' })
+    } finally {
+      setBilling((b) => (b ? { ...b, results } : b))
+      setBillBusy(false)
+    }
+  }
   const [promoteBusy, setPromoteBusy] = useState(false)
 
   /* 담당 강사는 서버가 **id 로** 받는다. 이름 문자열을 보내면 조용히 무시되고 '미지정'이 된다 */
@@ -285,24 +420,53 @@ function Content() {
   /** 회차 삭제. 출석부의 열이 하나 사라지는 것이라 먼저 묻는다 */
   const [deletingSession, setDeletingSession] = useState<LectureSession | null>(null)
 
-  const loadLectures = useCallback(async () => {
+  /**
+   * 특강 상세.
+   *
+   * ★ 목록 행을 눌러도 아무 일이 없었다. 수정·상태·노출을 부르는 코드는 있었는데
+   *   **들어갈 입구가 없어** 닫혀 있었다. 목록에 보이는 것이 기간·이름·구분·정원·금액·
+   *   상태·노출뿐이라 어떤 특강인지 볼 방법도 없었다.
+   * ★ 단건 조회 API 는 쓰지 않는다 — `GET /lectures` 목록이 설명·담당교사·분류·확정/대기
+   *   인원까지 다 내려준다(2026-09-14 확인). 목록에서 받은 값으로 채운다.
+   */
+  const [detail, setDetail] = useState<ApiLecture | null>(null)
+  const [editing, setEditing] = useState<LectureEdit | null>(null)
+  const [detailBusy, setDetailBusy] = useState(false)
+  const [detailErr, setDetailErr] = useState<string | null>(null)
+
+  /**
+   * 출석부 — 회차별 출결.
+   *
+   * ★ 회차마다 따로 조회한다(`sessions/{id}/attendances`). 한 번에 받는 경로가 없다.
+   * ★ 아직 아무도 안 찍은 회차는 **빈 배열**이다 — 0건은 "결석"이 아니라 "미입력"이다.
+   *   표에서도 그 둘을 구분해야 한다.
+   * ★ `Map<sessionId, Map<applicationId, status>>` 로 들고 있다. 표가 학생 × 회차라
+   *   셀 하나를 그릴 때 두 키로 바로 찾아야 한다.
+   */
+  const [attendance, setAttendance] = useState<Map<number, Map<number, LectureAttendanceStatus>>>(new Map())
+  const [attBusy, setAttBusy] = useState<string | null>(null)
+
+  /** ★ 목록을 돌려준다 — 저장 뒤 상세 모달을 새 값으로 갈아끼우는 데 쓴다 */
+  const loadLectures = useCallback(async (): Promise<ApiLecture[]> => {
     if (academyId === null) {
       setLoading(false)
-      return
+      return []
     }
     setLoading(true)
     try {
-      const list = await listLectures(academyId, new Date().getFullYear())
+      const list = await listLectures(academyId, lectureYear)
       setLectures(list)
       setLectureId((prev) => (list.some((l) => l.id === prev) ? prev : (list[0]?.id ?? null)))
       setError(null)
+      return list
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '특강 목록을 불러오지 못했습니다.')
       setLectures([])
+      return []
     } finally {
       setLoading(false)
     }
-  }, [academyId])
+  }, [academyId, lectureYear])
 
   useEffect(() => {
     void loadLectures()
@@ -344,16 +508,77 @@ function Content() {
     }
   }, [lectureId])
 
+  /* ★ 취소는 행을 지우지 않고 status 만 CANCELED 로 바꾼다. **waitlisted 는 false 로 남는다** —
+       `!waitlisted` 만 보면 취소자가 확정자에 섞여 서버 집계와 어긋나고 출석부에도 줄이 생긴다
+       (api/lectures.ts LectureApplicant 주석). */
   const applied: ApplicantRow[] = useMemo(
-    () => applicants.filter((a) => !a.waitlisted).map((a, i) => ({ ...a, seq: i + 1 })),
+    () =>
+      applicants
+        .filter((a) => !a.waitlisted && a.status !== 'CANCELED')
+        .map((a, i) => ({ ...a, seq: i + 1 })),
     [applicants],
   )
   const waiting: ApplicantRow[] = useMemo(
-    () => applicants.filter((a) => a.waitlisted).map((a, i) => ({ ...a, seq: i + 1 })),
+    () =>
+      applicants
+        .filter((a) => a.waitlisted && a.status !== 'CANCELED')
+        .map((a, i) => ({ ...a, seq: i + 1 })),
     [applicants],
   )
+  /** 취소된 신청. 명단에 남아 있으므로 섞지 않고 따로 센다 */
+  const canceled = useMemo(() => applicants.filter((a) => a.status === 'CANCELED'), [applicants])
+
+  /** 모듈 상수 APPLICANT_COLUMNS 는 그대로 두고 행 액션만 더한다 */
+  const applicantColumns: Column<ApplicantRow>[] = useMemo(
+    () => [
+      ...APPLICANT_COLUMNS,
+      {
+        key: 'cancel',
+        header: '',
+        width: '72px',
+        align: 'center',
+        value: () => '',
+        render: (r) => (
+          <button
+            className="btn"
+            style={{ padding: '4px 9px', fontSize: 11.5, color: 'var(--red)' }}
+            onClick={() => setCanceling(r)}
+          >
+            취소
+          </button>
+        ),
+      },
+    ],
+    [],
+  )
+
+  /* ★ 특강을 바꾸면 선택을 비운다. 안 비우면 **앞 특강에서 고른 사람이 그대로 남아**
+       다음 특강의 「선택 확정」에 섞인다 — 표에는 안 보이는데 대상에는 들어간다 */
+  useEffect(() => {
+    setSelectedApply([])
+    setSelectedWait([])
+  }, [lectureId])
 
   const selectedLecture = lectures.find((l) => l.id === lectureId) ?? null
+
+  /* 신청 취소. 확정자를 취소하면 정원이 하나 비고 자동 승격이 그때 돈다 */
+  const [canceling, setCanceling] = useState<ApplicantRow | null>(null)
+  const [cancelBusy, setCancelBusy] = useState(false)
+
+  async function runCancel(row: ApplicantRow) {
+    setCancelBusy(true)
+    setError(null)
+    try {
+      await cancelApplication(row.applicationId)
+      if (lectureId !== null) setApplicants(await listLectureApplicants(lectureId))
+      await loadLectures()
+      setCanceling(null)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '취소하지 못했습니다.')
+    } finally {
+      setCancelBusy(false)
+    }
+  }
 
   /**
    * 대기자 → 확정.
@@ -384,7 +609,7 @@ function Content() {
     if (lectureId !== null) setApplicants(await listLectureApplicants(lectureId))
     await loadLectures()
     setPromoteBusy(false)
-    setSelected([])
+    setSelectedWait([])
     setPromoting(null)
     if (failed.length > 0) {
       setError(`${ids.length}명 중 ${done}명만 확정됐습니다. 실패 ${failed.length}건 — ${failed[0]}`)
@@ -505,6 +730,110 @@ function Content() {
       setDeleteErr(err instanceof ApiError ? err.message : '특강을 삭제하지 못했습니다.')
     } finally {
       setDeleteBusy(false)
+    }
+  }
+
+  /* 회차가 바뀌면 출결을 다시 읽는다. 회차마다 따로 조회해야 해서 한 번에 모은다 */
+  useEffect(() => {
+    if (sessionList.length === 0) {
+      setAttendance(new Map())
+      return
+    }
+    let cancelled = false
+    void Promise.all(
+      sessionList.map((se) =>
+        listSessionAttendances(se.id)
+          .then((rows) => [se.id, new Map(rows.map((r) => [r.applicationId, r.status]))] as const)
+          /* 한 회차가 실패해도 나머지는 보여준다 — 표 전체가 비는 것보다 낫다 */
+          .catch(() => [se.id, new Map<number, LectureAttendanceStatus>()] as const),
+      ),
+    ).then((pairs) => {
+      if (!cancelled) setAttendance(new Map(pairs))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [sessionList])
+
+  /**
+   * 출결 한 칸을 찍는다.
+   *
+   * ★ 서버가 **한 건씩** 받는다(lectures.ts 주석). 셀을 누를 때마다 한 번 나간다.
+   * ★ 출석 → 지각 → 결석 → 미입력 순으로 돈다. 잘못 찍었을 때 되돌릴 방법이 그것뿐이다
+   *   — 서버에 "지우기"가 없어 미입력으로는 못 돌아간다. 그래서 세 값만 순환한다.
+   */
+  async function toggleAttendance(sessionId: number, applicationId: number) {
+    const key = `${sessionId}:${applicationId}`
+    const cur = attendance.get(sessionId)?.get(applicationId)
+    const next: LectureAttendanceStatus =
+      cur === 'PRESENT' ? 'LATE' : cur === 'LATE' ? 'ABSENT' : 'PRESENT'
+    setAttBusy(key)
+    setError(null)
+    try {
+      await saveSessionAttendance(sessionId, { applicationId, status: next })
+      setAttendance((prev) => {
+        const copy = new Map(prev)
+        const row = new Map(copy.get(sessionId) ?? [])
+        row.set(applicationId, next)
+        copy.set(sessionId, row)
+        return copy
+      })
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '출결을 저장하지 못했습니다.')
+    } finally {
+      setAttBusy(null)
+    }
+  }
+
+  /** 목록을 다시 읽고 열려 있는 상세도 새 값으로 바꾼다 — 안 그러면 고친 값이 안 보인다 */
+  async function refreshDetail() {
+    const next = await loadLectures()
+    setDetail((cur) => (cur ? (next.find((x) => x.id === cur.id) ?? cur) : cur))
+  }
+
+  /** 상세에서 고친 것을 저장한다. 접수 기간만 시점이라 따로 변환한다(lectures.ts 주석) */
+  async function saveDetail() {
+    if (!detail || !editing) return
+    setDetailBusy(true)
+    setDetailErr(null)
+    try {
+      await updateLecture(detail.id, {
+        name: editing.name.trim(),
+        description: editing.description.trim() || undefined,
+        capacity: editing.capacity === '' ? undefined : Number(editing.capacity),
+        fee: editing.fee === '' ? undefined : Number(editing.fee),
+        startDate: editing.startDate || undefined,
+        endDate: editing.endDate || undefined,
+        applyFrom: toInstant(editing.applyFrom, '00:00'),
+        applyTo: toInstant(editing.applyTo, '23:59'),
+        teacherId: editing.teacherId ?? undefined,
+      })
+      await refreshDetail()
+      setEditing(null)
+    } catch (err) {
+      /* 모달을 닫지 않는다 — 고친 값을 다시 치게 하면 안 된다 */
+      setDetailErr(err instanceof ApiError ? err.message : '특강을 수정하지 못했습니다.')
+    } finally {
+      setDetailBusy(false)
+    }
+  }
+
+  /**
+   * 상태·노출 전환.
+   *
+   * ★ 둘은 **별개 축이다.** 접수를 열어도(OPEN) 노출을 안 켜면 앱에 안 보인다 —
+   *   "왜 신청이 안 들어오지"의 흔한 원인이라 상세에서 둘을 따로 보여준다.
+   */
+  async function changeDetail(fn: () => Promise<unknown>) {
+    setDetailBusy(true)
+    setDetailErr(null)
+    try {
+      await fn()
+      await refreshDetail()
+    } catch (err) {
+      setDetailErr(err instanceof ApiError ? err.message : '바꾸지 못했습니다.')
+    } finally {
+      setDetailBusy(false)
     }
   }
 
@@ -728,14 +1057,12 @@ function Content() {
                     />
                     정원 초과 시 대기자 접수
                   </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
-                    <input
-                      type="checkbox"
-                      checked={draft.withBriefing}
-                      onChange={(e) => patch({ withBriefing: e.target.checked })}
-                    />
+                  {/* ★ 이 값은 서버로 가지 않는다 — 켜도 아무 일이 없는데 켜지는 것처럼 보였다.
+                         '함께 받기' 가 무엇인지(설명회를 따로 만드는지, 한 특강에 두 신청을 받는지)
+                         정해지기 전까지 막아 둔다. 설명회는 목록에서 유형 '설명회' 로 관리한다 */}
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--muted)' }} title="준비 중입니다">
+                    <input type="checkbox" checked={false} disabled data-soon readOnly />
                     설명회 신청도 함께 받기
-                    <span className="mk brandnew">보완 개발</span>
                   </label>
                 </div>
               </div>
@@ -830,7 +1157,7 @@ function Content() {
                       <b>특강비 청구는 따로 만듭니다</b> — 수납 관리의 청구 기준에서 등록합니다.
                       <br />
                       개설 후 <b>정원을 신청 인원보다 적게 줄일 수 없습니다</b> — 누구를 대기자로 밀어낼지 결정할 수 없기
-                      때문이며, 서버에서 제약으로 막습니다.
+                      때문입니다.
                     </div>
                   </div>
                 </div>
@@ -843,7 +1170,7 @@ function Content() {
                     <div className="tt">강의실 중복 확인이 필요합니다</div>
                     <div className="tx">
                       같은 시간대에 <b>{draft.room}</b>이 반 시간표(고정수업·이동수업)에 이미 배정돼 있을 수 있습니다.
-                      서버에서 <code>(요일, 교시, 강의실)</code> 충돌을 검사한 뒤 개설을 확정해야 합니다.
+                      개설하기 전에 같은 요일·교시에 이 강의실이 비어 있는지 확인하세요.
                     </div>
                   </div>
                 </div>
@@ -863,7 +1190,7 @@ function Content() {
             <Icon name="presentation" size={13} /> 개설 특강
           </div>
           <div className="v">{lectures.length}</div>
-          <div className="d">{new Date().getFullYear()}년</div>
+          <div className="d">{lectureYear}년</div>
         </div>
         <div className="stat">
           <div className="l">
@@ -889,16 +1216,16 @@ function Content() {
           <div className="v" style={{ fontSize: 14, paddingTop: 8 }}>
             <Unfilled reason="수납 현황은 수납 화면에서 확인하세요" />
           </div>
-          <div className="d">수납현황(F-4.8) 참조</div>
+          <div className="d">수납현황 화면에서 확인</div>
         </div>
         <div className="stat">
           <div className="l">
             <Icon name="megaphone" size={13} /> 설명회 신청
           </div>
-          <div className="v" style={{ fontSize: 15, paddingTop: 6 }}>
-            보완 개발
+          <div className="v">
+            {lectures.filter((l) => l.lectureType === 'BRIEFING').reduce((n, l) => n + (l.confirmedCount ?? 0), 0)}
           </div>
-          <div className="d warn">신규</div>
+          <div className="d">설명회 {lectures.filter((l) => l.lectureType === 'BRIEFING').length}개 · 확정 인원</div>
         </div>
       </div>
 
@@ -941,16 +1268,23 @@ function Content() {
           {tab === 'list' && (
             <DataTable
               columns={columns}
-              rows={lectures}
+              rows={briefingOnly ? lectures.filter((l) => l.lectureType === 'BRIEFING') : lectures}
               rowKey={(r) => String(r.id)}
               masked={false}
               loading={loading}
               pageSize={10}
-              onRowClick={(r) => setLectureId(r.id)}
+              /* 행을 누르면 상세를 열고, 아래 탭(신청자·대기자·출석부)도 그 특강으로 맞춘다 */
+              onRowClick={(r) => {
+                setLectureId(r.id)
+                setDetailErr(null)
+                setEditing(null)
+                setDetail(r)
+              }}
               emptyText={academyId === null ? '지점을 먼저 선택하세요.' : '등록된 특강이 없습니다.'}
               countLabel={
                 <>
-                  특강 <b>{lectures.length}</b>건
+                  {lectureYear}년 {briefingOnly ? '설명회' : '특강'}{' '}
+                  <b>{briefingOnly ? lectures.filter((l) => l.lectureType === 'BRIEFING').length : lectures.length}</b>건
                   {selectedLecture && (
                     <span style={{ color: 'var(--muted)' }}> · 선택: {selectedLecture.name}</span>
                   )}
@@ -958,6 +1292,9 @@ function Content() {
               }
               toolbar={
                 <>
+                  <button type="button" className={`chip${briefingOnly ? ' on' : ''}`} onClick={() => setBriefingOnly((v) => !v)}>
+                    설명회만
+                  </button>
                   <ExcelButton filename="특강_목록" columns={LECTURE_COLUMNS} rows={lectures} masked={false} />
                   <button className="btn pri" onClick={() => setDraft({ ...EMPTY_DRAFT })}>
                     <Icon name="plus" size={14} /> 특강 개설
@@ -969,12 +1306,12 @@ function Content() {
 
           {(tab === 'apply' || tab === 'wait') && (
             <DataTable
-              columns={APPLICANT_COLUMNS}
+              columns={applicantColumns}
               rows={tab === 'apply' ? applied : waiting}
               rowKey={(r) => String(r.applicationId)}
               selectable
-              selected={selected}
-              onSelectedChange={setSelected}
+              selected={tab === 'apply' ? selectedApply : selectedWait}
+              onSelectedChange={tab === 'apply' ? setSelectedApply : setSelectedWait}
               masked={masked}
               pageSize={12}
               emptyText={selectedLecture ? '해당하는 인원이 없습니다.' : '특강 목록에서 특강을 먼저 선택하세요.'}
@@ -982,6 +1319,10 @@ function Content() {
                 <>
                   {selectedLecture?.name ?? '특강 미선택'} · {tab === 'apply' ? '신청자' : '대기자'}{' '}
                   <b>{(tab === 'apply' ? applied : waiting).length}</b>명
+                  {/* 취소분은 명단에 남지만 세지 않는다 — 안 적으면 "아까 그 학생 어디 갔냐"가 된다 */}
+                  {canceled.length > 0 && (
+                    <span style={{ color: 'var(--muted)' }}> · 취소 {canceled.length}명</span>
+                  )}
                 </>
               }
               toolbar={
@@ -989,13 +1330,27 @@ function Content() {
                   {/* 대기자 → 확정. 서버가 한 건씩 받으므로 순차로 보낸다 */}
                   <button
                     className="btn"
-                    disabled={selected.length === 0 || tab !== 'wait'}
+                    disabled={selectedWait.length === 0 || tab !== 'wait'}
                     title={tab === 'wait' ? '선택한 대기자를 확정으로 올립니다' : '대기자 탭에서 사용합니다'}
-                    onClick={() => setPromoting({ ids: selected.map(Number) })}
+                    onClick={() => setPromoting({ ids: selectedWait.map(Number) })}
                   >
                     <Icon name="arrow-right" size={14} /> 선택 확정
                   </button>
-                  <button className="btn" disabled={selected.length === 0}>
+                  <button
+                    className="btn"
+                    disabled={tab !== 'apply' || selectedApply.length === 0 || !selectedLecture}
+                    title={tab === 'apply' ? '고른 신청자에게 특강비 청구를 만듭니다' : '신청자 탭에서 사용합니다'}
+                    onClick={() =>
+                      selectedLecture &&
+                      setBilling({
+                        rows: applied.filter((a) => selectedApply.includes(String(a.applicationId))),
+                        name: `${selectedLecture.name} 특강비`,
+                        amount: String(selectedLecture.fee ?? ''),
+                        dueDate: '',
+                        results: null,
+                      })
+                    }
+                  >
                     수납청구
                   </button>
                   <MaskToggle masked={masked} onChange={setMasked} />
@@ -1018,9 +1373,8 @@ function Content() {
                 </span>
                 <div className="dt-right">
                   <MaskToggle masked={masked} onChange={setMasked} />
-                  <button className="btn" disabled data-soon title="준비 중입니다">
-                    <Icon name="printer" size={14} /> 출석부 인쇄
-                  </button>
+                  {/* 지금 보이는 출석부를 그대로 인쇄한다 — 따로 만든 출력 양식은 없다 */}
+                  <PrintButton label="출석부 인쇄" />
                 </div>
               </div>
               <div className="dt-scroll">
@@ -1062,6 +1416,26 @@ function Content() {
                     </tr>
                   </thead>
                   <tbody>
+                    {/* ★ 빈 표를 머리만 남기고 두지 않는다. 출석을 찍으러 온 사람이
+                           "칸이 어디 있냐"고 묻게 된다 — 실제로 그랬다(2026-09-14).
+                           비는 이유가 셋이라 무엇을 해야 하는지까지 갈라서 적는다. */}
+                    {applied.length === 0 && (
+                      <tr>
+                        <td colSpan={sessionList.length + 4} className="al-center" style={{ padding: '26px 12px' }}>
+                          {selectedLecture === null ? (
+                            <span style={{ color: 'var(--muted)' }}>위 목록에서 특강을 먼저 고르세요.</span>
+                          ) : sessionList.length === 0 ? (
+                            <span style={{ color: 'var(--muted)' }}>
+                              이 특강에 수업 회차가 없습니다. 회차를 만들어야 출석을 찍을 수 있습니다.
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--muted)' }}>
+                              확정된 신청자가 없습니다. <b>신청자</b> 탭에서 확정하면 여기에 줄이 생깁니다.
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    )}
                     {applied.map((a) => (
                       <tr key={a.applicationId}>
                         <td>{a.studentNo ?? '-'}</td>
@@ -1069,14 +1443,39 @@ function Content() {
                           {masked ? `${a.studentName[0]}*${a.studentName.slice(2)}` : a.studentName}
                         </td>
                         <td className="al-center">{a.className ?? '-'}</td>
-                        {/* 출결 표시는 회차별 조회(sessions/{id}/attendances)를 붙여야 한다 */}
-                        {sessionList.map((se) => (
-                          <td key={se.id} className="al-center">
-                            <Unfilled reason="회차별 출결 조회 연동 전" />
-                          </td>
-                        ))}
+                        {/* ★ 눌러서 찍는다. 출석 → 지각 → 결석 순으로 돈다 —
+                               서버에 '지우기' 가 없어 미입력으로는 못 돌아간다 */}
+                        {sessionList.map((se) => {
+                          const st = attendance.get(se.id)?.get(a.applicationId)
+                          const busy = attBusy === `${se.id}:${a.applicationId}`
+                          return (
+                            <td key={se.id} className="al-center">
+                              <button
+                                type="button"
+                                className={`mk ${ATT_TONE[st ?? ''] ?? ''}`}
+                                style={{ border: 'none', cursor: 'pointer', font: 'inherit', opacity: busy ? 0.5 : 1 }}
+                                disabled={busy}
+                                title={st ? '눌러서 바꿉니다' : '아직 입력하지 않았습니다'}
+                                onClick={() => void toggleAttendance(se.id, a.applicationId)}
+                              >
+                                {st ? LECTURE_ATTENDANCE_LABEL[st] : '—'}
+                              </button>
+                            </td>
+                          )
+                        })}
                         <td className="al-center">
-                          <Unfilled reason="출석률은 회차 출결이 있어야 계산된다" />
+                          {/* ★ 미입력을 결석으로 세지 않는다. 찍은 회차만 분모에 넣는다 —
+                                 안 그러면 아직 안 한 수업 때문에 출석률이 떨어져 보인다 */}
+                          {(() => {
+                            const marked = sessionList.filter((se) =>
+                              attendance.get(se.id)?.has(a.applicationId),
+                            )
+                            if (marked.length === 0) return <span style={{ color: 'var(--muted)' }}>-</span>
+                            const ok = marked.filter(
+                              (se) => attendance.get(se.id)?.get(a.applicationId) !== 'ABSENT',
+                            ).length
+                            return `${Math.round((ok / marked.length) * 100)}% (${marked.length}회)`
+                          })()}
                         </td>
                       </tr>
                     ))}
@@ -1087,6 +1486,262 @@ function Content() {
           )}
         </div>
       </div>
+
+      {canceling && (
+        <Modal
+          title="신청 취소"
+          sub={`${canceling.studentName}(${canceling.studentNo ?? '-'}) 의 신청을 취소합니다.`}
+          confirmLabel="취소 처리"
+          danger
+          busy={cancelBusy}
+          onConfirm={() => void runCancel(canceling)}
+          onClose={() => setCanceling(null)}
+        >
+          <div className="note-box risk">
+            <div className="ic">
+              <Icon name="alert-triangle" size={17} />
+            </div>
+            <div>
+              <div className="tt">되돌릴 수 없습니다</div>
+              <div className="tx">
+                {canceling.waitlisted ? (
+                  <>대기 명단에서 빠집니다.</>
+                ) : (
+                  <>
+                    확정 인원이 하나 줄고 <b>출석부에서도 빠집니다.</b> 자리가 비면 대기자가 자동으로
+                    올라올 수 있습니다.
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {detail && (
+        <Modal
+          title={detail.name}
+          sub={
+            editing
+              ? '고친 내용을 저장합니다.'
+              : `${LECTURE_TYPE_LABEL[detail.lectureType] ?? detail.lectureType} · ${
+                  LECTURE_STATUS_LABEL[detail.status] ?? detail.status
+                } · ${detail.visible ? '앱에 노출 중' : '앱에 안 보임'}`
+          }
+          confirmLabel={editing ? '저장' : '닫기'}
+          hideCancel={!editing}
+          busy={detailBusy}
+          error={detailErr}
+          confirmDisabled={editing ? editing.name.trim() === '' : false}
+          wide
+          onConfirm={() => (editing ? void saveDetail() : setDetail(null))}
+          onClose={() => (editing ? setEditing(null) : setDetail(null))}
+        >
+          {/* ★ 폭은 모달이 정한다(`wide`). 여기에 minWidth 를 박으면 바깥 .mo 가 440px 에
+                 묶여 있어 **내용이 그대로 잘린다** — 실제로 그렇게 잘려 있었다(2026-09-14) */}
+          <div>
+            {editing ? (
+              <>
+                <div className="frow">
+                  <label className="req">특강명</label>
+                  <input
+                    className="inp"
+                    value={editing.name}
+                    onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+                  />
+                </div>
+                <div className="frow">
+                  <label>설명</label>
+                  <textarea
+                    className="ta"
+                    rows={3}
+                    value={editing.description}
+                    onChange={(e) => setEditing({ ...editing, description: e.target.value })}
+                  />
+                </div>
+                <div className="frow">
+                  <label>담당 강사</label>
+                  <select
+                    className="sel"
+                    value={editing.teacherId ?? ''}
+                    onChange={(e) =>
+                      setEditing({ ...editing, teacherId: e.target.value ? Number(e.target.value) : null })
+                    }
+                  >
+                    <option value="">{teachers.length === 0 ? '등록된 강사가 없습니다' : '미지정'}</option>
+                    {teachers.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="frow">
+                  <label>정원 · 특강비</label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input
+                      className="inp"
+                      type="number"
+                      min={0}
+                      style={{ width: 110 }}
+                      value={editing.capacity}
+                      placeholder="정원"
+                      onChange={(e) => setEditing({ ...editing, capacity: e.target.value })}
+                    />
+                    <input
+                      className="inp"
+                      type="number"
+                      min={0}
+                      value={editing.fee}
+                      placeholder="특강비"
+                      onChange={(e) => setEditing({ ...editing, fee: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="frow">
+                  <label>수업 기간</label>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input
+                      className="inp"
+                      type="date"
+                      value={editing.startDate}
+                      onChange={(e) => setEditing({ ...editing, startDate: e.target.value })}
+                    />
+                    <span style={{ color: 'var(--muted)' }}>~</span>
+                    <input
+                      className="inp"
+                      type="date"
+                      value={editing.endDate}
+                      onChange={(e) => setEditing({ ...editing, endDate: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="frow">
+                  <label>접수 기간</label>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input
+                      className="inp"
+                      type="date"
+                      value={editing.applyFrom}
+                      onChange={(e) => setEditing({ ...editing, applyFrom: e.target.value })}
+                    />
+                    <span style={{ color: 'var(--muted)' }}>~</span>
+                    <input
+                      className="inp"
+                      type="date"
+                      value={editing.applyTo}
+                      onChange={(e) => setEditing({ ...editing, applyTo: e.target.value })}
+                    />
+                  </div>
+                </div>
+                {/* ★ 회차는 여기서 못 고친다. 기간·요일을 바꿔도 이미 만들어진 회차는 그대로다 —
+                       출결이 그 회차에 붙어 있기 때문이다. 회차는 출석부에서 하나씩 지운다. */}
+                <div className="hint">수업 기간을 바꿔도 이미 만들어진 회차는 그대로입니다.</div>
+              </>
+            ) : (
+              <>
+                <div className="kv">
+                  <div className="row">
+                    <span className="k">설명</span>
+                    <span className="v">
+                      {detail.description || <span style={{ color: 'var(--muted)' }}>-</span>}
+                    </span>
+                  </div>
+                  <div className="row">
+                    <span className="k">담당 강사</span>
+                    <span className="v">
+                      {detail.teacherName || <span style={{ color: 'var(--muted)' }}>미지정</span>}
+                    </span>
+                  </div>
+                  <div className="row">
+                    <span className="k">세부 유형</span>
+                    <span className="v">
+                      {detail.categoryName || <span style={{ color: 'var(--muted)' }}>-</span>}
+                    </span>
+                  </div>
+                  <div className="row">
+                    <span className="k">정원</span>
+                    <span className="v">
+                      확정 {detail.confirmedCount}명
+                      {detail.capacity !== null && ` / 정원 ${detail.capacity}명`}
+                      {detail.waitlistedCount > 0 && ` · 대기 ${detail.waitlistedCount}명`}
+                    </span>
+                  </div>
+                  <div className="row">
+                    <span className="k">특강비</span>
+                    <span className="v">{won(detail.fee ?? 0)}</span>
+                  </div>
+                  <div className="row">
+                    <span className="k">수업 기간</span>
+                    <span className="v">
+                      {detail.startDate ? `${detail.startDate} ~ ${detail.endDate ?? ''}` : '-'}
+                    </span>
+                  </div>
+                  <div className="row">
+                    <span className="k">접수 기간</span>
+                    <span className="v">
+                      {detail.applyFrom ? `${localDay(detail.applyFrom)} ~ ${localDay(detail.applyTo ?? '')}` : '-'}
+                    </span>
+                  </div>
+                  <div className="row">
+                    <span className="k">회차</span>
+                    <span className="v">
+                      {sessionList.length > 0 ? (
+                        `${sessionList.length}회차 · ${sessionList[0].sessionDate} ~ ${
+                          sessionList[sessionList.length - 1].sessionDate
+                        }`
+                      ) : (
+                        <span style={{ color: 'var(--red)' }}>회차가 없습니다 — 출석부를 만들 수 없습니다</span>
+                      )}
+                    </span>
+                  </div>
+                </div>
+
+                {/* ★ 상태와 노출은 별개 축이다. 접수를 열어도 노출을 안 켜면 앱에 안 보인다 */}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
+                  <button
+                    className="btn"
+                    disabled={detailBusy}
+                    onClick={() => setEditing(toEdit(detail))}
+                  >
+                    <Icon name="pencil" size={14} /> 수정
+                  </button>
+                  <button
+                    className="btn"
+                    disabled={detailBusy}
+                    onClick={() =>
+                      void changeDetail(() =>
+                        changeLectureStatus(detail.id, detail.status === 'OPEN' ? 'CLOSED' : 'OPEN'),
+                      )
+                    }
+                  >
+                    {detail.status === 'OPEN' ? '접수 마감' : '접수 열기'}
+                  </button>
+                  <button
+                    className="btn"
+                    disabled={detailBusy}
+                    onClick={() => void changeDetail(() => setLectureVisible(detail.id, !detail.visible))}
+                  >
+                    {detail.visible ? '앱에서 숨기기' : '앱에 노출'}
+                  </button>
+                  <button
+                    className="btn"
+                    style={{ color: 'var(--red)', marginLeft: 'auto' }}
+                    disabled={detailBusy}
+                    onClick={() => {
+                      setDeleteErr(null)
+                      setDeleting(detail)
+                      setDetail(null)
+                    }}
+                  >
+                    삭제
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </Modal>
+      )}
 
       {deletingSession && (
         <Modal
@@ -1140,6 +1795,65 @@ function Content() {
               </div>
             </div>
           </div>
+        </Modal>
+      )}
+
+      {billing && (
+        <Modal
+          title={billing.results ? '수납청구 결과' : `특강비 청구 — ${billing.rows.length}명`}
+          sub={billing.results ? undefined : '학생마다 청구가 하나씩 만들어집니다. 수납현황의 미납자 관리에 바로 잡힙니다.'}
+          confirmLabel={billing.results ? '닫기' : '청구'}
+          busy={billBusy}
+          confirmDisabled={!billing.results && (billing.name.trim() === '' || !(Number(billing.amount) > 0))}
+          onConfirm={() => (billing.results ? setBilling(null) : void runBilling())}
+          onClose={() => setBilling(null)}
+        >
+          {billing.results ? (
+            <>
+              <div className="note-box" role="status">
+                <div>
+                  <b>{billing.results.filter((x) => x.ok).length}명 청구</b> · 실패{' '}
+                  <b style={{ color: billing.results.some((x) => !x.ok) ? 'var(--red)' : undefined }}>
+                    {billing.results.filter((x) => !x.ok).length}명
+                  </b>
+                  {billing.results.some((x) => !x.ok) && ' — 실패한 학생은 청구되지 않았습니다. 이유를 확인하고 다시 청구하세요.'}
+                </div>
+              </div>
+              <div style={{ maxHeight: 260, overflow: 'auto' }}>
+                {billing.results.map((x, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 10, fontSize: 12.5, padding: '4px 0' }}>
+                    <span style={{ width: 90 }}>{x.name}</span>
+                    <span style={{ color: x.ok ? 'var(--mint-d)' : 'var(--red)' }}>{x.msg}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="frow">
+                <label className="req">청구명</label>
+                <input className="inp" maxLength={100} value={billing.name} onChange={(e) => setBilling({ ...billing, name: e.target.value })} />
+              </div>
+              <div className="frow">
+                <label className="req">금액</label>
+                <div>
+                  <input
+                    className="inp"
+                    type="number"
+                    min={1}
+                    value={billing.amount}
+                    onChange={(e) => setBilling({ ...billing, amount: e.target.value })}
+                  />
+                  <div className="hint">특강에 적힌 금액을 채워 뒀습니다. 할인이 있으면 수납현황에서 조정합니다.</div>
+                </div>
+              </div>
+              <div className="frow">
+                <label>납기</label>
+                <input className="inp" type="date" value={billing.dueDate} onChange={(e) => setBilling({ ...billing, dueDate: e.target.value })} />
+              </div>
+              <div className="hint">대상: {billing.rows.map((r) => r.studentName).join(', ')}</div>
+            </>
+          )}
         </Modal>
       )}
 
@@ -1205,19 +1919,41 @@ function PromoteConfirm({
         /* ★ risk 클래스를 쓴다. 인라인으로 빨갛게 칠하면 <b> 는 `.note-box b`(민트)를 그대로
              받아서, 경고 상자 안에서 정작 강조한 숫자만 초록으로 나온다. 실제로 그랬다. */
         <div className="note-box risk" role="alert">
-          정원 {capacity}명을 <b>{after - capacity}명 넘깁니다.</b> 그래도 확정하시겠습니까?
+          <div>
+            정원 {capacity}명을 <b>{after - capacity}명 넘깁니다.</b> 그래도 확정하시겠습니까?
+          </div>
         </div>
       )}
     </Modal>
   )
 }
 
+const briefingSignal = createScreenSignal()
+const yearSignal = createScreenSignal()
+let pickedYear: number | null = null
+
 export const lectureMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled data-soon title="준비 중입니다">기간 선택 ▾</button>
-      <button className="btn" disabled data-soon title="준비 중입니다">
+      <select
+        className="sel"
+        style={{ width: 130 }}
+        value=""
+        onChange={(e) => {
+          if (e.target.value === '') return
+          pickedYear = Number(e.target.value)
+          yearSignal.bump()
+        }}
+      >
+        <option value="">기간 선택 ▾</option>
+        {[-1, 0, 1].map((d) => (
+          <option key={d} value={new Date().getFullYear() + d}>
+            {new Date().getFullYear() + d}년 특강
+          </option>
+        ))}
+      </select>
+      <button className="btn" onClick={() => briefingSignal.bump()} title="설명회만 모아 봅니다. 줄을 누르면 신청 명단을 볼 수 있습니다">
         <Icon name="megaphone" size={14} /> 설명회 신청 관리
       </button>
     </>

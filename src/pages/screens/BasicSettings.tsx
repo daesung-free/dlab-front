@@ -4,10 +4,40 @@ import { DataTable, ExcelButton, Modal, Unfilled, type Column } from '../../comp
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
-import { listClasses } from '../../api/classes'
+import { useAuth } from '../../auth/AuthContext'
+import { listClasses, setClassRoom } from '../../api/classes'
 import { fetchPenaltyItems } from '../../api/penalties'
 import {
+  createSeatArea,
+  createSeatGrid,
+  deleteSeatArea,
+  deleteSeatMaster,
+  listSeatAreas,
+  listSeatMasters,
+  renameSeatArea,
+} from '../../api/facility'
+import {
+  CONSULT_TYPE_LABEL,
+  DAY_TYPE_LABEL,
+  PERIOD_TYPE_LABEL,
+  createAbsenceCategory,
+  createConsultTag,
+  createPeriod,
+  deleteAbsenceCategory,
+  deletePeriod,
+  listAbsenceCategories,
+  listConsultTags,
+  listPeriods,
+  updateAbsenceCategory,
+  updateConsultTag,
+  updatePeriod,
+  type ConsultType,
+  type DayType,
+  type PeriodType,
+} from '../../api/schoolMasters'
+import {
   copyMastersToYear,
+  describeCopied,
   createCourseType,
   createCurriculum,
   createDepartment,
@@ -26,6 +56,7 @@ import {
   listCurriculums,
   listDepartments,
   listRooms,
+  type Room,
   listScholarshipMasters,
   listTracks,
   listTuitionMasters,
@@ -33,7 +64,13 @@ import {
   renameCurriculum,
   renameDepartment,
   renameTrack,
-  updateRoom,
+  setTrackActive,
+  setDepartmentActive,
+  setCourseTypeActive,
+  setCurriculumActive,
+  setTuitionMasterActive,
+  setRoomActive,
+  patchRoom,
   updateScholarshipMaster,
   updateTuitionMaster,
 } from '../../api/masters'
@@ -44,6 +81,7 @@ import {
   updateLectureCategory,
 } from '../../api/lectureCategories'
 import type { Mockup } from './types'
+import { createScreenSignal } from './screenSignal'
 
 /* F-4.10-1 기초 관리 — 신규개발-요구사항검증됨
  * 학과계열·학과·과정(전형)·반·강의실·사물함·장학 마스터 + 전년도 복사.
@@ -80,6 +118,9 @@ interface MasterRow {
   className?: string | null
   point?: number
   memberCount?: number
+  /** 반 — 지정된 강의실(2026-09-21 추가) */
+  roomId?: number | null
+  roomName?: string | null
   /** 강의실 — 코드 자리를 대신하고, 수정할 때 PUT 에 함께 실어야 한다 */
   roomNo?: string
   code?: string
@@ -87,6 +128,19 @@ interface MasterRow {
   discountRate?: number
   memo?: string | null
   active?: boolean | null
+}
+
+/*
+ * 코드·비고 — 계열·학과·과정·교육과정은 등록·수정 창에서 이름과 함께 받는다.
+ * ★ 서버 수정(PUT)이 **안 보낸 칸을 지운다.** 이름만 보내면 코드·비고가 사라졌다(2026-09-21 확인).
+ *   그래서 수정 창이 지금 값을 채워 두고, 셋을 늘 함께 보낸다. 칸을 비우면 지우는 것이다.
+ */
+const CODE_MEMO: NonNullable<MasterDef['createExtra']> = [
+  { key: 'code', label: '코드', placeholder: '예: A01 (비워도 됩니다)' },
+  { key: 'memo', label: '비고', placeholder: '비워도 됩니다' },
+]
+function naming(name: string, extra?: Record<string, string>) {
+  return { name, code: extra?.code?.trim() || null, memo: extra?.memo?.trim() || null }
 }
 
 interface MasterDef {
@@ -105,7 +159,23 @@ interface MasterDef {
    * ★ 예전에는 이걸 `window.prompt` 로 되물었다 — 이름 묻고, 코드 묻고, 할인율 묻고.
    *   대화상자가 뜨는 동안 탭이 멈추고, 마지막에서 취소하면 앞 입력이 통째로 날아갔다.
    */
-  createExtra?: { key: string; label: string; placeholder?: string; required?: boolean; numeric?: boolean }[]
+  createExtra?: {
+    key: string
+    label: string
+    placeholder?: string
+    required?: boolean
+    /** @deprecated `kind: 'number'` 를 쓴다. 기존 선언을 안 깨려고 남겨 둔다 */
+    numeric?: boolean
+    /**
+     * 칸의 종류. 기본은 글자.
+     *
+     * ★ 교시처럼 **시각과 선택값**이 필요한 마스터가 생겨서 더했다. 글자 칸으로 받으면
+     *   `09:00` 을 `9시` 로 적는 사람이 나오고, 서버 enum 은 오타를 400 으로 되돌린다.
+     */
+    kind?: 'text' | 'number' | 'time' | 'select'
+    /** `kind: 'select'` 일 때의 선택지 */
+    options?: { value: string; label: string }[]
+  }[]
   /**
    * 이름(과 `createExtra` 로 선언한 값들)을 고친다.
    *
@@ -124,9 +194,13 @@ interface MasterDef {
    *   있는 마스터까지 미제공으로 두면 그게 거짓말이 된다.
    */
   has?: { code?: boolean; memo?: boolean; active?: boolean }
+  /** 사용/중지 전환. 지우지 않고 목록에서만 빼고 싶을 때 쓴다 */
+  setActive?: (id: number, active: boolean) => Promise<unknown>
   /** 왜 등록·수정이 없는지 */
   note?: string
 }
+
+const SUPER_ONLY = '본사 관리자만 바꿀 수 있습니다'
 
 const MASTERS: MasterDef[] = [
   {
@@ -136,10 +210,12 @@ const MASTERS: MasterDef[] = [
     copyOrder: 1,
     global: true,
     load: () => listTracks(),
-    create: (_a, _y, name) => createTrack(name),
-    rename: renameTrack,
+    create: (_a, _y, name, extra) => createTrack(naming(name, extra)),
+    createExtra: CODE_MEMO,
+    rename: (id, name, _row, extra) => renameTrack(id, naming(name, extra)),
     remove: deleteTrack,
     has: { code: true, memo: true, active: true },
+    setActive: setTrackActive,
     note: '학과계열은 전 지점·전 연도 공통입니다. 전년도 복사 대상이 아닙니다.',
   },
   {
@@ -148,10 +224,12 @@ const MASTERS: MasterDef[] = [
     icon: 'graduation-cap',
     copyOrder: 2,
     load: (a, y) => listDepartments(a, y),
-    create: (academyId, year, name) => createDepartment({ academyId, year, name }),
-    rename: renameDepartment,
+    create: (academyId, year, name, extra) => createDepartment({ academyId, year, ...naming(name, extra) }),
+    createExtra: CODE_MEMO,
+    rename: (id, name, _row, extra) => renameDepartment(id, naming(name, extra)),
     remove: deleteDepartment,
     has: { code: true, memo: true, active: true },
+    setActive: setDepartmentActive,
   },
   {
     key: 'course_type',
@@ -159,10 +237,12 @@ const MASTERS: MasterDef[] = [
     icon: 'layers',
     copyOrder: 3,
     load: (a, y) => listCourseTypes(a, y),
-    create: (academyId, year, name) => createCourseType({ academyId, year, name }),
-    rename: renameCourseType,
+    create: (academyId, year, name, extra) => createCourseType({ academyId, year, ...naming(name, extra) }),
+    createExtra: CODE_MEMO,
+    rename: (id, name, _row, extra) => renameCourseType(id, naming(name, extra)),
     remove: deleteCourseType,
     has: { code: true, memo: true, active: true },
+    setActive: setCourseTypeActive,
   },
   {
     key: 'class_group',
@@ -171,17 +251,24 @@ const MASTERS: MasterDef[] = [
     copyOrder: 4,
     load: async (a, y) => {
       const list = await listClasses(y, a)
-      return list.map((c) => ({ id: c.id, name: c.name, memberCount: c.memberCount }))
+      /* memberCount 는 목록에서만 채워진다. 단건 응답은 null 이라 undefined 로 맞춰 둔다 */
+      return list.map((c) => ({
+        id: c.id,
+        name: c.name,
+        memberCount: c.memberCount ?? undefined,
+        roomId: c.roomId ?? null,
+        roomName: c.roomName ?? null,
+      }))
     },
     extra: {
       key: 'memberCount',
-      header: '인원',
-      width: '76px',
+      header: '인원 · 강의실',
+      width: '150px',
       align: 'center',
       sortable: true,
-      value: (r) => r.memberCount ?? '',
+      value: (r) => `${r.memberCount ?? 0}명 · ${r.roomName ?? '강의실 미지정'}`,
     },
-    note: '반은 반 배정 화면에서 관리합니다. 여기서는 목록만 봅니다.',
+    note: '반은 반 배정 화면에서 관리합니다. 여기서는 목록과 강의실 지정만 합니다.',
   },
   {
     key: 'curriculum',
@@ -189,10 +276,12 @@ const MASTERS: MasterDef[] = [
     icon: 'book-open',
     copyOrder: 5,
     load: (a, y) => listCurriculums(a, y),
-    create: (academyId, year, name) => createCurriculum({ academyId, year, name }),
-    rename: renameCurriculum,
+    create: (academyId, year, name, extra) => createCurriculum({ academyId, year, ...naming(name, extra) }),
+    createExtra: CODE_MEMO,
+    rename: (id, name, _row, extra) => renameCurriculum(id, naming(name, extra)),
     remove: deleteCurriculum,
     has: { code: true, memo: true, active: true },
+    setActive: setCurriculumActive,
     extra: {
       key: 'className',
       header: '소속 반',
@@ -231,6 +320,7 @@ const MASTERS: MasterDef[] = [
     rename: (id, name) => updateTuitionMaster(id, { name }),
     remove: deleteTuitionMaster,
     has: { code: true, memo: true, active: true },
+    setActive: setTuitionMasterActive,
     extra: {
       key: 'amount',
       header: '금액',
@@ -265,12 +355,13 @@ const MASTERS: MasterDef[] = [
       return createRoom({ academyId, roomNo, name })
     },
     createExtra: [{ key: 'roomNo', label: '호실 번호', placeholder: '201', required: true }],
-    // ★ PUT 의 필수값이 roomNo 라 지금 번호를 함께 실어야 이름만 바꿀 수 있다
+    // ★ PATCH 로 바꾼다 — PUT 은 통째로 바꿔 정원·비고를 안 실으면 지웠다
     rename: (id, name, row, extra) =>
-      updateRoom(id, { roomNo: (extra?.roomNo ?? row?.roomNo ?? name).trim(), name }),
+      patchRoom(id, { roomNo: (extra?.roomNo ?? row?.roomNo ?? name).trim(), name }),
     remove: deleteRoom,
     // 코드 자리는 roomNo 가 대신하므로 code 컬럼은 안 쓴다
     has: { memo: true, active: true },
+    setActive: setRoomActive,
     extra: {
       key: 'roomNo',
       header: '호실',
@@ -359,14 +450,230 @@ const MASTERS: MasterDef[] = [
     has: { memo: true, active: true },
     note: '특강의 세부 유형입니다. 설명회에는 붙지 않습니다. 지점을 비우고 만들면 전 지점 공통이 되는데 본사만 가능합니다.',
   },
+  {
+    key: 'seat_area',
+    label: '독서실 구역',
+    icon: 'layout-grid',
+    load: async (a) => {
+      const list = await listSeatAreas(a)
+      return list.map((x) => ({ id: x.id, name: x.areaNm, code: x.areaCd, sortOrder: x.sortOrder ?? undefined }))
+    },
+    /* ★ 구역만 만들면 좌석이 0개라 배치도가 빈 채로 남는다 — "등록했는데 아무것도 없다"가
+         된다. 그래서 행·열을 함께 받아 좌석 격자까지 이어 만든다.
+       ★ 좌석 생성이 실패해도 구역은 이미 생겼다. 뭉뚱그리면 다시 눌러 **구역이 두 개**
+         생기므로, 무엇이 됐고 무엇이 안 됐는지 그대로 알린다(CLAUDE.md 4). */
+    create: async (academyId, _y, name, extra) => {
+      const areaCd = (extra?.areaCd ?? '').trim()
+      const rows = Number(extra?.rows ?? '')
+      const columns = Number(extra?.columns ?? '')
+      const prefix = (extra?.seatCdPrefix ?? '').trim()
+      if (!areaCd) throw new Error('구역 코드를 입력하세요.')
+      if (!Number.isInteger(rows) || rows < 1) throw new Error('행 수를 1 이상으로 입력하세요.')
+      if (!Number.isInteger(columns) || columns < 1) throw new Error('열 수를 1 이상으로 입력하세요.')
+      const area = await createSeatArea({ academyId, areaCd, areaNm: name })
+      try {
+        await createSeatGrid({
+          studyAreaId: area.id,
+          rows,
+          columns,
+          seatCdPrefix: prefix || `${areaCd}-`,
+        })
+      } catch (err) {
+        throw new Error(
+          `구역은 만들어졌지만 좌석 ${rows * columns}개를 만들지 못했습니다. ` +
+            `좌석배치 화면에서 이어서 만들어 주세요. (${err instanceof Error ? err.message : ''})`,
+        )
+      }
+      return area
+    },
+    createExtra: [
+      { key: 'areaCd', label: '구역 코드', placeholder: 'A', required: true },
+      { key: 'rows', label: '행 수', placeholder: '5', required: true, kind: 'number' },
+      { key: 'columns', label: '열 수', placeholder: '8', required: true, kind: 'number' },
+      { key: 'seatCdPrefix', label: '좌석번호 접두어', placeholder: 'A-' },
+    ],
+    /* 이름만 고친다. **구역 코드는 등록 후 못 바꾼다** — 키오스크가 그 코드로 좌석을 찾는다 */
+    rename: (id, name) => renameSeatArea(id, name),
+    /* ★ 좌석이 남아 있으면 구역 삭제가 409 다. 격자로 만든 구역은 늘 좌석이 있으므로
+         그냥 부르면 **반드시 실패한다** — 좌석부터 지운다.
+       ★ 일괄 삭제 API 가 없어 한 건씩 나간다. 중간에 끊기면 좌석이 일부만 남으므로
+         몇 개를 못 지웠는지 그대로 알린다(CLAUDE.md 4). */
+    remove: async (id) => {
+      const seats = await listSeatMasters(id)
+      let failed = 0
+      for (const st of seats) {
+        try {
+          await deleteSeatMaster(st.id)
+        } catch {
+          failed += 1
+        }
+      }
+      if (failed > 0) {
+        throw new Error(
+          `좌석 ${seats.length}개 중 ${failed}개를 지우지 못해 구역을 삭제하지 않았습니다. 배정된 학생이 있는지 확인해 주세요.`,
+        )
+      }
+      return deleteSeatArea(id)
+    },
+    has: { code: true },
+    note: '구역 코드는 등록 후 바꿀 수 없습니다 — 키오스크가 이 코드로 좌석을 찾습니다. 구역을 지우면 그 안의 좌석도 함께 사라집니다. 잠시 못 쓰는 자리는 좌석배치 화면에서 사용중지로 두세요.',
+  },
+  {
+    key: 'period',
+    label: '교시',
+    icon: 'clock',
+    load: async (a, y) => {
+      const list = await listPeriods({ academyId: a, year: y })
+      /* ★ 교시 번호는 **요일 구분마다 따로** 매겨진다(평일 1교시와 일요일 1교시가 공존).
+           번호만으로 늘어놓으면 세 요일이 뒤섞여 읽을 수 없다 — 요일을 먼저 묶는다 */
+      const dayOrder: Record<string, number> = { WEEKDAY: 0, SATURDAY: 1, SUNDAY: 2 }
+      const sorted = [...list].sort(
+        (p1, p2) => (dayOrder[p1.dayType] ?? 9) - (dayOrder[p2.dayType] ?? 9) || p1.periodNo - p2.periodNo,
+      )
+      return sorted.map((x) => ({
+        id: x.id,
+        name: x.name ?? `${x.periodNo}교시`,
+        sortOrder: x.periodNo,
+        /* ★ 서버는 `HH:mm:ss` 로 준다. 초까지 찍으면 "13:10:00~14:20:00" 이라 칸을 넘겨
+             두 줄로 깨지고, 교시에 초가 의미도 없다 — 앞 5글자만 쓴다 */
+        periodText: `${DAY_TYPE_LABEL[x.dayType]} · ${x.startTime.slice(0, 5)}~${x.endTime.slice(0, 5)} · ${PERIOD_TYPE_LABEL[x.periodType]}`,
+      }))
+    },
+    create: async (academyId, year, name, extra) => {
+      const no = Number(extra?.periodNo ?? '')
+      if (!Number.isInteger(no) || no < 1) throw new Error('교시 번호를 1 이상으로 입력하세요.')
+      const startTime = (extra?.startTime ?? '').trim()
+      const endTime = (extra?.endTime ?? '').trim()
+      if (!startTime || !endTime) throw new Error('시작·종료 시각을 입력하세요.')
+      /* 겹침은 서버가 409 로 막는다(PERIOD_TIME_OVERLAPPED). 화면이 다시 계산하지 않는다 */
+      return createPeriod({
+        academyId,
+        year,
+        dayType: (extra?.dayType || 'WEEKDAY') as DayType,
+        periodNo: no,
+        name,
+        periodType: (extra?.periodType || 'CLASS') as PeriodType,
+        startTime,
+        endTime,
+        /* 0723 확정으로 점심·저녁도 학습계획을 넣을 수 있다 */
+        planable: true,
+        mandatory: false,
+      })
+    },
+    createExtra: [
+      { key: 'periodNo', label: '교시 번호', placeholder: '1', required: true, kind: 'number' },
+      {
+        key: 'dayType',
+        label: '요일 구분',
+        required: true,
+        kind: 'select',
+        options: (Object.keys(DAY_TYPE_LABEL) as DayType[]).map((k) => ({ value: k, label: DAY_TYPE_LABEL[k] })),
+      },
+      {
+        key: 'periodType',
+        label: '종류',
+        required: true,
+        kind: 'select',
+        options: (Object.keys(PERIOD_TYPE_LABEL) as PeriodType[]).map((k) => ({
+          value: k,
+          label: PERIOD_TYPE_LABEL[k],
+        })),
+      },
+      { key: 'startTime', label: '시작 시각', required: true, kind: 'time' },
+      { key: 'endTime', label: '종료 시각', required: true, kind: 'time' },
+    ],
+    rename: (id, name, _row, extra) =>
+      updatePeriod(id, {
+        year: Number(extra?.year ?? new Date().getFullYear()),
+        dayType: (extra?.dayType || 'WEEKDAY') as DayType,
+        periodNo: Number(extra?.periodNo ?? 1),
+        name,
+        periodType: (extra?.periodType || 'CLASS') as PeriodType,
+        startTime: (extra?.startTime ?? '').trim(),
+        endTime: (extra?.endTime ?? '').trim(),
+        planable: true,
+        mandatory: false,
+      }),
+    remove: deletePeriod,
+    extra: {
+      key: 'periodText',
+      header: '시간 · 종류',
+      width: '200px',
+      value: (r) => (r as { periodText?: string }).periodText ?? '-',
+    },
+    note: '식사·휴식으로 등록한 시간은 순공시간에서 빠집니다. 시각이 아니라 이 종류가 기준입니다. 시간이 겹치면 등록되지 않습니다.',
+  },
+  {
+    key: 'absence_category',
+    label: '사유 분류',
+    icon: 'file-text',
+    load: async (a, y) => {
+      const list = await listAbsenceCategories({ academyId: a, year: y })
+      return list.map((x) => ({ id: x.id, name: x.name, sortOrder: x.sortOrder }))
+    },
+    create: (academyId, year, name) => createAbsenceCategory({ academyId, year, name }),
+    rename: (id, name) => updateAbsenceCategory(id, { name }),
+    remove: deleteAbsenceCategory,
+    note: '사유 신청 화면에서 고르는 분류입니다. 병결·가정사처럼 결석을 인정할 근거가 됩니다.',
+  },
+  {
+    key: 'consult_tag',
+    label: '상담 태그',
+    icon: 'tags',
+    load: async (a, y) => {
+      const list = await listConsultTags({ academyId: a, year: y })
+      return list.map((x) => ({
+        id: x.id,
+        name: x.name,
+        active: x.active,
+        sortOrder: x.sortOrder,
+        consultTypeText: x.consultType ? CONSULT_TYPE_LABEL[x.consultType] : '전체',
+      }))
+    },
+    create: (academyId, year, name, extra) =>
+      createConsultTag(academyId, {
+        year,
+        name,
+        consultType: (extra?.consultType || undefined) as ConsultType | undefined,
+      }),
+    createExtra: [
+      {
+        key: 'consultType',
+        label: '상담 종류',
+        kind: 'select',
+        options: (Object.keys(CONSULT_TYPE_LABEL) as ConsultType[]).map((k) => ({
+          value: k,
+          label: CONSULT_TYPE_LABEL[k],
+        })),
+      },
+    ],
+    rename: (id, name, row) => updateConsultTag(id, { name, active: row?.active ?? true }),
+    /* ★ 삭제가 없다(405). 끄기로 대신한다 — 이미 붙은 상담 기록의 태그가 사라지면 안 된다.
+         목록은 기본이 활성만이라, 끄면 화면에서도 사라진다. */
+    remove: async (id) => updateConsultTag(id, { name: '', active: false }),
+    has: { active: true },
+    extra: {
+      key: 'consultTypeText',
+      header: '상담 종류',
+      width: '96px',
+      align: 'center',
+      value: (r) => (r as { consultTypeText?: string }).consultTypeText ?? '-',
+    },
+    note: '태그는 지워지지 않고 꺼집니다 — 이미 붙은 상담 기록에서 사라지면 안 되기 때문입니다.',
+  },
 ]
 
 function Content() {
   /* 진입 마스터는 URL이 결정한다 — 사이드바의 '과정/학과/학과계열 관리'가
    * 각각 다른 탭으로 들어오고, 새로고침·뒤로가기에도 그 상태가 유지된다. */
   const [params, setParams] = useSearchParams()
-  const { academyId } = useAcademy()
+  const { academyId, ready: academyReady } = useAcademy()
   const active = MASTERS.find((m) => m.key === params.get('tab')) ?? MASTERS[0]
+  /* 학과계열(전 지점 공통)과 전년도 복사는 서버가 본사만 받는다. 지점 계정에 버튼을 열어 두면
+     누를 때마다 '권한이 없습니다' 만 떠서 고장으로 읽힌다 — 미리 막고 이유를 적는다 */
+  const { principal, me } = useAuth()
+  const isSuper = (me?.roles ?? principal?.roles ?? []).some((r) => r === 'SUPER_ADMIN')
+  const locked = !!active.global && !isSuper
 
   const [year, setYear] = useState(new Date().getFullYear())
   const [rows, setRows] = useState<MasterRow[]>([])
@@ -381,8 +688,49 @@ function Content() {
   const [addErr, setAddErr] = useState<string | null>(null)
   const [renaming, setRenaming] = useState<{ row: MasterRow; name: string; extra: Record<string, string> } | null>(null)
   const [removing, setRemoving] = useState<MasterRow | null>(null)
+  /* 반 강의실 지정 — 강의실 마스터에서 고른다. 비우면 해제 */
+  const [roomFor, setRoomFor] = useState<{ row: MasterRow; roomId: string; rooms: Room[] | null } | null>(null)
+  const [roomErr, setRoomErr] = useState<string | null>(null)
+
+  function openRoom(row: MasterRow) {
+    setRoomErr(null)
+    setRoomFor({ row, roomId: row.roomId ? String(row.roomId) : '', rooms: null })
+    if (academyId !== null)
+      listRooms(academyId, true)
+        .then((rooms) => setRoomFor((cur) => (cur ? { ...cur, rooms } : cur)))
+        .catch(() => setRoomFor((cur) => (cur ? { ...cur, rooms: [] } : cur)))
+  }
+
+  async function saveRoom() {
+    if (!roomFor) return
+    setBusy(true)
+    setRoomErr(null)
+    try {
+      await setClassRoom(roomFor.row.id, roomFor.roomId ? Number(roomFor.roomId) : null)
+      const nm = roomFor.rooms?.find((r) => String(r.id) === roomFor.roomId)
+      setNotice(
+        roomFor.roomId
+          ? `${roomFor.row.name} 강의실을 ${nm?.name ?? nm?.roomNo ?? ''}(으)로 지정했습니다.`
+          : `${roomFor.row.name} 강의실 지정을 풀었습니다.`,
+      )
+      setRoomFor(null)
+      await load()
+    } catch (e) {
+      setRoomErr(e instanceof ApiError ? e.message : '강의실을 지정하지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
   /** 전년도 복사 확인 모달 */
   const [copying, setCopying] = useState(false)
+  /* 헤더 '전체 전년도 복사' 가 누르면 같은 확인 창을 띄운다 — 헤더는 본문 상태를 못 만진다(CLAUDE.md 5-1) */
+  const copyAskVer = copyAsk.useVersion()
+  useEffect(() => {
+    if (copyAskVer === 0) return
+    if (isSuper) setCopying(true)
+    else setNotice(SUPER_ONLY.replace('바꿀', '복사할'))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [copyAskVer])
 
   function setActive(m: MasterDef) {
     setParams({ tab: m.key }, { replace: true })
@@ -500,6 +848,24 @@ function Content() {
     }
   }
 
+  async function toggleActive(r: MasterRow) {
+    if (!active.setActive || typeof r.active !== 'boolean') return
+    setBusy(true)
+    try {
+      await active.setActive(r.id, !r.active)
+      setNotice(
+        r.active
+          ? `'${r.name}' 을(를) 중지했습니다. 새로 고를 때 목록에서 빠지고, 이미 쓰인 곳은 그대로입니다.`
+          : `'${r.name}' 을(를) 다시 쓸 수 있게 했습니다.`,
+      )
+      await load()
+    } catch (err) {
+      setNotice(err instanceof ApiError ? err.message : '바꾸지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   /**
    * 전년도 복사.
    * ⚠️ 되돌릴 수 없다. 대상 연도에 데이터가 있으면 서버가 409 로 막으므로 덮어쓰진 않는다.
@@ -514,10 +880,7 @@ function Content() {
     void (async () => {
       try {
         const res = await copyMastersToYear({ academyId, fromYear: from, toYear: year })
-        const summary = Object.entries(res.copied ?? {})
-          .filter(([, n]) => n > 0)
-          .map(([k, n]) => `${k} ${n}건`)
-          .join(' · ')
+        const summary = describeCopied(res.copied)
         setNotice(summary === '' ? `${from} → ${year} 복사했지만 넘어온 것이 없습니다.` : `${from} → ${year} 복사 — ${summary}`)
         await load()
       } catch (err) {
@@ -569,22 +932,45 @@ function Content() {
           ),
       },
     )
-    if (active.rename || active.remove) {
+    if (active.rename || active.remove || active.setActive || active.key === 'class_group') {
       base.push({
         key: 'act',
         header: '',
         /* ★ 수정·삭제 두 버튼이 들어갈 폭이다. 92px 이면 모자라서 **세로로 줄바꿈**됐다 —
              가로로 두려던 것이 화면에서는 두 줄로 쌓여 보였다. */
-        width: '128px',
+        width: active.setActive ? '184px' : '128px',
         align: 'center',
         value: () => '',
         render: (r) => (
           <div style={{ display: 'flex', gap: 4, justifyContent: 'center', flexWrap: 'nowrap' }}>
+            {active.key === 'class_group' && (
+              <button
+                className="btn"
+                style={{ padding: '4px 9px', fontSize: 11.5, whiteSpace: 'nowrap' }}
+                disabled={busy}
+                onClick={() => openRoom(r)}
+              >
+                강의실 지정
+              </button>
+            )}
+            {/* 지우지 않고 목록에서만 빼는 것 — 이미 쓰인 반·학생 기록은 그대로 남는다 */}
+            {active.setActive && typeof r.active === 'boolean' && (
+              <button
+                className="btn"
+                style={{ padding: '4px 9px', fontSize: 11.5, whiteSpace: 'nowrap' }}
+                disabled={busy || locked}
+                title={locked ? SUPER_ONLY : r.active ? '새로 고를 때 목록에서 빠집니다. 이미 쓰인 곳은 그대로입니다' : '다시 고를 수 있게 합니다'}
+                onClick={() => void toggleActive(r)}
+              >
+                {r.active ? '중지' : '다시 사용'}
+              </button>
+            )}
             {active.rename && (
               <button
                 className="btn"
                 style={{ padding: '4px 9px', fontSize: 11.5 }}
-                disabled={busy}
+                disabled={busy || locked}
+                title={locked ? SUPER_ONLY : undefined}
                 onClick={() => {
                   setAddErr(null)
                   setRenaming({
@@ -606,7 +992,8 @@ function Content() {
               <button
                 className="btn"
                 style={{ padding: '4px 9px', fontSize: 11.5, color: 'var(--red)' }}
-                disabled={busy}
+                disabled={busy || locked}
+                title={locked ? SUPER_ONLY : undefined}
                 onClick={() => {
                   setAddErr(null)
                   setRemoving(r)
@@ -620,8 +1007,9 @@ function Content() {
       })
     }
     return base
+    /* ★ load 를 빼면 '중지' 가 **처음 그렸을 때의 load**(지점 고르기 전)를 불러 목록을 비웠다 */
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, busy])
+  }, [active, busy, load, locked])
 
   return (
     <>
@@ -665,18 +1053,69 @@ function Content() {
           {(active.createExtra ?? []).map((f) => (
             <div className="frow" key={f.key}>
               <label className={f.required ? 'req' : undefined}>{f.label}</label>
-              <input
-                className="inp"
-                type={f.numeric ? 'number' : 'text'}
-                value={renaming.extra[f.key] ?? ''}
-                placeholder={f.placeholder}
-                maxLength={30}
-                onChange={(e) =>
-                  setRenaming({ ...renaming, extra: { ...renaming.extra, [f.key]: e.target.value } })
-                }
-              />
+              {f.kind === 'select' ? (
+                <select
+                  className="sel"
+                  value={renaming.extra[f.key] ?? ''}
+                  onChange={(e) =>
+                    setRenaming({ ...renaming, extra: { ...renaming.extra, [f.key]: e.target.value } })
+                  }
+                >
+                  <option value="">선택하세요</option>
+                  {(f.options ?? []).map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  className="inp"
+                  type={f.kind === 'time' ? 'time' : f.kind === 'number' || f.numeric ? 'number' : 'text'}
+                  value={renaming.extra[f.key] ?? ''}
+                  placeholder={f.placeholder}
+                  maxLength={f.kind === 'time' ? undefined : 30}
+                  onChange={(e) =>
+                    setRenaming({ ...renaming, extra: { ...renaming.extra, [f.key]: e.target.value } })
+                  }
+                />
+              )}
             </div>
           ))}
+        </Modal>
+      )}
+
+      {roomFor && (
+        <Modal
+          title={`${roomFor.row.name} 강의실`}
+          sub="반이 주로 쓰는 강의실입니다. 반 배정 화면의 반 카드에 함께 보입니다."
+          confirmLabel="저장"
+          busy={busy}
+          error={roomErr}
+          onConfirm={() => void saveRoom()}
+          onClose={() => setRoomFor(null)}
+        >
+          <div className="frow">
+            <label>강의실</label>
+            <div>
+              <select
+                className="sel"
+                value={roomFor.roomId}
+                disabled={roomFor.rooms === null}
+                onChange={(e) => setRoomFor({ ...roomFor, roomId: e.target.value })}
+              >
+                <option value="">{roomFor.rooms === null ? '불러오는 중…' : '지정 안 함'}</option>
+                {(roomFor.rooms ?? []).map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name ?? r.roomNo} ({r.roomNo})
+                  </option>
+                ))}
+              </select>
+              {roomFor.rooms !== null && roomFor.rooms.length === 0 && (
+                <div className="hint">이 지점에 등록된 강의실이 없습니다. 왼쪽 목록의 &lsquo;강의실&rsquo;에서 먼저 등록하세요.</div>
+              )}
+            </div>
+          </div>
         </Modal>
       )}
 
@@ -720,14 +1159,29 @@ function Content() {
           {(active.createExtra ?? []).map((f) => (
             <div className="frow" key={f.key}>
               <label className={f.required ? 'req' : undefined}>{f.label}</label>
-              <input
-                className="inp"
-                type={f.numeric ? 'number' : 'text'}
-                value={draft.extra[f.key] ?? ''}
-                placeholder={f.placeholder}
-                maxLength={30}
-                onChange={(e) => setDraft({ ...draft, extra: { ...draft.extra, [f.key]: e.target.value } })}
-              />
+              {f.kind === 'select' ? (
+                <select
+                  className="sel"
+                  value={draft.extra[f.key] ?? ''}
+                  onChange={(e) => setDraft({ ...draft, extra: { ...draft.extra, [f.key]: e.target.value } })}
+                >
+                  <option value="">선택하세요</option>
+                  {(f.options ?? []).map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  className="inp"
+                  type={f.kind === 'time' ? 'time' : f.kind === 'number' || f.numeric ? 'number' : 'text'}
+                  value={draft.extra[f.key] ?? ''}
+                  placeholder={f.placeholder}
+                  maxLength={f.kind === 'time' ? undefined : 30}
+                  onChange={(e) => setDraft({ ...draft, extra: { ...draft.extra, [f.key]: e.target.value } })}
+                />
+              )}
             </div>
           ))}
         </Modal>
@@ -755,7 +1209,7 @@ function Content() {
         </div>
       </div>
 
-      {academyId === null && !active.global && (
+      {academyId === null && academyReady && !active.global && (
         <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
           위에서 지점을 먼저 고르세요. 기초 데이터는 지점마다 따로 관리합니다.
         </div>
@@ -802,14 +1256,19 @@ function Content() {
                     </option>
                   ))}
                 </select>
-                <button className="btn" disabled={busy || academyId === null} onClick={() => setCopying(true)}>
+                <button
+                  className="btn"
+                  disabled={busy || academyId === null || !isSuper}
+                  title={isSuper ? undefined : SUPER_ONLY.replace('바꿀', '복사할')}
+                  onClick={() => setCopying(true)}
+                >
                   <Icon name="history" size={14} /> 전년도 복사
                 </button>
                 <ExcelButton filename={`기초_${active.label}`} columns={COLUMNS} rows={rows} masked={false} />
                 <button
                   className="btn pri"
-                  disabled={busy || !active.create}
-                  title={active.create ? undefined : '이 마스터는 여기서 등록할 수 없습니다'}
+                  disabled={busy || !active.create || locked}
+                  title={locked ? SUPER_ONLY : active.create ? undefined : '이 마스터는 여기서 등록할 수 없습니다'}
                   onClick={add}
                 >
                   <Icon name="plus" size={14} /> 등록
@@ -867,12 +1326,15 @@ function Content() {
   )
 }
 
+const copyAsk = createScreenSignal()
+
 export const basicSettingsMockup: Mockup = {
   Content,
   actions: (
     <>
       <button className="btn" disabled data-soon title="준비 중입니다">기수 선택 ▾</button>
-      <button className="btn" disabled data-soon title="준비 중입니다">
+      {/* 본문의 '전년도 복사' 와 같은 일이다 — 기초 데이터 전체를 한 번에 넘긴다 */}
+      <button className="btn" onClick={() => copyAsk.bump()} title="과정·학과·반·교육과정 등 기초 데이터를 작년에서 올해로 한 번에 복사합니다">
         <Icon name="history" size={14} /> 전체 전년도 복사
       </button>
     </>

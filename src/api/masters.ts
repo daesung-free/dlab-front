@@ -27,8 +27,20 @@ export function listTracks(): Promise<NamedMaster[]> {
   return request<NamedMaster[]>('/api/v1/admin/masters/tracks')
 }
 
-export function renameTrack(id: number, name: string): Promise<NamedMaster> {
-  return request<NamedMaster>(`/api/v1/admin/masters/tracks/${id}`, { method: 'PUT', body: { name } })
+/**
+ * 이름·코드·비고를 **통째로** 바꾼다.
+ *
+ * ★ 안 보낸 칸은 **지워진다**(2026-09-21 확인 — 이름만 보내면 코드·비고가 null 이 됐다).
+ *   그래서 네 마스터(계열·학과·과정·교육과정) 모두 셋을 같이 받는다. 비우면 지우는 것이다.
+ */
+export interface MasterNaming {
+  name: string
+  code?: string | null
+  memo?: string | null
+}
+
+export function renameTrack(id: number, body: MasterNaming): Promise<NamedMaster> {
+  return request<NamedMaster>(`/api/v1/admin/masters/tracks/${id}`, { method: 'PUT', body })
 }
 
 export function deleteTrack(id: number): Promise<void> {
@@ -40,8 +52,8 @@ export function setTrackActive(id: number, active: boolean): Promise<void> {
   return request<void>(`/api/v1/admin/masters/tracks/${id}/active`, { method: 'PATCH', body: { active } })
 }
 
-export function createTrack(name: string): Promise<NamedMaster> {
-  return request<NamedMaster>('/api/v1/admin/masters/tracks', { method: 'POST', body: { name } })
+export function createTrack(body: MasterNaming): Promise<NamedMaster> {
+  return request<NamedMaster>('/api/v1/admin/masters/tracks', { method: 'POST', body })
 }
 
 export interface Department extends NamedMaster {
@@ -54,12 +66,16 @@ export function listDepartments(academyId?: number, year?: number): Promise<Depa
   return request<Department[]>('/api/v1/admin/masters/departments', { query: { academyId, year } })
 }
 
-export function createDepartment(body: { academyId: number; year: number; name: string }): Promise<Department> {
+export function createDepartment(body: { academyId: number; year: number } & MasterNaming): Promise<Department> {
   return request<Department>('/api/v1/admin/masters/departments', { method: 'POST', body })
 }
 
-export function renameDepartment(id: number, name: string): Promise<Department> {
-  return request<Department>(`/api/v1/admin/masters/departments/${id}`, { method: 'PUT', body: { name } })
+export function renameDepartment(id: number, body: MasterNaming): Promise<Department> {
+  return request<Department>(`/api/v1/admin/masters/departments/${id}`, { method: 'PUT', body })
+}
+
+export function setDepartmentActive(id: number, active: boolean): Promise<void> {
+  return request<void>(`/api/v1/admin/masters/departments/${id}/active`, { method: 'PATCH', body: { active } })
 }
 
 export function deleteDepartment(id: number): Promise<void> {
@@ -71,17 +87,22 @@ export function listCourseTypes(academyId: number, year: number): Promise<NamedM
   return request<NamedMaster[]>('/api/v1/admin/masters/course-types', { query: { academyId, year } })
 }
 
-export function createCourseType(body: {
-  academyId: number
-  year: number
-  name: string
-  sortOrder?: number
-}): Promise<NamedMaster> {
+export function createCourseType(
+  body: {
+    academyId: number
+    year: number
+    sortOrder?: number
+  } & MasterNaming,
+): Promise<NamedMaster> {
   return request<NamedMaster>('/api/v1/admin/masters/course-types', { method: 'POST', body })
 }
 
-export function renameCourseType(id: number, name: string): Promise<NamedMaster> {
-  return request<NamedMaster>(`/api/v1/admin/masters/course-types/${id}`, { method: 'PUT', body: { name } })
+export function renameCourseType(id: number, body: MasterNaming): Promise<NamedMaster> {
+  return request<NamedMaster>(`/api/v1/admin/masters/course-types/${id}`, { method: 'PUT', body })
+}
+
+export function setCourseTypeActive(id: number, active: boolean): Promise<void> {
+  return request<void>(`/api/v1/admin/masters/course-types/${id}/active`, { method: 'PATCH', body: { active } })
 }
 
 export function deleteCourseType(id: number): Promise<void> {
@@ -98,18 +119,23 @@ export function listCurriculums(academyId: number, year: number): Promise<Curric
   return request<Curriculum[]>('/api/v1/admin/masters/curriculums', { query: { academyId, year } })
 }
 
-export function createCurriculum(body: {
-  academyId: number
-  year: number
-  name: string
-  classId?: number
-  sortOrder?: number
-}): Promise<Curriculum> {
+export function createCurriculum(
+  body: {
+    academyId: number
+    year: number
+    classId?: number
+    sortOrder?: number
+  } & MasterNaming,
+): Promise<Curriculum> {
   return request<Curriculum>('/api/v1/admin/masters/curriculums', { method: 'POST', body })
 }
 
-export function renameCurriculum(id: number, name: string): Promise<Curriculum> {
-  return request<Curriculum>(`/api/v1/admin/masters/curriculums/${id}`, { method: 'PUT', body: { name } })
+export function renameCurriculum(id: number, body: MasterNaming): Promise<Curriculum> {
+  return request<Curriculum>(`/api/v1/admin/masters/curriculums/${id}`, { method: 'PUT', body })
+}
+
+export function setCurriculumActive(id: number, active: boolean): Promise<void> {
+  return request<void>(`/api/v1/admin/masters/curriculums/${id}/active`, { method: 'PATCH', body: { active } })
 }
 
 export function deleteCurriculum(id: number): Promise<void> {
@@ -139,6 +165,10 @@ export function updateTuitionMaster(id: number, body: { name?: string; amount?: 
   return request<TuitionMaster>(`/api/v1/admin/masters/tuitions/${id}`, { method: 'PATCH', body })
 }
 
+export function setTuitionMasterActive(id: number, active: boolean): Promise<void> {
+  return request<void>(`/api/v1/admin/masters/tuitions/${id}/active`, { method: 'PATCH', body: { active } })
+}
+
 export function deleteTuitionMaster(id: number): Promise<void> {
   return request<void>(`/api/v1/admin/masters/tuitions/${id}`, { method: 'DELETE' })
 }
@@ -154,6 +184,37 @@ export interface YearlyCopyResult {
   toYear: number
   /** 표 이름 → 복사된 건수. 무엇이 몇 건 넘어갔는지 화면에 그대로 보여준다 */
   copied: Record<string, number>
+}
+
+/**
+ * `copied` 의 키는 **서버 표 이름**이다. 그대로 그리면 화면에 `courseType 5건` 이 찍힌다 —
+ * 행정 선생님이 읽을 말이 아니다(CLAUDE.md 1-1). 모르는 키는 그대로 두고 넘긴다.
+ *
+ * ★ 반만 복사하는 경로는 없다. 이 호출 하나가 아래 표를 **전부** 만든다 —
+ *   "전년도 반 구성 복사" 버튼을 누른 사람에게 그걸 먼저 알려야 한다.
+ */
+export const COPIED_LABEL: Record<string, string> = {
+  department: '학과',
+  curriculum: '교육과정',
+  courseType: '과정',
+  class: '반',
+  period: '교시',
+  approvalItem: '승인 항목',
+  penaltyItem: '상벌점 항목',
+  penaltyRule: '상벌점 규칙',
+  tuition: '교습비',
+  scholarshipMaster: '장학',
+  billingStandard: '청구 기준',
+  staff: '직원',
+  annualEvent: '연간 행사',
+}
+
+/** `{ class: 4, period: 34 }` → `반 4건 · 교시 34건`. 0 건은 뺀다 */
+export function describeCopied(copied: Record<string, number>): string {
+  return Object.entries(copied ?? {})
+    .filter(([, n]) => n > 0)
+    .map(([k, n]) => `${COPIED_LABEL[k] ?? k} ${n}건`)
+    .join(' · ')
 }
 
 export function copyMastersToYear(body: {
@@ -202,6 +263,14 @@ export function updateRoom(
   body: { roomNo: string; name?: string; capacity?: number; memo?: string },
 ): Promise<Room> {
   return request<Room>(`/api/v1/admin/masters/rooms/${id}`, { method: 'PUT', body })
+}
+
+/**
+ * 강의실 부분 수정 — **안 보낸 값은 그대로 둔다**(PATCH). 이름만 고칠 때 이걸 쓴다.
+ * ★ PUT(`updateRoom`)은 통째로 바꿔 정원·비고를 안 실으면 지워진다.
+ */
+export function patchRoom(id: number, body: { roomNo?: string; name?: string; capacity?: number; memo?: string }): Promise<Room> {
+  return request<Room>(`/api/v1/admin/masters/rooms/${id}`, { method: 'PATCH', body })
 }
 
 export function setRoomActive(id: number, active: boolean): Promise<void> {

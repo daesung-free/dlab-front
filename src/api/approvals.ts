@@ -55,8 +55,13 @@ export function listApprovalItems(academyId: number, year: number): Promise<Appr
   return request<ApprovalItem[]>('/api/v1/admin/approval-items', { query: { academyId, year } })
 }
 
-export function saveApprovalItem(requestType: RequestType, body: ApprovalItemSave): Promise<ApprovalItem> {
-  return request<ApprovalItem>(`/api/v1/admin/approval-items/${requestType}`, { method: 'PUT', body })
+/**
+ * ★ **응답 본문이 없다.** 스펙도 `ApiResponseVoid` 다 — 예전 타입이 `ApprovalItem` 을
+ *   돌려준다고 돼 있어서, 그 값을 쓰려다 `undefined.requestType` 으로 화면이 터졌다
+ *   (2026-09-21). 바꾼 값은 **호출부가 이미 알고 있으니** 그걸로 화면을 갱신한다.
+ */
+export function saveApprovalItem(requestType: RequestType, body: ApprovalItemSave): Promise<void> {
+  return request<void>(`/api/v1/admin/approval-items/${requestType}`, { method: 'PUT', body })
 }
 
 /** 설정 해제 — 되돌리면 그 유형의 신청이 다시 거절된다 */

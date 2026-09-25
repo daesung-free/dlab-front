@@ -4,6 +4,7 @@ import { Icon } from '../../components/Icon'
 import { Tabs } from '../../components/Tabs'
 import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
+import { useAuth } from '../../auth/AuthContext'
 import {
   PLATFORM_LABEL,
   listAppConfigs,
@@ -11,7 +12,9 @@ import {
   listTerms,
   setMaintenance,
   updateAppVersions,
+  getAppUsage,
   type AppConfigDetail,
+  type AppUsage,
   type Terms,
 } from '../../api/appConfig'
 import { listNotices, type Notice } from '../../api/notices'
@@ -93,7 +96,7 @@ const PUSH_ROWS: PushRow[] = Array.from({ length: 28 }, (_, i) => {
     received,
     opened: Math.round(received * 0.61),
     status,
-    by: ['강민서', '이장원', '시스템(자동)'][i % 3],
+    by: ['담임 E', '담임 C', '시스템(자동)'][i % 3],
   }
 })
 
@@ -196,12 +199,17 @@ const API_BANNER_COLUMNS: Column<Notice>[] = [
 
 
 function Content() {
-  const { academyId } = useAcademy()
+  const { academyId, ready: academyReady } = useAcademy()
+  const { principal, me } = useAuth()
+  // 서버 app-config 전체가 SUPER_ADMIN 전용이다(지점 관리자 → 403)
+  const isSuper = (me?.roles ?? principal?.roles ?? []).some((r) => r === 'SUPER_ADMIN')
   const [tab, setTab] = useState('push')
 
   const [configs, setConfigs] = useState<AppConfigDetail[]>([])
   const [terms, setTerms] = useState<Terms[]>([])
   const [banners, setBanners] = useState<Notice[]>([])
+  /* 가입·동의 현황. 실패해도 나머지 탭은 그대로 그려야 해서 따로 받는다 */
+  const [usage, setUsage] = useState<AppUsage | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -222,6 +230,8 @@ function Content() {
   } | null>(null)
 
   const load = useCallback(async () => {
+    // 지점 목록 전엔 academyId 가 null 이라 전 지점 값이 먼저 와서 지점 값을 덮을 수 있다
+    if (!academyReady || !isSuper) return
     setLoading(true)
     try {
       /* 셋을 나란히 부른다. 하나가 늦어도 나머지 탭은 먼저 그려져야 한다 */
@@ -239,7 +249,20 @@ function Content() {
     } finally {
       setLoading(false)
     }
-  }, [academyId])
+  }, [academyId, academyReady, isSuper])
+
+  /* 가입·동의 현황 — 지점을 바꾸면 늦게 온 이전 지점 응답이 덮지 않게 버린다 */
+  useEffect(() => {
+    if (!academyReady || !isSuper) return
+    let alive = true
+    setUsage(null)
+    getAppUsage(academyId ?? undefined)
+      .then((u) => alive && setUsage(u))
+      .catch(() => alive && setUsage(null))
+    return () => {
+      alive = false
+    }
+  }, [academyId, academyReady, isSuper])
 
   useEffect(() => {
     void load()
@@ -275,20 +298,37 @@ function Content() {
       setMaintEdit({ c, message: c.maintenanceMessage ?? '시스템 점검 중입니다.' })
       return
     }
-    void run('점검 모드를 껐습니다.', '점검 모드를 끄지 못했습니다.', () =>
+    const who = PLATFORM_LABEL[c.platform] ?? c.platform
+    void run(`${who} 점검 모드를 껐습니다. 지금부터 다시 앱을 쓸 수 있습니다.`, `${who} 점검 모드를 끄지 못했습니다.`, () =>
       setMaintenance(c.platform, { maintenance: false }),
     )
   }
 
   const inMaintenance = configs.filter((c) => c.maintenance)
 
+  const pushTerms = usage?.terms.find((x) => x.code === 'PUSH') ?? null
+
+  if (!isSuper) {
+    return (
+      <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
+        <div className="ic">
+          <Icon name="triangle-alert" size={17} />
+        </div>
+        <div>
+          <div className="tt">본사 관리자만 볼 수 있는 화면입니다</div>
+          <div className="tx">앱 버전·점검 모드·약관은 전 지점 앱에 한꺼번에 적용되어 본사에서만 바꿉니다.</div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <>
       {newTerms && (
         <Modal
-          title="약관 새 버전 배포"
+          title="약관 새 버전 등록"
           sub="기존 문구는 고치지 않습니다. 버전을 올려 새로 등록합니다."
-          confirmLabel="배포"
+          confirmLabel="등록"
           busy={busy}
           error={modalErr}
           confirmDisabled={
@@ -298,7 +338,10 @@ function Content() {
             newTerms.content.trim() === ''
           }
           onConfirm={() => {
-            void run('약관을 배포했습니다.', '약관을 배포하지 못했습니다.', () =>
+            void run(
+              `'${newTerms.title.trim()}' ${newTerms.version.trim()}을(를) 등록했습니다. 앞으로 동의하는 사람은 이 버전에 동의한 것으로 기록됩니다.`,
+              '약관을 등록하지 못했습니다.',
+              () =>
               createTerms({
                 academyId: academyId ?? undefined,
                 code: newTerms.code.trim().toUpperCase(),
@@ -323,8 +366,8 @@ function Content() {
             <div>
               <div className="tt">지우거나 고칠 수 없습니다</div>
               <div className="tx">
-                한 번 배포한 약관은 <b>수정·삭제가 안 됩니다.</b> 같은 코드·버전으로 다시 배포하는 것도 막혀
-                있습니다. 오타를 고치려면 버전을 올려 다시 배포해야 합니다.
+                한 번 등록한 약관은 <b>수정·삭제가 안 됩니다.</b> 같은 코드·버전으로 다시 등록하는 것도 막혀
+                있습니다. 오타를 고치려면 버전을 올려 새로 등록해야 합니다.
               </div>
             </div>
           </div>
@@ -382,14 +425,24 @@ function Content() {
       {verEdit && (
         <Modal
           title={`${PLATFORM_LABEL[verEdit.c.platform]} ${verEdit.field === 'minVersion' ? '최소 지원 버전' : '최신 버전'}`}
-          sub={verEdit.field === 'minVersion' ? '이보다 낮은 버전은 앱이 열리지 않습니다.' : undefined}
+          sub={
+            verEdit.field === 'minVersion'
+              ? '이보다 낮은 버전을 쓰는 학생·학부모는 저장 즉시 앱을 쓸 수 없고, 업데이트하라는 안내를 받습니다.'
+              : '스토어에 올라간 최신 버전을 적습니다. 낮은 버전 사용자에게 업데이트를 권하지만 막지는 않습니다.'
+          }
           confirmLabel="저장"
           confirmDisabled={verEdit.value.trim() === ''}
           error={modalErr}
           onConfirm={() => {
             const e = verEdit
             const label = e.field === 'minVersion' ? '최소 지원 버전' : '최신 버전'
-            void run(`${label}을 바꿨습니다.`, `${label}을 바꾸지 못했습니다.`, () =>
+            const who = PLATFORM_LABEL[e.c.platform] ?? e.c.platform
+            const v = e.value.trim()
+            const done =
+              e.field === 'minVersion'
+                ? `${who} 최소 지원 버전을 ${v}(으)로 바꿨습니다. 지금부터 ${v}보다 낮은 버전은 업데이트해야 앱을 쓸 수 있습니다.`
+                : `${who} 최신 버전을 ${v}(으)로 바꿨습니다. 낮은 버전 사용자에게 업데이트를 권합니다.`
+            void run(done, `${who} ${label}을 바꾸지 못했습니다.`, () =>
               updateAppVersions(e.c.platform, { [e.field]: e.value.trim() }),
             ).then((ok) => ok && setVerEdit(null))
           }}
@@ -418,7 +471,11 @@ function Content() {
           error={modalErr}
           onConfirm={() => {
             const e = maintEdit
-            void run('점검 모드를 켰습니다.', '점검 모드를 켜지 못했습니다.', () =>
+            const who = PLATFORM_LABEL[e.c.platform] ?? e.c.platform
+            void run(
+              `${who} 점검 모드를 켰습니다. 끄기 전까지 ${who} 사용자는 앱을 열면 안내 문구만 보게 됩니다.`,
+              `${who} 점검 모드를 켜지 못했습니다.`,
+              () =>
               setMaintenance(e.c.platform, { maintenance: true, message: e.message.trim() }),
             ).then((ok) => ok && setMaintEdit(null))
           }}
@@ -469,20 +526,43 @@ function Content() {
           <div className="l">
             <Icon name="smartphone" size={13} /> 앱 가입
           </div>
-          {/* 앱 가입자 수를 세는 경로가 없다 */}
-          <div className="v" style={{ fontSize: 14, paddingTop: 8 }}>
-            <Unfilled reason="앱 가입자 수가 서버에 없다" />
-          </div>
-          <div className="d">재원생 대비</div>
+          {usage ? (
+            <>
+              <div className="v">{usage.studentSignupRate}%</div>
+              <div className="d">
+                재원생 {usage.enrolledStudents}명 중 {usage.studentAccounts}명
+                {usage.pendingStudents > 0 && ` · 승인 대기 ${usage.pendingStudents}`}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="v" style={{ fontSize: 14, paddingTop: 8 }}>
+                <Unfilled reason="가입 현황을 못 받았다" />
+              </div>
+              <div className="d">재원생 대비</div>
+            </>
+          )}
         </div>
         <div className="stat">
           <div className="l">
             <Icon name="bell" size={13} /> 푸시 수신동의
           </div>
-          <div className="v" style={{ fontSize: 14, paddingTop: 8 }}>
-            <Unfilled reason="동의율 집계가 없다 — 계정별 조회만 있다" />
-          </div>
-          <div className="d">미동의자는 알림톡으로 폴백</div>
+          {/* 푸시 수신 동의는 약관 코드 PUSH 의 동의율이다. 분모는 활성 앱 계정(학생 + 학부모) */}
+          {pushTerms ? (
+            <>
+              <div className="v">{pushTerms.rate}%</div>
+              <div className="d">
+                앱 계정 {pushTerms.targetAccounts}개 중 {pushTerms.agreedAccounts}개 · 미동의자는 알림톡으로
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="v" style={{ fontSize: 14, paddingTop: 8 }}>
+                <Unfilled reason="PUSH 약관이 없거나 현황을 못 받았다" />
+              </div>
+              <div className="d">미동의자는 알림톡으로 대신 발송</div>
+            </>
+          )}
         </div>
         <div className="stat">
           <div className="l">
@@ -521,8 +601,8 @@ function Content() {
           <div className="tt">앱 알림과 카카오 알림톡은 서로 다릅니다 — 이 화면은 앱 알림만 다룹니다</div>
           <div className="tx">
             학부모 대상 <b>카카오 알림톡</b>은 템플릿 심사가 필요하므로 <b>문자발송</b> 메뉴에서 관리합니다. 여기서는 학생 앱
-            대상 <b>앱 알림</b>만 발송하며, 수신 미동의자는 서버가 알림톡으로 폴백합니다. <b>SMS는 제공하지 않으므로</b>{' '}
-            승인된 알림톡 문안이 없는 자유 문안은 폴백 경로가 없습니다.
+            대상 <b>앱 알림</b>만 발송하며, 수신 미동의자에게는 알림톡으로 대신 보냅니다. <b>문자(SMS)는 보내지 않으므로</b>{' '}
+            승인된 알림톡 문안이 없는 자유 문안은 미동의자에게 전달되지 않습니다.
           </div>
         </div>
       </div>
@@ -555,7 +635,7 @@ function Content() {
             </div>
           </div>
           {/* ★ 표를 비운다. 배너로 "예시"라고 적어도 **12행이 차 있으면 사람은 실데이터로 읽는다** —
-              발송자 이름(강민서·이장원)과 수신률 93%까지 들어 있어 더 그렇다.
+              발송자 이름과 수신률 93%까지 들어 있어 더 그렇다.
               발송 자체가 E-5(문구 심사)·E-7(FCM 자격증명) 대기라 채울 값이 없다 */}
           <DataTable
             columns={PUSH_COLUMNS}
@@ -598,9 +678,9 @@ function Content() {
                   {c.maintenance ? (
                     <span className="mk brandnew">점검 중 — 앱 사용 불가</span>
                   ) : c.minVersion ? (
-                    <span className="mk brandnew">업데이트 게이트 ON</span>
+                    <span className="mk brandnew">{c.minVersion} 미만은 업데이트해야 사용 가능</span>
                   ) : (
-                    <span className="mk verified">게이트 없음</span>
+                    <span className="mk verified">모든 버전 사용 가능</span>
                   )}
                 </div>
               </div>
@@ -616,7 +696,10 @@ function Content() {
                     <span className="k">최소 지원</span>
                     <span className="v">
                       {c.minVersion ?? '-'}
-                      <span style={{ color: 'var(--muted)', fontSize: 11.5 }}> — 미만은 실행 시 업데이트 게이트</span>
+                      <span style={{ color: 'var(--muted)', fontSize: 11.5 }}>
+                        {' '}
+                        — 이보다 낮은 버전은 앱을 열면 업데이트 안내가 뜨고, 업데이트하기 전까지 쓸 수 없습니다
+                      </span>
                     </span>
                   </div>
                   <div className="row">
@@ -697,8 +780,8 @@ function Content() {
               약관 · 동의 버전
             </div>
             <div className="r">
-              <span className="mk supplement" title="동의 시점의 약관 버전을 함께 저장합니다">
-                동의 이력 버전 고정
+              <span className="mk supplement" title="누가 어느 버전에 동의했는지 함께 남습니다">
+                동의한 버전이 함께 기록됩니다
               </span>
               <button
                 className="btn pri"
@@ -706,7 +789,7 @@ function Content() {
                   setNewTerms({ code: '', version: '', title: '', content: '', required: true })
                 }
               >
-                <Icon name="plus" size={14} /> 새 버전 배포
+                <Icon name="plus" size={14} /> 새 버전 등록
               </button>
             </div>
           </div>
@@ -738,8 +821,20 @@ function Content() {
                   </div>
                 </span>
                 <span style={{ width: 160, display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                  {/* 계정별 조회만 있어 전체 동의율을 못 낸다 */}
-                  <Unfilled reason="약관 동의율 집계가 없다 — 계정별 조회만 있다" />
+                  {(() => {
+                    const u = usage?.terms.find((x) => x.termsId === t.id)
+                    return u ? (
+                      <span style={{ fontSize: 12.5, textAlign: 'right' }}>
+                        <b>{u.rate}%</b>
+                        <span style={{ color: 'var(--muted)' }}>
+                          {' '}
+                          · {u.agreedAccounts}/{u.targetAccounts}
+                        </span>
+                      </span>
+                    ) : (
+                      <Unfilled reason="이 약관의 동의 현황이 안 왔다" />
+                    )
+                  })()}
                 </span>
               </div>
             ))}

@@ -12,7 +12,18 @@ import {
   type ApprovalBoardRow,
   type ApprovalItem,
   type ApproverType,
+  type RequestType,
 } from '../../api/approvals'
+import {
+  UNLOCK_STATUS_LABEL,
+  getViolations,
+  listActiveUnlocks,
+  listFirewallRequests,
+  recordViolation,
+  releaseRestriction,
+  type FirewallRow,
+  type ViolationSummary,
+} from '../../api/firewall'
 import type { Mockup } from './types'
 import './matrix.css'
 import '../../styles/forms.css'
@@ -23,12 +34,25 @@ import '../../styles/forms.css'
  * 두 화면은 approval_items / approval_requests 스키마를 공유한다.
  *
  * ⚠ #32 / I-12 (높음) — 항목별 승인 주체 매트릭스 미확정. 방화벽 해제는 특히 미결.
- * ⚠ #40 / I-20 (중)  — 에스컬레이션 응답시간·입학 시 승인자 사전지정, 클라이언트 미확약. */
+ * ⚠ #40 / I-20 (중)  — 미응답 전환 응답시간·입학 시 승인자 사전지정, 클라이언트 미확약.
+ *
+ * ★ 화면 문구에서 개발자 용어를 걷어냈다(2026-09-18, CLAUDE.md 1-1). 아래가 옮겨온 근거다 —
+ *   **지운 것이 아니라 여기로 옮긴 것이니 화면에 되돌리지 말 것.**
+ *
+ *   · 화면의 '미응답 시 전환' 은 서버 필드 `escalationApproverType`(= escalate_to) 이다.
+ *     제한시간은 `timeoutMinutes`(= timeout_min) 다.
+ *   · 승인 주체 3종은 서버 enum `ApproverType` = PARENT · TEACHER · AUTO.
+ *   · 신청 유형 3종은 `RequestType` = ABSENCE_REASON · REGULAR_SCHEDULE · FIREWALL_UNLOCK.
+ *     목업은 10종이었다(API_GAPS 9-2) — 화면에 코드를 병기해 두면 그 차이가 보였지만,
+ *     그건 우리 사정이라 주석으로 내린다.
+ *   · 흐름 5단계의 실제 동작 — ① 앱 신청 시 `approval_requests` 가 생성되고 상태는 대기
+ *     ② `approverType = PARENT` 인 항목은 학부모에게 푸시 ③ `timeoutMinutes` 경과
+ *     ④ `escalationApproverType`(대개 TEACHER) 으로 재라우팅 ⑤ 확정분이 출결·벌점에 반영. */
 
-const APPROVERS: { key: ApproverType; label: string; cls: string; icon: string }[] = [
-  { key: 'PARENT', label: '학부모', cls: 'p-read', icon: 'users' },
-  { key: 'TEACHER', label: '담임', cls: 'p-own', icon: 'user-check' },
-  { key: 'AUTO', label: '자동', cls: 'p-full', icon: 'zap' },
+const APPROVERS: { key: ApproverType; label: string; cls: string; icon: string; desc: string }[] = [
+  { key: 'PARENT', label: '학부모', cls: 'p-read', icon: 'users', desc: '앱 알림으로 승인' },
+  { key: 'TEACHER', label: '담임', cls: 'p-own', icon: 'user-check', desc: '담당 반 교사가 승인' },
+  { key: 'AUTO', label: '자동', cls: 'p-full', icon: 'zap', desc: '조건을 채우면 즉시 승인' },
 ]
 
 const CAT_TONE: Record<string, string> = {
@@ -38,7 +62,8 @@ const CAT_TONE: Record<string, string> = {
   기타: 'verified',
 }
 
-/** 응답 제한시간 후보 — I-20(응답시간) 미확약이라 화면에서 고르게 한다 */
+/** 전환까지 걸리는 시간 후보 — I-20(응답시간) 미확약이라 화면에서 고르게 한다.
+ *  ★ 문서·이슈에서는 '응답 제한시간' 으로 부른다. 화면 말과 다르니 대조할 때 헷갈리지 말 것 */
 const TIMEOUT_CHOICES = [30, 60, 120, 240]
 
 interface ApprovalItemSaveInput {
@@ -47,14 +72,361 @@ interface ApprovalItemSaveInput {
   escalationApproverType: ApproverType | null
 }
 
+
+function pad2(n: number): string {
+  return String(n).padStart(2, '0')
+}
+
+function localDateTime(iso: string): string {
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`
+}
+
+function localDate(iso: string): string {
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+}
+
+/** 끝나는 시각까지 남은 분. 이미 지났으면 0 — 음수를 그리면 "-3분" 이 된다 */
+function minutesLeft(endAt: string | null): number {
+  if (endAt === null) return 0
+  return Math.max(0, Math.round((new Date(endAt).getTime() - Date.now()) / 60000))
+}
+
+/* ── 와이파이 해제 · 위반 (계획서 2-10) ──────────────────────────
+ *
+ * 승인·거절은 위 라우팅이 이미 처리한다. 여기는 **그 뒤**다 —
+ * 지금 열려 있는 해제를 보고, 딴 짓하는 것을 적발해 남긴다.
+ *
+ * ★ 위반이 몇 번 쌓이면 제한이 걸리는지 **화면에 적지 않는다.** 지금은 2회에 2주지만
+ *   운영팀이 정한 값이 아니라 바뀔 수 있다(2026-09-18). 서버가 주는 실제 값만 보여준다.
+ */
+function FirewallSection({ academyId }: { academyId: number | null }) {
+  const [active, setActive] = useState<FirewallRow[]>([])
+  const [recent, setRecent] = useState<FirewallRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+  /** 적발 확인 */
+  const [confirm, setConfirm] = useState<FirewallRow | null>(null)
+  /** 학생별 위반 이력 */
+  const [detail, setDetail] = useState<{ row: FirewallRow; sum: ViolationSummary } | null>(null)
+
+  const load = useCallback(async () => {
+    if (academyId === null) {
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    try {
+      const [a, r] = await Promise.all([
+        listActiveUnlocks(academyId),
+        listFirewallRequests({ academyId }),
+      ])
+      setActive(a)
+      setRecent(r)
+      setErr(null)
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : '와이파이 해제 내역을 불러오지 못했습니다.')
+      setActive([])
+      setRecent([])
+    } finally {
+      setLoading(false)
+    }
+  }, [academyId])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  async function openDetail(row: FirewallRow) {
+    setBusy(true)
+    try {
+      setDetail({ row, sum: await getViolations(row.enrollmentId) })
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : '위반 이력을 불러오지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function doRecord(): Promise<boolean> {
+    if (!confirm) return false
+    setBusy(true)
+    try {
+      await recordViolation(confirm.enrollmentId, confirm.id)
+      /* ★ 적발 직후 요약을 다시 읽는다. 이번 건으로 제한이 걸렸는지는 **서버만 안다** —
+           화면이 횟수를 세어 판단하면 규칙이 바뀌는 날 조용히 틀린다 */
+      const sum = await getViolations(confirm.enrollmentId)
+      setNotice(
+        sum.restrictedUntil !== null
+          ? `${confirm.studentName} · 위반 ${sum.count}회로 ${localDate(sum.restrictedUntil)}까지 신청이 제한됩니다.`
+          : `${confirm.studentName} · 위반 ${sum.count}회로 기록했습니다.`,
+      )
+      await load()
+      return true
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : '위반을 기록하지 못했습니다.')
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function doRelease(restrictionId: number, name: string) {
+    setBusy(true)
+    try {
+      await releaseRestriction(restrictionId)
+      setNotice(`${name} 의 신청 제한을 풀었습니다. 적발 기록은 남습니다.`)
+      setDetail(null)
+      await load()
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : '제한을 풀지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const ACTIVE_COLUMNS: Column<FirewallRow>[] = [
+    { key: 'studentName', header: '학생', width: '96px', value: (r) => r.studentName },
+    { key: 'studentNo', header: '학번', width: '104px', value: (r) => r.studentNo },
+    { key: 'reason', header: '사유', value: (r) => r.reason },
+    {
+      key: 'left',
+      header: '남은 시간',
+      width: '96px',
+      align: 'right',
+      /* 서버가 종료 임박순으로 준다 — 화면에서 다시 세지 않고 끝나는 시각만 환산한다 */
+      value: (r) => minutesLeft(r.unlockEndAt),
+      render: (r) => {
+        const m = minutesLeft(r.unlockEndAt)
+        return <b style={{ color: m <= 5 ? 'var(--amber)' : 'var(--ink)' }}>{m}분</b>
+      },
+    },
+    {
+      key: 'act',
+      header: '',
+      width: '150px',
+      align: 'center',
+      value: () => '',
+      render: (r) => (
+        <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+          <button
+            className="btn"
+            style={{ padding: '4px 8px', fontSize: 11.5, whiteSpace: 'nowrap', color: 'var(--red)' }}
+            disabled={busy}
+            onClick={() => setConfirm(r)}
+          >
+            위반 적발
+          </button>
+          <button
+            className="btn"
+            style={{ padding: '4px 8px', fontSize: 11.5, whiteSpace: 'nowrap' }}
+            disabled={busy}
+            onClick={() => void openDetail(r)}
+          >
+            이력
+          </button>
+        </div>
+      ),
+    },
+  ]
+
+  const RECENT_COLUMNS: Column<FirewallRow>[] = [
+    { key: 'requestedAt', header: '신청', width: '128px', sortable: true, value: (r) => localDateTime(r.requestedAt) },
+    { key: 'studentName', header: '학생', width: '92px', value: (r) => r.studentName },
+    { key: 'requestedMinutes', header: '요청', width: '68px', align: 'right', value: (r) => `${r.requestedMinutes}분` },
+    { key: 'reason', header: '사유', value: (r) => r.reason },
+    {
+      key: 'unlockStatus',
+      header: '해제',
+      width: '80px',
+      align: 'center',
+      /* ★ 승인 상태와 다른 축이다. 승인됐어도 시간이 지나면 해제는 끝난다 */
+      value: (r) => UNLOCK_STATUS_LABEL[r.unlockStatus] ?? r.unlockStatus,
+      render: (r) => (
+        <span className={`mk ${r.unlockStatus === 'ACTIVE' ? 'brandnew' : ''}`}>
+          {UNLOCK_STATUS_LABEL[r.unlockStatus] ?? r.unlockStatus}
+        </span>
+      ),
+    },
+    {
+      key: 'act',
+      header: '',
+      width: '150px',
+      align: 'center',
+      value: () => '',
+      /* ★ 적발은 해제중인 건에만 달면 안 된다. 자리를 뜨고 나서 알게 되는 경우가 있고,
+           그때는 이미 시간이 끝나 해제중 목록에서 사라진 뒤다 — 그러면 남길 방법이 없다 */
+      render: (r) => (
+        <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+          <button
+            className="btn"
+            style={{ padding: '4px 8px', fontSize: 11.5, whiteSpace: 'nowrap', color: 'var(--red)' }}
+            disabled={busy}
+            onClick={() => setConfirm(r)}
+          >
+            위반 적발
+          </button>
+          <button
+            className="btn"
+            style={{ padding: '4px 8px', fontSize: 11.5, whiteSpace: 'nowrap' }}
+            disabled={busy}
+            onClick={() => void openDetail(r)}
+          >
+            이력
+          </button>
+        </div>
+      ),
+    },
+  ]
+
+  return (
+    /* ★ 위가 `.split` 이고 그 안 카드는 margin-bottom: 0 이다 — 여백 없이 이어 붙이면
+         바로 위 카드와 테두리가 맞닿아 한 덩어리로 보인다. 다른 섹션 간격(14px)에 맞춘다 */
+    <div className="card-sec" style={{ marginTop: 14 }}>
+      <div className="card-sec-h">
+        <div className="t">
+          <span className="ico">
+            <Icon name="wifi" size={15} />
+          </span>
+          와이파이 해제 · 위반
+        </div>
+        <div className="r">
+          <span className="mk brandnew">지금 해제중 {active.length}</span>
+        </div>
+      </div>
+      <div className="card-sec-b">
+        {err && (
+          <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+            {err}
+          </div>
+        )}
+        {notice && <div className="note-box">{notice}</div>}
+
+        <div className="note-box">
+          <div>
+            신청과 승인은 위 라우팅이 처리합니다. 여기서는 <b>지금 열려 있는 해제</b>를 보고,
+            인강 외 사용을 발견하면 <b>위반으로 남깁니다.</b> 위반이 쌓이면 신청이 자동으로 제한됩니다 —
+            걸린 기간은 학생 이력에서 확인합니다.
+          </div>
+        </div>
+
+        <DataTable
+          columns={ACTIVE_COLUMNS}
+          rows={active}
+          rowKey={(r) => String(r.id)}
+          masked={false}
+          loading={loading}
+          pageSize={8}
+          countLabel={<>지금 해제중 <b>{active.length}</b>건</>}
+          emptyText="지금 열려 있는 해제가 없습니다."
+        />
+
+        <div style={{ marginTop: 16 }}>
+          <DataTable
+            columns={RECENT_COLUMNS}
+            rows={recent}
+            rowKey={(r) => String(r.id)}
+            masked={false}
+            loading={loading}
+            pageSize={8}
+            countLabel={<>신청 이력 <b>{recent.length}</b>건</>}
+            emptyText="신청 이력이 없습니다."
+          />
+        </div>
+      </div>
+
+      {confirm && (
+        <Modal
+          title={`${confirm.studentName} 을(를) 위반으로 남길까요?`}
+          sub="해제를 받아놓고 인강 외 용도로 쓴 것을 기록합니다."
+          confirmLabel="위반 기록"
+          danger
+          busy={busy}
+          onConfirm={() => void doRecord().then((ok) => ok && setConfirm(null))}
+          onClose={() => setConfirm(null)}
+        >
+          <div className="note-box">
+            <div>
+              {/* 임계치를 화면이 말하지 않는다 — 서버가 판단하고, 결과만 받아 적는다 */}
+              위반이 쌓이면 <b>그 자리에서 신청 제한이 걸리고</b>, 지금 해제중이었다면 즉시 차단됩니다.
+              <br />
+              <b>적발 기록은 지울 수 없습니다.</b> 제한만 나중에 풀 수 있습니다.
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {detail && (
+        <Modal
+          wide
+          title={`${detail.row.studentName} 위반 이력`}
+          sub={`학번 ${detail.row.studentNo}`}
+          hideCancel
+          confirmLabel="닫기"
+          onConfirm={() => setDetail(null)}
+          onClose={() => setDetail(null)}
+        >
+          <div className="note-box" style={{ borderColor: detail.sum.restrictedUntil ? 'var(--red)' : undefined }}>
+            <div>
+              위반 <b>{detail.sum.count}회</b>
+              {detail.sum.restrictedUntil === null ? (
+                <> · 지금 걸린 제한은 없습니다.</>
+              ) : (
+                <>
+                  {' '}
+                  · <b>{localDateTime(detail.sum.restrictedUntil)}까지</b> 신청이 제한됩니다.
+                </>
+              )}
+            </div>
+          </div>
+
+          {detail.sum.items.length === 0 ? (
+            <div style={{ padding: 12, color: 'var(--muted)', fontSize: 13 }}>적발된 기록이 없습니다.</div>
+          ) : (
+            <div style={{ display: 'grid', gap: 6 }}>
+              {detail.sum.items.map((v) => (
+                <div
+                  key={v.id}
+                  style={{ display: 'flex', gap: 12, fontSize: 13, borderBottom: '1px solid var(--line)', padding: '6px 0' }}
+                >
+                  <span style={{ color: 'var(--muted)' }}>{localDateTime(v.occurredAt)}</span>
+                  <span style={{ flex: 1 }}>인강 외 사용 적발</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {detail.sum.restrictionId !== null && (
+            <div style={{ marginTop: 12 }}>
+              <button
+                className="btn"
+                style={{ color: 'var(--red)' }}
+                disabled={busy}
+                onClick={() => void doRelease(detail.sum.restrictionId as number, detail.row.studentName)}
+              >
+                <Icon name="undo-2" size={14} /> 신청 제한 풀기
+              </button>
+              {/* 봐주는 버튼이 아니다 — 잘못 눌렀을 때 되돌리는 자리다 */}
+              <div className="hint">잘못 적발한 경우에만 쓰세요. 적발 기록 자체는 남습니다.</div>
+            </div>
+          )}
+        </Modal>
+      )}
+    </div>
+  )
+}
+
 function Content() {
   const { academyId } = useAcademy()
   const [items, setItems] = useState<ApprovalItem[]>([])
-  const [escalation, setEscalation] = useState(true)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  /** ★ 저장 중인 **줄**. 전체를 잠그면 다른 줄까지 눌러도 반응이 없어 "안 바뀐다" 가 된다 */
+  const [savingType, setSavingType] = useState<RequestType | null>(null)
 
   const year = new Date().getFullYear()
 
@@ -89,25 +461,47 @@ function Content() {
     const approverType = patch.approverType ?? item.approverType
     if (!approverType) return // 승인 주체는 필수다
 
-    setBusy(true)
+    const timeoutMinutes = patch.timeoutMinutes ?? item.timeoutMinutes ?? undefined
+    const escalationApproverType =
+      'escalationApproverType' in patch
+        ? (patch.escalationApproverType ?? undefined)
+        : (item.escalationApproverType ?? undefined)
+
+    setSavingType(item.requestType)
     setNotice(null)
     try {
       await saveApprovalItem(item.requestType, {
         academyId,
         year,
         approverType,
-        timeoutMinutes: patch.timeoutMinutes ?? item.timeoutMinutes ?? undefined,
-        escalationApproverType:
-          'escalationApproverType' in patch
-            ? (patch.escalationApproverType ?? undefined)
-            : (item.escalationApproverType ?? undefined),
+        timeoutMinutes,
+        escalationApproverType,
       })
-      await load()
-      setNotice(`${REQUEST_TYPE_LABEL[item.requestType]} 설정을 저장했습니다.`)
+      /* ★ 전체를 다시 읽지 않는다. 재조회를 기다리는 동안 표가 멈춰 있어서
+           "눌러도 안 바뀐다" 로 느껴졌다.
+         ★ 서버는 **응답 본문을 주지 않으므로**(approvals.ts 주석) 방금 보낸 값으로
+           그 줄만 갈아 끼운다. 실패하면 아래에서 전체를 다시 읽는다 */
+      setItems((prev) =>
+        prev.map((x) =>
+          x.requestType === item.requestType
+            ? {
+                ...x,
+                configured: true,
+                approverType,
+                timeoutMinutes: timeoutMinutes ?? null,
+                escalationApproverType: escalationApproverType ?? null,
+              }
+            : x,
+        ),
+      )
+      /* 좁은 자리라 화면 이름을 통째로 넣지 않는다. 무엇을 눌렀는지는 방금 누른 사람이 안다 */
+      setNotice('저장했습니다')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '저장하지 못했습니다.')
+      /* 실패하면 화면과 서버가 어긋난다 — 그때만 전체를 다시 읽는다 */
+      await load()
     } finally {
-      setBusy(false)
+      setSavingType(null)
     }
   }
 
@@ -119,7 +513,7 @@ function Content() {
           <Icon name="triangle-alert" size={17} />
         </div>
         <div>
-          <div className="tt">서버가 다루는 신청 유형은 3종입니다</div>
+          <div className="tt">승인을 거치는 신청은 3종입니다</div>
           <div className="tx">
             사유 신청 · 정기일정 · 방화벽 해제만 승인 대상입니다. 좌석 이탈·급식 취소·
             질의응답 예약 등은 <b>승인 대상이 아닙니다</b> — 각자 다른 방식으로 처리합니다.
@@ -134,17 +528,9 @@ function Content() {
         </div>
       )}
 
-      {notice && (
-        <div className="note-box" role="status">
-          <div className="ic">
-            <Icon name="check" size={17} />
-          </div>
-          <div>
-            <div className="tt">{notice}</div>
-          </div>
-        </div>
-      )}
-
+      {/* ★ 저장 안내를 여기(표 위)에 띄우면 **표가 통째로 76px 아래로 밀린다** —
+             방금 누른 칸이 커서 밑에서 빠져나가서 "칸이 움직인다" 가 된다.
+             그래서 안내는 표 헤더의 상태줄에서 제자리 갱신한다. */}
       <div className="stat-strip">
         {APPROVERS.map((a) => (
           <div className="stat" key={a.key}>
@@ -152,9 +538,8 @@ function Content() {
               <Icon name={a.icon} size={13} /> {a.label} 승인
             </div>
             <div className="v">{items.filter((i) => i.approverType === a.key).length}</div>
-            <div className="d" style={{ fontFamily: 'ui-monospace, monospace', fontSize: 10 }}>
-              {a.key}
-            </div>
+            {/* 예전에는 여기에 서버 코드(PARENT 등)를 모노스페이스로 찍었다 — 화면에 둘 말이 아니다 */}
+            <div className="d">{a.desc}</div>
           </div>
         ))}
         <div className="stat">
@@ -168,10 +553,10 @@ function Content() {
         </div>
         <div className="stat">
           <div className="l">
-            <Icon name="arrow-right" size={13} /> 에스컬레이션
+            <Icon name="arrow-right" size={13} /> 전환 대상 지정
           </div>
           <div className="v">{items.filter((i) => i.escalationApproverType).length}</div>
-          <div className="d warn">응답시간 미확약</div>
+          <div className="d warn">전환까지 걸리는 시간 미확정</div>
         </div>
       </div>
 
@@ -184,13 +569,22 @@ function Content() {
             승인 항목별 주체 설정
           </div>
           <div className="r">
-            <button className={`chip${escalation ? ' on' : ''}`} onClick={() => setEscalation(!escalation)}>
-              에스컬레이션 열 보기
-            </button>
             {/* 셀을 누르면 그 자리에서 저장된다. 매트릭스에서 '저장' 버튼을 따로 두면
-                무엇이 저장됐는지 알기 어렵다 */}
-            <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>
-              {busy ? '저장 중…' : loading ? '불러오는 중…' : '선택하면 바로 저장됩니다'}
+                무엇이 저장됐는지 알기 어렵다.
+                ★ 자리를 차지한 채 글자만 바뀌므로 표가 밀리지 않는다 */}
+            {/* ★ 폭을 고정한다. 글자 길이가 바뀔 때마다 옆 버튼이 밀려서 움찔거렸다
+                   (113px → 59px 로 줄면서 칩이 54px 이동했다) */}
+            <span
+              role="status"
+              style={{
+                fontSize: 11.5,
+                color: notice ? 'var(--mint-d)' : 'var(--muted)',
+                width: 116,
+                textAlign: 'right',
+                flexShrink: 0,
+              }}
+            >
+              {savingType ? '저장 중…' : loading ? '불러오는 중…' : (notice ?? '선택하면 바로 저장됩니다')}
             </span>
           </div>
         </div>
@@ -201,36 +595,28 @@ function Content() {
                 <tr>
                   <th className="area">신청 항목</th>
                   <th style={{ width: 90 }}>분류</th>
+                  {/* 영문 코드(PARENT 등)는 뺐다 — 근거는 파일 상단 주석 */}
                   {APPROVERS.map((a) => (
                     <th key={a.key} style={{ width: 100 }}>
                       {a.label}
-                      <span className="rk">{a.key}</span>
                     </th>
                   ))}
-                  {escalation && (
-                    <>
-                      <th style={{ width: 118 }}>
-                        에스컬레이션
-                        <span className="rk">escalate_to</span>
-                      </th>
-                      <th style={{ width: 110 }}>
-                        응답 제한
-                        <span className="rk">timeout_min</span>
-                      </th>
-                    </>
-                  )}
+                  {/* ★ 두 열은 짝이다 — '전환 대상 / 전환까지' 로 같은 말에 걸어 둔다.
+                         '미응답 시' 조건은 바로 아래 범례가 이미 말한다.
+                     ★ 예전에는 이 둘을 접는 토글이 있었다. 원본 시안이 없는 화면이라 우리가
+                         넣은 것인데, 재보니 1340~760px 어디서도 표가 넘치지 않아 **접어서 얻는
+                         공간이 없었다.** 접으면 행 높이가 43→36px 로 줄어 표가 들썩이기만 했고,
+                         접힌 동안에는 이 값을 보지도 고치지도 못했다. 좁은 화면은 .mx-scroll 이
+                         가로 스크롤로 받는다(2026-09-21 제거) */}
+                  <th style={{ width: 104 }}>전환 대상</th>
+                  <th style={{ width: 104 }}>전환까지</th>
                   <th>비고</th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((it) => (
                   <tr key={it.requestType}>
-                    <th className="area">
-                      {REQUEST_TYPE_LABEL[it.requestType]}
-                      <span className="an">
-                        <code style={{ fontSize: 10 }}>{it.requestType}</code>
-                      </span>
-                    </th>
+                    <th className="area">{REQUEST_TYPE_LABEL[it.requestType]}</th>
                     <td>
                       <span className={`mk ${CAT_TONE[REQUEST_TYPE_CATEGORY[it.requestType]] ?? ''}`}>
                         {REQUEST_TYPE_CATEGORY[it.requestType]}
@@ -240,59 +626,67 @@ function Content() {
                       <td key={a.key}>
                         <button
                           type="button"
-                          disabled={busy}
+                          disabled={savingType === it.requestType}
                           onClick={() => void apply(it, { approverType: a.key })}
                           className={`pm ${it.approverType === a.key ? a.cls : 'p-none'}`}
-                          style={{ border: 'none', cursor: busy ? 'default' : 'pointer', fontFamily: 'inherit' }}
+                          style={{
+                            border: 'none',
+                            cursor: savingType === it.requestType ? 'default' : 'pointer',
+                            fontFamily: 'inherit',
+                          }}
                           title={`${REQUEST_TYPE_LABEL[it.requestType]} → ${a.label} 승인`}
                         >
                           {it.approverType === a.key ? '지정' : '—'}
                         </button>
                       </td>
                     ))}
-                    {escalation && (
-                      <>
-                        <td>
-                          <select
-                            className="sel"
-                            style={{ width: 104, padding: '4px 8px', fontSize: 11.5 }}
-                            disabled={busy || !it.approverType}
-                            value={it.escalationApproverType ?? ''}
-                            onChange={(e) =>
-                              void apply(it, {
-                                escalationApproverType: e.target.value === '' ? null : (e.target.value as ApproverType),
-                              })
-                            }
-                          >
-                            <option value="">없음</option>
-                            {APPROVERS.map((a) => (
-                              <option key={a.key} value={a.key}>
-                                → {a.label}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td>
-                          <select
-                            className="sel"
-                            style={{ width: 96, padding: '4px 8px', fontSize: 11.5 }}
-                            disabled={busy || !it.approverType}
-                            value={it.timeoutMinutes ?? ''}
-                            onChange={(e) =>
-                              void apply(it, { timeoutMinutes: e.target.value === '' ? null : Number(e.target.value) })
-                            }
-                          >
-                            <option value="">없음</option>
-                            {TIMEOUT_CHOICES.map((m) => (
-                              <option key={m} value={m}>
-                                {m}분
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                      </>
-                    )}
-                    <td style={{ textAlign: 'left', fontSize: 11.5, color: it.configured ? 'var(--muted)' : 'var(--red)' }}>
+                    <td>
+                      <select
+                        className="sel"
+                        style={{ width: 104, padding: '4px 8px', fontSize: 11.5 }}
+                        disabled={savingType === it.requestType || !it.approverType}
+                        value={it.escalationApproverType ?? ''}
+                        onChange={(e) =>
+                          void apply(it, {
+                            escalationApproverType: e.target.value === '' ? null : (e.target.value as ApproverType),
+                          })
+                        }
+                      >
+                        {/* ★ 옵션에 '→' 를 붙이지 않는다. 열 제목이 이미 '미응답 시 전환' 이라
+                               같은 말을 두 번 하고, '없음' 에는 화살표가 없어 줄도 안 맞았다 */}
+                        <option value="">없음</option>
+                        {APPROVERS.map((a) => (
+                          <option key={a.key} value={a.key}>
+                            {a.label}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td>
+                      <select
+                        className="sel"
+                        style={{ width: 96, padding: '4px 8px', fontSize: 11.5 }}
+                        disabled={savingType === it.requestType || !it.approverType}
+                        value={it.timeoutMinutes ?? ''}
+                        onChange={(e) =>
+                          void apply(it, { timeoutMinutes: e.target.value === '' ? null : Number(e.target.value) })
+                        }
+                      >
+                        {/* ★ 서버 값이 후보에 없으면 `<select>` 는 **아무것도 안 고른 상태**가 되어
+                               '없음' 으로 보인다 — 실제로는 10분이 걸려 있는데 안 걸린 것처럼 읽혔다
+                               (와이파이 해제·정기일정이 10분이라 두 줄이 그랬다, 2026-09-21).
+                               지금 값을 후보에 섞어서 **서버에 있는 것은 반드시 보이게** 한다 */}
+                        <option value="">없음</option>
+                        {[...new Set([...TIMEOUT_CHOICES, ...(it.timeoutMinutes ? [it.timeoutMinutes] : [])])]
+                          .sort((a, b) => a - b)
+                          .map((m) => (
+                            <option key={m} value={m}>
+                              {m}분
+                            </option>
+                          ))}
+                      </select>
+                    </td>
+                    <td style={{ textAlign: 'left', fontSize: 11.5, whiteSpace: 'nowrap', color: it.configured ? 'var(--muted)' : 'var(--red)' }}>
                       {it.configured
                         ? it.copiedFrom
                           ? '전년도에서 복사됨'
@@ -313,9 +707,11 @@ function Content() {
               <span className="pm p-own">담임</span> 담당 반 교사
             </span>
             <span>
-              <span className="pm p-read">학부모</span> 앱 푸시 → 승인
+              <span className="pm p-read">학부모</span> 앱 알림 → 승인
             </span>
-            <span style={{ color: 'var(--amber)', fontWeight: 700 }}>* 응답 제한시간 경과 시 자동 에스컬레이션</span>
+            <span style={{ color: 'var(--amber)', fontWeight: 700 }}>
+              * 정해진 시간 안에 답이 없으면 다음 사람에게 자동으로 넘어갑니다
+            </span>
           </div>
         </div>
       </div>
@@ -327,17 +723,18 @@ function Content() {
               <span className="ico">
                 <Icon name="arrow-right" size={15} />
               </span>
-              에스컬레이션 흐름 (0723 반영)
+              승인이 넘어가는 순서
             </div>
           </div>
           <div className="card-sec-b">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {[
-                { n: 1, t: '학생이 앱에서 신청', d: 'approval_requests 생성 · 상태 대기', c: 'var(--mint)' },
-                { n: 2, t: '학부모에게 푸시', d: 'approver_type = PARENT 인 항목', c: 'var(--blue)' },
-                { n: 3, t: '응답 제한시간 경과', d: '미응답 시 자동 전환 (시간 미확약)', c: 'var(--amber)' },
-                { n: 4, t: '담임에게 재라우팅', d: 'escalate_to = TEACHER', c: 'var(--violet)' },
-                { n: 5, t: '승인 / 반려 확정', d: '출결·벌점에 반영', c: 'var(--green)' },
+                /* 코드·테이블 이름은 파일 상단 주석으로 내렸다(CLAUDE.md 1-1) */
+                { n: 1, t: '학생이 앱에서 신청', d: '승인 대기 상태로 접수됩니다', c: 'var(--mint)' },
+                { n: 2, t: '학부모에게 알림', d: '학부모가 승인하도록 정한 항목만', c: 'var(--blue)' },
+                { n: 3, t: '정해진 시간이 지나면', d: '학부모가 답하지 않은 경우입니다', c: 'var(--amber)' },
+                { n: 4, t: '담임에게 넘어감', d: '항목마다 넘길 사람을 정해둡니다', c: 'var(--violet)' },
+                { n: 5, t: '승인 또는 반려', d: '출결·상벌점에 반영됩니다', c: 'var(--green)' },
               ].map((s) => (
                 <div key={s.n} style={{ display: 'flex', gap: 11, alignItems: 'flex-start' }}>
                   <span
@@ -375,19 +772,27 @@ function Content() {
               기본 정책
             </div>
           </div>
+          {/* ★ '승인 대기 UI (시안 1/2)' 줄은 지웠다. 이 화면은 원본 시안이 없는
+                 **신규개발**이고(`menu.ts` 에 refHtml 없음), '시안1' 은 0723 회의에서
+                 **이미 정해진 결론**이다("승인 대기 UI = 시안1"). 정해진 것을 매번 고르게
+                 하는 칸이었고, 시안1·2 가 뭐가 다른지는 레포에 기록도 없다(2026-09-21).
+             ★ 남은 셋은 **진짜 설정인데 저장할 서버 경로가 없다.** 지우면 "원래 없던 설정" 이
+                 되어 백엔드에 요청할 것이 조용히 사라지므로(CLAUDE.md 1) 남겨두고 막는다.
+                 값을 바꿀 수 있는 것처럼 두면 바꿔놓고 저장된 줄 안다. */}
           <div className="card-sec-b">
-            <div className="frow">
-              <label>승인 대기 UI</label>
-              <select className="sel" defaultValue="시안 1">
-                <option>시안 1</option>
-                <option>시안 2</option>
-              </select>
+            <div className="note-box">
+              <div>
+                아래 값은 <b>아직 저장되지 않습니다.</b> 지금 동작하는 기준은 왼쪽 표의 항목별
+                설정이고, 여기 정책은 준비되는 대로 열립니다.
+              </div>
             </div>
+
             <div className="frow">
-              <label>기본 응답 제한</label>
+              {/* 표의 '전환까지' 와 같은 값이다 — 한 화면에서 두 이름으로 부르지 않는다 */}
+              <label>기본 전환 시간</label>
               <div className="two">
-                <input className="inp" type="number" defaultValue={120} />
-                <select className="sel">
+                <input className="inp" type="number" defaultValue={120} disabled data-soon title="준비 중입니다" />
+                <select className="sel" disabled data-soon title="준비 중입니다">
                   <option>분</option>
                   <option>시간</option>
                 </select>
@@ -396,8 +801,8 @@ function Content() {
             <div className="frow">
               <label>승인자 사전지정</label>
               <div style={{ paddingTop: 9 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
-                  <input type="checkbox" />
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--muted)' }}>
+                  <input type="checkbox" disabled data-soon title="준비 중입니다" />
                   입학 시 학부모 승인자를 미리 지정
                 </label>
               </div>
@@ -405,8 +810,8 @@ function Content() {
             <div className="frow">
               <label>벌점 연계</label>
               <div style={{ paddingTop: 9 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
-                  <input type="checkbox" defaultChecked />
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--muted)' }}>
+                  <input type="checkbox" defaultChecked disabled data-soon title="준비 중입니다" />
                   벌점 확정 후에는 사유 승인 불가
                 </label>
               </div>
@@ -414,6 +819,8 @@ function Content() {
           </div>
         </div>
       </div>
+
+      <FirewallSection academyId={academyId} />
     </div>
   )
 }
@@ -485,6 +892,8 @@ function HistoryButton() {
   const [rows, setRows] = useState<ApprovalBoardRow[]>([])
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  /* 상태로 거른다 — '대기 중' 이 관리자용 진행 중 목록이다(/admin/approvals 는 담임 전용이라 이걸 쓴다) */
+  const [status, setStatus] = useState<'' | 'PENDING' | 'APPROVED' | 'REJECTED'>('')
 
   useEffect(() => {
     if (!open || academyId === null) return
@@ -492,14 +901,14 @@ function HistoryButton() {
     setLoading(true)
     setErr(null)
     /* 기본 30일. 기간을 안 주면 서버가 전체를 훑어 느려지고, 이력은 최근 것부터 본다 */
-    listApprovalBoard({ academyId, from: addDaysStr(todayStr(), -30), to: todayStr() })
+    listApprovalBoard({ academyId, from: addDaysStr(todayStr(), -30), to: todayStr(), status: status || undefined })
       .then((v) => alive && setRows(v.rows))
       .catch((e) => alive && setErr(e instanceof ApiError ? e.message : '승인 이력을 불러오지 못했습니다.'))
       .finally(() => alive && setLoading(false))
     return () => {
       alive = false
     }
-  }, [open, academyId])
+  }, [open, academyId, status])
 
   return (
     <>
@@ -519,18 +928,40 @@ function HistoryButton() {
           confirmLabel="닫기"
           /* 조회만 하는 모달이라 '취소'를 감춘다 — 되돌릴 것이 없다 */
           hideCancel
+          /* 폭은 모달이 정한다. 안쪽에 minWidth 를 박으면 바깥 .mo 가 440px 에 묶여 있어
+             내용이 잘린다 — 특강 상세에서 실제로 그렇게 잘려 있었다(2026-09-14) */
+          wide
           onConfirm={() => setOpen(false)}
           onClose={() => setOpen(false)}
         >
-          <div style={{ minWidth: 640 }}>
+          <div>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+              {(
+                [
+                  ['', '전체'],
+                  ['PENDING', '대기 중'],
+                  ['APPROVED', '승인'],
+                  ['REJECTED', '반려'],
+                ] as const
+              ).map(([k, label]) => (
+                <button key={k} type="button" className={`chip${status === k ? ' on' : ''}`} onClick={() => setStatus(k)}>
+                  {label}
+                </button>
+              ))}
+            </div>
             <DataTable
               columns={HISTORY_COLUMNS}
               rows={rows}
               rowKey={(r) => String(r.id)}
               loading={loading}
               pageSize={10}
-              countLabel={<>최근 30일 <b>{rows.length}</b>건</>}
-              emptyText={err ?? '최근 30일에 처리된 승인이 없습니다.'}
+              countLabel={
+                <>
+                  최근 30일 {status === 'PENDING' ? '대기 중' : status === 'APPROVED' ? '승인' : status === 'REJECTED' ? '반려' : ''}{' '}
+                  <b>{rows.length}</b>건
+                </>
+              }
+              emptyText={err ?? (status === 'PENDING' ? '지금 대기 중인 승인이 없습니다.' : status === '' ? '최근 30일 승인 요청이 없습니다.' : '최근 30일에 처리된 승인이 없습니다.')}
             />
           </div>
         </Modal>

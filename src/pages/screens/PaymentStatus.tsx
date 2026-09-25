@@ -8,6 +8,8 @@ import {
   type DateRangeValue,
   type Field,
   type SearchValues,
+  Modal,
+  todayStr,
 } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
@@ -18,12 +20,28 @@ import {
   paymentLabel,
   BILLING_TYPE_LABEL,
   PAY_METHOD_LABEL,
+  createBilling,
+  deleteBilling,
+  exportReceiptStatus,
+  deletePayment,
   getReceiptSummary,
   listReceiptStatus,
+  recordPayment,
   type BillingType,
+  type PayMethod,
   type ReceiptRow,
   type ReceiptSummary,
 } from '../../api/billing'
+import {
+  SEAT_TYPE_LABEL,
+  getFeeTable,
+  getRemainingDays,
+  issueAdmissionBilling,
+  issueMonthlyBilling,
+  type FeeTableRow,
+  type SeatType,
+} from '../../api/tuition'
+import { GRADE_LABEL, searchStudents, type Student } from '../../api/students'
 import type { Mockup } from './types'
 import './payment.css'
 
@@ -43,6 +61,18 @@ import './payment.css'
  * ★ 한 청구에 결제가 여러 건일 수 있다(부분납). 컬럼은 마지막 결제를 대표로 보여주고
  *   여러 건이면 그 사실을 표시한다 — 합계는 receivedAmount 가 이미 갖고 있다.
  *
+ * ★ 청구 등록·수납·취소를 여기에 붙였다(2026-09-14). 표는 조회용으로 두고 **모두 모달**이다.
+ *   등록은 경로가 셋이다 — 교습비(월) · **입학 청구**(2026-09-25 추가) · 그 밖.
+ *   ★ 입학 청구는 **입학금이 아니다.** 입학일이 1일이 아니면 **그 달 일할분 + 다음 달 정액**
+ *     두 건이 한 번에 만들어진다(규정). 금액을 화면이 정하면 안 되는 청구다.
+ *   교습비는 `POST /tuition/billings/monthly` 로 만든다 — 금액을 화면이 정하지 않고
+ *   단가표와 교습일수를 서버가 본다. 그 밖(특강비·급식비·예외)은 금액을 직접 적는
+ *   `POST /billings` 다. 둘을 바꿔 쓰면 단가표와 어긋난 금액이 조용히 들어간다.
+ *
+ * ★ 청구 취소는 **수납 거래를 먼저 지우고** 청구를 취소한다. 서버도 2026-09-16 부터
+ *   같은 순서를 강제한다(수납이 남아 있으면 400). 그래도 모달이 수납액을 먼저 보여준다 —
+ *   취소는 되돌릴 수 없고, 얼마가 함께 사라지는지는 누르기 전에 알아야 한다.
+ *
  * ★ 아직 없는 것: 지점(행에는 없다. 조회가 지점 단위라 헤더로 대신한다).
  *
  * ★ 지점은 행에 없지만 조회 자체가 지점 단위다(academyId). 선택한 지점을 헤더에 보여준다.
@@ -51,6 +81,57 @@ import './payment.css'
 
 type Method = '카드' | '가상계좌' | '현금'
 type Kind = '등록비' | '교습비' | '특강비' | '급식비'
+
+/**
+ * 청구 등록 입력.
+ *
+ * ★ `mode` 로 **경로가 셋으로 갈린다.** 교습비는 단가표를 서버가 보는 `monthly`,
+ *   입학 청구는 입학일로 일할 계산하는 `admission`, 그 밖은 금액을 직접 적는 `etc` 다.
+ *   한 모달에 담되 섞이지 않게 갈라 둔다.
+ *
+ * ★ 입학 청구를 `etc`(금액 직접 입력)로 넣지 않는다. 서버가 **그 달 교습비를 남은 교습일수로
+ *   일할 계산**하고, 1일 입학이 아니면 **다음 달분까지 두 건**을 만든다 — 직원이 달력을
+ *   세서 적을 값이 아니다(휴일이 지점마다 다르다).
+ */
+interface IssueDraft {
+  mode: 'monthly' | 'admission' | 'etc'
+  enrollmentId: string
+  /** monthly */
+  month: string
+  /** admission — 학생을 고르면 학생 정보의 입학일로 채운다 */
+  admissionDate: string
+  /** admission — 남은 교습일수. 서버 제안값을 채워 두고 **데스크가 고칠 수 있게** 둔다 */
+  remainingDays: string
+  seatType: SeatType
+  discountRate: string
+  /** etc */
+  name: string
+  billingType: BillingType
+  suppliedAmount: string
+  discountAmount: string
+  /** 공통 */
+  dueDate: string
+}
+
+function thisMonth(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+const EMPTY_ISSUE: IssueDraft = {
+  mode: 'monthly',
+  enrollmentId: '',
+  month: thisMonth(),
+  admissionDate: '',
+  remainingDays: '',
+  seatType: 'GENERAL',
+  discountRate: '',
+  name: '',
+  billingType: 'LECTURE',
+  suppliedAmount: '',
+  discountAmount: '',
+  dueDate: '',
+}
 
 const KINDS: Kind[] = ['등록비', '교습비', '특강비', '급식비']
 const METHODS: Method[] = ['카드', '가상계좌', '현금']
@@ -84,6 +165,8 @@ const STATUS_TONE: Record<string, string> = {
 const wonOf = (n: number) => `${n.toLocaleString()}원`
 
 /** 목업의 항목 이름 → 서버 billingType. 등록비는 서버에 대응 값이 없어 기타로 간다 */
+const METHOD_TO_CODE: Record<Method, PayMethod> = { 카드: 'CARD', 가상계좌: 'VBANK', 현금: 'CASH' }
+
 const KIND_TO_TYPE: Record<Kind, BillingType> = {
   등록비: 'ETC',
   교습비: 'TUITION',
@@ -394,17 +477,22 @@ function Content() {
 
   const period = query.period as DateRangeValue | undefined
   const params = useMemo(() => {
-    const kind = query.kind
-    // chips 는 배열이다. 서버는 type 하나만 받으므로 첫 값만 보낸다
-    const type = Array.isArray(kind) && kind.length > 0 ? (KIND_TO_TYPE[kind[0] as Kind] ?? undefined) : undefined
+    /* ★ 2026-09-25 부터 서버가 항목 **여럿**·검색어·결제수단을 받는다(목록·합계·엑셀이 같은 조건).
+         그전에는 항목 하나만 받아 나머지를 화면에서 걸렀고, 그래서 합계가 목록과 어긋났다.
+         결제수단만 아직 하나라 여럿 고르면 그것만 화면에서 거른다. */
+    const kinds = Array.isArray(query.kind) ? (query.kind as Kind[]) : []
+    const methods = Array.isArray(query.method) ? (query.method as Method[]) : []
     return {
-      year: 2026,
+      // 연도를 2026 으로 박아 두었었다 — 해가 바뀌면 조용히 작년 것을 보여준다. 기간 시작일의 해를 쓴다
+      year: period?.from ? Number(period.from.slice(0, 4)) : new Date().getFullYear(),
       academyId: academyId ?? undefined,
       from: period?.from || undefined,
       to: period?.to || undefined,
-      type,
+      type: kinds.length > 0 ? kinds.map((k) => KIND_TO_TYPE[k]) : undefined,
+      keyword: typeof query.keyword === 'string' && query.keyword.trim() !== '' ? query.keyword.trim() : undefined,
+      method: methods.length === 1 ? METHOD_TO_CODE[methods[0]] : undefined,
     }
-  }, [academyId, period?.from, period?.to, query.kind])
+  }, [academyId, period?.from, period?.to, query.kind, query.keyword, query.method])
 
   const load = useCallback(async () => {
     /* ★ 지점을 고르기 전에는 부르지 않는다. 예전에는 academyId 없이 먼저 던지고
@@ -437,25 +525,269 @@ function Content() {
 
   // 미납은 서버 조건(unpaidOnly)이 있지만, 같은 조회 결과에서 걸러도 값이 같다.
   // 요청을 하나 아끼려고 여기서 거른다 — unpaid 는 서버가 계산해준 값이다.
-  const unpaid = useMemo(() => rows.filter((r) => r.unpaid > 0), [rows])
+  /* 서버가 안 받는 조건(검색어 · 결제수단 · 항목 여럿)은 여기서 거른다. 이 목록은 서버가 조건 안의
+     전량을 주므로 화면에서 걸러도 빠지는 줄이 없다. ★ 청구기수는 뜻이 정해지지 않아 아직 안 먹는다 */
+  /* 서버가 못 받는 조건만 남았다 — 결제수단을 **둘 이상** 고른 경우다.
+     하나면 서버가 거르므로 여기서는 아무것도 안 한다 */
+  const filtered = useMemo(() => {
+    const methods = Array.isArray(query.method) ? (query.method as Method[]).map((m) => METHOD_TO_CODE[m]) : []
+    if (methods.length < 2) return rows
+    return rows.filter((r) => r.payments.some((p) => methods.includes(p.method)))
+  }, [rows, query.method])
+  /** 화면에서 걸렀으면 서버 요약과 줄이 달라진다 — 그때는 합계를 걸러진 줄로 낸다 */
+  const clientFiltered = filtered.length !== rows.length
+
+  const unpaid = useMemo(() => filtered.filter((r) => r.unpaid > 0), [filtered])
+
+  /* ── 청구 등록 · 수납 · 취소 ── */
+
+  const [students, setStudents] = useState<Student[]>([])
+  const [issueOpen, setIssueOpen] = useState(false)
+  const [issue, setIssue] = useState<IssueDraft>(EMPTY_ISSUE)
+  const [pay, setPay] = useState<{ row: ReceiptRow; amount: string; method: PayMethod } | null>(null)
+  const [cancelRow, setCancelRow] = useState<ReceiptRow | null>(null)
+  const [actBusy, setActBusy] = useState(false)
+  const [actErr, setActErr] = useState<string | null>(null)
+  const [actDone, setActDone] = useState<string | null>(null)
+  /* 교습비는 서버가 금액을 정한다. 그 값을 등록 전에 보여주지 않으면 얼마가 청구될지
+     모르고 누르게 된다 — 단가표를 미리 읽어 합계를 띄운다 */
+  /* 미납자 표의 체크박스. DataTable 은 selectable 만으로는 못 켜진다 —
+     selected/onSelectedChange 를 안 주면 값이 undefined 로 고정돼 **눌러도 안 찍힌다** */
+  const [unpaidSel, setUnpaidSel] = useState<string[]>([])
+  const [fee, setFee] = useState<FeeTableRow[] | null>(null)
+  const [feeErr, setFeeErr] = useState<string | null>(null)
+  /* 입학금은 남은 교습일수로 일할 계산된다. 화면이 달력으로 세지 않는다 — 휴일이 지점마다 다르다.
+     보여주기만 하고 **보내지는 않는다**. 서버가 다시 세게 두는 편이 등록 시점과 어긋나지 않는다 */
+  const [remainDays, setRemainDays] = useState<number | null>(null)
+
+  /* 청구를 만들려면 학생을 골라야 한다. 재원생만 — 퇴원생에게 새 청구를 낼 일은 없다 */
+  useEffect(() => {
+    if (academyId === null) {
+      setStudents([])
+      return
+    }
+    let cancelled = false
+    searchStudents({ status: 'ENROLLED', size: 2000, academyId })
+      .then((p) => !cancelled && setStudents(p.rows))
+      .catch(() => !cancelled && setStudents([]))
+    return () => {
+      cancelled = true
+    }
+  }, [academyId])
+
+  const issueStudent = students.find((st) => String(st.enrollmentId) === issue.enrollmentId) ?? null
+
+  /* 입학일은 학생 정보에 있다 — 직원이 다시 적게 하면 오타로 일할 계산이 통째로 틀어진다.
+     비어 있는 학생(예전 자료)이 있어 칸은 고칠 수 있게 둔다 */
+  useEffect(() => {
+    if (issue.mode !== 'admission' || issueStudent === null) return
+    const at = issueStudent.admissionDate ?? ''
+    setIssue((prev) =>
+      prev.mode === 'admission' && prev.enrollmentId === String(issueStudent.enrollmentId) && prev.admissionDate === ''
+        ? { ...prev, admissionDate: at }
+        : prev,
+    )
+  }, [issue.mode, issueStudent])
+
+  /* 남은 교습일수. 입학일·지점이 정해져야 답이 나온다 */
+  useEffect(() => {
+    if (!issueOpen || issue.mode !== 'admission' || academyId === null || issue.admissionDate === '') {
+      setRemainDays(null)
+      return
+    }
+    let cancelled = false
+    getRemainingDays({ academyId, admissionDate: issue.admissionDate })
+      .then((d) => {
+        if (cancelled) return
+        setRemainDays(d)
+        // 제안값을 칸에 채워 둔다. 데스크가 고치면 그 값이 이긴다
+        setIssue((prev) => (prev.mode === 'admission' ? { ...prev, remainingDays: String(d) } : prev))
+      })
+      .catch(() => !cancelled && setRemainDays(null))
+    return () => {
+      cancelled = true
+    }
+  }, [issueOpen, issue.mode, issue.admissionDate, academyId])
+
+  /* 학생·월·좌석이 정해지면 단가표를 읽는다. 학년에 따라 단가가 달라 학생이 먼저다 */
+  useEffect(() => {
+    if (!issueOpen || issue.mode !== 'monthly' || issueStudent === null || issue.month === '' || academyId === null) {
+      setFee(null)
+      setFeeErr(null)
+      return
+    }
+    let cancelled = false
+    setFeeErr(null)
+    getFeeTable(issue.month, issueStudent.grade, issue.seatType, academyId)
+      .then((r) => !cancelled && setFee(r))
+      .catch((err) => {
+        if (cancelled) return
+        setFee(null)
+        // 단가가 없는 달이 실제로 있다. 등록을 눌러보고 알게 하지 않는다
+        setFeeErr(err instanceof ApiError ? err.message : '단가표를 불러오지 못했습니다.')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [issueOpen, issue.mode, issue.month, issue.seatType, issueStudent, academyId])
+
+  /** 고른 할인율에 해당하는 줄. 없으면 할인 0% 줄을 쓴다 */
+  const feeRow = useMemo(() => {
+    if (fee === null || fee.length === 0) return null
+    const want = issue.discountRate.trim() === '' ? 0 : Number(issue.discountRate)
+    return fee.find((r) => r.discountRate === want) ?? null
+  }, [fee, issue.discountRate])
+
+  async function submitIssue() {
+    setActBusy(true)
+    setActErr(null)
+    try {
+      const enrollmentId = Number(issue.enrollmentId)
+      if (issue.mode === 'monthly') {
+        const r = await issueMonthlyBilling({
+          enrollmentId,
+          month: issue.month,
+          seatType: issue.seatType,
+          discountRate: issue.discountRate.trim() === '' ? undefined : Number(issue.discountRate),
+          dueDate: issue.dueDate || undefined,
+        })
+        setActDone(`${r.name} ${r.billedAmount.toLocaleString()}원으로 등록했습니다.`)
+      } else if (issue.mode === 'admission') {
+        /* 금액을 안 보낸다 — 입학금과 그 달 교습비 일할분을 서버가 계산한다.
+           그 달 교습비가 이미 있으면 409 이고, 그 문구를 그대로 보여준다 */
+        const made = await issueAdmissionBilling({
+          enrollmentId,
+          admissionDate: issue.admissionDate,
+          seatType: issue.seatType,
+          discountRate: issue.discountRate.trim() === '' ? undefined : Number(issue.discountRate),
+          remainingDays: issue.remainingDays.trim() === '' ? undefined : Number(issue.remainingDays),
+          dueDate: issue.dueDate || undefined,
+        })
+        /* 한 건이 아니다 — 입학금과 그 달 교습비가 따로 만들어진다.
+           무엇이 몇 건 생겼는지 그대로 알린다. 합계만 말하면 두 건인 줄 모른다 */
+        const total = made.reduce((a, b) => a + b.billedAmount, 0)
+        setActDone(
+          `${made.map((b) => b.name).join(' · ')} — 청구 ${made.length}건 합계 ${total.toLocaleString()}원으로 등록했습니다.`,
+        )
+      } else {
+        const r = await createBilling({
+          enrollmentId,
+          name: issue.name.trim(),
+          billingType: issue.billingType,
+          suppliedAmount: Number(issue.suppliedAmount),
+          discountAmount: issue.discountAmount.trim() === '' ? undefined : Number(issue.discountAmount),
+          dueDate: issue.dueDate || undefined,
+        })
+        setActDone(`${r.name} ${r.billedAmount.toLocaleString()}원으로 등록했습니다.`)
+      }
+      setIssueOpen(false)
+      setIssue(EMPTY_ISSUE)
+      await load()
+    } catch (err) {
+      /* 409 는 "이미 그 달 청구가 있다"는 뜻이다. 서버 문구가 그대로 쓸 만하다 */
+      setActErr(err instanceof ApiError ? err.message : '등록하지 못했습니다.')
+    } finally {
+      setActBusy(false)
+    }
+  }
+
+  async function submitPay() {
+    if (!pay) return
+    setActBusy(true)
+    setActErr(null)
+    try {
+      await recordPayment(pay.row.billingId, Number(pay.amount), pay.method)
+      setActDone(`${pay.row.studentName} · ${Number(pay.amount).toLocaleString()}원 수납했습니다.`)
+      setPay(null)
+      await load()
+    } catch (err) {
+      setActErr(err instanceof ApiError ? err.message : '수납하지 못했습니다.')
+    } finally {
+      setActBusy(false)
+    }
+  }
+
+  async function submitCancel() {
+    if (!cancelRow) return
+    setActBusy(true)
+    setActErr(null)
+    try {
+      /* 수납이 붙어 있으면 그 거래부터 취소한다. 청구만 취소하면 받은 돈이
+         매출장에서 통째로 사라진다 — 어디에도 안 보이는 수납이 된다 */
+      for (const p of cancelRow.payments) await deletePayment(p.id)
+      await deleteBilling(cancelRow.billingId)
+      setActDone(
+        cancelRow.payments.length > 0
+          ? `청구를 취소하고 수납 ${cancelRow.payments.length}건도 함께 취소했습니다.`
+          : '청구를 취소했습니다.',
+      )
+      setCancelRow(null)
+      await load()
+    } catch (err) {
+      setActErr(err instanceof ApiError ? err.message : '취소하지 못했습니다.')
+    } finally {
+      setActBusy(false)
+    }
+  }
+
+  /** 표 끝에 붙는 행 액션. 모듈 상수 COLUMNS 는 그대로 두고 여기서만 더한다 */
+  const columnsWithAct: Column<ReceiptRow>[] = useMemo(
+    () => [
+      ...COLUMNS,
+      {
+        key: 'act',
+        header: '',
+        width: '116px',
+        align: 'center',
+        value: () => '',
+        render: (r) => (
+          <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+            <button
+              className="btn"
+              style={{ padding: '4px 9px', fontSize: 11.5 }}
+              disabled={r.unpaid <= 0}
+              title={r.unpaid <= 0 ? '이미 완납된 청구입니다' : undefined}
+              onClick={() => {
+                setActErr(null)
+                setPay({ row: r, amount: String(r.unpaid), method: 'CARD' })
+              }}
+            >
+              수납
+            </button>
+            <button
+              className="btn"
+              style={{ padding: '4px 9px', fontSize: 11.5, color: 'var(--red)' }}
+              onClick={() => {
+                setActErr(null)
+                setCancelRow(r)
+              }}
+            >
+              취소
+            </button>
+          </div>
+        ),
+      },
+    ],
+    [],
+  )
 
   const sum = useMemo(() => {
     // 결제수단별 집계는 서버 요약에 없다. 행의 payments[] 를 더해 만든다 —
     // 조회 조건 안에서만 맞는 값이라 "조회 조건 기준"이라고 적어둔다
     const byMethod = new Map<string, number>()
-    for (const r of rows) {
+    for (const r of filtered) {
       for (const p of r.payments) byMethod.set(p.method, (byMethod.get(p.method) ?? 0) + p.amount)
     }
+    const add = (f: (r: ReceiptRow) => number) => filtered.reduce((a, r) => a + f(r), 0)
     return {
-      total: summary?.receivedAmount ?? 0,
-      billed: summary?.billedAmount ?? 0,
-      due: summary?.unpaidAmount ?? 0,
-      unpaidCount: summary?.unpaidCount ?? 0,
-      byType: summary?.unpaidByType ?? {},
+      total: clientFiltered ? add((r) => r.receivedAmount) : (summary?.receivedAmount ?? 0),
+      billed: clientFiltered ? add((r) => r.billedAmount) : (summary?.billedAmount ?? 0),
+      due: clientFiltered ? add((r) => r.unpaid) : (summary?.unpaidAmount ?? 0),
+      unpaidCount: clientFiltered ? filtered.filter((r) => r.unpaid > 0).length : (summary?.unpaidCount ?? 0),
       card: byMethod.get('CARD') ?? 0,
       vbank: byMethod.get('VBANK') ?? 0,
     }
-  }, [summary, rows])
+  }, [summary, filtered, clientFiltered])
 
   return (
     <>
@@ -505,23 +837,22 @@ function Content() {
         </div>
       )}
 
-      {tab !== 'discount' && (
-        <SearchForm
-          fields={FIELDS}
-          onSearch={setQuery}
-          presetKey="payment"
-          headerRight={
-            <span className="mk supplement" title="RBAC: SUPER_ADMIN / BRANCH_ADMIN 전체, STAFF 조회만">
-              <Icon name="shield-check" size={11} /> STAFF 조회 전용
-            </span>
-          }
-        />
-      )}
+      {/* 할인 정책 탭에서도 감추지 않는다 — 감추면 탭 줄이 320px 위로 튀었다(2026-09-21 사용자 결정) */}
+      <SearchForm
+        fields={FIELDS}
+        onSearch={setQuery}
+        presetKey="RECEIPT_STATUS"
+        headerRight={
+          <span className="mk supplement" title="직원 계정은 조회만 할 수 있습니다">
+            <Icon name="shield-check" size={11} /> STAFF 조회 전용
+          </span>
+        }
+      />
 
       <div className="card-sec">
         <Tabs
           items={[
-            { key: 'all', label: '통합 매출장', count: rows.length },
+            { key: 'all', label: '통합 매출장', count: filtered.length },
             { key: 'unpaid', label: '미납자 관리', count: unpaid.length },
             { key: 'discount', label: '할인 정책 · 청구액 계산', count: DISCOUNTS.filter((d) => d.active).length },
           ]}
@@ -551,6 +882,7 @@ function Content() {
               <div className="split-3-2">
                 <div>
                   <DataTable
+                    nowrap
                     columns={DISCOUNT_COLUMNS}
                     rows={DISCOUNTS}
                     rowKey={(r) => r.id}
@@ -695,11 +1027,13 @@ function Content() {
                         <Icon name="shield" size={16} />
                       </div>
                       <div>
-                        <div className="tt">이 금액은 서버가 다시 계산해야 합니다</div>
+                        {/* ★ 이 화면에서 계산한 값을 그대로 결제에 넘기면 결제 금액을 조작할 수 있다.
+                               서버가 같은 정책으로 재계산해 금액이 일치할 때만 결제창을 띄우고,
+                               승인 결과도 서버가 검증해야 한다(menu.internal 보안 항목). */}
+                        <div className="tt">실제 결제 금액은 결제할 때 다시 계산됩니다</div>
                         <div className="tx">
-                          이 화면에서 계산한 값을 그대로 결제에 넘기면 <b>결제 금액을 조작할 수 있습니다.</b> 서버가 같은
-                          정책으로 재계산해 <b>금액이 일치할 때만 결제창을 띄우고</b>, 승인 결과도 서버가 검증해야
-                          합니다. 이 화면은 정책을 입력하고 결과를 확인하는 용도입니다.
+                          이 화면은 할인 정책을 입력하고 청구액을 <b>미리 계산해 보는 곳</b>입니다. 결제할 때 같은 정책으로
+                          다시 계산해 <b>금액이 맞을 때만 결제창이 뜹니다.</b>
                         </div>
                       </div>
                     </div>
@@ -711,21 +1045,45 @@ function Content() {
 
           {tab === 'all' && (
             <DataTable
-              columns={COLUMNS}
-              rows={rows}
+              nowrap
+              columns={columnsWithAct}
+              rows={filtered}
               rowKey={(r) => String(r.billingId)}
               masked={masked}
               loading={loading}
               pageSize={12}
               countLabel={
                 <>
-                  청구 <b>{rows.length}</b>건 · 수납 {sum.total.toLocaleString()}원
+                  청구 <b>{filtered.length}</b>건 · 수납 {sum.total.toLocaleString()}원
                 </>
               }
               toolbar={
                 <>
+                  <button
+                    className="btn pri"
+                    disabled={academyId === null}
+                    onClick={() => {
+                      setActErr(null)
+                      setIssue(EMPTY_ISSUE)
+                      setIssueOpen(true)
+                    }}
+                  >
+                    <Icon name="plus" size={14} /> 청구 등록
+                  </button>
                   <MaskToggle masked={masked} onChange={setMasked} />
-                  <ExcelButton filename="통합_매출장" columns={COLUMNS} rows={rows} masked={masked} />
+                  {/* 서버 엑셀(2026-09-25). 결제수단을 둘 이상 고른 경우만 화면이 거르므로,
+                      그때는 파일이 화면보다 넓어진다 — 그 경우에만 화면 값으로 만든다 */}
+                  <ExcelButton
+                    filename="통합_매출장"
+                    columns={COLUMNS}
+                    rows={filtered}
+                    masked={masked}
+                    download={
+                      clientFiltered
+                        ? undefined
+                        : () => exportReceiptStatus({ ...params, unmask: !masked || undefined }, '통합_매출장.xlsx')
+                    }
+                  />
                 </>
               }
             />
@@ -733,10 +1091,13 @@ function Content() {
 
           {tab === 'unpaid' && (
             <DataTable
+              nowrap
               columns={UNPAID_COLUMNS}
               rows={unpaid}
               rowKey={(r) => String(r.billingId)}
               selectable
+              selected={unpaidSel}
+              onSelectedChange={setUnpaidSel}
               masked={masked}
               loading={loading}
               pageSize={12}
@@ -744,6 +1105,9 @@ function Content() {
                 <>
                   미납 <b>{sum.unpaidCount}</b>건 · {sum.due.toLocaleString()}원
                   <span style={{ color: 'var(--muted)' }}> (학생 수가 아니라 건수)</span>
+                  {unpaidSel.length > 0 && (
+                    <span style={{ color: 'var(--mint-d)', fontWeight: 700 }}> · {unpaidSel.length}건 선택</span>
+                  )}
                 </>
               }
               toolbar={
@@ -761,6 +1125,506 @@ function Content() {
         </div>
       </div>
 
+      {/* ── 청구 등록 ── */}
+      {issueOpen && (
+        <Modal
+          title="청구 등록"
+          sub="교습비·입학 청구는 서버가 계산하고, 그 밖은 금액을 직접 적습니다."
+          confirmLabel="등록"
+          busy={actBusy}
+          error={actErr}
+          confirmDisabled={
+            issue.enrollmentId === '' ||
+            (issue.mode === 'monthly'
+              ? issue.month.trim() === ''
+              : issue.mode === 'admission'
+                ? issue.admissionDate === '' || issue.remainingDays.trim() === ''
+                : issue.name.trim() === '' || issue.suppliedAmount.trim() === '')
+          }
+          onConfirm={() => void submitIssue()}
+          onClose={() => setIssueOpen(false)}
+        >
+          <div className="frow">
+            <label className="req">청구 종류</label>
+            {/* ★ .frow 는 112px + 1fr 2열 그리드다. 안내문을 컨트롤의 **형제**로 두면
+                   라벨 칸으로 떨어져 왼쪽에 눌려 붙는다 — 한 칸에 묶는다 */}
+            <div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  className={`btn${issue.mode === 'monthly' ? ' pri' : ''}`}
+                  onClick={() => setIssue({ ...issue, mode: 'monthly' })}
+                >
+                  교습비 (월)
+                </button>
+                <button
+                  type="button"
+                  className={`btn${issue.mode === 'admission' ? ' pri' : ''}`}
+                  onClick={() => setIssue({ ...issue, mode: 'admission' })}
+                >
+                  입학 (첫 달)
+                </button>
+                <button
+                  type="button"
+                  className={`btn${issue.mode === 'etc' ? ' pri' : ''}`}
+                  onClick={() => setIssue({ ...issue, mode: 'etc' })}
+                >
+                  특강비 · 급식비 · 그 밖
+                </button>
+              </div>
+              <div className="hint">
+                {issue.mode === 'monthly'
+                  ? '금액은 단가표와 그 달 교습일수로 계산됩니다. 아래에서 미리 확인하세요.'
+                  : issue.mode === 'admission'
+                    ? '입학일부터 남은 교습일수로 그 달 교습비를 계산합니다. 1일 입학이 아니면 다음 달분도 함께 청구됩니다.'
+                    : '금액을 직접 적습니다. 교습비는 위쪽으로 등록해야 단가표와 어긋나지 않습니다.'}
+              </div>
+            </div>
+          </div>
+
+          <div className="frow">
+            <label className="req">학생</label>
+            <select
+              className="sel"
+              value={issue.enrollmentId}
+              onChange={(e) => setIssue({ ...issue, enrollmentId: e.target.value })}
+            >
+              <option value="">선택하세요</option>
+              {students.map((st) => (
+                <option key={st.enrollmentId} value={String(st.enrollmentId)}>
+                  {st.studentNo ?? '-'} · {st.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {issue.mode === 'monthly' ? (
+            <>
+              <div className="frow">
+                <label className="req">청구 월</label>
+                <div>
+                  <input
+                    className="inp"
+                    type="month"
+                    value={issue.month}
+                    onChange={(e) => setIssue({ ...issue, month: e.target.value })}
+                  />
+                  <div className="hint">청구 한 건이 한 달분입니다. 같은 달을 두 번 등록할 수 없습니다.</div>
+                </div>
+              </div>
+              <div className="frow">
+                <label className="req">좌석 · 할인율</label>
+                <div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <select
+                      className="sel"
+                      value={issue.seatType}
+                      onChange={(e) => setIssue({ ...issue, seatType: e.target.value as SeatType })}
+                    >
+                      {(Object.keys(SEAT_TYPE_LABEL) as SeatType[]).map((t) => (
+                        <option key={t} value={t}>
+                          {SEAT_TYPE_LABEL[t]}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      className="inp"
+                      type="number"
+                      min={0}
+                      max={100}
+                      placeholder="할인율 %"
+                      value={issue.discountRate}
+                      onChange={(e) => setIssue({ ...issue, discountRate: e.target.value })}
+                    />
+                  </div>
+                  {/* 월 청구는 율, 아래 그 밖 청구는 금액이다 — 서버 계약이 그렇게 갈려 있다 */}
+                  <div className="hint">할인율은 퍼센트로 적습니다. 비우면 할인 없이 청구됩니다.</div>
+                </div>
+              </div>
+
+              {/* ── 청구될 금액 ── */}
+              {/* ★ 금액을 서버가 정하므로, 안 보여주면 **얼마가 청구되는지 모르고 누르게 된다.**
+                     단가표를 읽어 미리 띄운다 — 등록 뒤에 알게 하지 않는다 */}
+              <div className="frow">
+                <label>청구될 금액</label>
+                <div>
+                  {feeErr !== null ? (
+                    <div className="hint bad">{feeErr}</div>
+                  ) : issueStudent === null ? (
+                    <div className="hint">학생을 고르면 금액이 나옵니다.</div>
+                  ) : fee === null ? (
+                    <div className="hint">불러오는 중…</div>
+                  ) : feeRow === null ? (
+                    <div className="hint bad">
+                      할인율 {issue.discountRate || 0}% 단가가 없습니다. 등록된 할인율:{' '}
+                      {fee.map((r) => `${r.discountRate}%`).join(' · ')}
+                    </div>
+                  ) : (
+                    <>
+                      <table className="dt">
+                        <tbody>
+                          <tr>
+                            <td>교습비</td>
+                            <td style={{ textAlign: 'right' }}>{wonOf(feeRow.monthlyTuition)}</td>
+                          </tr>
+                          <tr>
+                            <td>독서실비</td>
+                            <td style={{ textAlign: 'right' }}>{wonOf(feeRow.monthlyStudyRoom)}</td>
+                          </tr>
+                          <tr>
+                            <td>
+                              <b>합계</b>
+                            </td>
+                            <td style={{ textAlign: 'right' }}>
+                              <b>{wonOf(feeRow.monthlyTotal)}</b>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                      <div className="hint">
+                        {GRADE_LABEL[issueStudent.grade] ?? issueStudent.grade} ·{' '}
+                        {SEAT_TYPE_LABEL[issue.seatType]} · 교습일수 {feeRow.teachingDays}일 기준
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : issue.mode === 'admission' ? (
+            <>
+              <div className="frow">
+                <label className="req">입학일</label>
+                <div>
+                  <input
+                    className="inp"
+                    type="date"
+                    value={issue.admissionDate}
+                    onChange={(e) => setIssue({ ...issue, admissionDate: e.target.value })}
+                  />
+                  <div className="hint">
+                    학생을 고르면 등록된 입학일이 들어옵니다. 이 날짜부터 그 달 교습비를 계산합니다.
+                  </div>
+                </div>
+              </div>
+              <div className="frow">
+                <label className="req">좌석 · 할인율</label>
+                <div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <select
+                      className="sel"
+                      value={issue.seatType}
+                      onChange={(e) => setIssue({ ...issue, seatType: e.target.value as SeatType })}
+                    >
+                      {(Object.keys(SEAT_TYPE_LABEL) as SeatType[]).map((t) => (
+                        <option key={t} value={t}>
+                          {SEAT_TYPE_LABEL[t]}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      className="inp"
+                      type="number"
+                      min={0}
+                      max={100}
+                      placeholder="할인율 %"
+                      value={issue.discountRate}
+                      onChange={(e) => setIssue({ ...issue, discountRate: e.target.value })}
+                    />
+                  </div>
+                  <div className="hint">할인율은 퍼센트로 적습니다. 비우면 할인 없이 청구됩니다.</div>
+                </div>
+              </div>
+              <div className="frow">
+                <label className="req">남은 교습일수</label>
+                <div>
+                  {/* ★ 서버 값을 그대로 쓰면 조용히 틀린다 — 서버는 그 달 교습일수 총합만 알고
+                         어느 날이 휴원일인지는 모른다. 데스크가 고칠 수 있어야 한다 */}
+                  <input
+                    className="inp"
+                    type="number"
+                    min={1}
+                    max={31}
+                    value={issue.remainingDays}
+                    onChange={(e) => setIssue({ ...issue, remainingDays: e.target.value })}
+                  />
+                  <div className="hint">
+                    {issue.admissionDate === ''
+                      ? '입학일을 고르면 일수가 채워집니다.'
+                      : remainDays === null
+                        ? '불러오는 중…'
+                        : `서버 제안값은 ${remainDays}일입니다. 휴원일이 있으면 고쳐서 등록하세요.`}
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="frow">
+                <label className="req">청구 이름</label>
+                <div>
+                  <input
+                    className="inp"
+                    placeholder="예: 2026년 10월 급식비"
+                    value={issue.name}
+                    onChange={(e) => setIssue({ ...issue, name: e.target.value })}
+                  />
+                  <div className="hint">청구서에 그대로 찍힙니다.</div>
+                </div>
+              </div>
+              <div className="frow">
+                <label className="req">항목 · 금액</label>
+                <div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                  <select
+                    className="sel"
+                    value={issue.billingType}
+                    onChange={(e) => setIssue({ ...issue, billingType: e.target.value as BillingType })}
+                  >
+                    {(Object.keys(BILLING_TYPE_LABEL) as BillingType[]).map((t) => (
+                      <option key={t} value={t}>
+                        {BILLING_TYPE_LABEL[t]}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    className="inp"
+                    type="number"
+                    min={0}
+                    placeholder="공급가"
+                    value={issue.suppliedAmount}
+                    onChange={(e) => setIssue({ ...issue, suppliedAmount: e.target.value })}
+                  />
+                  <input
+                    className="inp"
+                    type="number"
+                    min={0}
+                    placeholder="할인 금액"
+                    value={issue.discountAmount}
+                    onChange={(e) => setIssue({ ...issue, discountAmount: e.target.value })}
+                  />
+                  </div>
+                  <div className="hint">할인은 퍼센트가 아니라 금액으로 적습니다.</div>
+                </div>
+              </div>
+            </>
+          )}
+
+          <div className="frow">
+            <label>납기일</label>
+            <div>
+              <input
+                className="inp"
+                type="date"
+                value={issue.dueDate}
+                onChange={(e) => setIssue({ ...issue, dueDate: e.target.value })}
+              />
+              <div className="hint">비워 두면 납기일 없이 등록됩니다.</div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── 수납 ── */}
+      {pay && (
+        <Modal
+          title="수납 등록"
+          sub={`${pay.row.studentName} · ${pay.row.name}`}
+          confirmLabel="수납"
+          busy={actBusy}
+          error={actErr}
+          confirmDisabled={pay.amount.trim() === '' || Number(pay.amount) <= 0}
+          onConfirm={() => void submitPay()}
+          onClose={() => setPay(null)}
+        >
+          <div className="frow">
+            <label className="req">금액</label>
+            <div>
+              <input
+                className="inp"
+                type="number"
+                min={1}
+                value={pay.amount}
+                onChange={(e) => setPay({ ...pay, amount: e.target.value })}
+              />
+              {/* 부분납이면 여러 건이 쌓인다. 미납액을 기본값으로 넣어 두고 고치게 한다 */}
+              <div className="hint">
+                미납액 {pay.row.unpaid.toLocaleString()}원. 나눠 받으면 금액을 고쳐 적습니다.
+              </div>
+            </div>
+          </div>
+          <div className="frow">
+            <label className="req">수단</label>
+            <select
+              className="sel"
+              value={pay.method}
+              onChange={(e) => setPay({ ...pay, method: e.target.value as PayMethod })}
+            >
+              {(Object.keys(PAY_METHOD_LABEL) as PayMethod[]).map((m) => (
+                <option key={m} value={m}>
+                  {PAY_METHOD_LABEL[m]}
+                </option>
+              ))}
+            </select>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── 청구 취소 ── */}
+      {cancelRow && (
+        <Modal
+          title="청구 취소"
+          sub={`${cancelRow.studentName} · ${cancelRow.name}`}
+          confirmLabel="취소 처리"
+          danger
+          busy={actBusy}
+          error={actErr}
+          onConfirm={() => void submitCancel()}
+          onClose={() => setCancelRow(null)}
+        >
+          <div className="note-box risk">
+            <div className="ic">
+              <Icon name="triangle-alert" size={17} />
+            </div>
+            <div>
+              <div className="tt">되돌릴 수 없습니다</div>
+              <div className="tx">
+                {cancelRow.receivedAmount > 0 ? (
+                  <>
+                    이미 <b>{cancelRow.receivedAmount.toLocaleString()}원</b>이 수납된 청구입니다. 수납 기록을
+                    먼저 취소한 뒤 청구를 취소합니다. 둘 다 매출장에서 빠집니다.
+                  </>
+                ) : (
+                  <>청구 {cancelRow.billedAmount.toLocaleString()}원이 매출장에서 빠집니다.</>
+                )}
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* 결과는 모달을 닫은 뒤에도 보여야 한다 — 무엇이 됐는지 알려주지 않으면 다시 누른다 */}
+      {actDone && (
+        <Modal title="완료" hideCancel confirmLabel="닫기" onConfirm={() => setActDone(null)} onClose={() => setActDone(null)}>
+          <div style={{ fontSize: 13.5 }}>{actDone}</div>
+        </Modal>
+      )}
+    </>
+  )
+}
+
+/**
+ * 기간·지점별 통계 — 지점마다 수납 요약(`/receipt-status/summary`)을 불러 한 표로 놓는다.
+ * ★ 지점별 합계 API 가 따로 없어 지점 수만큼 부른다(본사 11곳). 지점 관리자는 자기 지점만 나온다 —
+ *   목록은 서버가 권한에 맞게 준다(AcademyContext).
+ * ★ 청구 연도(year)와 기간(from~to)은 다른 축이다 — 기간은 청구일 기준이다.
+ */
+function BranchStatsButton() {
+  const { academies } = useAcademy()
+  const now = new Date()
+  const [open, setOpen] = useState(false)
+  const [from, setFrom] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`)
+  const [to, setTo] = useState(todayStr())
+  const [rows, setRows] = useState<{ name: string; s: ReceiptSummary | null; err?: string }[] | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  async function run() {
+    setBusy(true)
+    const year = Number(from.slice(0, 4))
+    const out = await Promise.all(
+      academies.map(async (a) => {
+        try {
+          return { name: a.acadNm, s: await getReceiptSummary({ academyId: a.id, year, from, to }) }
+        } catch (e) {
+          return { name: a.acadNm, s: null, err: e instanceof ApiError ? e.message : '불러오지 못함' }
+        }
+      }),
+    )
+    setRows(out)
+    setBusy(false)
+  }
+
+  const won = (n: number) => `${n.toLocaleString()}원`
+  const total = (rows ?? []).reduce(
+    (t, r) =>
+      r.s
+        ? { billed: t.billed + r.s.billedAmount, received: t.received + r.s.receivedAmount, unpaid: t.unpaid + r.s.unpaidAmount }
+        : t,
+    { billed: 0, received: 0, unpaid: 0 },
+  )
+  const rate = (b: number, r: number) => (b > 0 ? `${Math.round((r / b) * 100)}%` : '-')
+
+  return (
+    <>
+      <button
+        className="btn"
+        onClick={() => {
+          setOpen(true)
+          setRows(null)
+        }}
+      >
+        <Icon name="bar-chart-3" size={14} /> 기간·지점별 통계
+      </button>
+      {open && (
+        <Modal wide title="기간·지점별 수납 통계" hideCancel confirmLabel="닫기" onConfirm={() => setOpen(false)} onClose={() => setOpen(false)}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+            <input className="inp" type="date" style={{ width: 150 }} value={from} onChange={(e) => setFrom(e.target.value)} />
+            <span>~</span>
+            <input className="inp" type="date" style={{ width: 150 }} value={to} onChange={(e) => setTo(e.target.value)} />
+            <button type="button" className="btn pri" disabled={busy || !from || !to || from > to} onClick={() => void run()}>
+              {busy ? '계산 중…' : '조회'}
+            </button>
+            <span style={{ fontSize: 12, color: 'var(--muted)' }}>청구일 기준</span>
+          </div>
+          {rows && (
+            <div style={{ maxHeight: 420, overflow: 'auto' }}>
+              <table className="dt nowrap" style={{ width: '100%' }}>
+                <thead>
+                  <tr>
+                    <th>지점</th>
+                    <th style={{ textAlign: 'right' }}>청구</th>
+                    <th style={{ textAlign: 'right' }}>수납</th>
+                    <th style={{ textAlign: 'right' }}>미납</th>
+                    <th style={{ textAlign: 'right' }}>미납 건</th>
+                    <th style={{ textAlign: 'right' }}>수납률</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.name}>
+                      <td>{r.name}</td>
+                      {r.s ? (
+                        <>
+                          <td style={{ textAlign: 'right' }}>{won(r.s.billedAmount)}</td>
+                          <td style={{ textAlign: 'right' }}>{won(r.s.receivedAmount)}</td>
+                          <td style={{ textAlign: 'right', color: r.s.unpaidAmount > 0 ? 'var(--red)' : undefined }}>{won(r.s.unpaidAmount)}</td>
+                          <td style={{ textAlign: 'right' }}>{r.s.unpaidCount}건</td>
+                          <td style={{ textAlign: 'right' }}>
+                            <b>{rate(r.s.billedAmount, r.s.receivedAmount)}</b>
+                          </td>
+                        </>
+                      ) : (
+                        <td colSpan={5} style={{ color: 'var(--red)' }}>
+                          {r.err}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                  {rows.length > 1 && (
+                    <tr style={{ fontWeight: 800 }}>
+                      <td>합계</td>
+                      <td style={{ textAlign: 'right' }}>{won(total.billed)}</td>
+                      <td style={{ textAlign: 'right' }}>{won(total.received)}</td>
+                      <td style={{ textAlign: 'right' }}>{won(total.unpaid)}</td>
+                      <td />
+                      <td style={{ textAlign: 'right' }}>{rate(total.billed, total.received)}</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Modal>
+      )}
     </>
   )
 }
@@ -770,9 +1634,7 @@ export const paymentMockup: Mockup = {
   actions: (
     <>
       <button className="btn" disabled data-soon title="준비 중입니다">기수 선택 ▾</button>
-      <button className="btn" disabled data-soon title="준비 중입니다">
-        <Icon name="bar-chart-3" size={14} /> 기간·지점별 통계
-      </button>
+      <BranchStatsButton />
     </>
   ),
 }

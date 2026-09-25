@@ -153,7 +153,7 @@ const TABS = [
 ]
 
 function Content() {
-  const { academyId } = useAcademy()
+  const { academyId, ready: academyReady } = useAcademy()
   const [tab, setTab] = useState('roster')
   const [query, setQuery] = useState<SearchValues>({})
   const [masked, setMasked] = useState(true)
@@ -162,7 +162,7 @@ function Content() {
   // 반 드롭다운. 실패해도 화면은 살려둔다 — 나머지 조건으로는 조회할 수 있다
   useEffect(() => {
     let cancelled = false
-    listClasses()
+    listClasses(new Date().getFullYear())
       .then((list) => !cancelled && setClasses(list))
       .catch(() => undefined)
     return () => {
@@ -222,6 +222,8 @@ function Content() {
     params,
     pageSize: PAGE_SIZE,
     sortable: SORTABLE,
+    // 지점 목록을 받기 전엔 academyId 가 null 이라 전 지점 학생을 한 번 받고 다시 받는다 — 표가 깜빡인다
+    enabled: academyReady,
   })
 
   const rows = table.rows
@@ -251,7 +253,7 @@ function Content() {
           {exportError}
         </div>
       )}
-      <SearchForm fields={fields} onSearch={setQuery} presetKey="affairs" />
+      <SearchForm fields={fields} onSearch={setQuery} presetKey="ROSTER" />
 
       {table.error && (
         <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
@@ -263,6 +265,7 @@ function Content() {
         <Tabs items={TABS.map((t) => ({ key: t.key, label: t.label }))} active={tab} onChange={setTab} />
         <div style={{ padding: 14 }}>
           <DataTable
+            nowrap
             columns={columns}
             rows={rows}
             rowKey={(r) => String(r.enrollmentId)}

@@ -106,33 +106,69 @@ export function withdrawAccount(accountId: number): Promise<void> {
 }
 
 /**
- * 권한 변경 이력 한 줄.
+ * 계정 변경 이력 한 줄 — **실제 응답 모양**(2026-09-21 확인).
  *
- * ★ replaceRoles 가 역할을 통째로 교체하므로 before/after 를 봐야 무엇이 빠졌는지 알 수 있다.
+ * ★ 예전 타입(beforeValue·afterValue·changedAt)은 서버와 달랐다. 그래서 '이력 보기' 가
+ *   "undefined - → -" 만 찍었다. 실제는 `changes` 에 **바뀐 칸 목록이 JSON 문자열**로 온다.
+ * ★ `actorName` 에 사람 이름이 아니라 계정 종류("EMPLOYEE")가 온다 — 백엔드 요청(API_GAPS 33-1).
  */
 export interface AccountHistory {
   id: number
   action: string
-  beforeValue: string | null
-  afterValue: string | null
-  changedBy: string | null
+  /** JSON 문자열 — `[{"field":"status","before":"ACTIVE","after":"WITHDRAWN"}]` */
+  changes: string | null
+  actorId: number | null
+  actorName: string | null
   /** ISO instant */
-  changedAt: string
+  occurredAt: string
+}
+
+export interface AccountChange {
+  field: string
+  before: string | null
+  after: string | null
+}
+
+/** `changes` 를 푼다. 깨진 값이면 빈 목록 — 이력 한 줄 때문에 창 전체가 죽지 않게 */
+export function parseAccountChanges(raw: string | null): AccountChange[] {
+  if (!raw) return []
+  try {
+    const v = JSON.parse(raw) as unknown
+    return Array.isArray(v) ? (v as AccountChange[]) : []
+  } catch {
+    return []
+  }
 }
 
 export function listAccountHistory(accountId: number): Promise<AccountHistory[]> {
   return request<AccountHistory[]>(`/api/v1/admin/staff/accounts/${accountId}/history`)
 }
 
-/** 잠금 해제. 로그인 5회 실패로 잠긴 계정은 이걸 부르기 전까지 자동으로 안 풀린다 */
+/**
+ * 잠금 해제. 로그인 5회 실패로 잠긴 계정은 이걸 부르기 전까지 자동으로 안 풀린다.
+ *
+ * ★ **직원 계정 경로를 쓴다.** 2026-09-16 에 생겼다 — 그전에는 앱 계정 경로
+ *   (`/app-accounts/{id}/unlock`)뿐이라 그걸 쓰고 있었다.
+ *   계정 번호는 한 공간이라 앱 경로로 불러도 직원 계정이 풀리기는 한다(확인함).
+ *   그래도 직원 화면은 직원 경로를 쓴다 — 두 경로의 권한 검사와 감사 기록 주체가
+ *   갈라지는 날 앱 경로가 조용히 어긋난다.
+ * ★ 잠겨 있지 않아도 성공이다(멱등). 그 사이 다른 관리자가 먼저 풀었다고 오류를 내지 않는다.
+ */
 export function unlockAccount(accountId: number): Promise<void> {
-  return request<void>(`/api/v1/admin/app-accounts/${accountId}/unlock`, { method: 'POST' })
+  return request<void>(`/api/v1/admin/staff/accounts/${accountId}/unlock`, { method: 'POST' })
 }
 
-/** 임시 비밀번호 발급. 응답으로 오는 비밀번호는 **다시 볼 수 없다** */
+/**
+ * 임시 비밀번호 발급. 응답으로 오는 비밀번호는 **다시 볼 수 없다**.
+ *
+ * ★ 잠금 해제와 같은 이유로 **직원 경로**를 쓴다(2026-09-16 생김). 앱 경로도 같은 계정을
+ *   집지만, 화면이 직원 목록을 그리는 한 경로도 직원이어야 한다.
+ * ★ 이건 **되돌릴 수 없다.** 기존 비밀번호가 즉시 못 쓰게 되므로, 엉뚱한 줄에서 누르면
+ *   그 사람은 로그인이 막힌 뒤에야 안다 — 확인 모달을 반드시 거친다.
+ */
 export function issueTemporaryPassword(accountId: number): Promise<{ temporaryPassword: string }> {
   return request<{ temporaryPassword: string }>(
-    `/api/v1/admin/app-accounts/${accountId}/temporary-password`,
+    `/api/v1/admin/staff/accounts/${accountId}/temporary-password`,
     { method: 'POST' },
   )
 }

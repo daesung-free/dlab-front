@@ -1,6 +1,8 @@
 import type { Mockup } from './types'
 /* Phase 0 */
 import { adminUserMockup } from './AdminUser'
+import { branchConfigMockup } from './BranchConfig'
+import { mealVendorMockup } from './MealVendor'
 /* Phase 1 */
 import { studentSearchMockup } from './StudentSearch'
 import { penaltyMockup } from './PenaltyManage'
@@ -19,8 +21,12 @@ import { paymentMockup } from './PaymentStatus'
 import { affairsMockup } from './AffairsRoster'
 import { adminAssignMockup } from './AdminAssign'
 import { adminLectureMockup } from './AdminLecture'
+import { scholarshipRulesMockup } from './ScholarshipRules'
+import { staffCardsMockup } from './StaffCards'
+import { regularScheduleMockup } from './RegularSchedule'
 import { adminBillingMockup } from './AdminBilling'
 import { adminResultMockup } from './AdminResult'
+import { examUploadMockup } from './ExamUpload'
 import { seatMoveMockup } from './SeatMove'
 /* Phase 3 */
 import { scoreMockup } from './ScoreReport'
@@ -49,6 +55,8 @@ import { appManageMockup } from './AppManage'
 export const MOCKUPS: Record<string, Mockup> = {
   /* ── Phase 0 (선행 인프라) ── */
   'admin-user': adminUserMockup, // F-4.10-2 사용자 관리 (RBAC 5단계)
+  'admin-meal-vendor': mealVendorMockup, // F-4.5 부속 급식 업체·지점 배정
+  'admin-branch-config': branchConfigMockup, // F-4.10 부속 지점 설정 (본사 전용)
 
   /* ── Phase 1 (MVP) ── */
   'student-search': studentSearchMockup, // F-4.1-1 학원생 검색·조회
@@ -69,8 +77,12 @@ export const MOCKUPS: Record<string, Mockup> = {
   affairs: affairsMockup, // F-4.9 교무업무 명단 조회·출력
   'admin-assign': adminAssignMockup, // F-4.10-3 배정 관리
   'admin-lecture': adminLectureMockup, // F-4.10-4 특강 기초 설정
+  'admin-scholarship': scholarshipRulesMockup, // F-4.10-7 장학 취소 기준 · 검토
+  'admin-staff-card': staffCardsMockup, // F-4.10-8 직원 카드 · 출퇴근
+  'regular-schedule': regularScheduleMockup, // F-4.11-8 정기일정 · 인정 판정
   'admin-billing': adminBillingMockup, // F-4.10-5 수납 관리(청구기준)
   'admin-result': adminResultMockup, // F-4.10-6 실적 관리
+  'exam-upload': examUploadMockup, // F-4.6 부속 성적 업로드(디랩 시험 파일)
   'seat-move': seatMoveMockup, // F-4.11-8 좌석 이탈/복귀
 
   /* ── Phase 3 (교육·성적·소통) ── */

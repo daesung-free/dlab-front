@@ -203,6 +203,8 @@ function Content() {
   const [tab, setTab] = useState('all')
   const [query, setQuery] = useState<SearchValues>({})
   const [masked, setMasked] = useState(true)
+  /* selectable 만으로는 체크박스가 안 눌린다 — DataTable 이 제어 컴포넌트다 */
+  const [sel, setSel] = useState<string[]>([])
 
   const base = useMemo(() => ROWS.filter((r) => matches(r, query)), [query])
 
@@ -274,7 +276,7 @@ function Content() {
       <SearchForm
         fields={FIELDS}
         onSearch={setQuery}
-        presetKey="payment-gate"
+        presetKey="PAYMENT"
         headerRight={
           <span className="mk supplement" title="가상계좌 만료 스케줄러 10분 주기">
             <Icon name="timer" size={11} /> 만료 스케줄러 10분 주기
@@ -303,6 +305,8 @@ function Content() {
           rows={[]}
           rowKey={(r) => r.id}
           selectable
+          selected={sel}
+          onSelectedChange={setSel}
           masked={masked}
           pageSize={15}
           emptyText="결제 기록이 없습니다 — PG 연동이 아직 준비되지 않았습니다."

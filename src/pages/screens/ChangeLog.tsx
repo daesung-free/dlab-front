@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   DataTable,
   ExcelButton,
   MaskToggle,
   SearchForm,
-  Unfilled,
+  addDaysStr,
+  toDateStr,
   todayStr,
   useServerTable,
   type Column,
@@ -15,6 +16,8 @@ import { Icon } from '../../components/Icon'
 import { useAcademy } from '../../auth/AcademyContext'
 import { listAuditLogs, type AuditAction, type AuditLog } from '../../api/auditLogs'
 import type { Mockup } from './types'
+import { createScreenSignal } from './screenSignal'
+import { AUDIT_AREAS, auditAreaLabel, changeFieldLabel, changeValueLabel } from '../../lib/changeLabels'
 
 /* 학원생 관리 > 메모/기타 > 금일 수정 이력 — 클라이언트 메뉴표 기준 추가 화면
  *
@@ -36,12 +39,16 @@ const ACTION_META: Record<Action, { label: string; cls: string; icon: string }> 
   DELETE: { label: '삭제', cls: 'brandnew', icon: 'trash-2' },
 }
 
+const ACTION_CHIPS = (Object.keys(ACTION_META) as Action[]).map((a) => ACTION_META[a].label)
+const CHIP_TO_ACTION: Record<string, Action> = Object.fromEntries(
+  (Object.keys(ACTION_META) as Action[]).map((a) => [ACTION_META[a].label, a]),
+)
+
 /** 변경이 발생한 업무 영역 — 화면이 아니라 도메인 기준으로 묶는다 */
 /* 업무 영역 = 서버의 entityType 이다. **서버가 한국어로 준다** — 목록에서 실제로 온 값이
    '상벌점' · '공지' · '학생 등록' 이었다. 감사 로그가 opt-in 이라 아래 7개만 남는다
    (auditLogs.ts 첫 주석). 목업의 '출결 · 반 배정 · 급식 · 특강'은 대상이 아니라 뺐다 —
    골라도 항상 0건이면 "그날 변경이 없었다"로 잘못 읽힌다. */
-const AREAS = ['학생 등록', '사유신청', '상벌점', '청구', '성적', '공지', '직원 계정'] as const
 
 const FIELDS: Field[] = [
   { type: 'dateRange', name: 'date', label: '조회 기간', presets: true, span: 2 },
@@ -58,7 +65,8 @@ const FIELDS: Field[] = [
     type: 'select',
     name: 'area',
     label: '업무 영역',
-    options: AREAS.map((v) => ({ value: v, label: v })),
+    // ★ 값은 서버 원래 이름이다 — '사유신청'(붙여 씀)·'직원 계정' 으로 보내 항상 0건이었다
+    options: AUDIT_AREAS,
   },
   {
     type: 'select',
@@ -72,10 +80,10 @@ const FIELDS: Field[] = [
     type: 'chips',
     name: 'action',
     label: '변경 유형',
-    options: ['등록', '수정', '삭제'],
-    multiple: true,
-    disabled: true,
-    disabledReason: '유형별 조회는 아직 지원되지 않습니다.',
+    options: ACTION_CHIPS,
+    // ★ 서버가 하나만 받는다. 여럿 고르면 걸러진 것처럼 보이는데 결과가 그대로가 되므로
+    //   하나만 고르게 둔다(2026-09-25 서버가 받기 시작했다)
+    multiple: false,
   },
 ]
 
@@ -93,6 +101,17 @@ function localAt(iso: string): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
 
+/** `changes` 는 JSON 문자열(`[{field, before, after}]`)이다. 깨졌거나 비었으면 빈 목록 */
+function changesOf(raw: string | null): { field: string; before: string | null; after: string | null }[] {
+  if (!raw) return []
+  try {
+    const v = JSON.parse(raw) as unknown
+    return Array.isArray(v) ? (v as { field: string; before: string | null; after: string | null }[]) : []
+  } catch {
+    return []
+  }
+}
+
 const COLUMNS: Column<LogRow>[] = [
   { key: 'at', header: '변경 시각', width: '164px', value: (r) => r.at },
   {
@@ -103,14 +122,9 @@ const COLUMNS: Column<LogRow>[] = [
     /* ★ 서버가 계정 유형('EMPLOYEE')을 이름 자리에 넣어 보내던 때가 있었다. 고쳐졌지만
          배포가 안 올라간 환경에서는 그대로 오므로, 사람 이름이 아닌 것이 그대로 보이면
          오해를 만든다. 그 값만 따로 알린다. */
-    render: (r) =>
-      !r.actorName || r.actorName === 'EMPLOYEE' ? (
-        <Unfilled reason="바꾼 사람의 이름을 아직 안 준다" />
-      ) : (
-        r.actorName
-      ),
+    render: (r) => r.actorName ?? '-',
   },
-  { key: 'area', header: '업무 영역', width: '100px', align: 'center', value: (r) => r.entityType },
+  { key: 'area', header: '업무 영역', width: '100px', align: 'center', value: (r) => auditAreaLabel(r.entityType) },
   {
     key: 'action',
     header: '유형',
@@ -122,34 +136,23 @@ const COLUMNS: Column<LogRow>[] = [
       return m ? <span className={`mk ${m.cls}`}>{m.label}</span> : <span>{r.action}</span>
     },
   },
-  {
-    key: 'targetNo',
-    header: '대상 학번',
-    width: '100px',
-    value: () => '',
-    render: () => <Unfilled reason="기록에 학번이 없다" />,
-  },
-  {
-    key: 'target',
-    header: '대상',
-    width: '80px',
-    value: () => '',
-    render: () => <Unfilled reason="기록에 대상 이름이 없다" />,
-  },
+  /* ★ 대상·변경 내용은 2026-09-21 부터 쌓인다. 그 전 기록과 학생과 무관한 기록(청구 설정 등)은
+       값이 원래 없어 '-' 다 — '미제공' 이 아니다 */
+  { key: 'targetNo', header: '대상 학번', width: '100px', value: (r) => r.targetStudentNo ?? '-' },
+  { key: 'target', header: '대상', width: '80px', mask: 'name', value: (r) => r.targetStudentName ?? '-' },
   {
     key: 'field',
     header: '변경 항목',
-    width: '96px',
-    value: () => '',
-    render: () => <Unfilled reason="어느 항목을 바꿨는지 안 준다" />,
+    width: '120px',
+    value: (r) => changesOf(r.changes).map((c) => changeFieldLabel(c.field)).join(', ') || '-',
   },
   {
     key: 'diff',
     header: '변경 전 → 변경 후',
-    /* ★ 이 화면의 존재 이유인 열이다. 서버가 changes 를 채우면 여기부터 살아난다 —
-         지금은 전 건 null 이다(API_GAPS 24-1). 열을 지우지 않는 이유가 그것이다. */
-    value: () => '',
-    render: () => <Unfilled reason="변경 전후 값을 아직 안 준다" />,
+    value: (r) =>
+      changesOf(r.changes)
+        .map((c) => `${changeValueLabel(c.before)} → ${changeValueLabel(c.after)}`)
+        .join(' / ') || '-',
   },
   {
     key: 'ip',
@@ -171,22 +174,73 @@ const COLUMNS: Column<LogRow>[] = [
      읽혀서, 어제 것이 왜 없냐는 말이 나온다. 실제로 4차 점검에서 그렇게 올라왔다. */
 const TODAY_RANGE: SearchValues = { date: { from: todayStr(), to: todayStr() } }
 
+/*
+ * 헤더 '기간 선택' — 자주 쓰는 기간을 한 번에 고른다. 헤더는 본문 상태를 못 만지므로(CLAUDE.md 5-1)
+ * 고른 값을 여기에 두고 신호로 알린다. 본문은 검색 폼을 그 값으로 다시 그려 칸에도 보이게 한다 —
+ * 칸은 그대로인데 결과만 바뀌면 무엇으로 조회했는지 알 수 없다.
+ */
+const periodSignal = createScreenSignal()
+let pickedPeriod: { from: string; to: string } | null = null
+
+function periodOf(kind: string): { from: string; to: string } {
+  const t = new Date()
+  const today = todayStr()
+  if (kind === 'week') return { from: addDaysStr(t, -6), to: today }
+  if (kind === 'month') return { from: `${today.slice(0, 8)}01`, to: today }
+  if (kind === 'lastMonth') {
+    const first = new Date(t.getFullYear(), t.getMonth() - 1, 1)
+    const last = new Date(t.getFullYear(), t.getMonth(), 0)
+    return { from: toDateStr(first), to: toDateStr(last) }
+  }
+  return { from: today, to: today }
+}
+
+function PeriodMenu() {
+  return (
+    <select
+      className="sel"
+      style={{ width: 130 }}
+      value=""
+      onChange={(e) => {
+        if (!e.target.value) return
+        pickedPeriod = periodOf(e.target.value)
+        periodSignal.bump()
+      }}
+    >
+      <option value="">기간 선택 ▾</option>
+      <option value="today">오늘</option>
+      <option value="week">최근 7일</option>
+      <option value="month">이번 달</option>
+      <option value="lastMonth">지난 달</option>
+    </select>
+  )
+}
+
 function Content() {
   const [query, setQuery] = useState<SearchValues>(TODAY_RANGE)
+  const [formKey, setFormKey] = useState(0)
+  const periodVer = periodSignal.useVersion()
+  useEffect(() => {
+    if (periodVer === 0 || !pickedPeriod) return
+    const date = pickedPeriod
+    setQuery((q) => ({ ...q, date }))
+    setFormKey((k) => k + 1)
+  }, [periodVer])
   const [masked, setMasked] = useState(true)
   const { academyId } = useAcademy()
 
   /* ★ useMemo 필수 — 매 렌더 새 객체를 넘기면 무한 요청이 된다.
      ★ 기간을 안 보내면 서버가 오늘분만 준다. 화면 이름이 '금일 수정 이력'이라 그게 맞다.
-     ★ action 은 **일부러 안 보낸다.** 서버가 받지 않고 조용히 무시해서, 보내면 걸러진
-       것처럼 보이는데 결과가 그대로다(auditLogs.ts 주석). */
+     ★ action 은 2026-09-25 부터 서버가 받는다. 그전에는 조용히 무시돼서 안 보냈다. */
   const params = useMemo(() => {
     const d = query.date as { from?: string; to?: string } | undefined
     const area = typeof query.area === 'string' ? query.area : ''
+    const act = Array.isArray(query.action) ? query.action[0] : query.action
     return {
       from: d?.from || undefined,
       to: d?.to || undefined,
       entityType: area || undefined,
+      action: typeof act === 'string' && act !== '' ? CHIP_TO_ACTION[act] : undefined,
       academyId: academyId ?? undefined,
     }
   }, [query, academyId])
@@ -249,17 +303,18 @@ function Content() {
           <div className="tt">주요 변경이 자동으로 기록됩니다</div>
           <div className="tx">
             학생 등록 · 사유신청 · 상벌점 · 청구 · 성적 · 공지 · 직원 계정에서 생긴 변경이 남습니다.
-            담당자가 따로 기록할 필요는 없습니다. <b>무엇을 어떤 값으로 바꿨는지</b>는 아직
-            기록되지 않아 지금은 비어 있습니다.
+            담당자가 따로 기록할 필요는 없습니다. <b>어느 학생의 기록인지</b>는 2026-09-21 이후 기록부터 남고,
+            <b>무엇을 어떤 값으로 바꿨는지</b>는 지금은 직원 계정 변경에만 남습니다.
           </div>
         </div>
       </div>
 
       <SearchForm
+        key={formKey}
         fields={FIELDS}
         onSearch={setQuery}
-        initial={TODAY_RANGE}
-        presetKey="change-log"
+        initial={query}
+        presetKey="AUDIT_LOG"
         headerRight={
           <span className="mk supplement" title="조회 기본값은 오늘입니다">
             <Icon name="clock" size={11} /> 기본 조회 = 금일
@@ -305,7 +360,7 @@ export const changeLogMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled data-soon title="준비 중입니다">기간 선택 ▾</button>
+      <PeriodMenu />
       <button className="btn" disabled data-soon title="준비 중입니다">
         <Icon name="shield-check" size={14} /> 보존정책
       </button>

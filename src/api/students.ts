@@ -56,17 +56,29 @@ export interface Student {
   address: string | null
   /** 문자열이다 — 마스킹되면 `2007-**-**`이 와서 날짜 타입에 안 담긴다 */
   birthDate: string | null
+  /** 'M' | 'F'. 목록·상세 모두 온다(2026-09-21 확인 — 예전엔 없었다) */
+  gender?: string | null
+  /** 영문 이름 · 졸업(예정) 연도 (2026-09-21 추가) */
+  englishName?: string | null
+  graduationYear?: number | null
   schoolName: string | null
   year: number
   grade: GradeType
   track: TrackType | null
   enrollmentStatus: EnrollmentStatus
   admissionDate: string | null
+  /** 소속 지점 id. 담임 예외 지정에서 같은 지점 선생님을 고를 때 쓴다 */
+  academyId?: number
   /** 지점'명'. 본사 계정이 전 지점을 한 화면에서 보므로 코드가 아니라 이름이 온다 */
   academyName: string | null
   /** 고정반. 미배정이면 null */
   className: string | null
+  /** 그 학생의 담임 — 따로 지정됐으면 지정된 선생님, 아니면 반 담임 */
   homeroomTeacher: string | null
+  /** 담임을 따로 지정했는가. 목록은 이것만 쓴다 */
+  homeroomOverridden?: boolean
+  /** 따로 지정한 내용(사유·일시). 지정이 없으면 null */
+  homeroomOverride?: HomeroomOverride | null
   seatCd: string | null
   scholarshipTypes: string[]
   /**
@@ -154,6 +166,8 @@ export interface AdmitRequest {
   address?: string
   /** 지정하지 않으면 서버가 등록일로 잡는다 */
   admissionDate?: string
+  englishName?: string
+  graduationYear?: number
 }
 
 /** 접수 후 상세를 채운다. 넘긴 필드만 바뀐다 */
@@ -168,14 +182,63 @@ export interface StudentUpdateRequest {
   grade?: GradeType
   track?: TrackType
   status?: EnrollmentStatus
+  englishName?: string
+  graduationYear?: number
 }
 
 export function admitStudent(body: AdmitRequest): Promise<Student> {
   return request<Student>('/api/v1/admin/students', { method: 'POST', body })
 }
 
+/**
+ * 학생 한 명. 수정 화면이 여는 순간 다시 읽는다 — 목록 값은 가려져 있거나 낡았을 수 있다.
+ *
+ * ★ **상세는 가리지 않고 원본을 준다**(`masked: false`, 2026-09-21 확인). 목록은 가려서 주므로
+ *   수정 모달이 목록 값을 그대로 채우면 `010-****-3153` 이 입력칸에 들어가 **그대로 저장된다.**
+ * ★ 성별은 2026-09-21 부터 온다. 그 전에는 보낼 수만 있고 읽을 수 없었다 — API_GAPS 30-1.
+ */
+export function getStudent(enrollmentId: number): Promise<Student> {
+  return request<Student>(`/api/v1/admin/students/${enrollmentId}`)
+}
+
+/**
+ * 학생 정보 수정.
+ *
+ * ★ **보낸 칸만 바뀐다.** 안 보낸 칸은 그대로다.
+ * ★ **빈 문자열을 보내면 그 값이 지워진다**(주소 `""` → 빈 값, 2026-09-21 확인). 그래서
+ *   화면은 **바뀐 칸만** 보낸다 — 폼 전체를 보내면 손대지 않은 빈 칸까지 지워진다.
+ */
 export function updateStudent(enrollmentId: number, body: StudentUpdateRequest): Promise<Student> {
   return request<Student>(`/api/v1/admin/students/${enrollmentId}`, { method: 'PATCH', body })
+}
+
+export interface HomeroomOverride {
+  enrollmentId: number
+  /** false 면 반 담임을 따른다 */
+  overridden: boolean
+  teacherId: number | null
+  teacherName: string | null
+  reason: string | null
+  at: string | null
+}
+
+/**
+ * 담임 예외 지정 — 같은 반의 이 학생만 다른 선생님에게 맡긴다. 반 전체 교체는 `PUT /classes/{id}/homeroom`.
+ *
+ * ★ 승인 이양·상담 담당·목록의 담임 표시가 따라 바뀐다. 반공지·반설문 권한은 반 담임 그대로다.
+ * ★ 사유 필수(빈 값이면 400), 같은 지점 선생님만, 최고·지점관리자만. **반을 옮기면 자동으로 풀린다.**
+ * ★ 지금 상태는 목록·상세의 `homeroomOverridden`·`homeroomOverride` 로 온다(2026-09-21 추가).
+ */
+export function setHomeroomOverride(enrollmentId: number, teacherId: number, reason: string): Promise<HomeroomOverride> {
+  return request<HomeroomOverride>(`/api/v1/admin/students/${enrollmentId}/homeroom-override`, {
+    method: 'PUT',
+    body: { teacherId, reason },
+  })
+}
+
+/** 담임 예외 해제 — 반 담임으로 돌아간다. 지정이 없어도 오류가 아니다 */
+export function clearHomeroomOverride(enrollmentId: number): Promise<HomeroomOverride> {
+  return request<HomeroomOverride>(`/api/v1/admin/students/${enrollmentId}/homeroom-override`, { method: 'DELETE' })
 }
 
 /** 저장하면 부여될 다음 학번. 미리보기용이고 예약은 아니다 */
@@ -211,7 +274,8 @@ export interface StatusLog {
   fromStatus: EnrollmentStatus | null
   toStatus: EnrollmentStatus
   reason: string | null
-  changedBy: string | null
+  /** 바꾼 사람의 **계정 id** 다. 이름이 아니다 — 화면에 그대로 쓰면 숫자가 보인다 */
+  changedBy: number | null
   /** ISO instant */
   changedAt: string
 }
@@ -235,3 +299,60 @@ export function changeStudentStatus(
 export function listStatusLogs(enrollmentId: number): Promise<StatusLog[]> {
   return request<StatusLog[]>(`/api/v1/admin/students/${enrollmentId}/status-logs`)
 }
+
+/**
+ * 재등록 — `POST /students/{enrollmentId}/re-enroll`
+ *
+ * ★ 퇴원한 학생을 **새 기수로 다시 들이는** 것이다. 상태를 재원으로 되돌리는 게 아니다 —
+ *   서버가 `WITHDRAWN → ENROLLED` 를 막고 "재등록으로 처리하세요"라고 답한다.
+ * ★ 그래서 **학번이 새로 매겨진다.** 지금 학번은 퇴원 이력으로 남는다.
+ *   되돌릴 수 없으므로 화면이 그 사실을 먼저 알려야 한다.
+ * ★ 연도·지점·학년이 필수다. 지난 기수의 값을 그대로 쓰는 게 아니라 새로 정한다.
+ */
+export function reEnrollStudent(
+  enrollmentId: number,
+  body: { academyId: number; year: number; grade: GradeType; track?: TrackType; admissionDate?: string },
+): Promise<{ enrollmentId: number; studentNo: string | null }> {
+  return request(`/api/v1/admin/students/${enrollmentId}/re-enroll`, { method: 'POST', body })
+}
+
+/* ── 엑셀 일괄 등록 (F-4.1-3) ─────────────────────────────── */
+
+export interface StudentImportResult {
+  totalRows: number
+  validRows: number
+  errorRows: number
+  /** 반영될(반영된) 행. `existing` 이면 새로 만들지 않고 기존 학생을 갱신한다 */
+  rows: { rowNumber: number; name: string; grade: string; track: string | null; existing: boolean }[]
+  /** 행 번호는 **엑셀 기준 1-based** — 사용자가 그 행을 바로 찾는다 */
+  errors: { rowNumber: number; field: string; message: string }[]
+}
+
+function importForm(file: File): FormData {
+  const fd = new FormData()
+  fd.append('file', file)
+  return fd
+}
+
+/**
+ * 미리보기 — **아무것도 저장하지 않는다.** 서버는 결과를 들고 있지 않아서
+ * 반영할 때 **같은 파일을 다시 올려야** 한다(다중 인스턴스라 세션에 둘 수 없다).
+ * ★ 칸은 위치가 아니라 **첫 줄의 제목**으로 찾는다 — 필수: 이름·학년 / 선택: 연락처·계열·생년월일·성별·출신학교·학생고유ID
+ */
+export function previewStudentImport(academyId: number, year: number, file: File): Promise<StudentImportResult> {
+  return request<StudentImportResult>('/api/v1/admin/students/import/preview', {
+    method: 'POST',
+    query: { academyId, year },
+    body: importForm(file),
+  })
+}
+
+/** 반영 — **오류 행이 있어도 정상 행은 넣는다.** */
+export function applyStudentImport(academyId: number, year: number, file: File): Promise<StudentImportResult> {
+  return request<StudentImportResult>('/api/v1/admin/students/import', {
+    method: 'POST',
+    query: { academyId, year },
+    body: importForm(file),
+  })
+}
+

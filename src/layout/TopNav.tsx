@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import logoUrl from '../assets/logo.png'
-import { NAV, navItemCount } from '../data/nav'
+import { NAV, navItemCount, type NavItem } from '../data/nav'
+import { canSeeScreenAs } from '../data/menuCodes'
 import { useAuth } from '../auth/AuthContext'
 import { ROLE_LABEL, type Role } from '../api/accounts'
 import { getDisplayName, getLoginId } from '../api/tokens'
@@ -11,7 +12,8 @@ import { PasswordModal } from '../auth/PasswordModal'
 
 export function TopNav() {
   const { academies, academyId, setAcademyId, selectable } = useAcademy()
-  const { principal, me, logout, canSeeAdmin } = useAuth()
+  const { principal, me, logout, canSeeAdmin, allowedMenus } = useAuth()
+  const isSuper = (me?.roles ?? principal?.roles ?? []).some((r) => r === 'SUPER_ADMIN')
 
   /* 로그인한 계정을 그대로 보여준다.
      ★ 예전에는 mockDashboard 의 ME('강민서 / 분당 지점관리자')를 그렸다. 누구로 로그인하든
@@ -36,7 +38,12 @@ export function TopNav() {
      ★ 변경에 성공하면 서버가 새 토큰을 주고 AuthContext 가 그걸 다시 해석하므로
        `forced` 는 저절로 false 가 된다 — 여기서 따로 상태를 끌 필요가 없다. */
   /* 판단은 AuthContext 가 한다 — 라우트에서도 같은 값을 써야 하기 때문이다 */
-  const visibleNav = canSeeAdmin ? NAV : NAV.filter((c) => c.id !== 'admin')
+  /* ★ 계정별 메뉴 노출까지 반영한다. 대분류 안이 통째로 비면 **탭도 감춘다** —
+        남겨두면 눌렀을 때 제목만 있는 빈 화면이 나온다 */
+  const canItem = (item: NavItem): boolean => canSeeScreenAs(item.screenId, allowedMenus, isSuper)
+  const visibleNav = (canSeeAdmin ? NAV : NAV.filter((c) => c.id !== 'admin')).filter(
+    (c) => navItemCount(c, canItem) > 0,
+  )
 
   const forced = principal?.mustChangePassword === true
   const [pwOpen, setPwOpen] = useState(false)
@@ -70,7 +77,7 @@ export function TopNav() {
               <Icon name={c.icon} />
             </span>
             {c.name}
-            <span className="cat-n">{navItemCount(c)}</span>
+            <span className="cat-n">{navItemCount(c, canItem)}</span>
           </NavLink>
         ))}
       </nav>
@@ -96,9 +103,11 @@ export function TopNav() {
           </select>
         )}
 
-        <button className="icon-btn" title="알림 3건">
+        {/* ★ 빨간 배지와 '3건'은 **가짜였다.** 서버에 "나에게 온 알림" 이 없다 —
+               /notices 는 공지 발행이고 /notification-logs 는 발송 이력이다.
+               읽지 않은 알림이 있는 것처럼 보이면 눌러보게 되고, 눌러도 아무 일이 없다. */}
+        <button className="icon-btn" disabled data-soon title="준비 중입니다">
           <Icon name="bell" size={17} />
-          <span className="badge" />
         </button>
         <div className="av">{who.slice(0, 1).toUpperCase()}</div>
         <div className="wt">

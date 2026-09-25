@@ -34,6 +34,13 @@ export interface AuditLog {
   changes: string | null
   /** UTC instant */
   occurredAt: string
+  /**
+   * 대상 학생(2026-09-21 추가). 학생에 딸린 기록(상벌점·출결·학생 정보)만 채워진다.
+   * ★ 그 전에 쌓인 기록은 비어 있다 — 소급되지 않는다
+   */
+  targetEnrollmentId?: number | null
+  targetStudentName?: string | null
+  targetStudentNo?: string | null
 }
 
 export interface AuditLogParams {
@@ -43,16 +50,12 @@ export interface AuditLogParams {
   /** 서버가 주는 한국어 값 그대로 보낸다 */
   entityType?: string
   actorId?: number
+  /** 등록·수정·삭제. 2026-09-25 부터 서버가 받는다(그전에는 조용히 무시됐다) */
+  action?: AuditAction
   academyId?: number
   page?: number
   size?: number
 }
-
-/**
- * ⚠ **`action` 은 보내지 않는다.** 서버가 그 파라미터를 받지 않고, 400 도 아니고 **조용히
- *   무시**한다. 보내면 걸러진 것처럼 보이는데 결과가 그대로라 사용자가 오해한다.
- *   (확인: `action=CREATE` 32건 · `action=DELETE` 32건 · 필터 없음 32건 — 전부 같다)
- */
 export function listAuditLogs(params: AuditLogParams): Promise<Paged<AuditLog>> {
   return requestPaged<AuditLog>('/api/v1/admin/audit-logs', { query: { ...params } })
 }

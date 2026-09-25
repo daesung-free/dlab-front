@@ -43,7 +43,7 @@ import '../../styles/forms.css'
 const MONTH_OF = (l: Lecture): string => (l.startDate ? l.startDate.slice(0, 7) : '-')
 
 function Content() {
-  const { academyId } = useAcademy()
+  const { academyId, ready: academyReady } = useAcademy()
   const [tab, setTab] = useState('lecture')
   const [year, setYear] = useState(new Date().getFullYear())
   const [all, setAll] = useState<Lecture[]>([])
@@ -86,7 +86,8 @@ function Content() {
 
   const wantType = tab === 'lecture' ? 'LECTURE' : 'BRIEFING'
   const rows = useMemo(() => all.filter((l) => l.lectureType === wantType), [all, wantType])
-  const hidden = rows.filter((l) => !l.visible && l.status === 'OPEN')
+  // 탭과 상관없이 센다 — 탭별로 세면 탭을 바꿀 때마다 경고가 생겼다 없어지며 탭 줄이 89px 오르내렸다
+  const hidden = all.filter((l) => !l.visible && l.status === 'OPEN')
 
   /**
    * 동작 하나를 돌리고 결과를 알린다.
@@ -274,13 +275,13 @@ function Content() {
             <div className="tt">접수는 열려 있는데 앱에 안 보이는 것이 {hidden.length}건 있습니다</div>
             <div className="tx">
               접수를 여는 것과 앱에 띄우는 것은 별개입니다. <b>노출</b>을 켜야 학생 앱에서 보이고 신청이 들어옵니다.
-              — {hidden.map((l) => l.name).join(' · ')}
+              — {hidden.map((l) => `${l.name}${l.lectureType === 'BRIEFING' ? '(설명회)' : ''}`).join(' · ')}
             </div>
           </div>
         </div>
       )}
 
-      {academyId === null && (
+      {academyId === null && academyReady && (
         <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
           위에서 지점을 먼저 고르세요.
         </div>
@@ -324,6 +325,7 @@ function Content() {
           </div>
 
           <DataTable
+            nowrap
             columns={COLUMNS}
             rows={rows}
             rowKey={(r) => String(r.id)}

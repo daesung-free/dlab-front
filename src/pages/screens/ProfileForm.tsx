@@ -126,12 +126,12 @@ const COLUMNS: Column<ProfileRow>[] = [
     width: '104px',
     align: 'center',
     value: () => '',
-    render: (r) => (
+    render: () => (
       <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled={r.done === 0}>
+        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled data-soon title="준비 중입니다">
           열람
         </button>
-        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled={r.done !== r.total}>
+        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled data-soon title="준비 중입니다">
           PDF
         </button>
       </div>
@@ -240,6 +240,7 @@ function Content() {
       </div>
 
       <DataTable
+        nowrap
         columns={COLUMNS}
         rows={rows}
         rowKey={(r) => r.id}

@@ -1,8 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   DataTable,
   ExcelButton,
   MaskToggle,
+  Modal,
   SearchForm,
   Unfilled,
   useServerData,
@@ -18,8 +20,15 @@ import { listClasses } from '../../api/classes'
 import {
   ATTENDANCE_STATUS,
   ATTENDANCE_STATUS_LABEL,
+  FIXABLE_STATUS_LABEL,
+  TAGGING_EVENT_LABEL,
+  addTagging,
+  exportAttendance,
   fetchAttendanceBoard,
+  fixAttendanceStatus,
   recalculateStudyTime,
+  type FixableStatus,
+  type TaggingEvent,
   type AttendanceRow,
   type AttendanceStatus,
 } from '../../api/attendance'
@@ -90,11 +99,32 @@ function one(v: unknown): string | undefined {
 }
 
 function Content() {
-  const { academyId } = useAcademy()
+  const { academyId, ready: academyReady } = useAcademy()
   const [query, setQuery] = useState<SearchValues>({})
   const [masked, setMasked] = useState(true)
-  const [recalcMsg, setRecalcMsg] = useState<string | null>(null)
+  const [recalcMsg, setRecalcMsg] = useState<{ text: string; error?: boolean } | null>(null)
   const [recalcing, setRecalcing] = useState(false)
+
+  /**
+   * 출결 보정.
+   *
+   * ★ 카드를 안 찍고 들어온 학생을 처리하는 유일한 경로다. 없으면 그 학생은 그날 결석으로 남는다.
+   * ★ 두 가지가 다르다 —
+   *     태깅 추가  '사건'을 넣는다(09:10 등원). 등·하원 시각이 생기고 순공시간이 다시 계산된다
+   *     상태 정정  결과만 못박는다. 시각은 그대로다
+   *   시각을 아는 경우(늦게 왔지만 몇 시인지 안다)는 태깅이 맞다.
+   * ★ 정정 사유는 서버가 필수로 막는다. 나중에 왜 고쳤는지 아는 유일한 근거다.
+   */
+  const [fixing, setFixing] = useState<{
+    row: AttendanceRow
+    mode: 'tagging' | 'status'
+    at: string
+    eventType: TaggingEvent
+    status: FixableStatus
+    reason: string
+  } | null>(null)
+  const [fixBusy, setFixBusy] = useState(false)
+  const [fixErr, setFixErr] = useState<string | null>(null)
 
   // 반 드롭다운은 하드코딩하지 않는다 — 지점·연도마다 다르다
   const classParams = useMemo(() => ({ year: new Date().getFullYear() }), [])
@@ -163,6 +193,28 @@ function Content() {
   const serverMasked = board.data?.masked ?? false
   const effectiveMasked = serverMasked ? false : masked
 
+  /** 보정 저장. 태깅과 상태 정정은 경로가 다르다 */
+  async function submitFix() {
+    if (!fixing) return
+    const { row, mode, at, eventType, status, reason } = fixing
+    setFixBusy(true)
+    setFixErr(null)
+    try {
+      if (mode === 'tagging') {
+        await addTagging(row.enrollmentId, { date: row.date, at, eventType, reason: reason.trim() })
+      } else {
+        await fixAttendanceStatus(row.enrollmentId, { date: row.date, status, reason: reason.trim() })
+      }
+      board.reload()
+      setFixing(null)
+    } catch (err) {
+      /* 모달을 닫지 않는다 — 사유를 다시 쓰게 하면 안 된다 */
+      setFixErr(err instanceof ApiError ? err.message : '출결을 정정하지 못했습니다.')
+    } finally {
+      setFixBusy(false)
+    }
+  }
+
   const columns: Column<AttendanceRow>[] = useMemo(
     () => [
       // 하루 조회면 전 행이 같은 날짜라 목업대로 컬럼을 안 띄운다.
@@ -185,12 +237,13 @@ function Content() {
         value: (r) => ATTENDANCE_STATUS_LABEL[r.status] ?? r.status,
         render: (r) => (
           <span style={{ display: 'inline-flex', gap: 4, justifyContent: 'center' }}>
-            <span className={`mk ${STATUS_META[r.status]?.cls ?? ''}`} title={r.status}>
+            {/* title 에 영문 코드(ON_TIME 등)를 넣지 않는다 — 화면이다(CLAUDE.md 1-1) */}
+            <span className={`mk ${STATUS_META[r.status]?.cls ?? ''}`}>
               {ATTENDANCE_STATUS_LABEL[r.status] ?? r.status}
             </span>
             {/* 상태와 다른 축이라 배지를 덮어쓰지 않고 나란히 붙인다 */}
             {r.excused && (
-              <span className="mk supplement" title="사유 승인됨 (excused)">
+              <span className="mk supplement" title="사유가 승인된 건입니다">
                 사유
               </span>
             )}
@@ -225,27 +278,60 @@ function Content() {
             <Unfilled reason="알림 발송 기록은 준비 중입니다" />
           ),
       },
+      {
+        /* ★ 카드를 안 찍고 들어온 학생을 여기서 처리한다. 없으면 그날 결석으로 남는다 */
+        key: 'fix',
+        header: '',
+        width: '64px',
+        align: 'center',
+        value: () => '',
+        render: (r) => (
+          <button
+            className="btn"
+            style={{ padding: '4px 9px', fontSize: 11.5 }}
+            /* 아직 오지 않은 날은 고칠 것이 없다 — 미래 날짜는 전원 '예정' 이다 */
+            disabled={r.status === 'NOT_YET'}
+            title={r.status === 'NOT_YET' ? '아직 지나지 않은 날입니다' : undefined}
+            onClick={() => {
+              setFixErr(null)
+              setFixing({
+                row: r,
+                mode: 'tagging',
+                at: '',
+                eventType: 'CHECK_IN',
+                status: 'PRESENT',
+                reason: '',
+              })
+            }}
+          >
+            정정
+          </button>
+        ),
+      },
     ],
     [ranged],
   )
+
+  // 결과 문구에 날짜를 빼고 머리줄의 날짜를 따르게 했으므로, 조회 날짜가 바뀌면 지운다
+  useEffect(() => setRecalcMsg(null), [date, range, ranged])
 
   async function recalculate() {
     setRecalcing(true)
     setRecalcMsg(null)
     const from = ranged ? (range?.from as string) : date
     const to = ranged ? (range?.to as string) : date
-    const label = ranged ? `${from} ~ ${to}` : date
     try {
       const res = await recalculateStudyTime({ academyId: academyId ?? undefined, from, to })
       // 0은 실패가 아니다 — 아직 확정 전인 날(오늘)은 조회 시점에 즉석 계산되므로 대상이 아니다
-      setRecalcMsg(
-        res.updated > 0
-          ? `${label} 순공시간 ${res.updated}건을 다시 계산했습니다.`
-          : `${label}은 다시 계산할 확정분이 없습니다. (당일치는 조회할 때마다 즉석 계산됩니다)`,
-      )
+      setRecalcMsg({
+        text:
+          res.updated > 0
+            ? `순공시간 ${res.updated}건을 다시 계산했습니다`
+            : '다시 계산할 확정분이 없습니다 (오늘 것은 조회할 때마다 계산됩니다)',
+      })
       board.reload()
     } catch (err) {
-      setRecalcMsg(err instanceof ApiError ? err.message : '학습시간 재계산에 실패했습니다.')
+      setRecalcMsg({ text: err instanceof ApiError ? err.message : '학습시간 재계산에 실패했습니다', error: true })
     } finally {
       setRecalcing(false)
     }
@@ -253,6 +339,98 @@ function Content() {
 
   return (
     <>
+      {fixing && (
+        <Modal
+          title="출결 정정"
+          sub={`${fixing.row.date} · ${fixing.row.name}(${fixing.row.studentNo ?? '-'})`}
+          confirmLabel="저장"
+          busy={fixBusy}
+          error={fixErr}
+          confirmDisabled={
+            fixing.reason.trim() === '' || (fixing.mode === 'tagging' && fixing.at.trim() === '')
+          }
+          onConfirm={() => void submitFix()}
+          onClose={() => setFixing(null)}
+        >
+          {/* ★ 두 방식이 다르다. 시각을 아는 경우(늦게 왔지만 몇 시인지 안다)는 태깅이 맞다 —
+                 등·하원 시각이 생기고 순공시간이 다시 계산된다. 상태 정정은 결과만 못박는다. */}
+          <div className="frow">
+            <label className="req">방식</label>
+            <div>
+              <select
+                className="sel"
+                value={fixing.mode}
+                onChange={(e) => setFixing({ ...fixing, mode: e.target.value as 'tagging' | 'status' })}
+              >
+                <option value="tagging">태깅 추가 — 찍히지 않은 등·하원을 넣습니다</option>
+                <option value="status">상태 정정 — 결과만 바꿉니다</option>
+              </select>
+              <div className="hint">
+                {fixing.mode === 'tagging'
+                  ? '시각이 기록되고 순공시간이 다시 계산됩니다.'
+                  : '시각은 그대로 두고 상태만 바꿉니다.'}
+              </div>
+            </div>
+          </div>
+
+          {fixing.mode === 'tagging' ? (
+            <>
+              <div className="frow">
+                <label className="req">종류</label>
+                <select
+                  className="sel"
+                  value={fixing.eventType}
+                  onChange={(e) => setFixing({ ...fixing, eventType: e.target.value as TaggingEvent })}
+                >
+                  {(Object.keys(TAGGING_EVENT_LABEL) as TaggingEvent[]).map((k) => (
+                    <option key={k} value={k}>
+                      {TAGGING_EVENT_LABEL[k]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="frow">
+                <label className="req">시각</label>
+                <input
+                  className="inp"
+                  type="time"
+                  value={fixing.at}
+                  onChange={(e) => setFixing({ ...fixing, at: e.target.value })}
+                />
+              </div>
+            </>
+          ) : (
+            <div className="frow">
+              <label className="req">바꿀 상태</label>
+              <select
+                className="sel"
+                value={fixing.status}
+                onChange={(e) => setFixing({ ...fixing, status: e.target.value as FixableStatus })}
+              >
+                {(Object.keys(FIXABLE_STATUS_LABEL) as FixableStatus[]).map((k) => (
+                  <option key={k} value={k}>
+                    {FIXABLE_STATUS_LABEL[k]}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className="frow">
+            <label className="req">정정 사유</label>
+            <div>
+              <input
+                className="inp"
+                value={fixing.reason}
+                placeholder="예: 카드 인식 오류로 수기 등원 처리"
+                onChange={(e) => setFixing({ ...fixing, reason: e.target.value })}
+              />
+              <div className="hint">정정 이력에 함께 남습니다.</div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       <div className="stat-strip c8">
         <div className="stat">
           <div className="l">
@@ -268,8 +446,9 @@ function Content() {
               <Icon name={STATUS_META[s].icon} size={13} /> {ATTENDANCE_STATUS_LABEL[s]}
             </div>
             <div className="v">{summary?.[s] ?? 0}</div>
-            <div className="d" style={{ fontFamily: 'ui-monospace, monospace', fontSize: 10 }}>
-              {s}
+            {/* 여기에 상태 코드(ON_TIME 등)를 찍어 두었었다 — 화면이다. 전체 대비 비율을 쓴다 */}
+            <div className="d">
+              {summary?.total ? `조회 대상의 ${Math.round(((summary[s] ?? 0) / summary.total) * 100)}%` : '-'}
             </div>
           </div>
         ))}
@@ -286,7 +465,7 @@ function Content() {
       <SearchForm
         fields={fields}
         onSearch={setQuery}
-        presetKey="attendance"
+        presetKey="ATTENDANCE"
         headerRight={
           <span className="mk verified" title="키오스크에서 자동으로 받습니다">
             <Icon name="zap" size={11} /> 실시간 수신 중
@@ -294,7 +473,7 @@ function Content() {
         }
       />
 
-      {academyId === null && (
+      {academyId === null && academyReady && (
         <div className="note-box">지점을 먼저 선택하세요. 출결은 지점 단위로 조회합니다.</div>
       )}
 
@@ -304,9 +483,8 @@ function Content() {
         </div>
       )}
 
-      {recalcMsg && <div className="note-box">{recalcMsg}</div>}
-
       <DataTable
+        nowrap
         columns={columns}
         rows={rows}
         // 기간 조회면 같은 학생이 날짜 수만큼 나온다 — enrollmentId 만 쓰면 키가 겹쳐
@@ -318,12 +496,18 @@ function Content() {
         countLabel={
           <>
             {ranged ? `${range?.from} ~ ${range?.to}` : date} 출결 <b>{rows.length}</b>건
+            {/* 결과를 표 위 안내 상자로 띄우면 누를 때마다 표가 67px 밀렸다 — 이 줄에 붙인다 */}
+            {(recalcing || recalcMsg) && (
+              <span style={{ marginLeft: 10, fontWeight: 400, color: recalcMsg?.error ? 'var(--red)' : 'var(--muted)' }}>
+                {recalcing ? '학습시간 계산 중…' : recalcMsg?.text}
+              </span>
+            )}
           </>
         }
         toolbar={
           <>
             <button className="btn" onClick={() => void recalculate()} disabled={recalcing || academyId === null}>
-              <Icon name="refresh-cw" size={14} /> {recalcing ? '계산 중…' : '학습시간 일괄계산'}
+              <Icon name="refresh-cw" size={14} /> 학습시간 일괄계산
             </button>
             {serverMasked ? (
               <span className="dt-count" style={{ color: 'var(--muted)' }}>
@@ -332,9 +516,15 @@ function Content() {
             ) : (
               <MaskToggle masked={masked} onChange={setMasked} />
             )}
-            {/* ⚠️ 현재 페이지가 아니라 조회된 전량이 담긴다 — 서버가 전량을 주기 때문이다.
-                서버 엑셀(/attendance/export)로 바꾸면 마스킹 해제 권한까지 서버가 판단한다 */}
-            <ExcelButton filename="출결_현황" columns={columns} rows={rows} masked={effectiveMasked} />
+            {/* 서버 엑셀이다(2026-09-25) — 조회와 같은 조건을 서버가 타고, 마스킹 해제 권한도
+                서버가 판단한다. 파일은 회수가 안 되므로 화면 토글보다 기준이 높다 */}
+            <ExcelButton
+              filename="출결_현황"
+              columns={columns}
+              rows={rows}
+              masked={effectiveMasked}
+              download={() => exportAttendance({ ...params, unmask: !effectiveMasked || undefined }, '출결_현황.xlsx')}
+            />
           </>
         }
       />
@@ -345,8 +535,9 @@ function Content() {
 export const attendanceMockup: Mockup = {
   Content,
   actions: (
-    <button className="btn" disabled data-soon title="준비 중입니다">
+    // 출결 알림(등원·하원·지각)도 알림 템플릿 중 하나다 — 따로 두지 않고 그 화면으로 보낸다
+    <Link className="btn" to="/s/message-send?tab=tpl" title="등원·하원·지각 알림 문구는 알림 발송의 템플릿 관리에서 고칩니다">
       <Icon name="bell" size={14} /> 출결 알림 템플릿
-    </button>
+    </Link>
   ),
 }

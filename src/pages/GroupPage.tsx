@@ -1,5 +1,6 @@
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { findScreen } from '../data/menu'
+import { canSeeScreenAs } from '../data/menuCodes'
 import { findNavCat, navItemCount, navPath } from '../data/nav'
 import { PageHead } from '../components/PageHead'
 import { useAuth } from '../auth/AuthContext'
@@ -14,12 +15,20 @@ import './home.css'
  */
 export function GroupPage() {
   const { groupId } = useParams()
-  const { canSeeAdmin } = useAuth()
+  const { canSeeAdmin, allowedMenus, principal, me } = useAuth()
+  const isSuper = (me?.roles ?? principal?.roles ?? []).some((r) => r === 'SUPER_ADMIN')
   const cat = groupId ? findNavCat(groupId) : undefined
   if (!cat) return <Navigate to="/" replace />
   /* ★ 메뉴에서 감추는 것만으로는 주소를 직접 친 사람을 못 막는다 — viewer1 으로 /g/admin 이
        그대로 열렸다. 서버가 403 을 주므로 자료는 안 새지만 화면은 열린 채로 남는다. */
   if (cat.id === 'admin' && !canSeeAdmin) return <Navigate to="/" replace />
+
+  /* ★ 계정별 메뉴 노출. 좌측 메뉴만 거르면 **이 허브에는 다 남는다** — 감춘 화면의 카드가
+       그대로 보이고, 눌러야 대시보드로 되튕긴다(ScreenPage). 같은 기준으로 여기서도 거른다 */
+  const sections = cat.sections
+    .map((sec) => ({ ...sec, items: sec.items.filter((i) => canSeeScreenAs(i.screenId, allowedMenus, isSuper)) }))
+    .filter((sec) => sec.items.length > 0)
+  if (sections.length === 0) return <Navigate to="/" replace />
 
   return (
     <>
@@ -30,11 +39,11 @@ export function GroupPage() {
         sub={cat.desc}
         actions={
           /* '중분류'는 우리끼리 쓰는 말이다(CLAUDE.md 1-1) — 화면 개수만 남긴다 */
-          <span className="sc-ref">화면 {navItemCount(cat)}개</span>
+          <span className="sc-ref">화면 {navItemCount(cat, (i) => canSeeScreenAs(i.screenId, allowedMenus, isSuper))}개</span>
         }
       />
 
-      {cat.sections.map((sec) => (
+      {sections.map((sec) => (
         <section key={sec.name} style={{ marginBottom: 22 }}>
           <div className="sc-sub" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 9 }}>
             {sec.name}

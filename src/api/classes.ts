@@ -16,9 +16,23 @@ export interface ClassGroup {
   classType: ClassType
   homeroomTeacherId: number | null
   homeroomTeacherName: string | null
+  /**
+   * 정원.
+   *
+   * ★ **`null` 이면 정원을 두지 않는 반**이다 — 0 이 아니다. 화면이 `?? 0` 으로 받으면
+   *   "정원 0명" 이 되어 늘 초과로 보인다. 충원율도 못 낸다.
+   */
   capacity: number | null
-  /** 현재 인원. 반마다 명단을 부르지 않아도 되게 목록에 실려 온다 */
-  memberCount: number
+  /** 반 강의실(강의실 마스터). 지정 안 했으면 null (2026-09-21 추가) */
+  roomId?: number | null
+  roomName?: string | null
+  /**
+   * 현재 인원. 반마다 명단을 부르지 않아도 되게 목록에 실려 온다.
+   *
+   * ★ **목록에서만 채워진다.** 생성·수정·담임지정 같은 단건 응답은 `null` 이다 —
+   *   세지 않기 때문이다. 만든 직후 이 값을 쓰려 하면 빈다.
+   */
+  memberCount: number | null
 }
 
 /** 반 명단의 학생 한 명. 학생 검색(Student)보다 필드가 적다 */
@@ -35,6 +49,14 @@ export interface ClassMember {
 }
 
 /** `academyId` 는 좁히는 용도다. 안 보내면 계정 스코프 그대로다 */
+/**
+ * 반 목록.
+ *
+ * ★ `year` 는 선택이지만 **사실상 필수다.** 안 넘기면 전 연도가 섞여 와서 같은 이름의 반이
+ *   여러 번 나오고(반 이름은 해마다 재사용된다 — 'N수 1반' 이 2026·2027 양쪽에 있다),
+ *   드롭다운에서 다음 해 반을 고르면 **학생 배정이 전원 실패한다** —
+ *   서버가 "학생의 등록 연도와 반의 연도가 다릅니다" 로 건별로 거절한다(2026-09-16 실측).
+ */
 export function listClasses(year?: number, academyId?: number): Promise<ClassGroup[]> {
   return request<ClassGroup[]>('/api/v1/admin/classes', { query: { year, academyId } })
 }
@@ -94,3 +116,29 @@ export function assignStudentsToClass(classId: number, enrollmentIds: number[]):
 export function releaseStudentFromClass(classId: number, enrollmentId: number): Promise<void> {
   return request<void>(`/api/v1/admin/classes/${classId}/students/${enrollmentId}`, { method: 'DELETE' })
 }
+
+/**
+ * 반 생성.
+ *
+ * ★ `classType` 이 둘이다 — `FIXED`(고정반)는 학생이 소속되는 반, `MOVING`(이동반)은
+ *   과목별로 옮겨 다니는 반이다. 배정 화면이 다루는 것은 고정반이다.
+ *
+ * ★ `capacity` 는 **안 보내면 정원 없는 반**이 된다(0 이 아니다).
+ * ★ 응답의 `memberCount` 는 `null` 이다 — 방금 만든 반이라 셀 것이 없다.
+ */
+export function createClass(body: {
+  academyId: number
+  year: number
+  name: string
+  classType: ClassType
+  homeroomTeacherId?: number
+  capacity?: number
+}): Promise<ClassGroup> {
+  return request<ClassGroup>('/api/v1/admin/classes', { method: 'POST', body })
+}
+
+/** 반 강의실 지정·해제. roomId 를 비우면(null) 해제한다 */
+export function setClassRoom(classId: number, roomId: number | null): Promise<ClassGroup> {
+  return request<ClassGroup>(`/api/v1/admin/classes/${classId}/room`, { method: 'PUT', body: { roomId } })
+}
+

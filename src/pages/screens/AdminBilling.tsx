@@ -10,6 +10,7 @@ import {
   createBillingStandard,
   deleteBillingStandard,
   listBillingStandards,
+  copyBillingStandardsYear,
   listRefundRules,
   setBillingStandardActive,
   type AmountSource,
@@ -27,6 +28,7 @@ import {
   type TuitionPrice,
 } from '../../api/tuition'
 import type { Mockup } from './types'
+import { createScreenSignal } from './screenSignal'
 import '../../styles/forms.css'
 
 /* F-4.10-5 수납 관리(청구기준 관리) — 신규개발-요구사항검증됨
@@ -156,6 +158,21 @@ function standardColumns(
       ),
     },
   ]
+}
+
+/*
+ * 단가표의 결제 채널 · 납기 — 단가표 행에는 없고 **교습비 청구 기준**(itemType TUITION)에 있다
+ * (paymentMethod · dueDesc). 단가표는 학년 × 좌석 금액표라 청구 방법은 교습비 기준 하나를 따른다.
+ * 교습비 기준이 없으면 '-' — 청구 기준 탭에서 등록하면 채워진다.
+ */
+function priceColumns(tuition: BillingStandard | undefined): Column<TuitionPrice>[] {
+  return PRICE_COLUMNS.map((c) =>
+    c.key === 'pg'
+      ? { ...c, value: () => (tuition?.paymentMethod ? PAYMENT_METHOD_LABEL[tuition.paymentMethod] : '-'), render: undefined }
+      : c.key === 'dueDay'
+        ? { ...c, value: () => tuition?.dueDesc ?? '-', render: undefined }
+        : c,
+  )
 }
 
 const PRICE_COLUMNS: Column<TuitionPrice>[] = [
@@ -300,6 +317,10 @@ function Content() {
   const [prices, setPrices] = useState<TuitionPrice[]>([])
   const [months, setMonths] = useState<TuitionMonth[]>([])
   const [standards, setStandards] = useState<BillingStandard[]>([])
+  const priceCols = useMemo(
+    () => priceColumns(standards.find((x) => x.itemType === 'TUITION' && x.active) ?? standards.find((x) => x.itemType === 'TUITION')),
+    [standards],
+  )
   const [refunds, setRefunds] = useState<RefundRule[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -308,6 +329,16 @@ function Content() {
   const [monthEdit, setMonthEdit] = useState<{ mo: number; days: string } | null>(null)
   const [monthErr, setMonthErr] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  /*
+   * 전년도 기준 복사 — 청구 기준만 옮긴다(`/billing-standards/copy-year`). 같은 코드는 건너뛴다.
+   * 헤더 버튼은 본문 상태를 못 만져 신호로 이 창을 연다(CLAUDE.md 5-1).
+   */
+  const [copyAsk, setCopyAsk] = useState(false)
+  const [copyBusy, setCopyBusy] = useState(false)
+  const copyVer = copySignal.useVersion()
+  useEffect(() => {
+    if (copyVer > 0) setCopyAsk(true)
+  }, [copyVer])
 
   /* 청구 기준 등록. **코드·항목·금액 방식이 필수**라 이름만 받는 창으로는 못 만든다 */
   const [newStd, setNewStd] = useState<NewStandard | null>(null)
@@ -444,8 +475,52 @@ function Content() {
     }
   }
 
+  async function copyStandards() {
+    // 헤더 버튼은 지점을 안 골라도 창을 연다 — 조용히 멈추면 '복사'가 안 먹는 것처럼 보인다
+    if (academyId === null) {
+      setNotice('먼저 위에서 지점을 고르세요.')
+      setCopyAsk(false)
+      return
+    }
+    setCopyBusy(true)
+    try {
+      const r = await copyBillingStandardsYear({ academyId, fromYear: year - 1, toYear: year })
+      setNotice(
+        r.copied === 0
+          ? `새로 옮길 청구 기준이 없습니다${r.skipped ? ` — ${r.skipped}건은 같은 코드가 이미 ${year}년에 있습니다` : ` — ${year - 1}년에 등록된 기준이 없습니다`}.`
+          : `${year - 1}년 청구 기준을 ${year}년으로 옮겼습니다 — ${r.copied}건 복사` +
+              (r.skipped ? ` · ${r.skipped}건은 같은 코드가 있어 건너뜀` : '') +
+              '. 금액이 바뀌었으면 옮긴 기준을 고치세요.',
+      )
+      setCopyAsk(false)
+      await load()
+    } catch (err) {
+      setNotice(err instanceof ApiError ? `복사하지 못했습니다 — ${err.message}` : '복사하지 못했습니다.')
+      setCopyAsk(false)
+    } finally {
+      setCopyBusy(false)
+    }
+  }
+
   return (
     <>
+      {copyAsk && (
+        <Modal
+          title={`${year - 1}년 청구 기준을 ${year}년으로 복사할까요?`}
+          sub="같은 코드가 이미 있으면 건너뜁니다. 사용 중지된 기준도 그대로 옮깁니다."
+          confirmLabel="복사"
+          busy={copyBusy}
+          onConfirm={() => void copyStandards()}
+          onClose={() => setCopyAsk(false)}
+        >
+          <div className="note-box">
+            <div>
+              금액은 작년 그대로 넘어갑니다. 올해 금액이 다르면 옮긴 뒤 고치세요. 위에서 고른 시즌({year})이 옮겨 갈
+              연도입니다.
+            </div>
+          </div>
+        </Modal>
+      )}
       {delStd && (
         <Modal
           title="청구 기준 삭제"
@@ -707,7 +782,7 @@ function Content() {
               {/* 위 목록의 '단가표' 행이 여기서 갈린다 — 학년 × 좌석유형 */}
               <div style={{ marginTop: 14 }} />
               <DataTable
-                columns={PRICE_COLUMNS}
+                columns={priceCols}
                 rows={prices}
                 rowKey={(r) => String(r.id)}
                 masked={false}
@@ -720,7 +795,7 @@ function Content() {
                 }
                 toolbar={
                   <>
-                    <ExcelButton filename={`청구기준_${year}`} columns={PRICE_COLUMNS} rows={prices} masked={false} />
+                    <ExcelButton filename={`청구기준_${year}`} columns={priceCols} rows={prices} masked={false} />
                     <select
                       className="sel"
                       value={year}
@@ -809,7 +884,7 @@ function Content() {
                 <div>
                   <div className="tt">학원법 시행령 반환기준입니다 — 학원이 바꾸는 값이 아닙니다</div>
                   <div className="tx">
-                    서버가 내려주는 값이고 <b>읽기 전용</b>입니다. 차감은 <b>정상가 기준</b>이라
+                    법에서 정한 값이라 <b>읽기 전용</b>입니다. 차감은 <b>정상가 기준</b>이라
                     할인을 받은 학생은 환불액이 음수가 될 수 있습니다.
                   </div>
                 </div>
@@ -840,12 +915,14 @@ function Content() {
   )
 }
 
+const copySignal = createScreenSignal()
+
 export const adminBillingMockup: Mockup = {
   Content,
   actions: (
     <>
       <button className="btn" disabled data-soon title="준비 중입니다">기수 선택 ▾</button>
-      <button className="btn" disabled data-soon title="준비 중입니다">
+      <button className="btn" onClick={() => copySignal.bump()} title="작년 청구 기준을 올해로 옮깁니다. 같은 코드는 건너뜁니다">
         <Icon name="history" size={14} /> 전년도 기준 복사
       </button>
     </>

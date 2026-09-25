@@ -81,15 +81,31 @@ export interface LectureSession {
   room: string | null
 }
 
-/** 신청자 한 명. 대기자도 같은 구조이고 waitlisted 로 갈린다 */
+/** 신청 상태. **취소는 행이 지워지지 않고 이 값이 바뀐다** — 아래 ★ 참고 */
+export type ApplicationStatus = 'APPLIED' | 'WAITLISTED' | 'CANCELED'
+
+/**
+ * 신청자 한 명. 대기자도 같은 구조이고 `waitlisted` 로 갈린다.
+ *
+ * ★ **`waitlisted` 만 보고 확정자를 세면 안 된다.** 취소된 신청은 `status: 'CANCELED'` 가
+ *   되는데 `waitlisted` 는 **false 로 남는다.** 그래서 `!waitlisted` 로 거르면 취소자가
+ *   확정자에 섞인다 — 실측: 대기자 1명을 취소했더니 서버 확정 4명 / 화면 5명이 됐고,
+ *   출석부에도 줄이 생겼다(2026-09-16).
+ *
+ *   확정자는 `!waitlisted && status !== 'CANCELED'` 다. `/attendance-targets` 는
+ *   서버가 같은 기준으로 걸러 준다.
+ */
 export interface LectureApplicant {
   applicationId: number
   studentId: number
+  /** 등록 건 id(2026-09-21 추가) — 청구는 이걸로 한다. 학생 id 로는 재등록한 학생의 어느 등록인지 모른다 */
+  enrollmentId?: number
   studentNo: string | null
   studentName: string
   className: string | null
   phone: string | null
-  status: string
+  status: ApplicationStatus
+  /** ★ 취소돼도 false 다. 확정자 판정에 이것만 쓰지 않는다 — 위 ★ 참고 */
   waitlisted: boolean
   appliedAt: string | null
   memo: string | null
@@ -145,6 +161,10 @@ export function promoteApplicant(applicationId: number): Promise<void> {
 
 /**
  * 부분 수정. 보낸 항목만 바뀐다.
+ *
+ * ★ **`null` 을 보내도 지워지지 않는다.** 서버가 null 을 "안 보낸 것"으로 보기 때문에,
+ *   한번 넣은 정원·설명·기간을 **비울 방법이 없다**(2026-09-14 확인). 값을 바꾸는 것만 된다.
+ *   화면에서 "정원 제한 없음"으로 되돌리려면 서버에 지우는 방법이 필요하다.
  *
  * ★ 개설(POST)은 이름·종류만 받는다. 유형·담당·정원·비용·기간은 전부 이쪽이라
  *   등록 폼이 값을 채우려면 **2콜**이 된다 — 중간에 실패하면 이름만 있는 특강이 남는다.
@@ -213,4 +233,65 @@ export function deleteLecture(lectureId: number): Promise<void> {
  */
 export function deleteLectureSession(sessionId: number): Promise<void> {
   return request<void>(`/api/v1/admin/lectures/sessions/${sessionId}`, { method: 'DELETE' })
+}
+
+/* ── 특강 출석부 ─────────────────────────────────────────────────────────────── */
+
+export type LectureAttendanceStatus = 'PRESENT' | 'ABSENT' | 'LATE'
+
+export const LECTURE_ATTENDANCE_LABEL: Record<LectureAttendanceStatus, string> = {
+  PRESENT: '출석',
+  LATE: '지각',
+  ABSENT: '결석',
+}
+
+export interface LectureAttendance {
+  applicationId: number
+  status: LectureAttendanceStatus
+  /** 서버가 안 줄 수도 있다 — 목록은 대상(applicants)과 맞춰 그린다 */
+  studentName?: string | null
+  memo?: string | null
+}
+
+/**
+ * 출석 대상 — `GET /lectures/{id}/attendance-targets`
+ *
+ * ★ 응답이 신청자 목록과 같은 모양이고 **확정자만** 온다(`waitlisted: false`).
+ *   대기자는 수업에 안 들어오므로 출석부에 없다.
+ */
+export function listAttendanceTargets(lectureId: number): Promise<LectureApplicant[]> {
+  return request<LectureApplicant[]>(`/api/v1/admin/lectures/${lectureId}/attendance-targets`)
+}
+
+/** 회차별 출결 — 아직 아무도 안 찍었으면 빈 배열이다(0건 = 미입력) */
+export function listSessionAttendances(sessionId: number): Promise<LectureAttendance[]> {
+  return request<LectureAttendance[]>(`/api/v1/admin/lectures/sessions/${sessionId}/attendances`)
+}
+
+/**
+ * 출결 입력 — `PUT /lectures/sessions/{id}/attendances`
+ *
+ * ★ **한 건씩 받는다.** `applicationId` + `status` 가 필수이고 배열이 아니다 —
+ *   여러 명을 찍으면 그 수만큼 호출된다. 중간에 실패하면 앞사람은 이미 저장돼 있으므로
+ *   호출부가 "몇 명 중 몇 명이 됐는지"를 알려야 한다.
+ * ★ 허용값은 `PRESENT · ABSENT · LATE` 뿐이다. 출결 관리(F-4.3)의 상태값과 다르다 —
+ *   그쪽은 조퇴·외출까지 있다.
+ */
+export function saveSessionAttendance(
+  sessionId: number,
+  body: { applicationId: number; status: LectureAttendanceStatus; memo?: string },
+): Promise<void> {
+  return request<void>(`/api/v1/admin/lectures/sessions/${sessionId}/attendances`, { method: 'PUT', body })
+}
+
+/**
+ * 관리자 신청 취소.
+ *
+ * ★ **행이 지워지지 않는다.** `status` 가 `CANCELED` 로 바뀌고 명단에 남는다 —
+ *   누가 취소했는지가 남아야 해서다. 화면은 취소자를 확정자에서 빼고 따로 표시한다.
+ *
+ * ★ 확정자를 취소하면 정원이 하나 빈다. 자동 승격은 그때 돈다(수동 승격과 다르다).
+ */
+export function cancelApplication(applicationId: number): Promise<void> {
+  return request<void>(`/api/v1/admin/lectures/applications/${applicationId}`, { method: 'DELETE' })
 }

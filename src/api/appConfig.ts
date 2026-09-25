@@ -104,3 +104,40 @@ export interface TermsStatus {
 export function getTermsAgreements(accountId: number): Promise<TermsStatus[]> {
   return request<TermsStatus[]>(`/api/v1/admin/app-config/terms/agreements/${accountId}`)
 }
+
+export interface TermsUsage {
+  termsId: number
+  code: string
+  version: string
+  title: string
+  required: boolean
+  /** 분모 — 활성 앱 계정(학생 + 학부모) */
+  targetAccounts: number
+  agreedAccounts: number
+  /** 정수 % */
+  rate: number
+}
+
+/**
+ * 앱 가입·동의 현황 — 앱 운영 상단 카드(2026-09-21 추가).
+ *
+ * ★ 기준은 **지금 재원 중인 학생**이다. 퇴원생 계정은 분모에 안 들어간다.
+ * ★ 동의율은 약관마다 따로이고 분모는 활성 앱 계정(학생 + 학부모)이다 — 가입률과 분모가 다르다.
+ * ★ `academyId` 를 빼면 전 지점 합계다(본사 계정).
+ */
+export interface AppUsage {
+  enrolledStudents: number
+  studentAccounts: number
+  /** 가입했지만 아직 승인 전 */
+  pendingStudents: number
+  studentSignupRate: number
+  parentAccounts: number
+  studentsWithParent: number
+  parentLinkRate: number
+  terms: TermsUsage[]
+}
+
+export function getAppUsage(academyId?: number): Promise<AppUsage> {
+  return request<AppUsage>('/api/v1/admin/app-config/usage', { query: { academyId } })
+}
+

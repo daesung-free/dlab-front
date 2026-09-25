@@ -158,6 +158,13 @@ export const NAV: NavCat[] = [
           { screenId: 'admin-basic', label: '학과계열 관리', tab: 'track', icon: 'git-compare' },
           { screenId: 'admin-basic', label: '그 외 기초 항목', tab: 'class_group', icon: 'sliders-horizontal' },
           { screenId: 'annual-events', label: '연간 행사 마스터', added: true, note: '학습계획 자동 반영' },
+          {
+            screenId: 'admin-meal-vendor',
+            label: '급식 업체 관리',
+            icon: 'utensils',
+            added: true,
+            note: '지점별 업체 · 1식 단가. 해마다 새로 정한다',
+          },
         ],
       },
       {
@@ -166,7 +173,16 @@ export const NAV: NavCat[] = [
       },
       {
         name: '사용자관리',
-        items: [{ screenId: 'admin-user', label: '사용자관리' }],
+        items: [
+          { screenId: 'admin-user', label: '사용자관리' },
+          {
+            screenId: 'admin-branch-config',
+            label: '지점 설정',
+            icon: 'settings',
+            added: true,
+            note: '결제·방화벽·키오스크. 본사 전용',
+          },
+        ],
       },
       {
         name: '배정 · 특강 · 실적',
@@ -174,6 +190,13 @@ export const NAV: NavCat[] = [
           { screenId: 'admin-assign', label: '배정 관리', added: true, note: '사물함·독서실. 기숙사 제외' },
           { screenId: 'admin-lecture', label: '특강 기초 설정', added: true },
           { screenId: 'admin-result', label: '실적 관리', added: true, note: '합격 실적 입력·통계' },
+          {
+            screenId: 'exam-upload',
+            label: '성적 업로드',
+            icon: 'upload',
+            added: true,
+            note: '디랩 시험 성적·문항분석표·정오표 파일',
+          },
         ],
       },
     ],
@@ -203,8 +226,10 @@ export const navSectionOfScreen = (screenId: string): string | undefined => {
 }
 
 /** 대분류 하위 기능 개수 */
-export const navItemCount = (cat: NavCat): number =>
-  cat.sections.reduce((n, s) => n + s.items.length, 0)
+/** ★ `can` 을 넘기면 **보이는 것만** 센다. 계정별 메뉴 노출로 항목을 감추면서 숫자를
+ *   그대로 두면 상단 탭이 '12' 인데 열어보니 3개인 상태가 된다 — 누락으로 읽힌다 */
+export const navItemCount = (cat: NavCat, can?: (item: NavItem) => boolean): number =>
+  cat.sections.reduce((n, s) => n + (can ? s.items.filter(can).length : s.items.length), 0)
 
 /** 메뉴에 걸린 고유 화면 id 집합 — 배치 누락 검증용 */
 export const navScreenIds = (): string[] => [

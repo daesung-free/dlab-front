@@ -28,7 +28,7 @@ export interface MockStudent {
 const SURNAMES = ['김', '이', '박', '최', '정', '강', '조', '윤', '장', '임', '한', '오', '서', '신', '권']
 const GIVEN = ['승민', '하윤', '서준', '민재', '유나', '도현', '지호', '채원', '수빈', '서연', '지우', '세훈', '하늘', '민주', '도윤', '현준', '예린', '태윤']
 const SCHOOLS = ['태원고', '송림고', '유신고', '분당고', '보평고', '낙생고', '한솔고', '이매고']
-const TEACHERS = ['이장원', '김유진', '최지원', '박서영', '정하람']
+const TEACHERS = ['담임 C', '담임 B', '담임 A', '담임 D', '정하람']
 const BRANCHES: MockStudent['branch'][] = ['분당', '일산', '동탄']
 
 function pad(n: number, len: number): string {

@@ -1,17 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { StudentList, type StudentRow } from '../../components/StudentList'
 import { StudentHeader } from '../../components/StudentHeader'
+import { AcademyExams } from '../../components/AcademyExams'
 import { Icon } from '../../components/Icon'
-import { Unfilled } from '../../components/common'
+import { Modal } from '../../components/common'
 import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
 import {
   EXAM_CODE_LABEL,
   getStudentGrades,
+  getAcademyScoring,
+  listAcademyExams,
   listExamForms,
+  updateExamScores,
+  updateSchoolRecord,
   type ExamForm,
   type ExamSubject,
   type GradeSubmission,
+  type ScoreInput,
 } from '../../api/grades'
 import { GRADE_LABEL, TRACK_LABEL, searchStudents, type Student } from '../../api/students'
 import type { Mockup } from './types'
@@ -26,11 +32,17 @@ import './score.css'
  *   근거로 돌기 때문에 **학생이 낸 값인지 직원이 고친 값인지 화면에 드러내야 한다** —
  *   `modifiedBy` 가 그 표시다.
  *
- * ⚠️ 표에는 아직 입력칸이 없다. 목업이 조회 화면이라 수정 UI 추가는 승인이 필요하다.
+ * ★ 표 자체는 읽기 전용으로 두고 **수정은 모달로 뺐다.** 표에 입력칸을 박으면 조회하러 온
+ *   사람이 실수로 값을 건드리는데, 이 값은 장학 판정 근거다. 고치려면 한 번 더 눌러야 한다.
  *
  * ★ 표의 **열은 시험 양식이 정한다.** 과목 구성이 학년·연도마다 달라서
  *   화면이 국·수·영·탐구를 하드코딩하면 안 된다.
  *   절대평가 과목(한국사·영어)은 `hasStandardScore=false` 라 표준점수 칸을 비운다.
+ *
+ * ★ **열을 `examSubjectId` 로 맞추면 안 된다.** 회차마다 id 가 새로 매겨져 있다 —
+ *   HIGH2 는 6월이 1~5, 9월이 6~10, 10월이 11~15 다. 예전에는 양식 **하나**를 골라
+ *   그 id 로 모든 회차를 찾았는데, 그러면 **고른 회차 말고는 전 칸이 '-'** 로 나왔다.
+ *   성적이 실제로 들어 있어도 빈 표로 보인다. 축은 `subjectCode` 가 갖는다.
  *
  * ★ `examSkipped=true` 는 **"모른다고 체크한 것"** 이지 미입력이 아니다.
  *   둘을 같이 보여주면 담임이 "안 낸 학생"과 "모르는 학생"을 구분하지 못한다.
@@ -44,9 +56,34 @@ import './score.css'
  * ★ 코드는 **서버가 주는 그대로** 써야 한다. 예전에는 `KOR`·`INQ1`·`INQ2` 로 찾았는데
  *   서버는 `KOREAN`·`INQUIRY1`·`INQUIRY2` 다. `MATH` 하나만 겹쳐서 **수학 백분위가
  *   곧 합계로 나왔다** — 72×4과목인 학생의 합이 72 였다. 틀린 줄 모르고 상담에 쓰인다.
- *   실제 코드: KOREAN MATH ENGLISH INQUIRY1 INQUIRY2 HISTORY SOCIAL SCIENCE (2026-09-11)
+ *
+ * ★ **탐구 과목 코드가 학년마다 다르다.** 고3·N수는 `INQUIRY1`·`INQUIRY2` 인데
+ *   고2는 `SOCIAL`·`SCIENCE`(통합사회·통합과학)다. 둘을 빼놓으면 **고2만 국어+수학
+ *   두 과목만 더한 값**이 '국수탐 합계'로 나온다 — 실측: 국60 수61 사63 과64 인 학생의
+ *   합이 121 이었다(2026-09-16). 같은 표에서 학년만 다르면 기준이 달라지는 셈이다.
+ *
+ * ★ 영어·한국사는 뺀다. 절대평가라 백분위가 아예 없다(`hasPercentile: false`).
+ *   실제 코드: KOREAN MATH ENGLISH INQUIRY1 INQUIRY2 HISTORY SOCIAL SCIENCE
  */
-const SUM_CODES = ['KOREAN', 'MATH', 'INQUIRY1', 'INQUIRY2']
+const SUM_CODES = ['KOREAN', 'MATH', 'INQUIRY1', 'INQUIRY2', 'SOCIAL', 'SCIENCE']
+
+/** 입력 중인 한 과목 칸. 숫자가 아니라 문자열로 들고 있어야 지우는 중간 상태가 표현된다 */
+interface ScoreCell {
+  standardScore: string
+  percentile: string
+  gradeLevel: string
+}
+
+/**
+ * 빈 칸은 `null` 로 보낸다.
+ *
+ * ★ `0` 과 빈 칸을 섞으면 안 된다. `Number('')` 는 0 이라 그냥 넘기면 **안 낸 과목이
+ *   백분위 0 으로 저장된다** — 국수탐 합계가 그만큼 낮게 나오고 장학 판정이 틀어진다.
+ */
+function numOrNull(v: string): number | null {
+  const t = v.trim()
+  return t === '' ? null : Number(t)
+}
 
 function toRow(s: Student): StudentRow {
   return {
@@ -60,7 +97,7 @@ function toRow(s: Student): StudentRow {
 }
 
 function Content() {
-  const { academyId } = useAcademy()
+  const { academyId, ready: academyReady } = useAcademy()
   const [students, setStudents] = useState<Student[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [forms, setForms] = useState<ExamForm[]>([])
@@ -70,25 +107,41 @@ function Content() {
   const [gradeError, setGradeError] = useState<string | null>(null)
   const [subjectCode, setSubjectCode] = useState<string | null>(null)
 
+  /* 수정 모달. 표는 읽기 전용으로 두고 여기서만 값을 바꾼다 */
+  const [recordEdit, setRecordEdit] = useState<string | null>(null)
+  const [scoreEdit, setScoreEdit] = useState<{ examMasterId: number; cells: Record<number, ScoreCell> } | null>(null)
+  const [saveBusy, setSaveBusy] = useState(false)
+  const [saveErr, setSaveErr] = useState<string | null>(null)
+
   const year = new Date().getFullYear()
 
   /* 좌측 목록 */
   /* ★ 지점을 넘겨야 한다. `/students` 는 안 보내면 **계정 스코프 그대로** 오므로
        본사 계정에서는 전 지점 학생이 섞여 나온다 — 분당을 골라도 65명이 다 보였다.
        (400 이 아니라 조용히 섞여서 들어오는 것이라 더 늦게 드러났다. CLAUDE.md 3-1) */
+  /* ★ 지점 목록을 받기 전에는 부르지 않는다. 그 사이 academyId 가 null 이라 전 지점 학생을 먼저 받았고,
+       그 첫 학생(다른 지점)이 선택된 채 남아 **남의 지점 학생 성적**을 불러왔다 */
   const loadStudents = useCallback(async () => {
+    if (!academyReady) return
     setListLoading(true)
     try {
-      const page = await searchStudents({ status: 'ENROLLED', size: 100, academyId: academyId ?? undefined })
+      const page = await searchStudents({ status: 'ENROLLED', size: 2000, academyId: academyId ?? undefined })
       setStudents(page.rows)
-      setSelectedId((prev) => prev ?? (page.rows[0] ? String(page.rows[0].enrollmentId) : null))
+      // 지점을 바꾸면 이전 선택이 새 목록에 없다 — 그대로 두면 목록에 없는 학생의 성적이 오른쪽에 남는다
+      setSelectedId((prev) =>
+        prev !== null && page.rows.some((r) => String(r.enrollmentId) === prev)
+          ? prev
+          : page.rows[0]
+            ? String(page.rows[0].enrollmentId)
+            : null,
+      )
       setError(null)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '학생 목록을 불러오지 못했습니다.')
     } finally {
       setListLoading(false)
     }
-  }, [academyId])
+  }, [academyId, academyReady])
 
   useEffect(() => {
     void loadStudents()
@@ -98,7 +151,9 @@ function Content() {
   useEffect(() => {
     let cancelled = false
     listExamForms(year)
-      .then((f) => !cancelled && setForms(f))
+      // 디랩에서 본 시험(ACADEMY)은 성적 업로드 화면이 맡는다 — 여기는 입학 전 성적만.
+      // 섞이면 회차 버튼에 업로드용 회차가 끼어 직원이 손으로 고치게 된다
+      .then((f) => !cancelled && setForms(f.filter((x) => x.purpose !== 'ACADEMY')))
       .catch(() => !cancelled && setForms([]))
     return () => {
       cancelled = true
@@ -108,48 +163,126 @@ function Content() {
   const selected = students.find((s) => String(s.enrollmentId) === selectedId) ?? null
 
   /* 선택 학생의 성적 */
+  const loadGrades = useCallback(async (enrollmentId: number) => {
+    setGradeError(null)
+    try {
+      setSubmission(await getStudentGrades(enrollmentId))
+    } catch (err) {
+      setSubmission(null)
+      // "제출된 성적이 없습니다"는 오류가 아니라 정상 상태다
+      setGradeError(
+        err instanceof ApiError && err.code === 'GRADE_SUBMISSION_NOT_FOUND' ? null : '성적을 불러오지 못했습니다.',
+      )
+    }
+  }, [])
+
   useEffect(() => {
     if (selectedId === null) {
       setSubmission(null)
       return
     }
-    let cancelled = false
-    setGradeError(null)
-    getStudentGrades(Number(selectedId))
-      .then((g) => !cancelled && setSubmission(g))
-      .catch((err) => {
-        if (cancelled) return
-        setSubmission(null)
-        // "제출된 성적이 없습니다"는 오류가 아니라 정상 상태다
-        setGradeError(err instanceof ApiError && err.code === 'GRADE_SUBMISSION_NOT_FOUND' ? null : '성적을 불러오지 못했습니다.')
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [selectedId])
+    void loadGrades(Number(selectedId))
+  }, [selectedId, loadGrades])
 
-  /** 표의 열. 선택 학생의 학년에 맞는 양식에서 뽑는다 */
-  const subjects: ExamSubject[] = useMemo(() => {
-    const form = forms.find((f) => f.gradeType === selected?.grade) ?? forms[0]
-    return form ? [...form.subjects].sort((a, b) => a.sortOrder - b.sortOrder) : []
+  /** 선택 학생의 학년에 해당하는 양식들. 회차(6월·9월·수능)마다 한 건이다 */
+  const gradeForms: ExamForm[] = useMemo(() => {
+    const mine = forms.filter((f) => f.gradeType === selected?.grade)
+    return [...(mine.length > 0 ? mine : forms)].sort((a, b) => a.sortOrder - b.sortOrder)
   }, [forms, selected])
+
+  /**
+   * 표의 열 — 그 학년 **전 회차의 과목을 합집합**으로 모은다.
+   *
+   * ★ 회차마다 과목이 다르다. HIGH2 는 10월에만 한국사가 붙는다. 한 회차만 보고 열을
+   *   만들면 다른 회차의 과목이 표에서 통째로 빠진다.
+   */
+  const subjects: ExamSubject[] = useMemo(() => {
+    const byCode = new Map<string, ExamSubject>()
+    for (const f of gradeForms) {
+      for (const s2 of f.subjects) if (!byCode.has(s2.subjectCode)) byCode.set(s2.subjectCode, s2)
+    }
+    return [...byCode.values()].sort((a, b) => a.sortOrder - b.sortOrder)
+  }, [gradeForms])
+
+  /** `examSubjectId` → 과목 코드. 회차마다 id 가 달라 점수를 코드로 되돌려야 한다 */
+  const codeById: Map<number, string> = useMemo(() => {
+    const m = new Map<number, string>()
+    for (const f of forms) for (const s2 of f.subjects) m.set(s2.examSubjectId, s2.subjectCode)
+    return m
+  }, [forms])
 
   useEffect(() => {
     if (subjectCode === null && subjects.length > 0) setSubjectCode(subjects[0].subjectCode)
   }, [subjects, subjectCode])
 
-  /** 과목별 백분위 추이 — 회차를 가로축으로 */
+  /** 과목별 백분위 추이 — 회차를 가로축으로. 여기도 코드로 맞춘다(위 ★ 참고) */
   const trend = useMemo(() => {
     if (!submission || subjectCode === null) return []
-    const subj = subjects.find((s) => s.subjectCode === subjectCode)
-    if (!subj) return []
     return submission.exams
       .map((e) => ({
         label: EXAM_CODE_LABEL[e.examCode] ?? e.examCode,
-        value: e.scores.find((sc) => sc.examSubjectId === subj.examSubjectId)?.percentile ?? null,
+        value: e.scores.find((sc) => codeById.get(sc.examSubjectId) === subjectCode)?.percentile ?? null,
       }))
       .filter((x) => x.value !== null) as { label: string; value: number }[]
-  }, [submission, subjectCode, subjects])
+  }, [submission, subjectCode, codeById])
+
+  /* ── 저장 ── */
+
+  async function submitRecord() {
+    if (selectedId === null || recordEdit === null) return
+    setSaveBusy(true)
+    setSaveErr(null)
+    try {
+      // 빈 칸은 "아직 모른다"로 보낸다 — 서버가 null 을 받아 실제로 지운다
+      const v = recordEdit.trim()
+      await updateSchoolRecord(Number(selectedId), v === '' ? null : Number(v))
+      setRecordEdit(null)
+      await loadGrades(Number(selectedId))
+    } catch (err) {
+      setSaveErr(err instanceof ApiError ? err.message : '저장하지 못했습니다.')
+    } finally {
+      setSaveBusy(false)
+    }
+  }
+
+  async function submitScores() {
+    if (selectedId === null || scoreEdit === null) return
+    setSaveBusy(true)
+    setSaveErr(null)
+    try {
+      const scores: ScoreInput[] = Object.entries(scoreEdit.cells).map(([id, c]) => ({
+        examSubjectId: Number(id),
+        standardScore: numOrNull(c.standardScore),
+        percentile: numOrNull(c.percentile),
+        gradeLevel: numOrNull(c.gradeLevel),
+      }))
+      await updateExamScores(Number(selectedId), scores)
+      setScoreEdit(null)
+      await loadGrades(Number(selectedId))
+    } catch (err) {
+      setSaveErr(err instanceof ApiError ? err.message : '저장하지 못했습니다.')
+    } finally {
+      setSaveBusy(false)
+    }
+  }
+
+  /** 회차 하나를 편집 상태로 연다. 이미 낸 값이 있으면 채워 넣는다 */
+  function openScoreEdit(form: ExamForm) {
+    const exam = submission?.exams.find((e) => e.examMasterId === form.examMasterId)
+    const cells: Record<number, ScoreCell> = {}
+    for (const sub of form.subjects) {
+      const sc = exam?.scores.find((x) => x.examSubjectId === sub.examSubjectId)
+      cells[sub.examSubjectId] = {
+        standardScore: sc?.standardScore != null ? String(sc.standardScore) : '',
+        percentile: sc?.percentile != null ? String(sc.percentile) : '',
+        gradeLevel: sc?.gradeLevel != null ? String(sc.gradeLevel) : '',
+      }
+    }
+    setSaveErr(null)
+    setScoreEdit({ examMasterId: form.examMasterId, cells })
+  }
+
+  const editForm = gradeForms.find((f) => f.examMasterId === scoreEdit?.examMasterId) ?? null
 
   return (
     <div className="p-score">
@@ -207,7 +340,7 @@ function Content() {
                 <Icon name="info" size={15} />
               </div>
               <div>
-                성적은 <b>학생이 앱에서 직접 입력</b>하고, <b>수정은 직원이</b> 합니다.
+                입학 전 성적은 <b>학생이 앱에서 직접 입력</b>하고, <b>수정은 직원이</b> 합니다.
                 장학 판정이 이 등급을 근거로 하므로, 직원이 고친 값에는 아래에 수정 표시가 붙습니다.
               </div>
             </div>
@@ -218,6 +351,34 @@ function Content() {
               </div>
             )}
 
+            {/* ── 내신 ── */}
+            <div className="sec-h">
+              <div className="t">
+                <span className="ic">
+                  <Icon name="book-open" size={17} />
+                </span>{' '}
+                내신 · 주요 과목 평균 등급
+              </div>
+              <div className="note" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <b style={{ fontSize: 14, color: 'var(--ink)' }}>
+                  {submission?.mainSubjectAverage != null ? submission.mainSubjectAverage.toFixed(2) : '미입력'}
+                </b>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={selected === null}
+                  onClick={() => {
+                    setSaveErr(null)
+                    setRecordEdit(
+                      submission?.mainSubjectAverage != null ? String(submission.mainSubjectAverage) : '',
+                    )
+                  }}
+                >
+                  수정
+                </button>
+              </div>
+            </div>
+
             {/* ── 회차별 성적 표 ── */}
             <div className="sec-h">
               <div className="t">
@@ -226,10 +387,27 @@ function Content() {
                 </span>{' '}
                 회차별 성적 (표준 / 백분위 · 등급)
               </div>
-              <div className="note">
-                {subjects.length > 0
-                  ? `${subjects.map((s) => s.subjectName).join(' · ')} · 시험 양식 기준`
-                  : `${year}년 시험 양식이 없습니다`}
+              {/* 회차마다 양식이 달라 입력 버튼도 회차별로 둔다 — 한 번에 한 회차만 교체된다.
+                  학생을 고르기 전에는 학년을 몰라 전 학년 양식이 다 나온다('6월'이 세 번) — 그래서 감춘다 */}
+              <div className="note" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {selected === null ? null : gradeForms.length === 0 ? (
+                  `${year}년 시험 양식이 없습니다`
+                ) : (
+                  <>
+                    <span style={{ marginRight: 4 }}>성적 입력</span>
+                    {gradeForms.map((f) => (
+                      <button
+                        key={f.examMasterId}
+                        type="button"
+                        className="btn"
+                        disabled={selected === null}
+                        onClick={() => openScoreEdit(f)}
+                      >
+                        {EXAM_CODE_LABEL[f.examCode] ?? f.examCode}
+                      </button>
+                    ))}
+                  </>
+                )}
               </div>
             </div>
 
@@ -255,7 +433,7 @@ function Content() {
                   <tr>
                     <th className="rd">회차</th>
                     {subjects.map((s) => (
-                      <th key={s.examSubjectId}>
+                      <th key={s.subjectCode}>
                         {s.subjectName}
                         {!s.hasStandardScore && (
                           <>
@@ -268,7 +446,16 @@ function Content() {
                     <th>
                       국수탐
                       <br />
-                      <small style={{ fontWeight: 500, color: 'var(--muted)' }}>백분위합</small>
+                      {/* 어느 과목을 더했는지 적는다. 학년마다 탐구 과목이 달라서
+                             '국수탐'만 쓰면 무엇이 들어갔는지 알 수 없다 */}
+                      <small style={{ fontWeight: 500, color: 'var(--muted)' }}>
+                        {subjects.filter((s) => SUM_CODES.includes(s.subjectCode)).length > 0
+                          ? subjects
+                              .filter((s) => SUM_CODES.includes(s.subjectCode))
+                              .map((s) => s.subjectName)
+                              .join('+')
+                          : '백분위합'}
+                      </small>
                     </th>
                   </tr>
                 </thead>
@@ -281,11 +468,10 @@ function Content() {
                     </tr>
                   )}
                   {submission?.exams.map((e) => {
+                    /* 회차 안의 점수를 과목 코드로 색인한다 — id 는 회차마다 다르다 */
+                    const byCode = new Map(e.scores.map((sc) => [codeById.get(sc.examSubjectId), sc]))
                     const sum = e.scores
-                      .filter((sc) => {
-                        const subj = subjects.find((s) => s.examSubjectId === sc.examSubjectId)
-                        return subj && SUM_CODES.includes(subj.subjectCode)
-                      })
+                      .filter((sc) => SUM_CODES.includes(codeById.get(sc.examSubjectId) ?? ''))
                       .reduce((a, sc) => a + (sc.percentile ?? 0), 0)
                     return (
                       <tr key={e.examMasterId}>
@@ -294,10 +480,10 @@ function Content() {
                           <small>{EXAM_CODE_LABEL[e.examCode] ?? e.examCode}</small>
                         </td>
                         {subjects.map((s) => {
-                          const sc = e.scores.find((x) => x.examSubjectId === s.examSubjectId)
-                          if (!sc) return <td key={s.examSubjectId} style={{ color: 'var(--muted)' }}>-</td>
+                          const sc = byCode.get(s.subjectCode)
+                          if (!sc) return <td key={s.subjectCode} style={{ color: 'var(--muted)' }}>-</td>
                           return (
-                            <td key={s.examSubjectId}>
+                            <td key={s.subjectCode}>
                               <span className={`gr${sc.gradeLevel === 1 ? ' g1' : (sc.gradeLevel ?? 0) >= 4 ? ' g4' : ''}`}>
                                 {sc.gradeLevel ?? '-'}
                               </span>
@@ -332,7 +518,7 @@ function Content() {
                     {subjects.map((s) => (
                       <button
                         type="button"
-                        key={s.examSubjectId}
+                        key={s.subjectCode}
                         className={`subj-opt${subjectCode === s.subjectCode ? ' on' : ''}`}
                         onClick={() => setSubjectCode(s.subjectCode)}
                       >
@@ -375,16 +561,196 @@ function Content() {
                   </div>
                 </div>
                 <div className="box-b">
-                  <div style={{ fontSize: 12, color: 'var(--muted)', padding: '18px 0', textAlign: 'center' }}>
-                    {/* 엑셀 업로드 안이 채택되지 않아 이 값의 출처 자체가 없다 — 박스 유지 여부 확인 필요 */}
-                    <Unfilled reason="엑셀 상세 업로드 안이 채택되지 않아 데이터 출처가 없다" />
-                  </div>
+                  {selected ? (
+                    <WeakUnits key={selected.enrollmentId} enrollmentId={selected.enrollmentId} />
+                  ) : (
+                    <div style={{ fontSize: 12, color: 'var(--muted)', padding: '18px 0', textAlign: 'center' }}>-</div>
+                  )}
                 </div>
               </div>
             </div>
+
+            {/* ── 디랩 시험 — 성적 업로드로 반영된 것. 입학 전 성적(위)과 따로 본다 ── */}
+            {selected && <AcademyExams key={selected.enrollmentId} enrollmentId={selected.enrollmentId} />}
           </div>
         </section>
       </div>
+
+      {/* ── 내신 수정 ── */}
+      {recordEdit !== null && (
+        <Modal
+          title="내신 수정"
+          sub={`${selected?.name ?? ''} 학생의 주요 과목 평균 등급입니다.`}
+          busy={saveBusy}
+          error={saveErr}
+          onConfirm={() => void submitRecord()}
+          onClose={() => setRecordEdit(null)}
+        >
+          {/* ★ .frow 는 112px + 1fr 2열 그리드다. 안내문을 입력칸의 **형제**로 두면
+                 라벨 칸으로 떨어져 왼쪽에 눌려 붙는다 — 입력칸과 함께 한 칸에 묶는다 */}
+          <div className="frow">
+            <label>평균 등급</label>
+            <div>
+              <input
+                className="inp"
+                type="number"
+                /* ★ 배수를 걸지 않는다. Modal 안이라 확인이 submit 인데, step 배수가 아닌
+                      값(2.355 처럼 소수 셋째 자리)은 브라우저가 제출을 막아 **버튼이 안 먹는
+                      것처럼** 보인다. 범위(1~9)는 그대로 둔다 */
+                step="any"
+                min={1}
+                max={9}
+                placeholder="예: 2.35"
+                value={recordEdit}
+                onChange={(e) => setRecordEdit(e.target.value)}
+              />
+              <div className="hint">비워 두면 &lsquo;아직 모름&rsquo; 으로 저장됩니다.</div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── 회차별 성적 수정 ── */}
+      {scoreEdit !== null && editForm !== null && (
+        <Modal
+          title={`${editForm.examName} 성적 입력`}
+          sub={`${selected?.name ?? ''} 학생 · 이 회차의 값만 바뀝니다.`}
+          busy={saveBusy}
+          error={saveErr}
+          onConfirm={() => void submitScores()}
+          onClose={() => setScoreEdit(null)}
+        >
+          <div className="table-scroll">
+            <table className="rtable">
+              <thead>
+                <tr>
+                  <th className="rd">과목</th>
+                  <th>표준점수</th>
+                  <th>백분위</th>
+                  <th>등급</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...editForm.subjects]
+                  .sort((a, b) => a.sortOrder - b.sortOrder)
+                  .map((sub) => {
+                    const cell = scoreEdit.cells[sub.examSubjectId]
+                    const set = (k: keyof ScoreCell, v: string) =>
+                      setScoreEdit({
+                        ...scoreEdit,
+                        cells: { ...scoreEdit.cells, [sub.examSubjectId]: { ...cell, [k]: v } },
+                      })
+                    return (
+                      <tr key={sub.examSubjectId}>
+                        <td className="rd">{sub.subjectName}</td>
+                        <td>
+                          {/* 절대평가 과목은 표준점수가 없다 — 칸을 열어 두면 없는 값을 적게 된다 */}
+                          {sub.hasStandardScore ? (
+                            <input
+                              className="inp"
+                              type="number"
+                              min={0}
+                              max={200}
+                              value={cell.standardScore}
+                              onChange={(e) => set('standardScore', e.target.value)}
+                            />
+                          ) : (
+                            <span style={{ color: 'var(--muted)', fontSize: 11 }}>절대평가</span>
+                          )}
+                        </td>
+                        <td>
+                          {sub.hasPercentile ? (
+                            <input
+                              className="inp"
+                              type="number"
+                              min={0}
+                              max={100}
+                              value={cell.percentile}
+                              onChange={(e) => set('percentile', e.target.value)}
+                            />
+                          ) : (
+                            <span style={{ color: 'var(--muted)', fontSize: 11 }}>-</span>
+                          )}
+                        </td>
+                        <td>
+                          {sub.hasGradeLevel ? (
+                            <input
+                              className="inp"
+                              type="number"
+                              min={1}
+                              max={9}
+                              value={cell.gradeLevel}
+                              onChange={(e) => set('gradeLevel', e.target.value)}
+                            />
+                          ) : (
+                            <span style={{ color: 'var(--muted)', fontSize: 11 }}>-</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+              </tbody>
+            </table>
+          </div>
+          <div className="hint" style={{ marginTop: 10 }}>
+            빈 칸은 저장하지 않고 비워 둡니다. 다른 회차의 값은 그대로 남습니다.
+          </div>
+        </Modal>
+      )}
+    </div>
+  )
+}
+
+/**
+ * 단원별 정답률 — 가장 최근 디랩 시험의 채점에서 **정답률이 낮은 단원 5개**. 전 단원은 아래 '디랩 시험' 에 있다.
+ * ★ 문항 정보와 정오표가 둘 다 있어야 나온다(성적 업로드 ②·③).
+ */
+function WeakUnits({ enrollmentId }: { enrollmentId: number }) {
+  const [rows, setRows] = useState<{ name: string; my: number | null; nat: number | null }[] | null>(null)
+  const [examName, setExamName] = useState<string | null>(null)
+  useEffect(() => {
+    let alive = true
+    listAcademyExams(enrollmentId)
+      .then(async (ex) => {
+        if (ex.length === 0) return alive && setRows([])
+        const areas = await getAcademyScoring(enrollmentId, ex[0].examMasterId)
+        const units = areas
+          .flatMap((a) => a.byUnit.map((u) => ({ name: `${a.name} · ${u.name}`, my: u.myRate, nat: u.nationalRate })))
+          .filter((u) => u.my !== null)
+          .sort((x, y) => (x.my ?? 0) - (y.my ?? 0))
+          .slice(0, 5)
+        if (alive) {
+          setExamName(ex[0].examName)
+          setRows(units)
+        }
+      })
+      .catch(() => alive && setRows([]))
+    return () => {
+      alive = false
+    }
+  }, [enrollmentId])
+
+  if (rows === null) return <div style={{ fontSize: 12, color: 'var(--muted)', padding: '18px 0', textAlign: 'center' }}>불러오는 중…</div>
+  if (rows.length === 0)
+    return (
+      <div style={{ fontSize: 12, color: 'var(--muted)', padding: '18px 0', textAlign: 'center' }}>
+        채점된 디랩 시험이 없습니다. 성적 업로드에서 문항 정보와 정오표를 올리면 나옵니다.
+      </div>
+    )
+  return (
+    <div style={{ display: 'grid', gap: 6 }}>
+      <div style={{ fontSize: 11.5, color: 'var(--muted)' }}>{examName} · 정답률 낮은 단원</div>
+      {rows.map((u) => (
+        <div key={u.name} style={{ display: 'grid', gridTemplateColumns: '1fr 110px', gap: 8, fontSize: 12 }}>
+          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={u.name}>
+            {u.name}
+          </span>
+          <span style={{ textAlign: 'right' }}>
+            <b>{Math.round(u.my ?? 0)}%</b>
+            <span style={{ color: 'var(--muted)' }}> · 전국 {u.nat == null ? '-' : `${Math.round(u.nat)}%`}</span>
+          </span>
+        </div>
+      ))}
     </div>
   )
 }

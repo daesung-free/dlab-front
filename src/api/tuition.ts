@@ -112,3 +112,87 @@ export function getFeeTable(
     query: { month, gradeType, seatType, academyId },
   })
 }
+
+/* ─────────── 교습비 청구 발행 (/tuition/billings) ─────────── */
+
+/**
+ * 발행 결과. `/billings` 의 `BillingRow` 와 **다른 모양이다** —
+ * 교습비와 독서실비가 `items[]` 로 쪼개져 온다.
+ */
+export interface IssuedBilling {
+  id: number
+  name: string
+  serviceYear: number
+  serviceMonth: number
+  suppliedAmount: number
+  discountAmount: number
+  billedAmount: number
+  dueDate: string | null
+  items: { itemType: string; suppliedAmount: number; discountAmount: number; billedAmount: number }[]
+}
+
+/**
+ * 월 교습비 청구 발행.
+ *
+ * ★ **금액을 화면이 정하지 않는다.** 단가표(`/tuition/prices`)와 그 달의 교습일수를 서버가
+ *   보고 계산한다. 그래서 금액을 직접 적는 `createBilling` 대신 이쪽을 쓴다 —
+ *   직접 적으면 단가표와 어긋난 금액이 조용히 들어간다.
+ *
+ * ★ **같은 달을 두 번 발행하면 409** (`BILLING_ALREADY_ISSUED`,
+ *   "2026년 11월 교습비 청구가 이미 있습니다"). 일괄 발행이 중간에 끊겨 다시 돌려도
+ *   중복이 안 생긴다 — 화면은 이 409 를 **실패가 아니라 '이미 있음'으로 세야 한다.**
+ *
+ * ★ 단가가 없는 달은 404 (`TUITION_PRICE_NOT_FOUND`). 12월을 넣어 확인했다 —
+ *   시드에 2월·9월만 등록돼 있다.
+ */
+export function issueMonthlyBilling(body: {
+  enrollmentId: number
+  /** yyyy-MM. **청구 1건 = 한 달분**이다 */
+  month: string
+  seatType: SeatType
+  /** 할인 **율**(%)이다. 금액이 아니다 — `createBilling` 쪽은 반대로 금액이다 */
+  discountRate?: number
+  /** 비우면 월 정액. 중도 입·퇴원이면 실제 다니는 교습일수를 넣는다 */
+  remainingDays?: number
+  dueDate?: string
+}): Promise<IssuedBilling> {
+  return request<IssuedBilling>('/api/v1/admin/tuition/billings/monthly', { method: 'POST', body })
+}
+
+/**
+ * 입학 청구 발행.
+ *
+ * ★ **이름과 달리 '입학금' 항목을 만들지 않는다**(2026-09-25 확인). 만드는 것은 교습비다 —
+ *   입학일이 **1일이면 그 달 정액 한 건**, 아니면 **그 달 일할분 + 다음 달 정액**
+ *   **두 건**이다(1개월 미만으로 결제됐으니 다음 달분을 함께 받는다는 규정).
+ *   그래서 응답이 배열이고, 화면도 '입학금' 이라고 부르면 안 된다.
+ *
+ * ★ 이미 그 달 교습비가 있으면 409 다 — 9월 입학으로 넣었더니 "2026년 9월 교습비 청구가
+ *   이미 있습니다"가 왔다(2026-09-14).
+ *
+ * ★ `remainingDays` 는 **서버 제안값을 화면이 고쳐 보낼 수 있어야 한다.** 서버는 그 달
+ *   교습일수 총합만 알고 **어느 날이 휴원일인지는 모른다** — 서버가 확정하면 조용히 틀린다.
+ */
+export function issueAdmissionBilling(body: {
+  enrollmentId: number
+  admissionDate: string
+  seatType: SeatType
+  discountRate?: number
+  remainingDays?: number
+  dueDate?: string
+}): Promise<IssuedBilling[]> {
+  // ★ **배열이다**(월 교습비는 단건). 입학금 청구와 그 달 교습비 청구가 **따로 만들어진다** —
+  //   단건으로 받으면 name·billedAmount 가 undefined 가 되어 등록이 됐는데도 화면은 실패로 본다
+  //   (2026-09-25 실제로 그랬다).
+  return request<IssuedBilling[]>('/api/v1/admin/tuition/billings/admission', { method: 'POST', body })
+}
+
+/**
+ * 입학일 기준 남은 교습일수.
+ *
+ * ★ 중도 입학이면 월 정액이 아니라 이 일수로 일할 계산한다. 화면이 달력으로 세지 않는다 —
+ *   휴일이 지점마다 다르다. 실측: 분당 09-14 입학 → 17일, 12-10 입학 → 22일.
+ */
+export function getRemainingDays(params: { academyId: number; admissionDate: string }): Promise<number> {
+  return request<number>('/api/v1/admin/tuition/billings/remaining-days', { query: { ...params } })
+}

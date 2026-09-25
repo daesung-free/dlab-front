@@ -65,10 +65,10 @@ interface ClassInfo {
 }
 
 const CLASS_INFO: ClassInfo[] = [
-  { no: '1반', homeroom: '최지원', track: '인문', capacity: 14, enrolled: 13, room: '201호' },
-  { no: '2반', homeroom: '김유진', track: '자연', capacity: 14, enrolled: 14, room: '202호' },
-  { no: '3반', homeroom: '이장원', track: '자연', capacity: 14, enrolled: 12, room: '301호' },
-  { no: '4반', homeroom: '박서영', track: '자연', capacity: 14, enrolled: 14, room: '302호' },
+  { no: '1반', homeroom: '담임 A', track: '인문', capacity: 14, enrolled: 13, room: '201호' },
+  { no: '2반', homeroom: '담임 B', track: '자연', capacity: 14, enrolled: 14, room: '202호' },
+  { no: '3반', homeroom: '담임 C', track: '자연', capacity: 14, enrolled: 12, room: '301호' },
+  { no: '4반', homeroom: '담임 D', track: '자연', capacity: 14, enrolled: 14, room: '302호' },
 ]
 
 const CLASSES = CLASS_INFO.map((c) => c.no)
@@ -78,7 +78,7 @@ const MOVE_SUBJECTS = ['수학', '탐구1', '탐구2']
 
 const SUBJECTS = ['국어', '수학', '영어', '탐구1', '탐구2']
 const ROOMS = ['201호', '202호', '301호', '302호', '401호']
-const TEACHERS = ['이장원', '김유진', '최지원', '박서영', '정하람']
+const TEACHERS = ['담임 C', '담임 B', '담임 A', '담임 D', '정하람']
 
 /** 결정적 편성 — 반·요일·교시 조합에서 항상 같은 결과가 나온다 */
 function buildCell(classNo: string, day: Day, p: Period): Cell {
@@ -192,6 +192,8 @@ interface RoomRow {
 
 function Content() {
   const [tab, setTab] = useState('grid')
+  /* selectable 만으로는 체크박스가 안 눌린다 — DataTable 이 제어 컴포넌트다 */
+  const [sel, setSel] = useState<string[]>([])
   const [classNo, setClassNo] = useState('1반')
   const [subject, setSubject] = useState('전체')
 
@@ -269,7 +271,7 @@ function Content() {
         <div>
           <div className="tt">반 시간표와 이동수업은 이 화면에서만 편성합니다 — 학습계획과 연동하지 않습니다</div>
           <div className="tx">
-            <b>반 시간표(여기)</b>는 교무팀이 반 단위로 짜는 <b>고정 편성</b>이고, <b>주·일 학습계획(F-4.11-2)</b>은
+            <b>반 시간표(여기)</b>는 교무팀이 반 단위로 짜는 <b>고정 편성</b>이고, <b>주·일 학습계획</b>은
             학생이 본인 시간을 순번으로 채우는 <b>개인 계획</b>입니다. 주체도 단위도 다릅니다.
             <br />
             <b>두 화면은 서로 연결되지 않습니다.</b> 시간표를 짜도 학생의 학습계획에 자동으로 들어가지 않습니다.
@@ -432,6 +434,8 @@ function Content() {
             rows={moveRows}
             rowKey={(r) => r.id}
             selectable
+            selected={sel}
+            onSelectedChange={setSel}
             pageSize={15}
             countLabel={
               <>
@@ -463,7 +467,7 @@ function Content() {
               강의실 주간 사용률
             </div>
             <div className="r">
-              <span className="mk brandnew">중복 배정은 서버에서 차단</span>
+              <span className="mk brandnew">중복 배정 자동 차단</span>
             </div>
           </div>
           <div className="card-sec-b" style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>

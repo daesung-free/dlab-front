@@ -10,6 +10,7 @@ import {
   SURVEY_RUN_STATE_LABEL,
   SURVEY_TYPE_LABEL,
   closeSurvey,
+  exportSurveyResponses,
   createSurvey as createSurveyApi,
   getSurveyResult,
   listSurveys,
@@ -18,6 +19,7 @@ import {
   type SurveyResult,
   type SurveySummary,
 } from '../../api/surveys'
+import { createScreenSignal } from './screenSignal'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
 
@@ -243,14 +245,31 @@ function emptyDraft(mode: 'survey' | 'template'): Draft {
 }
 
 /* ── 가채점 결과 집계 예시 ── */
+/* 헤더 버튼 → 본문. 「설문 생성」은 본문 편집기를 열고, 「템플릿에서 생성」은 템플릿 탭으로 보낸다 */
+const newSurveySignal = createScreenSignal()
+const fromTemplateSignal = createScreenSignal()
+
 function Content() {
   const [tab, setTab] = useState('list')
+
+  /* 헤더 액션은 본문과 따로 렌더돼 상태를 공유할 수 없다(screenSignal.ts 주석).
+     헤더에서 누른 것을 본문이 받아 처리한다 */
+  const newSurveyVer = newSurveySignal.useVersion()
+  const fromTemplateVer = fromTemplateSignal.useVersion()
   const [draft, setDraft] = useState<Draft | null>(null)
 
   /* ── 편집기 열기 ── */
 
   const createSurvey = useCallback(() => setDraft(emptyDraft('survey')), [])
   const createTemplate = useCallback(() => setDraft(emptyDraft('template')), [])
+
+  /* 첫 렌더의 0 은 건너뛴다 — 화면에 들어오자마자 편집기가 열리면 안 된다 */
+  useEffect(() => {
+    if (newSurveyVer > 0) createSurvey()
+  }, [newSurveyVer, createSurvey])
+  useEffect(() => {
+    if (fromTemplateVer > 0) setTab('template')
+  }, [fromTemplateVer])
 
 
   const editTemplate = useCallback((t: Template) => {
@@ -355,6 +374,7 @@ function Content() {
   const [resultId, setResultId] = useState<number | null>(null)
   const [apiLoading, setApiLoading] = useState(true)
   const [apiError, setApiError] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
   const [apiNotice, setApiNotice] = useState<string | null>(null)
 
   const loadSurveys = useCallback(async () => {
@@ -612,7 +632,7 @@ function Content() {
                 <Icon name="save" size={14} /> {isTemplate ? '템플릿 저장' : '저장'}
               </button>
               {!isTemplate && (
-                <button className="btn" disabled={!draft.title.trim() || draft.questions.length === 0}>
+                <button className="btn" disabled data-soon title="준비 중입니다">
                   <Icon name="send" size={14} /> 저장 후 배포
                 </button>
               )}
@@ -936,8 +956,9 @@ function Content() {
           <div className="l">
             <Icon name="line-chart" size={13} /> 성적 연동
           </div>
+          {/* ★ 'F-4.6' 은 우리 문서 번호다 — 통계 칸에 화면 코드가 값처럼 들어가 있었다 */}
           <div className="v" style={{ fontSize: 15, paddingTop: 6 }}>
-            F-4.6
+            성적 관리
           </div>
           <div className="d">가채점 → 리포트</div>
         </div>
@@ -1053,8 +1074,21 @@ function Content() {
                       </option>
                     ))}
                   </select>
-                  <button className="btn" style={{ padding: '5px 11px', fontSize: 11.5 }} disabled data-soon title="준비 중입니다">
-                    <Icon name="file-spreadsheet" size={12} /> 원시 응답 다운로드
+                  <button
+                    className="btn"
+                    style={{ padding: '5px 11px', fontSize: 11.5 }}
+                    disabled={resultId === null || exporting}
+                    title="응답을 한 줄씩 엑셀로 받습니다. 익명 설문은 학번·이름이 비어 있습니다"
+                    onClick={() => {
+                      const sv = surveys.find((x) => x.id === resultId)
+                      if (!sv) return
+                      setExporting(true)
+                      exportSurveyResponses(sv.id, sv.title)
+                        .catch((err) => setApiError(err instanceof ApiError ? err.message : '응답을 내려받지 못했습니다.'))
+                        .finally(() => setExporting(false))
+                    }}
+                  >
+                    <Icon name="file-spreadsheet" size={12} /> {exporting ? '받는 중…' : '원시 응답 다운로드'}
                   </button>
                 </div>
               </div>
@@ -1131,12 +1165,14 @@ function Content() {
 
 export const surveyMockup: Mockup = {
   Content,
+  /* 본문에 같은 기능이 이미 있었고 헤더 것만 막혀 있었다 — 중복된 채로 눌리지 않으면
+     고장으로 읽힌다. 본문으로 신호를 보내 같은 동작을 하게 한다 */
   actions: (
     <>
-      <button className="btn" disabled data-soon title="준비 중입니다">
+      <button className="btn" onClick={() => fromTemplateSignal.bump()}>
         <Icon name="copy" size={14} /> 템플릿에서 생성
       </button>
-      <button className="btn pri" disabled data-soon title="준비 중입니다">
+      <button className="btn pri" onClick={() => newSurveySignal.bump()}>
         <Icon name="plus" size={14} /> 설문 생성
       </button>
     </>

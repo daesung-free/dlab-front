@@ -5,6 +5,7 @@ import { useServerData } from '../components/common'
 import { getStatistics } from '../api/statistics'
 import { getDisplayName, getLoginId } from '../api/tokens'
 import { useAuth } from '../auth/AuthContext'
+import { hasMenuCode } from '../data/menuCodes'
 import { Unfilled } from '../components/common'
 import { Icon } from '../components/Icon'
 import {
@@ -81,7 +82,7 @@ const DATE_LABEL = new Intl.DateTimeFormat('ko-KR', {
 
 export function Dashboard() {
   const { academyId, academies } = useAcademy()
-  const { me } = useAuth()
+  const { me, allowedMenus } = useAuth()
 
   /* ★ useMemo 필수 — 매 렌더 새 객체면 무한 요청이 된다.
      from·to 를 같은 날로 줘서 **오늘 하루** 집계를 받는다(statistics.ts 주석). */
@@ -90,9 +91,14 @@ export function Dashboard() {
     () => ({ academyId: academyId ?? undefined, year: Number(today.slice(0, 4)), from: today, to: today }),
     [academyId, today],
   )
+  /* ★ 오늘 요약은 집계 API 하나로 그린다. 그 메뉴가 안 열린 계정이면 **부르지 않는다** —
+        부르면 403 이 나고 대시보드 맨 위에 빨간 경고가 뜬다(열어준 적 없을 뿐인데 고장으로 읽힌다) */
+  /* ★ 목록을 **읽기 전(null)에는 부르지 않는다.** 먼저 불러놓고 403 을 받으면 이미 늦다 */
+  const canStats = allowedMenus !== null && hasMenuCode('statistics', allowedMenus)
   const stats = useServerData({
     fetcher: getStatistics,
     params,
+    enabled: canStats,
     errorMessage: '오늘 집계를 불러오지 못했습니다.',
   })
 
@@ -150,13 +156,22 @@ export function Dashboard() {
         </div>
       )}
 
+      {allowedMenus !== null && !canStats && (
+        <div className="note-box">이 계정에는 집계 메뉴가 열려 있지 않아 오늘 요약은 보이지 않습니다.</div>
+      )}
+
       {/* ── 오늘 출결 — GET /statistics (from=to=오늘) ──
            ★ 집계 전(attendanceRate === null)과 0을 구분한다. 0%로 그리면 전원 결석으로 보인다 */}
-      {!stats.loading && !counted && (
+      {canStats && !stats.loading && !counted && (
         <div className="note-box">
-          오늘({today}) 출결이 <b>아직 집계되지 않았습니다.</b> 등원 태깅이 들어오면 채워집니다.
+          {/* ★ note-box 는 flex 다 — 글자와 <b> 를 형제로 두면 각각이 칸이 되어 눌린다 */}
+          <div>
+            오늘({today}) 출결이 <b>아직 집계되지 않았습니다.</b> 등원 태깅이 들어오면 채워집니다.
+          </div>
         </div>
       )}
+      {/* 집계 메뉴가 없는 계정에는 0 을 그리지 않는다 — 실제 0 과 구분이 안 된다 */}
+      {(canStats || allowedMenus === null) && (
       <div className="att-strip">
         <div className="att-cell lead">
           <div className="l">
@@ -208,6 +223,7 @@ export function Dashboard() {
           <div className="d">건</div>
         </div>
       </div>
+      )}
 
       <div className="dash-grid">
         {/* ── 좌측 ── */}

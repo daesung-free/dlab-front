@@ -185,7 +185,9 @@ function Content() {
   useEffect(() => {
     if (academyId === null) return
     let cancelled = false
-    void listClasses().then((l) => !cancelled && setClasses(l)).catch(() => undefined)
+    void listClasses(new Date().getFullYear())
+      .then((l) => !cancelled && setClasses(l))
+      .catch(() => undefined)
     // ⚠️ year 를 안 보내면 서버가 500 을 낸다(선택값인데도) — docs/API_GAPS.md 5-10
     void listPlanOptions(academyId, new Date().getFullYear())
       .then((o) => !cancelled && setOptions(o))

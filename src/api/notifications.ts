@@ -1,4 +1,5 @@
-import { request } from './client'
+import { request, requestPaged } from './client'
+import type { Paged } from './types'
 
 /* 알림 템플릿 (F-4.4 문자 발송) — /api/v1/admin/notification-templates
  *
@@ -26,6 +27,8 @@ export type NotificationEvent =
   | 'APPROVAL_REMINDER'
   | 'APPROVAL_HANDED_OVER'
   | 'APPROVAL_APPROVED_BY_STAFF_PRIMARY'
+  /** ★ 템플릿 목록에는 없고 **발송 이력에만 온다.** 빼놓으면 이력 행이 라벨 없이 코드로 찍힌다 */
+  | 'APPROVAL_APPROVED_BY_ADMIN'
   | 'APPROVAL_REJECTED'
   | 'CONSULT_RESERVED'
   | 'CONSULT_CANCELED'
@@ -40,6 +43,7 @@ export const EVENT_LABEL: Record<NotificationEvent, string> = {
   APPROVAL_REMINDER: '승인 재알림',
   APPROVAL_HANDED_OVER: '승인 권한 위임',
   APPROVAL_APPROVED_BY_STAFF_PRIMARY: '직원 대리 승인',
+  APPROVAL_APPROVED_BY_ADMIN: '관리자 승인',
   APPROVAL_REJECTED: '승인 반려',
   CONSULT_RESERVED: '상담 예약',
   CONSULT_CANCELED: '상담 취소',
@@ -93,6 +97,9 @@ export interface NotificationTemplate {
    * 축을 따로 보면 "왜 알림이 안 가지"를 못 짚으므로 화면은 이 값을 쓴다.
    */
   sendable: boolean
+  /** 마지막으로 고친 시각·사람(2026-09-21 추가). 그 전에 고친 행은 사람이 null 이다 */
+  updatedAt?: string | null
+  updatedByName?: string | null
 }
 
 /** `requiredVariables` 는 쉼표 문자열이라 화면에서 쪼갠다 */
@@ -161,4 +168,88 @@ export function recordTemplateReviewResult(
     method: 'POST',
     body: { approved, note },
   })
+}
+
+/* ── 발송 이력 (F-4.4 발송 이력 탭) ───────────────────────────
+ *
+ * ★ 여기 남는 것은 **자동 발송뿐이다.** 미등원·승인·상담 예약처럼 서버가 스스로 보내는
+ *   건들이다. 사람이 문안을 써서 보내는 발송은 아직 없다(위 ⚠️) — 그래서 이 목록에는
+ *   "누가 보냈는지"·"어느 범위로 보냈는지" 가 없다. 자동이라 보낸 사람이 없고,
+ *   대상은 사유가 정한다.
+ *
+ * ★ **`SKIPPED` 를 실패로 세지 않는다.** 알림톡 템플릿이 심사를 통과하지 못하면 아예
+ *   보내지 않고 SKIPPED 로 남긴다. 실패로 뭉뚱그리면 "발송이 죽었다" 로 읽히는데
+ *   실제로는 **심사가 끝나면 그대로 나간다.**
+ */
+
+export type NotificationStatus = 'PENDING' | 'SENT' | 'FAILED' | 'SKIPPED'
+
+export const NOTIFICATION_STATUS_LABEL: Record<NotificationStatus, string> = {
+  PENDING: '발송 대기',
+  SENT: '발송됨',
+  FAILED: '실패',
+  /** 보내지 않고 넘어간 건. 대개 알림톡 템플릿이 아직 심사 중이다 */
+  SKIPPED: '보류',
+}
+
+export interface NotificationLog {
+  id: number
+  academyId: number
+  event: NotificationEvent
+  channel: NotificationChannel
+  status: NotificationStatus
+  studentId: number | null
+  studentName: string | null
+  title: string
+  body: string
+  /** 실패·보류 사유. 나간 건이면 null */
+  failReason: string | null
+  /** 실제로 나간 시각. **안 나갔으면 null 이다** — 만들어진 시각(createdAt)과 다르다 */
+  sentAt: string | null
+  createdAt: string
+}
+
+export interface NotificationLogQuery {
+  academyId?: number
+  from?: string
+  to?: string
+  event?: NotificationEvent
+  channel?: NotificationChannel
+  status?: NotificationStatus
+  studentId?: number
+  /** 0-based */
+  page?: number
+  size?: number
+}
+
+/** 건별 이력. **서버 페이징이다** — useServerTable 로 붙인다 */
+export function listNotificationLogs(params: NotificationLogQuery): Promise<Paged<NotificationLog>> {
+  return requestPaged<NotificationLog>('/api/v1/admin/notification-logs', { query: { ...params } })
+}
+
+/**
+ * 묶음 집계 — **날짜 × 사유 × 채널** 한 줄.
+ *
+ * ★ 발송 이력 표가 보는 것이 이쪽이다. 건별로 그리면 미등원 안내 하루치가 200줄이 되어
+ *   "어제 뭐가 나갔나" 를 못 본다. 건별은 학생을 짚어서 볼 때 쓴다.
+ * ★ **페이징이 없다.** 기간을 넓게 잡으면 그만큼 그대로 온다.
+ */
+export interface NotificationSummaryRow {
+  date: string
+  event: NotificationEvent
+  channel: NotificationChannel
+  total: number
+  sent: number
+  failed: number
+  skipped: number
+  /** 그 묶음에서 가장 이른 시각 */
+  firstAt: string
+}
+
+export function getNotificationSummary(params: {
+  academyId?: number
+  from?: string
+  to?: string
+}): Promise<NotificationSummaryRow[]> {
+  return request<NotificationSummaryRow[]>('/api/v1/admin/notification-logs/summary', { query: { ...params } })
 }

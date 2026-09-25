@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DataTable, ExcelButton, MaskToggle, PrintButton, Unfilled, type Column } from '../../components/common'
+import { DataTable, ExcelButton, MaskToggle, Modal, PrintButton, Unfilled, type Column } from '../../components/common'
 import { Icon } from '../../components/Icon'
 import { Tabs } from '../../components/Tabs'
 import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
 import {
+  assignSeatsBulk,
   getSeatLayout,
   listSeatAreas,
   releaseSeatOfStudent,
@@ -12,6 +13,7 @@ import {
   type SeatArea,
   type SeatCell as ApiSeatCell,
 } from '../../api/facility'
+import { SeatSetup } from './SeatSetup'
 import type { Mockup } from './types'
 import './reading-room.css'
 
@@ -34,7 +36,11 @@ import './reading-room.css'
  * ★ 마스킹이 다른 목록과 같은 규칙이 됐다(2026-09-03). `unmask` 를 주면 원본이 오고
  *   응답의 `masked` 가 false 가 된다 — 화면은 그 값을 보고 토글 상태를 정한다.
  *
- * ★ 이석 위치는 아직 없다. 좌석 이탈 로그 수집이 보류라 서버가 값을 못 준다 —
+ * ★ 이석은 **좌석 이탈 태깅**이다(2026-09-25 서버 반영 — `onSeatLeave`·`seatLeftAt`).
+ *   presence 는 이탈을 모른다 — 이탈해도 출결로는 재실이라 그것만 보면 앉아 있는 걸로 보인다.
+ *   출결 외출(presence=OUT)도 자리에 없는 것은 같아서 함께 이석으로 묶는다.
+ *
+ * ★ 이석 위치(어디로 갔는지)는 아직 없다. 위치 구분값이 정해지지 않았다(I-16) —
  *   목업 컬럼은 남기고 <Unfilled/> 로 표시한다. */
 
 type SeatState = 'in' | 'out' | 'away' | 'free' | 'off'
@@ -42,17 +48,25 @@ type SeatState = 'in' | 'out' | 'away' | 'free' | 'off'
 const STATE_META: Record<SeatState, { label: string; short: string; color: string }> = {
   in: { label: '재실', short: '재실', color: 'var(--mint-wash)' },
   out: { label: '배정 · 미등원', short: '미등원', color: 'var(--amber-wash)' },
-  away: { label: '이석 (좌석 이탈 신청)', short: '이석', color: 'var(--violet-wash)' },
+  away: { label: '이석 (좌석 이탈 · 외출)', short: '이석', color: 'var(--violet-wash)' },
   free: { label: '미배정 공석', short: '공석', color: '#fff' },
   off: { label: '사용중지', short: '중지', color: '#eceef1' },
 }
 
-/** 배정 축 × 재실 축 → 화면의 5색 */
+/** ISO 시각 → 'HH:mm' (로컬). 자리를 비운 시각은 날짜가 필요 없다 — 그날 안에서만 본다 */
+function hhmm(iso: string | null): string {
+  if (!iso) return '-'
+  const d = new Date(iso)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+/** 배정 축 × 재실 축 × 이탈 축 → 화면의 5색 */
 function seatState(cell: ApiSeatCell): SeatState {
   if (cell.assignmentState === 'DISABLED') return 'off'
   if (cell.assignmentState !== 'ASSIGNED') return 'free'
+  // ★ 이탈을 먼저 본다. 이탈 중이어도 출결은 재실이라 presence 를 먼저 보면 '재실' 이 된다
+  if (cell.onSeatLeave || cell.presence === 'OUT') return 'away'
   if (cell.presence === 'PRESENT') return 'in'
-  if (cell.presence === 'OUT') return 'away'
   return 'out'
 }
 
@@ -94,7 +108,7 @@ const ASSIGN_COLUMNS: Column<AssignRow>[] = [
     key: 'awayTo',
     header: '이석 위치',
     value: () => '',
-    render: () => <Unfilled reason="이석 위치가 좌석 응답에 없다 (좌석 이탈/복귀 연동 필요)" />,
+    render: () => <Unfilled reason="이석 위치 구분값이 아직 정해지지 않았다(I-16)" />,
   },
 ]
 
@@ -109,25 +123,30 @@ function Content() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [masked, setMasked] = useState(true)
+  /** 재배치할 학생(배정 목록의 체크박스). 키는 좌석 id 문자열이다 */
+  const [picked, setPicked] = useState<string[]>([])
+  /** 재배치 모달 — 좌석 id → 옮길 좌석 id */
+  const [moving, setMoving] = useState<Record<number, number> | null>(null)
+  const [moveErr, setMoveErr] = useState<string | null>(null)
 
-  // 구역 목록
-  useEffect(() => {
+  // 구역 목록. 등록 탭에서 구역을 만든 뒤에도 불러야 해서 함수로 뺐다
+  const reloadAreas = useCallback(async () => {
     if (academyId === null) {
       setLoading(false)
       return
     }
-    let cancelled = false
-    listSeatAreas(academyId)
-      .then((list) => {
-        if (cancelled) return
-        setAreas(list)
-        setAreaId((prev) => (list.some((a) => a.id === prev) ? prev : (list[0]?.id ?? null)))
-      })
-      .catch((err) => !cancelled && setError(err instanceof ApiError ? err.message : '좌석 구역을 불러오지 못했습니다.'))
-    return () => {
-      cancelled = true
+    try {
+      const list = await listSeatAreas(academyId)
+      setAreas(list)
+      setAreaId((prev) => (list.some((a) => a.id === prev) ? prev : (list[0]?.id ?? null)))
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '좌석 구역을 불러오지 못했습니다.')
     }
   }, [academyId])
+
+  useEffect(() => {
+    void reloadAreas()
+  }, [reloadAreas])
 
   const loadLayout = useCallback(async () => {
     if (areaId === null) {
@@ -150,6 +169,12 @@ function Content() {
   useEffect(() => {
     void loadLayout()
   }, [loadLayout])
+
+  /* ★ 구역을 바꾸면 목록이 통째로 바뀐다. 선택을 안 비우면 **안 보이는 구역의 학생이
+       그대로 남아** 재배치에 섞인다(특강 대기자에서 같은 일이 있었다) */
+  useEffect(() => {
+    setPicked([])
+  }, [areaId])
 
   const seats = useMemo<Seat[]>(
     () =>
@@ -191,6 +216,41 @@ function Content() {
         })),
     [seats],
   )
+
+  /** 옮겨 갈 수 있는 자리 — 사용중지(off)는 뺀다 */
+  const freeSeats = useMemo(() => seats.filter((s) => s.state === 'free').sort((a, b) => a.seatCd.localeCompare(b.seatCd)), [seats])
+
+  /**
+   * 좌석 재배치.
+   *
+   * ★ 한 번에 보낸다. 단건을 N번 부르면 중간에 실패했을 때 일부만 옮겨진 채 남는데,
+   *   좌석은 **되돌릴 기준이 화면에 없다** — 서버가 전부-아니면-전무로 처리한다.
+   * ★ 옮기면 원래 자리는 서버가 알아서 비운다. 먼저 해제할 필요가 없다(확인함 09-16).
+   */
+  async function submitMove() {
+    if (!moving) return
+    const items = Object.entries(moving)
+      .filter(([from, to]) => Number(from) !== to)
+      .map(([from, to]) => {
+        const row = seats.find((x) => x.seatId === Number(from))
+        return { seatId: to, enrollmentId: row?.enrollmentId ?? 0 }
+      })
+      .filter((x) => x.enrollmentId !== 0)
+    if (items.length === 0) return
+    setBusy(true)
+    setMoveErr(null)
+    try {
+      await assignSeatsBulk(items)
+      setMoving(null)
+      setPicked([])
+      await loadLayout()
+    } catch (err) {
+      /* "A01: 이미 2026-0002 학생이 배정돼 있습니다" 처럼 서버 문구가 그대로 쓸 만하다 */
+      setMoveErr(err instanceof ApiError ? err.message : '좌석을 옮기지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const sel = selectedSeatId === null ? undefined : seats.find((s) => s.seatId === selectedSeatId)
   const area = areas.find((a) => a.id === areaId)
@@ -243,14 +303,14 @@ function Content() {
             <Icon name="circle-dot" size={13} /> 재실
           </div>
           <div className="v">{count('in')}</div>
-          <div className="d up">서버 계산값</div>
+          <div className="d up">실시간</div>
         </div>
         <div className="stat">
           <div className="l">
             <Icon name="footprints" size={13} /> 이석
           </div>
           <div className="v">{count('away')}</div>
-          <div className="d">좌석 이탈 신청 반영</div>
+          <div className="d">좌석 이탈 · 외출 반영</div>
         </div>
         <div className="stat">
           <div className="l">
@@ -278,6 +338,8 @@ function Content() {
         items={[
           { key: 'map', label: '좌석배치표' },
           { key: 'list', label: '배정 명단', count: assignRows.length },
+          /* ★ 구역·좌석을 만드는 경로가 없어서 이 화면이 늘 시드에 기대고 있었다 */
+          { key: 'setup', label: '구역·좌석 등록' },
         ]}
         active={tab}
         onChange={setTab}
@@ -292,7 +354,7 @@ function Content() {
                 <span className="ico">
                   <Icon name="layout-grid" size={15} />
                 </span>
-                {area?.areaNm ?? '독서실'} 배치도
+                {area ? `${area.buildingName} ${area.areaNm}` : '독서실'} 배치도
               </div>
               <div className="r">
                 {areas.map((a) => (
@@ -305,7 +367,8 @@ function Content() {
                       setSelectedSeatId(null)
                     }}
                   >
-                    {a.areaNm}
+                    {/* 관을 빼면 본관 A 와 별관 A 가 화면에서 구분되지 않는다 */}
+                    {a.buildingName} {a.areaNm}
                   </button>
                 ))}
                 <PrintButton label="도면 인쇄" />
@@ -384,6 +447,21 @@ function Content() {
                         <b>{sel.seatCd}</b> · {sel.row}행 {sel.col}열
                       </span>
                     </div>
+                    {/*
+                      데스크가 "단말에서 이 자리가 안 보인다"는 문의를 받는 곳이 이 화면이다.
+                      별관은 키오스크에 내려가는 번호가 밀려 있어(1번 → 1001번) 여기 없으면
+                      대조하려고 「구역·좌석 등록」 탭까지 옮겨가야 한다.
+                    */}
+                    <div className="row">
+                      <span className="k">키오스크 번호</span>
+                      <span className="v">
+                        {sel.kioskSeatCd === sel.seatCd ? (
+                          <span className="muted">{sel.kioskSeatCd} · 좌석번호와 같음</span>
+                        ) : (
+                          <b>{sel.kioskSeatCd}</b>
+                        )}
+                      </span>
+                    </div>
                     <div className="row">
                       <span className="k">상태</span>
                       <span className="v">
@@ -404,10 +482,16 @@ function Content() {
                       <span className="k">고정반</span>
                       <span className="v">{sel.className ?? '미배정'}</span>
                     </div>
+                    {sel.onSeatLeave && (
+                      <div className="row">
+                        <span className="k">자리 비운 시각</span>
+                        <span className="v">{hhmm(sel.seatLeftAt)}</span>
+                      </div>
+                    )}
                     <div className="row">
                       <span className="k">이석 위치</span>
                       <span className="v">
-                        <Unfilled reason="이석 위치가 좌석 응답에 없다" />
+                        <Unfilled reason="이석 위치 구분값이 아직 정해지지 않았다(I-16)" />
                       </span>
                     </div>
                   </div>
@@ -434,6 +518,17 @@ function Content() {
         </div>
       )}
 
+      {/* ★ 구역 목록과 배치도를 **둘 다** 다시 읽는다. 구역만 읽으면 방금 지운 좌석이
+          배치도에 그대로 남고, 배치도만 읽으면 새 구역이 칩에 안 뜬다 */}
+      {tab === 'setup' && (
+        <SeatSetup
+          onChanged={() => {
+            void reloadAreas()
+            void loadLayout()
+          }}
+        />
+      )}
+
       {tab === 'list' && (
         <DataTable
           columns={ASSIGN_COLUMNS}
@@ -442,6 +537,9 @@ function Content() {
           masked={false}
           loading={loading}
           pageSize={15}
+          selectable
+          selected={picked}
+          onSelectedChange={setPicked}
           countLabel={
             <>
               {area?.areaNm ?? '독서실'} 배정 <b>{assignRows.length}</b>명
@@ -450,8 +548,18 @@ function Content() {
           emptyText="배정된 좌석이 없습니다."
           toolbar={
             <>
-              <button className="btn" disabled data-soon title="준비 중입니다">
+              <button
+                className="btn"
+                disabled={busy || picked.length === 0}
+                title={picked.length === 0 ? '옮길 학생을 먼저 고르세요' : `${picked.length}명의 자리를 옮깁니다`}
+                onClick={() => {
+                  setMoveErr(null)
+                  // 처음에는 지금 자리 그대로 둔다 — 실수로 전원이 움직이지 않게
+                  setMoving(Object.fromEntries(picked.map((k) => [Number(k), Number(k)])))
+                }}
+              >
                 <Icon name="refresh-cw" size={14} /> 좌석 재배치
+                {picked.length > 0 && ` ${picked.length}`}
               </button>
               <ExcelButton
                 filename={`독서실_${area?.areaNm ?? ''}_배정`}
@@ -463,7 +571,102 @@ function Content() {
           }
         />
       )}
+
+      {moving && (
+        <MoveModal
+          moving={moving}
+          setMoving={setMoving}
+          seats={seats}
+          freeSeats={freeSeats}
+          busy={busy}
+          error={moveErr}
+          onConfirm={() => void submitMove()}
+          onClose={() => setMoving(null)}
+        />
+      )}
     </div>
+  )
+}
+
+/**
+ * 좌석 재배치 모달.
+ *
+ * ★ 한 자리에 두 명을 고를 수 있다 — 서버도 막지만(전체 취소) **저장을 눌러 보고서야
+ *   알면 늦다.** 고르는 동안 화면에서 먼저 짚어준다.
+ */
+function MoveModal({
+  moving,
+  setMoving,
+  seats,
+  freeSeats,
+  busy,
+  error,
+  onConfirm,
+  onClose,
+}: {
+  moving: Record<number, number>
+  setMoving: (v: Record<number, number>) => void
+  seats: Seat[]
+  freeSeats: Seat[]
+  busy: boolean
+  error: string | null
+  onConfirm: () => void
+  onClose: () => void
+}) {
+  const entries = Object.entries(moving).map(([from, to]) => ({ from: Number(from), to }))
+  const changed = entries.filter((e) => e.from !== e.to)
+  const targets = entries.map((e) => e.to)
+  const dup = targets.filter((t, i) => targets.indexOf(t) !== i)
+
+  return (
+    <Modal
+      wide
+      title={`${entries.length}명의 자리를 옮깁니다`}
+      sub="옮기면 원래 자리는 비워집니다. 하나라도 안 되면 전부 취소됩니다."
+      confirmLabel={`${changed.length}명 옮기기`}
+      busy={busy}
+      confirmDisabled={changed.length === 0 || dup.length > 0}
+      error={error}
+      onConfirm={onConfirm}
+      onClose={onClose}
+    >
+      <div style={{ display: 'grid', gap: 8 }}>
+        {entries.map(({ from, to }) => {
+          const row = seats.find((s) => s.seatId === from)
+          const conflict = dup.includes(to)
+          return (
+            <div key={from} className="frow">
+              <label>
+                {row?.studentName ?? '-'}
+                <span style={{ color: 'var(--muted)', fontWeight: 400 }}> {row?.seatCd}</span>
+              </label>
+              <div>
+                <select
+                  className="sel"
+                  style={{ width: 190, borderColor: conflict ? 'var(--red)' : undefined }}
+                  value={to}
+                  onChange={(e) => setMoving({ ...moving, [from]: Number(e.target.value) })}
+                >
+                  <option value={from}>{row?.seatCd} (그대로)</option>
+                  {freeSeats.map((f) => (
+                    <option key={f.seatId} value={f.seatId}>
+                      {f.seatCd}
+                    </option>
+                  ))}
+                </select>
+                {conflict && <div className="hint" style={{ color: 'var(--red)' }}>같은 자리를 두 명이 골랐습니다.</div>}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {freeSeats.length === 0 && (
+        <div className="note-box" style={{ marginTop: 10 }}>
+          <div>이 구역에 빈 자리가 없습니다. 먼저 배정을 해제하거나 다른 구역을 쓰세요.</div>
+        </div>
+      )}
+    </Modal>
   )
 }
 
