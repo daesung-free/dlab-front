@@ -308,7 +308,7 @@ function Content() {
         fields={FIELDS}
         onSearch={setQuery}
         initial={query}
-        presetKey="change-log"
+        presetKey="AUDIT_LOG"
         headerRight={
           <span className="mk supplement" title="조회 기본값은 오늘입니다">
             <Icon name="clock" size={11} /> 기본 조회 = 금일

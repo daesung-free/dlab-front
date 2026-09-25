@@ -1,4 +1,4 @@
-import { request } from './client'
+import { downloadFile, request } from './client'
 
 /* 출결 관리 (F-4.3) — GET /api/v1/admin/attendance
  *
@@ -105,6 +105,21 @@ export interface AttendanceParams {
 export function fetchAttendanceBoard(params: AttendanceParams): Promise<AttendanceBoard> {
   const { statuses, ...rest } = params
   return request<AttendanceBoard>('/api/v1/admin/attendance', {
+    query: { ...rest },
+    repeatable: { statuses },
+  })
+}
+
+/**
+ * 조회 조건 그대로 서버 엑셀을 받는다(2026-09-25 서버가 조건을 받게 됐다).
+ *
+ * ★ 화면에서 만들던 엑셀과 **같은 조건**이다 — 조회와 같은 필터 코드를 서버가 탄다.
+ * ★ **마스킹 해제 권한은 서버가 판단한다.** 파일은 회수가 안 되므로 화면 토글보다 기준이 높다 —
+ *   화면에서 이름을 보고 있어도 파일에서는 가려질 수 있다.
+ */
+export function exportAttendance(params: AttendanceParams & { unmask?: boolean }, filename = '출결_현황.xlsx'): Promise<void> {
+  const { statuses, ...rest } = params
+  return downloadFile('/api/v1/admin/attendance/export', filename, {
     query: { ...rest },
     repeatable: { statuses },
   })
