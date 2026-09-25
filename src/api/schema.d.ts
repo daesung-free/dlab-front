@@ -17700,6 +17700,16 @@ export interface components {
             assignmentState?: string;
             /** @enum {string} */
             presence?: "PRESENT" | "OUT" | "ABSENT" | "EMPTY";
+            /**
+             * @description 지금 자리를 비웠는지(좌석이탈). <b><code>presence</code>와 또 다른 축</b>이다 —
+             *                             이탈해도 출결로는 재실이라 화면이 이 값으로 덮어 표시한다
+             */
+            onSeatLeave?: boolean;
+            /**
+             * Format: date-time
+             * @description 이탈 시작 시각. 이탈 중이 아니면 비어 있다
+             */
+            seatLeftAt?: string;
             /** Format: int64 */
             enrollmentId?: number;
             studentNo?: string;
@@ -17796,42 +17806,36 @@ export interface components {
             meta?: components["schemas"]["PageMeta"];
             error?: components["schemas"]["ErrorBody"];
         };
-        LeaveRow: {
+        LeaveRowResponse: {
             /** Format: int64 */
             leaveLogId?: number;
-            /**
-             * Format: int64
-             * @description <code>null</code>이면 키오스크가 보낸 카드·학번으로 학생을 못 찾은 건이다
-             */
+            /** Format: int64 */
             enrollmentId?: number;
-            /** @description 학생을 못 찾았으면 키오스크가 보낸 학번 원본 */
             studentNo?: string;
+            /** @description 상위 관리자가 아니면 가려진 값이다. 학생을 못 찾은 건은 비어 있다 */
             name?: string;
             className?: string;
             areaCd?: string;
             seatCd?: string;
             /** Format: date-time */
             leftAt?: string;
-            /**
-             * Format: date-time
-             * @description 복귀 또는 자동 마감 시각. 열려 있으면 <code>null</code>
-             */
+            /** Format: date-time */
             closedAt?: string;
             /** @enum {string} */
             status?: "OPEN" | "RETURNED" | "AUTO_CLOSED" | "NO_RETURN_RECORD";
-            /**
-             * Format: int64
-             * @description 이탈 시간(분). <code>OPEN</code>이면 지금까지 경과, <code>RETURNED</code>면 실제 이탈 시간,
-             *                           그 외에는 알 수 없어 <code>null</code>
-             */
+            /** Format: int64 */
             minutes?: number;
             resolved?: boolean;
+            /** @description 이 행의 이름이 가려졌는지 */
+            masked?: boolean;
         };
         SeatLeaveBoardResponse: {
-            rows?: components["schemas"]["LeaveRow"][];
+            rows?: components["schemas"]["LeaveRowResponse"][];
             summary?: {
                 [key: string]: number;
             };
+            /** @description 이름이 가려졌는지. 화면이 모르면 또 가려 이름이 통째로 사라진다 */
+            masked?: boolean;
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -17843,9 +17847,9 @@ export interface components {
          *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
          *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
          */
-        ApiResponseListLeaveRow: {
+        ApiResponseListLeaveRowResponse: {
             success?: boolean;
-            data?: components["schemas"]["LeaveRow"][];
+            data?: components["schemas"]["LeaveRowResponse"][];
             meta?: components["schemas"]["PageMeta"];
             error?: components["schemas"]["ErrorBody"];
         };
@@ -30795,7 +30799,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseListLeaveRow"];
+                    "*/*": components["schemas"]["ApiResponseListLeaveRowResponse"];
                 };
             };
         };

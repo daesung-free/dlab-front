@@ -36,7 +36,11 @@ import './reading-room.css'
  * ★ 마스킹이 다른 목록과 같은 규칙이 됐다(2026-09-03). `unmask` 를 주면 원본이 오고
  *   응답의 `masked` 가 false 가 된다 — 화면은 그 값을 보고 토글 상태를 정한다.
  *
- * ★ 이석 위치는 아직 없다. 좌석 이탈 로그 수집이 보류라 서버가 값을 못 준다 —
+ * ★ 이석은 **좌석 이탈 태깅**이다(2026-09-25 서버 반영 — `onSeatLeave`·`seatLeftAt`).
+ *   presence 는 이탈을 모른다 — 이탈해도 출결로는 재실이라 그것만 보면 앉아 있는 걸로 보인다.
+ *   출결 외출(presence=OUT)도 자리에 없는 것은 같아서 함께 이석으로 묶는다.
+ *
+ * ★ 이석 위치(어디로 갔는지)는 아직 없다. 위치 구분값이 정해지지 않았다(I-16) —
  *   목업 컬럼은 남기고 <Unfilled/> 로 표시한다. */
 
 type SeatState = 'in' | 'out' | 'away' | 'free' | 'off'
@@ -44,17 +48,25 @@ type SeatState = 'in' | 'out' | 'away' | 'free' | 'off'
 const STATE_META: Record<SeatState, { label: string; short: string; color: string }> = {
   in: { label: '재실', short: '재실', color: 'var(--mint-wash)' },
   out: { label: '배정 · 미등원', short: '미등원', color: 'var(--amber-wash)' },
-  away: { label: '이석 (좌석 이탈 신청)', short: '이석', color: 'var(--violet-wash)' },
+  away: { label: '이석 (좌석 이탈 · 외출)', short: '이석', color: 'var(--violet-wash)' },
   free: { label: '미배정 공석', short: '공석', color: '#fff' },
   off: { label: '사용중지', short: '중지', color: '#eceef1' },
 }
 
-/** 배정 축 × 재실 축 → 화면의 5색 */
+/** ISO 시각 → 'HH:mm' (로컬). 자리를 비운 시각은 날짜가 필요 없다 — 그날 안에서만 본다 */
+function hhmm(iso: string | null): string {
+  if (!iso) return '-'
+  const d = new Date(iso)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+/** 배정 축 × 재실 축 × 이탈 축 → 화면의 5색 */
 function seatState(cell: ApiSeatCell): SeatState {
   if (cell.assignmentState === 'DISABLED') return 'off'
   if (cell.assignmentState !== 'ASSIGNED') return 'free'
+  // ★ 이탈을 먼저 본다. 이탈 중이어도 출결은 재실이라 presence 를 먼저 보면 '재실' 이 된다
+  if (cell.onSeatLeave || cell.presence === 'OUT') return 'away'
   if (cell.presence === 'PRESENT') return 'in'
-  if (cell.presence === 'OUT') return 'away'
   return 'out'
 }
 
@@ -96,7 +108,7 @@ const ASSIGN_COLUMNS: Column<AssignRow>[] = [
     key: 'awayTo',
     header: '이석 위치',
     value: () => '',
-    render: () => <Unfilled reason="이석 위치가 좌석 응답에 없다 (좌석 이탈/복귀 연동 필요)" />,
+    render: () => <Unfilled reason="이석 위치 구분값이 아직 정해지지 않았다(I-16)" />,
   },
 ]
 
@@ -298,7 +310,7 @@ function Content() {
             <Icon name="footprints" size={13} /> 이석
           </div>
           <div className="v">{count('away')}</div>
-          <div className="d">좌석 이탈 신청 반영</div>
+          <div className="d">좌석 이탈 · 외출 반영</div>
         </div>
         <div className="stat">
           <div className="l">
@@ -470,10 +482,16 @@ function Content() {
                       <span className="k">고정반</span>
                       <span className="v">{sel.className ?? '미배정'}</span>
                     </div>
+                    {sel.onSeatLeave && (
+                      <div className="row">
+                        <span className="k">자리 비운 시각</span>
+                        <span className="v">{hhmm(sel.seatLeftAt)}</span>
+                      </div>
+                    )}
                     <div className="row">
                       <span className="k">이석 위치</span>
                       <span className="v">
-                        <Unfilled reason="이석 위치가 좌석 응답에 없다" />
+                        <Unfilled reason="이석 위치 구분값이 아직 정해지지 않았다(I-16)" />
                       </span>
                     </div>
                   </div>

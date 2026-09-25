@@ -21,7 +21,6 @@ import { getSeatLayout, listSeatAreas, type SeatArea, type SeatCell } from '../.
 import {
   SEAT_LEAVE_STATUS,
   SEAT_LEAVE_STATUS_LABEL,
-  fetchCurrentSeatLeaves,
   fetchSeatLeaves,
   type SeatLeaveRow,
   type SeatLeaveStatus,
@@ -34,13 +33,12 @@ import './seat.css'
  * 배경: 키오스크 증설이 중단(잔여 6대)돼 앱으로 대체한다.
  *       패드 소지 = 앱 신청 / 미소지 = 키오스크 병행.
  *
- * 연동(2026-09-22) — GET /api/v1/admin/seat-leaves · /current. src/api/seatLeaves.ts 참고.
+ * 연동(2026-09-22) — GET /api/v1/admin/seat-leaves. src/api/seatLeaves.ts 참고.
  *   · 이동 신청 내역 탭 = 이탈 이력. 서버가 이탈·복귀를 한 행으로 짝지어 준다
- *   · 실시간 좌석표 탭 = 좌석 배치(/seats/layout) 위에 '지금 이탈 중'을 겹친다.
- *     ★ 겹치는 기준은 enrollmentId 다. 이탈 행의 seatCd 는 **키오스크 번호**라
- *       별관이면 1000번대로 와서 배치도의 seatCd 와 안 맞는다
- *     ★ 배치도의 presence 는 이탈 기록을 모른다(출결 외출만 본다). 그래서 이탈 중인지는
- *       이 화면이 current 로 따로 받아 덮는다 — 서버가 합쳐 주면 이 겹치기를 걷어낸다(API_GAPS 37부)
+ *   · 실시간 좌석표 탭 = 좌석 배치(/seats/layout)의 onSeatLeave·seatLeftAt 을 그대로 쓴다.
+ *     ★ presence 는 이탈을 모른다 — 이탈해도 출결로는 재실이다. 이탈 축이 따로 온다(2026-09-25)
+ *     ★ 그래서 /seat-leaves/current 를 따로 부르지 않는다. 두 번 부르면 배치와 이탈이
+ *       서로 다른 시점이 되어 좌석표에서만 깜빡인다
  *   · 키오스크 관리 탭 = 아직 서버에 없다. 예시 값 그대로 두고 탭 안에 표시한다
  *
  * ⚠ 이탈 위치(강의실·화장실·공용공간·교과실)는 아직 정해지지 않았다(I-16). 위치별 칸·필터는
@@ -76,12 +74,19 @@ const VIEW_META: Record<SeatView, { label: string; cls: string; color: string }>
   off: { label: '사용중지', cls: 'empty', color: 'var(--line-2)' },
 }
 
-/** 배정 × 재실 × 이탈 중 → 좌석표 한 칸 */
-function seatView(cell: SeatCell, leaving: boolean): SeatView {
+/** 배정 × 재실 × 이탈 → 좌석표 한 칸 */
+function seatView(cell: SeatCell): SeatView {
   if (cell.assignmentState === 'DISABLED') return 'off'
   if (cell.assignmentState !== 'ASSIGNED' || cell.enrollmentId === null) return 'free'
-  if (leaving) return 'away'
+  // ★ 이탈을 먼저 본다. 이탈 중이어도 출결은 재실이라 presence 를 먼저 보면 앉아 있는 걸로 보인다
+  if (cell.onSeatLeave) return 'away'
   return cell.presence === 'PRESENT' ? 'seat' : 'absent'
+}
+
+/** 이탈 시작 시각 → 지금까지 몇 분. 서버가 분을 안 주는 자리라 화면이 센다 */
+function minutesSince(iso: string | null): number {
+  if (!iso) return 0
+  return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000))
 }
 
 /** ISO(UTC) → 'yyyy-MM-dd HH:mm' (로컬) */
@@ -343,6 +348,9 @@ function LeaveLog({ academyId }: { academyId: number | null }) {
 
   const rows = board.data?.rows ?? []
   const summary = board.data?.summary
+  // 서버가 이미 가려서 보낸 경우 화면에서 또 가리지 않는다 — 이중 마스킹이 된다
+  const serverMasked = board.data?.masked ?? false
+  const effectiveMasked = serverMasked ? false : masked
 
   return (
     <>
@@ -358,7 +366,7 @@ function LeaveLog({ academyId }: { academyId: number | null }) {
         columns={COLUMNS}
         rows={rows}
         rowKey={(r) => String(r.leaveLogId)}
-        masked={masked}
+        masked={effectiveMasked}
         loading={board.loading}
         pageSize={12}
         emptyText="조회 기간에 좌석 이탈 기록이 없습니다"
@@ -371,8 +379,15 @@ function LeaveLog({ academyId }: { academyId: number | null }) {
         }
         toolbar={
           <>
-            <MaskToggle masked={masked} onChange={setMasked} />
-            <ExcelButton filename="좌석_이탈현황" columns={COLUMNS} rows={rows} masked={masked} />
+            {/* 출결 현황과 같은 처리다 — 서버가 가려서 보낸 경우엔 토글 자체가 뜻이 없다 */}
+            {serverMasked ? (
+              <span className="dt-count" style={{ color: 'var(--muted)' }}>
+                권한상 마스킹됨
+              </span>
+            ) : (
+              <MaskToggle masked={masked} onChange={setMasked} />
+            )}
+            <ExcelButton filename="좌석_이탈현황" columns={COLUMNS} rows={rows} masked={effectiveMasked} />
           </>
         }
       />
@@ -390,7 +405,6 @@ function Content() {
   const [areaId, setAreaId] = useState<number | null>(null)
   /** 구역 id → 배치. 상단 '재실' 은 지점 전체라 구역을 다 읽는다 */
   const [layouts, setLayouts] = useState<Map<number, SeatCell[]>>(new Map())
-  const [current, setCurrent] = useState<SeatLeaveRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [loadedAt, setLoadedAt] = useState<Date | null>(null)
@@ -420,11 +434,7 @@ function Content() {
     if (academyId === null) return
     setLoading(true)
     try {
-      const [cur, ...lays] = await Promise.all([
-        fetchCurrentSeatLeaves({ academyId }),
-        ...areas.map((a) => getSeatLayout(a.id, !masked)),
-      ])
-      setCurrent(cur)
+      const lays = await Promise.all(areas.map((a) => getSeatLayout(a.id, !masked)))
       setLayouts(new Map(areas.map((a, i) => [a.id, lays[i]])))
       setLoadedAt(new Date())
       setError(null)
@@ -441,14 +451,10 @@ function Content() {
     return () => window.clearInterval(t)
   }, [refresh])
 
-  const leavingBy = useMemo(() => {
-    const m = new Map<number, SeatLeaveRow>()
-    for (const r of current) if (r.enrollmentId !== null) m.set(r.enrollmentId, r)
-    return m
-  }, [current])
-
   const allCells = useMemo(() => [...layouts.values()].flat(), [layouts])
-  const seated = allCells.filter((c) => seatView(c, c.enrollmentId !== null && leavingBy.has(c.enrollmentId)) === 'seat').length
+  const seated = allCells.filter((c) => seatView(c) === 'seat').length
+  // 지점 전체 기준이다 — 구역을 바꿔도 이 숫자는 그대로여야 한다
+  const away = allCells.filter((c) => seatView(c) === 'away').length
 
   const cells = useMemo(
     () =>
@@ -468,7 +474,7 @@ function Content() {
           <div className="v" style={{ color: 'var(--mint-d)' }}>
             {seated}
           </div>
-          <div className={current.length ? 'd warn' : 'd'}>본인좌석 · 이탈 중 {current.length}명</div>
+          <div className={away ? 'd warn' : 'd'}>본인좌석 · 이탈 중 {away}명</div>
         </div>
         {AWAY_LOCATIONS.map((l) => (
           <div className="stat" key={l}>
@@ -564,8 +570,8 @@ function Content() {
             )}
             <div className="seatmap">
               {cells.map((c) => {
-                const leave = c.enrollmentId !== null ? leavingBy.get(c.enrollmentId) : undefined
-                const view = seatView(c, leave !== undefined)
+                const view = seatView(c)
+                const awayMin = view === 'away' ? minutesSince(c.seatLeftAt) : 0
                 const meta = VIEW_META[view]
                 const dim = onlySeated && view !== 'seat'
                 const who = c.studentName ?? ''
@@ -580,19 +586,16 @@ function Content() {
                     title={
                       view === 'free' || view === 'off'
                         ? `${c.seatCd} · ${meta.label}`
-                        : leave
-                          ? `${c.seatCd} · ${who} · ${dateTime(leave.leftAt).slice(11)} 이탈 · ${leave.minutes ?? 0}분째`
+                        : view === 'away'
+                          ? `${c.seatCd} · ${who} · ${dateTime(c.seatLeftAt).slice(11)} 이탈 · ${awayMin}분째`
                           : `${c.seatCd} · ${who} · ${meta.label}`
                     }
                   >
                     <span className="sc">{c.seatCd}</span>
                     <span className="sn">{view === 'free' || view === 'off' ? meta.label : who}</span>
-                    {leave && (
-                      <span
-                        className="sl"
-                        style={{ color: (leave.minutes ?? 0) > LONG_AWAY_MIN ? 'var(--red)' : 'var(--ink-2)' }}
-                      >
-                        이탈 {leave.minutes ?? 0}분
+                    {view === 'away' && (
+                      <span className="sl" style={{ color: awayMin > LONG_AWAY_MIN ? 'var(--red)' : 'var(--ink-2)' }}>
+                        이탈 {awayMin}분
                       </span>
                     )}
                     {view === 'absent' && (
