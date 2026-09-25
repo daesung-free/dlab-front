@@ -470,9 +470,9 @@ function Content() {
                 >
                   <span style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>{localDateTime(h.changedAt)}</span>
                   <span style={{ flex: 1 }}>{h.detail}</span>
-                  {/* 서버가 계정 번호만 준다 — 이름은 안 온다 */}
+                  {/* 이름이 오기 전에는 '계정 #12' 를 찍었다 — 누가 바꿨는지 알 수 없는 값이었다 */}
                   <span style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>
-                    {h.changedBy === null ? '-' : `계정 #${h.changedBy}`}
+                    {h.changedByName ?? (h.changedBy === null ? '-' : `계정 #${h.changedBy}`)}
                   </span>
                 </div>
               ))}

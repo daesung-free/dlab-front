@@ -145,15 +145,20 @@ const CLASS_COLUMNS: Column<ClassRow>[] = [
 
 interface MonthRow {
   month: string
+  /** 그달 새로 등록한 인원. 서버가 안 주면 null */
+  admitted: number | null
   count: number
   delta: number | null
 }
 
-/* ★ 월별은 '신규 등원' 이 아니다. 서버는 **그달 말 등록 인원**과 **전월 대비 증감**을 준다.
-     증감은 들어온 사람에서 나간 사람을 뺀 값이라 음수도 된다 — '신규' 칸에 넣으면 거짓말이 된다.
-     목업 열 이름(신규 등원 / 누계)을 서버가 주는 뜻에 맞게 바꿨다(2026-09-21). */
+/* ★ 세 칸이 각각 다른 것을 센다 — 합쳐 읽으면 안 된다.
+     · 신규 등록 (admitted) 그달 새로 등록한 인원. 2026-09-25 서버가 주기 시작했다
+     · 등록 인원 (count)    그달 말 기준 재원 인원
+     · 전월 대비 (delta)    들어온 사람 − 나간 사람. **신규가 있어도 0 이 될 수 있다**
+     예전에는 신규를 못 받아 목업의 '신규 등원' 칸을 뺐었다(2026-09-21). 이제 되살렸다. */
 const MONTH_COLUMNS: Column<MonthRow>[] = [
   { key: 'month', header: '월', value: (r) => r.month },
+  { key: 'admitted', header: '신규 등록', value: (r) => r.admitted ?? '-' },
   { key: 'count', header: '등록 인원', value: (r) => r.count },
   { key: 'delta', header: '전월 대비', value: (r) => (r.delta === null ? '' : r.delta) },
 ]
@@ -307,7 +312,12 @@ function Content() {
   const totalCapacity = classRows.reduce((n, r) => n + (r.capacity ?? 0), 0)
   const fillPct = totalCapacity > 0 ? Math.round((seated / totalCapacity) * 100) : null
 
-  const months: MonthRow[] = byMonth.map((r) => ({ month: r.key, count: r.count, delta: r.delta }))
+  const months: MonthRow[] = byMonth.map((r) => ({
+    month: r.key,
+    admitted: r.admitted ?? null,
+    count: r.count,
+    delta: r.delta,
+  }))
   /* 작년 같은 달 — 키가 'yyyy-MM' 이라 달만 떼어 맞춘다 */
   const prevByMm = new Map((prevMonth ?? []).map((r) => [r.key.slice(-2), r.count]))
 
@@ -528,7 +538,8 @@ function Content() {
             <div className="note-box">
               <div>
                 그달 말 기준 <b>등록 인원(휴원·퇴원 포함)</b>입니다. 재원생만 센 반별·계열 탭과는 숫자가
-                다를 수 있습니다.
+                다를 수 있습니다. <b>신규</b>는 그달 새로 등록한 인원이고, <b>전월 대비</b>는 들어온 인원에서
+                나간 인원을 뺀 값이라 신규가 있어도 0 일 수 있습니다.
               </div>
             </div>
             {months.length === 0 && !loading && (
@@ -548,6 +559,14 @@ function Content() {
                   />
                 </span>
                 <span style={{ width: 58, fontSize: 12.5, fontWeight: 800, textAlign: 'right' }}>{m.count}명</span>
+                {/* ★ 전월 대비와 다른 값이다 — 저쪽은 들어온 사람에서 나간 사람을 뺀 것이라
+                       신규가 있어도 0 이 된다. 그래서 신규를 따로 적는다(2026-09-25 서버가 주기 시작) */}
+                <span
+                  style={{ width: 78, fontSize: 11.5, textAlign: 'right', color: 'var(--muted)' }}
+                  title="그달 새로 등록한 인원"
+                >
+                  {m.admitted === null ? '-' : `신규 ${m.admitted}명`}
+                </span>
                 <span
                   style={{
                     width: 92,
