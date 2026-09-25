@@ -31,7 +31,15 @@ import {
   type ReceiptRow,
   type ReceiptSummary,
 } from '../../api/billing'
-import { SEAT_TYPE_LABEL, getFeeTable, issueMonthlyBilling, type FeeTableRow, type SeatType } from '../../api/tuition'
+import {
+  SEAT_TYPE_LABEL,
+  getFeeTable,
+  getRemainingDays,
+  issueAdmissionBilling,
+  issueMonthlyBilling,
+  type FeeTableRow,
+  type SeatType,
+} from '../../api/tuition'
 import { GRADE_LABEL, searchStudents, type Student } from '../../api/students'
 import type { Mockup } from './types'
 import './payment.css'
@@ -53,6 +61,9 @@ import './payment.css'
  *   여러 건이면 그 사실을 표시한다 — 합계는 receivedAmount 가 이미 갖고 있다.
  *
  * ★ 청구 등록·수납·취소를 여기에 붙였다(2026-09-14). 표는 조회용으로 두고 **모두 모달**이다.
+ *   등록은 경로가 셋이다 — 교습비(월) · **입학 청구**(2026-09-25 추가) · 그 밖.
+ *   ★ 입학 청구는 **입학금이 아니다.** 입학일이 1일이 아니면 **그 달 일할분 + 다음 달 정액**
+ *     두 건이 한 번에 만들어진다(규정). 금액을 화면이 정하면 안 되는 청구다.
  *   교습비는 `POST /tuition/billings/monthly` 로 만든다 — 금액을 화면이 정하지 않고
  *   단가표와 교습일수를 서버가 본다. 그 밖(특강비·급식비·예외)은 금액을 직접 적는
  *   `POST /billings` 다. 둘을 바꿔 쓰면 단가표와 어긋난 금액이 조용히 들어간다.
@@ -73,14 +84,23 @@ type Kind = '등록비' | '교습비' | '특강비' | '급식비'
 /**
  * 청구 등록 입력.
  *
- * ★ `mode` 로 **경로가 갈린다.** 교습비는 단가표를 서버가 보는 `monthly`,
- *   그 밖은 금액을 직접 적는 `etc` 다. 한 모달에 담되 섞이지 않게 갈라 둔다.
+ * ★ `mode` 로 **경로가 셋으로 갈린다.** 교습비는 단가표를 서버가 보는 `monthly`,
+ *   입학 청구는 입학일로 일할 계산하는 `admission`, 그 밖은 금액을 직접 적는 `etc` 다.
+ *   한 모달에 담되 섞이지 않게 갈라 둔다.
+ *
+ * ★ 입학 청구를 `etc`(금액 직접 입력)로 넣지 않는다. 서버가 **그 달 교습비를 남은 교습일수로
+ *   일할 계산**하고, 1일 입학이 아니면 **다음 달분까지 두 건**을 만든다 — 직원이 달력을
+ *   세서 적을 값이 아니다(휴일이 지점마다 다르다).
  */
 interface IssueDraft {
-  mode: 'monthly' | 'etc'
+  mode: 'monthly' | 'admission' | 'etc'
   enrollmentId: string
   /** monthly */
   month: string
+  /** admission — 학생을 고르면 학생 정보의 입학일로 채운다 */
+  admissionDate: string
+  /** admission — 남은 교습일수. 서버 제안값을 채워 두고 **데스크가 고칠 수 있게** 둔다 */
+  remainingDays: string
   seatType: SeatType
   discountRate: string
   /** etc */
@@ -101,6 +121,8 @@ const EMPTY_ISSUE: IssueDraft = {
   mode: 'monthly',
   enrollmentId: '',
   month: thisMonth(),
+  admissionDate: '',
+  remainingDays: '',
   seatType: 'GENERAL',
   discountRate: '',
   name: '',
@@ -538,6 +560,9 @@ function Content() {
   const [unpaidSel, setUnpaidSel] = useState<string[]>([])
   const [fee, setFee] = useState<FeeTableRow[] | null>(null)
   const [feeErr, setFeeErr] = useState<string | null>(null)
+  /* 입학금은 남은 교습일수로 일할 계산된다. 화면이 달력으로 세지 않는다 — 휴일이 지점마다 다르다.
+     보여주기만 하고 **보내지는 않는다**. 서버가 다시 세게 두는 편이 등록 시점과 어긋나지 않는다 */
+  const [remainDays, setRemainDays] = useState<number | null>(null)
 
   /* 청구를 만들려면 학생을 골라야 한다. 재원생만 — 퇴원생에게 새 청구를 낼 일은 없다 */
   useEffect(() => {
@@ -555,6 +580,38 @@ function Content() {
   }, [academyId])
 
   const issueStudent = students.find((st) => String(st.enrollmentId) === issue.enrollmentId) ?? null
+
+  /* 입학일은 학생 정보에 있다 — 직원이 다시 적게 하면 오타로 일할 계산이 통째로 틀어진다.
+     비어 있는 학생(예전 자료)이 있어 칸은 고칠 수 있게 둔다 */
+  useEffect(() => {
+    if (issue.mode !== 'admission' || issueStudent === null) return
+    const at = issueStudent.admissionDate ?? ''
+    setIssue((prev) =>
+      prev.mode === 'admission' && prev.enrollmentId === String(issueStudent.enrollmentId) && prev.admissionDate === ''
+        ? { ...prev, admissionDate: at }
+        : prev,
+    )
+  }, [issue.mode, issueStudent])
+
+  /* 남은 교습일수. 입학일·지점이 정해져야 답이 나온다 */
+  useEffect(() => {
+    if (!issueOpen || issue.mode !== 'admission' || academyId === null || issue.admissionDate === '') {
+      setRemainDays(null)
+      return
+    }
+    let cancelled = false
+    getRemainingDays({ academyId, admissionDate: issue.admissionDate })
+      .then((d) => {
+        if (cancelled) return
+        setRemainDays(d)
+        // 제안값을 칸에 채워 둔다. 데스크가 고치면 그 값이 이긴다
+        setIssue((prev) => (prev.mode === 'admission' ? { ...prev, remainingDays: String(d) } : prev))
+      })
+      .catch(() => !cancelled && setRemainDays(null))
+    return () => {
+      cancelled = true
+    }
+  }, [issueOpen, issue.mode, issue.admissionDate, academyId])
 
   /* 학생·월·좌석이 정해지면 단가표를 읽는다. 학년에 따라 단가가 달라 학생이 먼저다 */
   useEffect(() => {
@@ -599,6 +656,23 @@ function Content() {
           dueDate: issue.dueDate || undefined,
         })
         setActDone(`${r.name} ${r.billedAmount.toLocaleString()}원으로 등록했습니다.`)
+      } else if (issue.mode === 'admission') {
+        /* 금액을 안 보낸다 — 입학금과 그 달 교습비 일할분을 서버가 계산한다.
+           그 달 교습비가 이미 있으면 409 이고, 그 문구를 그대로 보여준다 */
+        const made = await issueAdmissionBilling({
+          enrollmentId,
+          admissionDate: issue.admissionDate,
+          seatType: issue.seatType,
+          discountRate: issue.discountRate.trim() === '' ? undefined : Number(issue.discountRate),
+          remainingDays: issue.remainingDays.trim() === '' ? undefined : Number(issue.remainingDays),
+          dueDate: issue.dueDate || undefined,
+        })
+        /* 한 건이 아니다 — 입학금과 그 달 교습비가 따로 만들어진다.
+           무엇이 몇 건 생겼는지 그대로 알린다. 합계만 말하면 두 건인 줄 모른다 */
+        const total = made.reduce((a, b) => a + b.billedAmount, 0)
+        setActDone(
+          `${made.map((b) => b.name).join(' · ')} — 청구 ${made.length}건 합계 ${total.toLocaleString()}원으로 등록했습니다.`,
+        )
       } else {
         const r = await createBilling({
           enrollmentId,
@@ -1047,7 +1121,7 @@ function Content() {
       {issueOpen && (
         <Modal
           title="청구 등록"
-          sub="교습비는 단가표로 계산되고, 그 밖은 금액을 직접 적습니다."
+          sub="교습비·입학 청구는 서버가 계산하고, 그 밖은 금액을 직접 적습니다."
           confirmLabel="등록"
           busy={actBusy}
           error={actErr}
@@ -1055,7 +1129,9 @@ function Content() {
             issue.enrollmentId === '' ||
             (issue.mode === 'monthly'
               ? issue.month.trim() === ''
-              : issue.name.trim() === '' || issue.suppliedAmount.trim() === '')
+              : issue.mode === 'admission'
+                ? issue.admissionDate === '' || issue.remainingDays.trim() === ''
+                : issue.name.trim() === '' || issue.suppliedAmount.trim() === '')
           }
           onConfirm={() => void submitIssue()}
           onClose={() => setIssueOpen(false)}
@@ -1075,6 +1151,13 @@ function Content() {
                 </button>
                 <button
                   type="button"
+                  className={`btn${issue.mode === 'admission' ? ' pri' : ''}`}
+                  onClick={() => setIssue({ ...issue, mode: 'admission' })}
+                >
+                  입학 (첫 달)
+                </button>
+                <button
+                  type="button"
                   className={`btn${issue.mode === 'etc' ? ' pri' : ''}`}
                   onClick={() => setIssue({ ...issue, mode: 'etc' })}
                 >
@@ -1084,7 +1167,9 @@ function Content() {
               <div className="hint">
                 {issue.mode === 'monthly'
                   ? '금액은 단가표와 그 달 교습일수로 계산됩니다. 아래에서 미리 확인하세요.'
-                  : '금액을 직접 적습니다. 교습비는 위쪽으로 등록해야 단가표와 어긋나지 않습니다.'}
+                  : issue.mode === 'admission'
+                    ? '입학일부터 남은 교습일수로 그 달 교습비를 계산합니다. 1일 입학이 아니면 다음 달분도 함께 청구됩니다.'
+                    : '금액을 직접 적습니다. 교습비는 위쪽으로 등록해야 단가표와 어긋나지 않습니다.'}
               </div>
             </div>
           </div>
@@ -1194,6 +1279,73 @@ function Content() {
                       </div>
                     </>
                   )}
+                </div>
+              </div>
+            </>
+          ) : issue.mode === 'admission' ? (
+            <>
+              <div className="frow">
+                <label className="req">입학일</label>
+                <div>
+                  <input
+                    className="inp"
+                    type="date"
+                    value={issue.admissionDate}
+                    onChange={(e) => setIssue({ ...issue, admissionDate: e.target.value })}
+                  />
+                  <div className="hint">
+                    학생을 고르면 등록된 입학일이 들어옵니다. 이 날짜부터 그 달 교습비를 계산합니다.
+                  </div>
+                </div>
+              </div>
+              <div className="frow">
+                <label className="req">좌석 · 할인율</label>
+                <div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <select
+                      className="sel"
+                      value={issue.seatType}
+                      onChange={(e) => setIssue({ ...issue, seatType: e.target.value as SeatType })}
+                    >
+                      {(Object.keys(SEAT_TYPE_LABEL) as SeatType[]).map((t) => (
+                        <option key={t} value={t}>
+                          {SEAT_TYPE_LABEL[t]}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      className="inp"
+                      type="number"
+                      min={0}
+                      max={100}
+                      placeholder="할인율 %"
+                      value={issue.discountRate}
+                      onChange={(e) => setIssue({ ...issue, discountRate: e.target.value })}
+                    />
+                  </div>
+                  <div className="hint">할인율은 퍼센트로 적습니다. 비우면 할인 없이 청구됩니다.</div>
+                </div>
+              </div>
+              <div className="frow">
+                <label className="req">남은 교습일수</label>
+                <div>
+                  {/* ★ 서버 값을 그대로 쓰면 조용히 틀린다 — 서버는 그 달 교습일수 총합만 알고
+                         어느 날이 휴원일인지는 모른다. 데스크가 고칠 수 있어야 한다 */}
+                  <input
+                    className="inp"
+                    type="number"
+                    min={1}
+                    max={31}
+                    value={issue.remainingDays}
+                    onChange={(e) => setIssue({ ...issue, remainingDays: e.target.value })}
+                  />
+                  <div className="hint">
+                    {issue.admissionDate === ''
+                      ? '입학일을 고르면 일수가 채워집니다.'
+                      : remainDays === null
+                        ? '불러오는 중…'
+                        : `서버 제안값은 ${remainDays}일입니다. 휴원일이 있으면 고쳐서 등록하세요.`}
+                  </div>
                 </div>
               </div>
             </>

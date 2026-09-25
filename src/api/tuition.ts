@@ -160,11 +160,18 @@ export function issueMonthlyBilling(body: {
 }
 
 /**
- * 입학금 청구 발행.
+ * 입학 청구 발행.
  *
- * ★ 입학금만 나오는 게 아니라 **그 달 교습비도 함께 계산된다.** 그래서 이미 그 달
- *   교습비가 있으면 409 다 — 9월 입학으로 넣었더니 "2026년 9월 교습비 청구가 이미
- *   있습니다"가 왔다(2026-09-14).
+ * ★ **이름과 달리 '입학금' 항목을 만들지 않는다**(2026-09-25 확인). 만드는 것은 교습비다 —
+ *   입학일이 **1일이면 그 달 정액 한 건**, 아니면 **그 달 일할분 + 다음 달 정액**
+ *   **두 건**이다(1개월 미만으로 결제됐으니 다음 달분을 함께 받는다는 규정).
+ *   그래서 응답이 배열이고, 화면도 '입학금' 이라고 부르면 안 된다.
+ *
+ * ★ 이미 그 달 교습비가 있으면 409 다 — 9월 입학으로 넣었더니 "2026년 9월 교습비 청구가
+ *   이미 있습니다"가 왔다(2026-09-14).
+ *
+ * ★ `remainingDays` 는 **서버 제안값을 화면이 고쳐 보낼 수 있어야 한다.** 서버는 그 달
+ *   교습일수 총합만 알고 **어느 날이 휴원일인지는 모른다** — 서버가 확정하면 조용히 틀린다.
  */
 export function issueAdmissionBilling(body: {
   enrollmentId: number
@@ -173,8 +180,11 @@ export function issueAdmissionBilling(body: {
   discountRate?: number
   remainingDays?: number
   dueDate?: string
-}): Promise<IssuedBilling> {
-  return request<IssuedBilling>('/api/v1/admin/tuition/billings/admission', { method: 'POST', body })
+}): Promise<IssuedBilling[]> {
+  // ★ **배열이다**(월 교습비는 단건). 입학금 청구와 그 달 교습비 청구가 **따로 만들어진다** —
+  //   단건으로 받으면 name·billedAmount 가 undefined 가 되어 등록이 됐는데도 화면은 실패로 본다
+  //   (2026-09-25 실제로 그랬다).
+  return request<IssuedBilling[]>('/api/v1/admin/tuition/billings/admission', { method: 'POST', body })
 }
 
 /**
