@@ -9,7 +9,9 @@ import { request } from './client'
  * ★ AUTO_CLOSED 는 **복귀가 아니다.** 키오스크가 00:30 에 미복귀 건을 일괄 마감한 것이라
  *   이탈 시간(minutes)도 없다. 복귀로 세면 밤늦게 나간 학생의 장시간 미복귀가 가려진다.
  * ★ 이탈 위치(어디로 갔는지)는 없다 — 위치 구분값이 아직 정해지지 않았다.
- * ★ 이름은 가려서 오지 않는다(`masked` 필드가 없다). 가리기는 화면이 한다.
+ * ★ 마스킹은 **서버가 한다**(2026-09-25). 담임·행정 계정에는 이름이 가려져 오고 응답·행마다
+ *   `masked` 가 온다. 프론트에서 또 가리면 이중 마스킹이라 이름이 통째로 사라진다.
+ *   본사·지점 관리자에게 원본이 오는 것은 정상이다 — 출결·상벌점·좌석배치표와 같은 규칙이다.
  */
 
 export type SeatLeaveStatus = 'OPEN' | 'RETURNED' | 'AUTO_CLOSED' | 'NO_RETURN_RECORD'
@@ -44,10 +46,14 @@ export interface SeatLeaveRow {
   /** OPEN 이면 지금까지 경과, RETURNED 면 실제 이탈 시간. 나머지는 알 수 없어 null */
   minutes: number | null
   resolved: boolean
+  /** 이 행의 이름이 서버에서 가려졌는지 */
+  masked: boolean
 }
 
 export interface SeatLeaveBoard {
   rows: SeatLeaveRow[]
+  /** 이 응답의 이름이 가려져 왔는지. 화면은 이 값을 보고 또 가리지 않는다 */
+  masked: boolean
   /** 조회된 목록 기준이라 필터를 걸면 같이 줄어든다 */
   summary: { total: number } & Record<SeatLeaveStatus, number>
 }

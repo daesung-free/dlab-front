@@ -92,10 +92,14 @@ export interface SeatMaster {
 }
 
 /**
- * 좌석 상태는 **두 축이 겹친다.** 하나로 합치면 안 된다.
+ * 좌석 상태는 **축이 셋 겹친다.** 하나로 합치면 안 된다.
  *   · 배정 축(assignmentState) : 배정됨 / 미배정 / 사용중지
- *   · 재실 축(presence)        : 재실 / 이석 / 미등원 / 빈자리
- * 화면은 둘을 조합해 색을 정한다(ReadingRoom 의 seatState).
+ *   · 재실 축(presence)        : 재실 / 외출 / 미등원 / 빈자리
+ *   · 이탈 축(onSeatLeave)     : 지금 자리를 비웠는지 (키오스크 좌석 이탈 태깅)
+ * 화면은 셋을 조합해 색을 정한다(ReadingRoom 의 seatState).
+ *
+ * ★ 이탈 중이어도 출결로는 여전히 재실(PRESENT)이다 — 등원해 있기 때문이다.
+ *   그래서 `presence` 만 보면 자리를 비운 학생이 '재실' 로 보인다(2026-09-25 서버 반영).
  */
 export type AssignmentState = 'ASSIGNED' | 'UNASSIGNED' | 'DISABLED'
 export type Presence = 'PRESENT' | 'OUT' | 'ABSENT' | 'EMPTY'
@@ -117,6 +121,13 @@ export interface SeatCell {
   assignmentState: AssignmentState | null
   /** 지금 앉아 있는지 — 배정과 별개다(배정된 자리라도 자리를 비울 수 있다) */
   presence: Presence | null
+  /**
+   * 지금 좌석 이탈 중인지. **`presence` 와 별개 축이다** — 이탈해도 출결은 재실이라
+   * 이 값으로 덮어 표시해야 한다. 좌석 이탈/복귀 화면(F-4.11-8)과 같은 기록을 본다.
+   */
+  onSeatLeave: boolean
+  /** 이탈 시작 시각(ISO). 이탈 중이 아니면 null */
+  seatLeftAt: string | null
   enrollmentId: number | null
   studentNo: string | null
   studentName: string | null
