@@ -9,6 +9,10 @@
 import { writeFileSync, mkdirSync } from 'node:fs'
 import { GROUPS, SCREENS, PHASE, KIND_LABEL, screensOf } from '../src/data/menu.ts'
 import { ISSUES, PRIORITY_ORDER, resolveIssue } from '../src/data/issues.ts'
+/* ★ 로직·데이터 항목·오픈이슈·DSA 실사 근거는 menu.ts 가 아니라 menu.internal.ts 에 있다.
+ *   menu.ts 는 사이드바가 쓰므로 프로덕션 번들에 들어간다 — 내부 메모를 떼어낸 이유다.
+ *   떼어낼 때 이 생성기를 같이 안 고쳐서 `npm run docs` 가 죽어 있었다(2026-09-25 고침). */
+import { internalOf } from '../src/data/menu.internal.ts'
 
 const out: string[] = []
 const w = (s = '') => out.push(s)
@@ -43,7 +47,7 @@ w('| No | 코드 | 우선순위 | 확인 대상 | 내용 | 걸려 있는 화면 
 w('|---|---|---|---|---|---|')
 for (const p of ['최우선', '높음'] as const) {
   for (const i of ISSUES.filter((x) => x.priority === p)) {
-    const blocked = SCREENS.filter((s) => s.issues.some((r) => resolveIssue(r)?.code === i.code))
+    const blocked = SCREENS.filter((s) => (internalOf(s.id).issues ?? []).some((r) => resolveIssue(r)?.code === i.code))
       .map((s) => s.code)
       .join(', ')
     const body = i.body.length > 90 ? `${i.body.slice(0, 90)}…` : i.body
@@ -68,9 +72,13 @@ for (const g of GROUPS) {
     w(`- **구분** ${KIND_LABEL[s.kind]} · **Phase** ${PHASE[s.phase].name}${s.feOrder ? ` · FE ${s.feOrder}순위` : ''}`)
     w(`- **화면 경로** \`/s/${s.id}\``)
     w(`- **기능 개요** ${s.summary}`)
-    if (s.tables.length) w(`- **데이터 항목** ${s.tables.map((t) => `\`${t}\``).join(', ')}`)
-    if (s.issues.length) {
-      const detail = s.issues
+    const inner = internalOf(s.id)
+    const tables = inner.tables ?? []
+    const issues = inner.issues ?? []
+    const logic = inner.logic ?? []
+    if (tables.length) w(`- **데이터 항목** ${tables.map((t) => `\`${t}\``).join(', ')}`)
+    if (issues.length) {
+      const detail = issues
         .map((r) => {
           const i = resolveIssue(r)
           return i ? `${r} ${i.code}(${i.priority}·${i.owner})` : r
@@ -78,12 +86,12 @@ for (const g of GROUPS) {
         .join(' / ')
       w(`- **오픈이슈** ${detail}`)
     }
-    if (s.logic.length) {
+    if (logic.length) {
       w('- **핵심 요구사항 · 로직**')
-      for (const l of s.logic) w(`  - ${l}`)
+      for (const l of logic) w(`  - ${l}`)
     }
-    if (s.note0723) w(`- **[0723 반영]** ${s.note0723}`)
-    w(`- **DSA 실사 근거** (코드 아님 · UX 참고용) ${s.dsaNote}`)
+    if (inner.note0723) w(`- **[0723 반영]** ${inner.note0723}`)
+    if (inner.dsaNote) w(`- **DSA 실사 근거** (코드 아님 · UX 참고용) ${inner.dsaNote}`)
     w()
   }
 }
