@@ -11,6 +11,7 @@ import { listMyFavorites, saveMyFavorites, listMyMenus, type MenuNode } from '..
 import { Modal } from '../components/common'
 import { useServerData } from '../components/common'
 import { fetchAttendanceBoard } from '../api/attendance'
+import { getStatistics } from '../api/statistics'
 import { ApiError } from '../api/client'
 
 /** UTC 로 만들면 오전에 하루가 밀린다 — 오늘 요약이라 로컬 날짜여야 한다 */
@@ -152,6 +153,8 @@ function FavoriteModal({
 function DashboardSide() {
   const { academyId, academies } = useAcademy()
   const { allowedMenus } = useAuth()
+  /* 실제로 셀 수 있는 두 줄만 남긴다. 값을 못 받으면 **줄째 감춘다** —
+     '-' 로 두면 "지금 0건" 과 구분이 안 된다 */
   const urgent = TODOS.filter((t) => t.tone === 'urgent')
 
   const now = today()
@@ -173,6 +176,23 @@ function DashboardSide() {
     errorMessage: '오늘 출결을 불러오지 못했습니다.',
   })
   const summary = board.data?.summary
+
+  /* ★ '즉시 확인' 두 줄은 **고정 예시값이었다**(9건·7명). 사이드바라 전 화면에 같이 떠서
+        바로 위 실제 출결 숫자와 나란히 보였다 — 대시보드만 실데이터로 바꿔 놨더니
+        같은 값이 사이드바에서만 거짓으로 남았다(2026-09-27 운영 확인).
+     ★ 집계 하나로 받는다. 승인 목록을 따로 부르면 담임은 403 이다. */
+  const statParams = useMemo(
+    () => ({ academyId: academyId ?? undefined, year: new Date().getFullYear(), from: ymd(today()), to: ymd(today()) }),
+    [academyId],
+  )
+  const canStats = allowedMenus !== null && hasMenuCode('statistics', allowedMenus)
+  const stats = useServerData({
+    fetcher: getStatistics,
+    params: statParams,
+    enabled: academyId !== null && canStats,
+    errorMessage: '',
+  })
+  const todo = stats.data?.todo ?? null
   /* 아직 안 고른 사람에게 보여줄 기본값. 서버에 저장된 것이 없으면 이걸 쓴다 —
      빈 칸으로 두면 "고장난 것" 으로 읽힌다 */
   const DEFAULT_QUICK = [
@@ -255,30 +275,27 @@ function DashboardSide() {
       </div>
       )}
 
-      {urgent.length > 0 && (
+      {todo !== null && (
         <div className="legend-block" style={{ background: 'var(--red-wash)' }}>
-          {/* ★ 이 숫자는 목업이다(mockDashboard). 사이드바라 전 화면에 같이 떠서, 라벨이
-                 없으면 바로 위 실제 출결 숫자와 나란히 보여 둘 다 진짜로 읽힌다. */}
-          <div className="lt" style={{ color: 'var(--red)', display: 'flex', alignItems: 'center', gap: 6 }}>
-            즉시 확인
-            <span className="mk supplement" title="집계 기능이 준비되면 실제 숫자로 바뀝니다">
-              표시용 예시
-            </span>
-          </div>
-          {urgent.map((t) => (
-            <Link
-              to={t.to}
-              key={t.id}
-              className="legend-row"
-              style={{ color: 'var(--ink-2)', justifyContent: 'space-between' }}
-            >
-              <span>{t.label}</span>
-              <b style={{ color: 'var(--red)' }}>
-                {t.count}
-                {t.unit}
-              </b>
-            </Link>
-          ))}
+          <div className="lt" style={{ color: 'var(--red)' }}>즉시 확인</div>
+          {urgent.map((t) => {
+            const n = t.id === 't1' ? todo.pendingApprovals : t.id === 't2' ? todo.unexcusedAbsentToday : null
+            if (n === null) return null
+            return (
+              <Link
+                to={t.to}
+                key={t.id}
+                className="legend-row"
+                style={{ color: 'var(--ink-2)', justifyContent: 'space-between' }}
+              >
+                <span>{t.label}</span>
+                <b style={{ color: n > 0 ? 'var(--red)' : 'var(--muted)' }}>
+                  {n}
+                  {t.unit}
+                </b>
+              </Link>
+            )
+          })}
         </div>
       )}
 
