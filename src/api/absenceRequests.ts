@@ -148,6 +148,19 @@ export function approveRequest(approvalRequestId: number): Promise<unknown> {
   return request(`/api/v1/admin/approvals/${approvalRequestId}/approve`, { method: 'POST' })
 }
 
+/**
+ * 승인 철회 — **이미 승인된 건을 되돌린다**.
+ *
+ * ★ 앱의 '취소'(학생이 스스로 거두는 것)와 다르다. 그쪽은 승인 전까지만 되고,
+ *   승인된 뒤에는 **관리자만** 되돌릴 수 있다 — 승인만 받고 취소해서 벌점을 피하는
+ *   길을 학생에게 주지 않으려는 것이다(서버 주석).
+ * ★ **사유가 필수다.** 되돌린 뒤 벌점이 붙는지 여부가 사유에 따라 갈리므로
+ *   나중에 사람이 판단할 근거가 남아야 한다.
+ */
+export function revokeRequest(approvalRequestId: number, reason: string): Promise<unknown> {
+  return request(`/api/v1/admin/approvals/${approvalRequestId}/revoke`, { method: 'POST', body: { reason } })
+}
+
 /** 반려. 사유가 학생·학부모에게 그대로 전달되므로 빈 값으로 보내지 않는다 */
 export function rejectRequest(approvalRequestId: number, reason: string): Promise<unknown> {
   return request(`/api/v1/admin/approvals/${approvalRequestId}/reject`, {
