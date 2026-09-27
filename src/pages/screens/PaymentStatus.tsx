@@ -3,6 +3,7 @@ import {
   DataTable,
   ExcelButton,
   MaskToggle,
+  NotAllowed,
   SearchForm,
   type Column,
   type DateRangeValue,
@@ -474,6 +475,8 @@ function Content() {
   const [summary, setSummary] = useState<ReceiptSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  /** 이 계정에 안 열린 화면인가(403). 숫자를 하나도 안 그린다 */
+  const [denied, setDenied] = useState(false)
 
   const period = query.period as DateRangeValue | undefined
   const params = useMemo(() => {
@@ -511,6 +514,8 @@ function Content() {
       setRows(list)
       setSummary(sum)
     } catch (err) {
+      /* ★ 권한으로 막힌 것은 고장이 아니다 — 표를 0 으로 그리면 "오늘 0건" 으로 읽힌다 */
+      if (err instanceof ApiError && err.code === 'FORBIDDEN') setDenied(true)
       setError(err instanceof ApiError ? err.message : '수납현황을 불러오지 못했습니다.')
       setRows([])
       setSummary(null)
@@ -788,6 +793,9 @@ function Content() {
       vbank: byMethod.get('VBANK') ?? 0,
     }
   }, [summary, filtered, clientFiltered])
+
+  // 권한으로 막힌 계정에는 숫자를 하나도 그리지 않는다 — 0 으로 보이면 "오늘 0건" 이 된다
+  if (denied) return <NotAllowed what="수납현황" />
 
   return (
     <>
