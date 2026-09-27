@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import { useAcademy } from '../auth/AcademyContext'
 import { useServerData } from '../components/common'
 import { getStatistics } from '../api/statistics'
-import { listApprovalBoard } from '../api/approvals'
 import { getDisplayName, getLoginId } from '../api/tokens'
 import { useAuth } from '../auth/AuthContext'
 import { hasMenuCode } from '../data/menuCodes'
@@ -105,17 +104,9 @@ export function Dashboard() {
 
   /* ★ '오늘 처리할 일' 의 위 두 줄은 **고정 예시값이었다.** 재원생 1명인 지점에서도
         9건·7명이 그대로 나와서, 클라이언트가 가장 먼저 보는 화면에 거짓 숫자가 떴다
-        (2026-09-27 실테스트). 셀 수 있는 둘은 실제로 센다. 나머지는 예시 표시 그대로 둔다. */
-  const pendingParams = useMemo(
-    () => ({ academyId: academyId ?? undefined, status: 'PENDING' as const }),
-    [academyId],
-  )
-  const pending = useServerData({
-    fetcher: listApprovalBoard,
-    params: pendingParams,
-    enabled: academyId !== null,
-    errorMessage: '',
-  })
+        (2026-09-27 실테스트).
+     ★ 집계(`todo`)에서 받는다. 승인 목록(`/approvals/board`)을 따로 부르면 **담임은 403** 이라
+        그 계정에서만 '-' 가 됐다. 집계는 담임도 자기 범위로 받는다. */
 
   const st = stats.data
   const by = st?.attendance.byStatus ?? {}
@@ -266,9 +257,9 @@ export function Dashboard() {
                    "오늘 처리할 일이 없다" 로 읽혀 실제 0 과 구분되지 않는다 */
                 const live =
                   raw.id === 't1'
-                    ? (pending.data?.rows.length ?? null)
+                    ? (st?.todo?.pendingApprovals ?? null)
                     : raw.id === 't2'
-                      ? (canStats && counted ? absent : null)
+                      ? (st?.todo?.unexcusedAbsentToday ?? null)
                       : undefined
                 /* 설명줄도 예시였다("학부모 미응답 2건은 담임 전환 예정"). 실제 값으로 바꾼 줄에
                    가짜 설명을 남기면 숫자만 진짜인 채로 더 헷갈린다 */

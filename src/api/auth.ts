@@ -133,6 +133,9 @@ export async function changePassword(currentPassword: string, newPassword: strin
     /* 현재 비밀번호가 틀리면 서버가 401(INVALID_CREDENTIALS)을 준다. 토큰 문제가 아니다 —
        이걸 안 막으면 오타 한 번에 로그아웃되고, 사용자는 이유를 모른 채 다시 로그인한다. */
     keepSessionOn401: true,
+    /* ★ 조회 전용 계정도 자기 비밀번호는 바꿀 수 있어야 한다. 못 바꾸면 임시 비밀번호를
+         받은 계정이 **영구히 잠긴다** — 서버가 PASSWORD_CHANGE_REQUIRED 로 나머지를 다 막는다 */
+    allowReadOnly: true,
   })
   setTokens(res.accessToken, res.refreshToken)
   return res
