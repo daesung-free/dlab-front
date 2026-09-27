@@ -698,8 +698,15 @@ function Content() {
         await changeLectureStatus(made.id, 'OPEN')
         await setLectureVisible(made.id, true)
         steps.push('접수를 열고 앱에 노출했습니다')
-      } catch {
-        steps.push('접수 열기는 실패했습니다 — 목록에서 상태를 바꿔 주세요')
+      } catch (err) {
+        /* ★ 이유를 그대로 보여준다. 서버가 담당 강사 없는 특강의 접수 시작을 막는데
+             (2026-09-25, "담당 강사를 지정해야 접수를 시작할 수 있습니다"),
+             '실패했습니다' 로 뭉뚱그리면 무엇을 고쳐야 하는지 알 수 없다 */
+        steps.push(
+          err instanceof ApiError
+            ? `접수 열기는 실패했습니다 — ${err.message}`
+            : '접수 열기는 실패했습니다 — 목록에서 상태를 바꿔 주세요',
+        )
       }
     }
 
@@ -920,10 +927,13 @@ function Content() {
             >
               <Icon name="save" size={14} /> {saving === 'draft' ? '저장 중…' : '임시 저장'}
             </button>
+            {/* ★ 담당 강사 없이도 **임시 저장은 된다**(준비 중인 특강을 저장하려고 그렇게 뒀다).
+                   접수 시작만 서버가 막으므로 그 버튼에서만 먼저 알린다 — 만들고 나서
+                   "접수 열기 실패" 로 알려주면 반쯤 만들어진 특강이 남는다 */}
             <button
               className="btn pri"
-              disabled={!canSave || saving !== ''}
-              title={saveBlockReason}
+              disabled={!canSave || saving !== '' || draft.teacherId === null}
+              title={draft.teacherId === null ? '담당 강사를 정해야 접수를 시작할 수 있습니다' : saveBlockReason}
               onClick={() => void saveDraft('open')}
             >
               <Icon name="send" size={14} /> {saving === 'open' ? '개설 중…' : '개설 · 접수 시작'}

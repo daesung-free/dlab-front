@@ -49,6 +49,11 @@ interface Result<TData> {
   data: TData | null
   loading: boolean
   error: string | null
+  /**
+   * 서버 오류 코드(`FORBIDDEN` 등). 화면이 **오류를 종류별로 다르게 보여야 할 때** 쓴다.
+   * 권한 때문에 막힌 것은 고장이 아니라 "이 계정에는 안 보인다" 이므로 빨간 경고가 아니어야 한다.
+   */
+  errorCode: string | null
   /** 쓰기(승인·부여 등) 후 다시 읽을 때 */
   reload: () => void
 }
@@ -62,6 +67,7 @@ export function useServerData<TData, TParams extends object>({
   const [data, setData] = useState<TData | null>(null)
   const [loading, setLoading] = useState(enabled)
   const [error, setError] = useState<string | null>(null)
+  const [errorCode, setErrorCode] = useState<string | null>(null)
   const [nonce, setNonce] = useState(0)
 
   /**
@@ -92,13 +98,17 @@ export function useServerData<TData, TParams extends object>({
 
     fetcherRef.current(params)
       .then((res) => {
-        if (!cancelled) setData(res)
+        if (!cancelled) {
+          setData(res)
+          setErrorCode(null)
+        }
       })
       .catch((err: unknown) => {
         if (cancelled) return
         // 401은 client.ts 가 토큰을 지우고 AuthContext 가 로그인 화면으로 되돌린다.
         // 여기서 따로 처리하면 사라질 화면에 에러만 잠깐 비친다.
         setError(err instanceof ApiError ? err.message : messageRef.current)
+        setErrorCode(err instanceof ApiError ? err.code : null)
         setData(null)
       })
       .finally(() => {
@@ -115,6 +125,7 @@ export function useServerData<TData, TParams extends object>({
     data,
     loading,
     error,
+    errorCode,
     reload: useCallback(() => setNonce((n) => n + 1), []),
   }
 }

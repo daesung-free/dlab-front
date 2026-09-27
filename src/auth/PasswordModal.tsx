@@ -59,11 +59,14 @@ export function PasswordModal({ onClose, forced = false, onDone }: Props) {
     <Modal
       title="비밀번호 변경"
       sub={
+        /* ★ 규칙이 가장 필요한 최초 로그인에서 '8자 이상' 이 안 보였다(2026-09-27 실테스트) */
         forced
-          ? '임시 비밀번호로 로그인했습니다. 계속하려면 새 비밀번호를 정해 주세요.'
+          ? '임시 비밀번호로 로그인했습니다. 계속하려면 새 비밀번호를 정해 주세요 — 8자 이상입니다.'
           : '새 비밀번호는 8자 이상으로 정해 주세요.'
       }
       confirmLabel="변경"
+      /* 조회 전용 계정도 비밀번호는 바꿀 수 있어야 한다 — 못 바꾸면 계정이 잠긴다 */
+      allowReadOnly
       onConfirm={() => void submit()}
       onClose={onClose}
       busy={busy}

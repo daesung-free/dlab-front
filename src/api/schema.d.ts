@@ -4951,8 +4951,11 @@ export interface paths {
         get: operations["list_12"];
         put?: never;
         /**
-         * 청구 생성.
+         * 청구 생성
          * @description 청구 생성. <b>할인은 값으로 받는다</b> — 할인 정책이 미확정이라 산출하지 않는다.
+         *
+         *      <p><b>같은 학생에게 같은 이름으로 또 청구하면 거부된다.</b> 정말 두 번 받는 경우에만
+         *      <code>allowDuplicate</code>를 켠다.
          */
         post: operations["create_12"];
         delete?: never;
@@ -14830,6 +14833,7 @@ export interface components {
             discountAmount?: number;
             /** Format: date */
             dueDate?: string;
+            allowDuplicate?: boolean;
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).

@@ -19,7 +19,8 @@ export const ATTENDANCE = {
 export interface TodoItem {
   id: string
   label: string
-  count: number
+  /** null 이면 '-' 로 그린다(값을 못 받은 것과 0을 구분한다) */
+  count: number | null
   unit: string
   to: string
   icon: string

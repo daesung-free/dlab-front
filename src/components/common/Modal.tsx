@@ -9,6 +9,15 @@ interface Props {
   sub?: string
   /** 확인 버튼 문구. 무엇이 일어나는지 그대로 쓴다 — '확인'보다 '등록' */
   confirmLabel?: string
+  /**
+   * 조회 전용 계정에서도 확인 버튼을 살린다.
+   *
+   * ★ **비밀번호 변경처럼 계정 자신을 위한 모달에 쓴다.** 조회 전용 가드가 `.btn.pri` 전체를
+   *   막고 있어서, 임시 비밀번호를 받은 조회 전용 계정이 **비밀번호를 바꿀 길이 없어
+   *   영구히 잠겼다**(2026-09-27 실테스트). 서버가 PASSWORD_CHANGE_REQUIRED 를 강제하는 이상
+   *   화면이 그 길을 막으면 계정이 죽는다.
+   */
+  allowReadOnly?: boolean
   /** 확인이 눌렸을 때. form 의 submit 으로 들어온다 */
   onConfirm: () => void
   onClose: () => void
@@ -113,6 +122,7 @@ export function Modal({
   title,
   sub,
   confirmLabel = '저장',
+  allowReadOnly = false,
   onConfirm,
   onClose,
   busy = false,
@@ -193,6 +203,8 @@ export function Modal({
             <button
               type="submit"
               className="btn pri"
+              /* 조회 전용 가드(blocks.css)가 이 속성을 보고 비켜 간다 */
+              data-allow-readonly={allowReadOnly ? 'true' : undefined}
               style={danger ? { background: 'var(--red)', borderColor: 'var(--red)' } : undefined}
               disabled={busy || confirmDisabled}
             >

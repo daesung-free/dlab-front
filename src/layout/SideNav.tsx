@@ -7,7 +7,7 @@ import { Icon } from '../components/Icon'
 import { useAcademy } from '../auth/AcademyContext'
 import { useAuth } from '../auth/AuthContext'
 import { canSeeScreen, canSeeScreenAs, hasMenuCode, screenOfMenuCode } from '../data/menuCodes'
-import { listMyFavorites, saveMyFavorites, listMenuCatalog, type MenuNode } from '../api/menus'
+import { listMyFavorites, saveMyFavorites, listMyMenus, type MenuNode } from '../api/menus'
 import { Modal } from '../components/common'
 import { useServerData } from '../components/common'
 import { fetchAttendanceBoard } from '../api/attendance'
@@ -60,7 +60,10 @@ function FavoriteModal({
 
   useEffect(() => {
     let alive = true
-    listMenuCatalog()
+    /* ★ 전체 카탈로그(`/menus`)는 **계정별 메뉴 노출을 설정하는 관리자용**이라 담임·행정은 403 이다.
+         그걸 부르는 바람에 담임·행정이 자기 대시보드를 못 꾸몄다(2026-09-27 실테스트).
+         자주 쓰는 메뉴는 **내가 볼 수 있는 메뉴**면 충분하다 */
+    listMyMenus()
       .then((list) => alive && setCatalog(list))
       .catch(() => alive && setErr('메뉴 목록을 불러오지 못했습니다.'))
     return () => {

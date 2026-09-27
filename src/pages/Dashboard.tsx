@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAcademy } from '../auth/AcademyContext'
 import { useServerData } from '../components/common'
 import { getStatistics } from '../api/statistics'
+import { listApprovalBoard } from '../api/approvals'
 import { getDisplayName, getLoginId } from '../api/tokens'
 import { useAuth } from '../auth/AuthContext'
 import { hasMenuCode } from '../data/menuCodes'
@@ -102,6 +103,20 @@ export function Dashboard() {
     errorMessage: '오늘 집계를 불러오지 못했습니다.',
   })
 
+  /* ★ '오늘 처리할 일' 의 위 두 줄은 **고정 예시값이었다.** 재원생 1명인 지점에서도
+        9건·7명이 그대로 나와서, 클라이언트가 가장 먼저 보는 화면에 거짓 숫자가 떴다
+        (2026-09-27 실테스트). 셀 수 있는 둘은 실제로 센다. 나머지는 예시 표시 그대로 둔다. */
+  const pendingParams = useMemo(
+    () => ({ academyId: academyId ?? undefined, status: 'PENDING' as const }),
+    [academyId],
+  )
+  const pending = useServerData({
+    fetcher: listApprovalBoard,
+    params: pendingParams,
+    enabled: academyId !== null,
+    errorMessage: '',
+  })
+
   const st = stats.data
   const by = st?.attendance.byStatus ?? {}
   /* ★ 집계 전과 0을 구분한다. attendanceRate 가 null 이면 아직 안 잡힌 날이라
@@ -124,8 +139,12 @@ export function Dashboard() {
   const ranking = st?.studyTime.ranking ?? []
   const maxRank = ranking[0]?.minutes ?? 1
   /* 청구액이 0이면 나눌 수 없다 — 0으로 나누면 NaN 이 그대로 화면에 찍힌다 */
-  const billed = st?.revenue.billedAmount ?? 0
-  const collectRate = billed > 0 ? Math.round(((st?.revenue.receivedAmount ?? 0) / billed) * 100) : 0
+  const billed = st?.revenue?.billedAmount ?? 0
+  const collectRate = billed > 0 ? Math.round(((st?.revenue?.receivedAmount ?? 0) / billed) * 100) : 0
+  /* 담임 계정에는 급식·수납이 null 로 온다 — 0 으로 그리면 "오늘 신청 0식" 처럼 보여
+     실제 0 과 구분되지 않는다. 카드째 감춘다 */
+  const showMeals = st === null || st.meals !== null
+  const showRevenue = st === null || st.revenue !== null
 
   return (
     <>
@@ -150,7 +169,13 @@ export function Dashboard() {
         </div>
       </div>
 
-      {stats.error && (
+      {/* ★ 권한으로 막힌 것은 **고장이 아니다.** 담임 계정은 집계 메뉴가 열려 있어도 서버가
+             403 을 준다 — 로그인 직후 첫 화면에 빨간 「권한이 없습니다」가 떠서 고장으로
+             보였다(2026-09-27 실테스트). 종류를 갈라 문구를 다르게 쓴다 */}
+      {stats.error && stats.errorCode === 'FORBIDDEN' && (
+        <div className="note-box">이 계정에는 지점 전체 집계가 열려 있지 않습니다. 아래 목록은 담당 범위로 보입니다.</div>
+      )}
+      {stats.error && stats.errorCode !== 'FORBIDDEN' && (
         <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
           {stats.error}
         </div>
@@ -171,7 +196,7 @@ export function Dashboard() {
         </div>
       )}
       {/* 집계 메뉴가 없는 계정에는 0 을 그리지 않는다 — 실제 0 과 구분이 안 된다 */}
-      {(canStats || allowedMenus === null) && (
+      {(canStats || allowedMenus === null) && stats.errorCode !== 'FORBIDDEN' && (
       <div className="att-strip">
         <div className="att-cell lead">
           <div className="l">
@@ -232,10 +257,35 @@ export function Dashboard() {
             title="오늘 처리할 일"
             mock
             icon="list-checks"
-            right={<span className="mk brandnew">{TODOS.filter((t) => t.tone === 'urgent').length}건 긴급</span>}
+            /* 긴급 개수는 '값이 있는 긴급 줄' 만 센다 — 못 받은 줄까지 세면 없는 일이 긴급으로 잡힌다 */
+            right={<span className="mk brandnew">{TODOS.filter((t) => t.tone === 'urgent').length}줄</span>}
           >
             <div className="todo-list">
-              {TODOS.map((t) => (
+              {TODOS.map((raw) => {
+                /* 실데이터로 덮는 둘 — 값을 못 받으면 숫자 대신 '-' 다. 0 으로 그리면
+                   "오늘 처리할 일이 없다" 로 읽혀 실제 0 과 구분되지 않는다 */
+                const live =
+                  raw.id === 't1'
+                    ? (pending.data?.rows.length ?? null)
+                    : raw.id === 't2'
+                      ? (canStats && counted ? absent : null)
+                      : undefined
+                /* 설명줄도 예시였다("학부모 미응답 2건은 담임 전환 예정"). 실제 값으로 바꾼 줄에
+                   가짜 설명을 남기면 숫자만 진짜인 채로 더 헷갈린다 */
+                const t =
+                  live === undefined
+                    ? raw
+                    : {
+                        ...raw,
+                        count: live,
+                        hint:
+                          live === null
+                            ? '지금은 셀 수 없습니다'
+                            : raw.id === 't1'
+                              ? '승인 라우팅에서 처리합니다'
+                              : '출결 관리에서 확인합니다',
+                      }
+                return (
                 <Link className={`todo ${t.tone}`} to={t.to} key={t.id}>
                   <span className="ic">
                     <Icon name={t.icon} size={16} />
@@ -245,14 +295,15 @@ export function Dashboard() {
                     <div className="hint">{t.hint}</div>
                   </div>
                   <div className="cnt">
-                    {t.count}
+                    {t.count === null ? '-' : t.count}
                     <small>{t.unit}</small>
                   </div>
                   <span className="go">
                     <Icon name="chevron-right" size={16} />
                   </span>
                 </Link>
-              ))}
+                )
+              })}
             </div>
           </Card>
 
@@ -297,17 +348,18 @@ export function Dashboard() {
           </Card>
 
           <div className="mini-grid">
+            {showMeals && (
             <Card title="급식" icon="utensils">
               <div className="mini-b">
                 <div className="big">
-                  {st?.meals.appliedTotal ?? 0}
+                  {st?.meals?.appliedTotal ?? 0}
                   <small>식</small>
                 </div>
                 <div className="sub">오늘 신청</div>
                 <div className="track">
                   <i
                     style={{
-                      width: `${enrolled > 0 ? Math.min(100, ((st?.meals.appliedTotal ?? 0) / enrolled) * 100) : 0}%`,
+                      width: `${enrolled > 0 ? Math.min(100, ((st?.meals?.appliedTotal ?? 0) / enrolled) * 100) : 0}%`,
                       background: 'var(--mint)',
                     }}
                   />
@@ -317,7 +369,9 @@ export function Dashboard() {
                 </div>
               </div>
             </Card>
+            )}
 
+            {showRevenue && (
             <Card title="수납" icon="credit-card">
               <div className="mini-b">
                 <div className="big">
@@ -325,19 +379,20 @@ export function Dashboard() {
                   <small>%</small>
                 </div>
                 <div className="sub">
-                  {(st?.revenue.receivedAmount ?? 0).toLocaleString()} /{' '}
-                  {(st?.revenue.billedAmount ?? 0).toLocaleString()}원
+                  {(st?.revenue?.receivedAmount ?? 0).toLocaleString()} /{' '}
+                  {(st?.revenue?.billedAmount ?? 0).toLocaleString()}원
                 </div>
                 <div className="track">
                   <i style={{ width: `${collectRate}%`, background: 'var(--blue)' }} />
                 </div>
                 <div className="sub" style={{ marginTop: 7 }}>
-                  미납 <b style={{ color: 'var(--red)' }}>{(st?.revenue.unpaidAmount ?? 0).toLocaleString()}원</b>
+                  미납 <b style={{ color: 'var(--red)' }}>{(st?.revenue?.unpaidAmount ?? 0).toLocaleString()}원</b>
                   {' · '}
                   인원 <Unfilled reason="집계는 금액만 준다. 인원은 수납현황에서 본다" />
                 </div>
               </div>
             </Card>
+            )}
 
             <Card title="성적"
               mock

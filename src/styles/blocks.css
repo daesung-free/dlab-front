@@ -156,12 +156,16 @@
   font-size: 12.5px;
 }
 
-[data-readonly] .btn.pri {
+/* 조회 전용 계정에서 쓰기 버튼을 죽인다.
+   ★ `[data-allow-readonly]` 는 비켜 간다. 이 예외가 없어서 **비밀번호 변경 모달의 확인
+     버튼까지 막혀, 임시 비밀번호를 받은 조회 전용 계정이 영구히 잠겼다**(2026-09-27 실테스트).
+     조회 전용 계정에는 '비밀번호 변경' 메뉴가 따로 없어 빠져나갈 길이 없었다. */
+[data-readonly] .btn.pri:not([data-allow-readonly]) {
   opacity: 0.45;
   pointer-events: none;
 }
 
-[data-readonly] .btn.pri::after {
+[data-readonly] .btn.pri:not([data-allow-readonly])::after {
   content: '조회 전용';
   margin-left: 6px;
   padding: 1px 5px;
