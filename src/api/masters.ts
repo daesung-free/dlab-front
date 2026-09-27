@@ -291,6 +291,42 @@ export function deleteRoom(id: number): Promise<void> {
  *   예전에는 자유 문자열이라 KICE-50 하나만 쳐도 규칙의 KICE_50 과 안 맞아
  *   그 학생만 판정에서 조용히 빠졌다.
  */
+/* ── 장학 부여 내역 (누구에게 무슨 장학이 갔나) ── */
+
+/** 한 학생에게 부여된 장학 하나 */
+export interface ScholarshipItem {
+  id: number
+  enrollmentId: number
+  /** 마스터의 code 다 — 이름이 아니라 코드로 잇는다 */
+  scholarshipType: string
+  discountRate: number
+}
+
+/** 그 학생의 장학 내역. `enrollmentId` 가 필수다 */
+export function listStudentScholarships(enrollmentId: number): Promise<ScholarshipItem[]> {
+  return request<ScholarshipItem[]>('/api/v1/admin/masters/scholarships', { query: { enrollmentId } })
+}
+
+/**
+ * 장학 부여.
+ *
+ * ★ `scholarshipType` 은 **마스터에 등록된 code** 여야 한다. 자유 문자열을 보내면 서버가 막는다 —
+ *   예전에 `KICE-50` 처럼 다르게 적었다가 취소 판정 규칙의 `KICE_50` 과 안 맞아
+ *   그 학생만 조용히 빠진 적이 있다.
+ * ★ 할인율은 **보내지 않는다.** 서버가 마스터 값을 복사한다(다른 값을 보내면 400).
+ */
+export function grantScholarship(enrollmentId: number, scholarshipType: string): Promise<ScholarshipItem> {
+  return request<ScholarshipItem>('/api/v1/admin/masters/scholarships', {
+    method: 'POST',
+    body: { enrollmentId, scholarshipType },
+  })
+}
+
+/** 장학 회수 */
+export function revokeScholarship(scholarshipId: number): Promise<void> {
+  return request<void>(`/api/v1/admin/masters/scholarships/${scholarshipId}`, { method: 'DELETE' })
+}
+
 export interface ScholarshipMaster {
   id: number
   academyId: number | null

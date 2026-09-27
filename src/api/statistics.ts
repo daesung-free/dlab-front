@@ -1,4 +1,4 @@
-import { request } from './client'
+import { downloadFile, request } from './client'
 
 /* 대시보드 집계 — GET /api/v1/admin/statistics
  *
@@ -102,4 +102,17 @@ export function getStudentStatistics(params: {
   asOf?: string
 }): Promise<StudentStatRow[]> {
   return request<StudentStatRow[]>('/api/v1/admin/statistics/students', { query: { ...params } })
+}
+
+/**
+ * 순공시간 엑셀 — 기간별 학생 순공시간.
+ *
+ * ★ 화면 표가 아니라 **서버가 만든다.** 기간이 길면 줄이 수천 개라 화면에서 만들 값이 아니다.
+ * ★ `from`·`to` 가 필수다.
+ */
+export function exportStudyTime(
+  params: { academyId?: number; from: string; to: string; size?: number },
+  filename = '순공시간.xlsx',
+): Promise<void> {
+  return downloadFile('/api/v1/admin/statistics/study-time/export', filename, { query: { ...params } })
 }

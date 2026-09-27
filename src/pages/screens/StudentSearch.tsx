@@ -20,6 +20,14 @@ import { listTeachers, type TeacherRow } from '../../api/accounts'
 import { ApiError } from '../../api/client'
 import { issueAppTemporaryPassword, unlockAppAccount } from '../../api/accounts'
 import {
+  grantScholarship,
+  listSelectableScholarships,
+  listStudentScholarships,
+  revokeScholarship,
+  type ScholarshipItem,
+  type ScholarshipMaster,
+} from '../../api/masters'
+import {
   GRADE_LABEL,
   SORTABLE,
   STATUS_LABEL,
@@ -453,6 +461,15 @@ function Content() {
     msg: null,
     err: null,
   })
+  /* 장학 — **종류 마스터와 다른 것이다.** 여기는 '누구에게 갔나'(부여 내역)다.
+     내역을 볼 자리가 없어 명단의 장학 칸이 어디서 온 값인지 알 수 없었다(2026-09-27 P2) */
+  const [scholar, setScholar] = useState<{ items: ScholarshipItem[]; pick: string; busy: boolean; err: string | null }>({
+    items: [],
+    pick: '',
+    busy: false,
+    err: null,
+  })
+  const [scholarMasters, setScholarMasters] = useState<ScholarshipMaster[]>([])
 
   /** 푼 뒤 목록·상세를 다시 읽어 잠금 표시가 사라지게 한다 */
   async function unlockApp(a: AppAccount, who: string) {
@@ -489,10 +506,51 @@ function Content() {
     }
   }
 
+  /* 부여 드롭다운 — **사용 중인 장학만** 온다. 지점·연도가 바뀌면 다시 읽는다 */
+  useEffect(() => {
+    let alive = true
+    listSelectableScholarships(new Date().getFullYear(), academyId ?? undefined)
+      .then((v) => alive && setScholarMasters(v))
+      .catch(() => alive && setScholarMasters([]))
+    return () => {
+      alive = false
+    }
+  }, [academyId])
+
+  async function addScholarship(enrollmentId: number) {
+    if (scholar.pick === '') return
+    setScholar((c) => ({ ...c, busy: true, err: null }))
+    try {
+      // 할인율은 안 보낸다 — 서버가 마스터 값을 복사한다(다르게 보내면 400)
+      await grantScholarship(enrollmentId, scholar.pick)
+      const items = await listStudentScholarships(enrollmentId)
+      setScholar({ items, pick: '', busy: false, err: null })
+      table.reload()
+    } catch (e) {
+      setScholar((c) => ({ ...c, busy: false, err: e instanceof ApiError ? e.message : '장학을 주지 못했습니다.' }))
+    }
+  }
+
+  async function removeScholarship(item: ScholarshipItem, enrollmentId: number) {
+    setScholar((c) => ({ ...c, busy: true, err: null }))
+    try {
+      await revokeScholarship(item.id)
+      const items = await listStudentScholarships(enrollmentId)
+      setScholar({ items, pick: '', busy: false, err: null })
+      table.reload()
+    } catch (e) {
+      setScholar((c) => ({ ...c, busy: false, err: e instanceof ApiError ? e.message : '장학을 회수하지 못했습니다.' }))
+    }
+  }
+
   function openInfo(r: Student) {
     setInfoErr(null)
     setInfoDone(null)
     setAcct({ busyId: null, msg: null, err: null })
+    setScholar({ items: [], pick: '', busy: false, err: null })
+    void listStudentScholarships(r.enrollmentId)
+      .then((items) => setScholar((c) => ({ ...c, items })))
+      .catch(() => setScholar((c) => ({ ...c, items: [] })))
     setHr({ open: false, teachers: null, teacherId: '', reason: '', busy: false, err: null })
     setInfoEdit({ row: r, loaded: null, form: emptyInfo() })
     void getStudent(r.enrollmentId)
@@ -972,6 +1030,59 @@ function Content() {
                     반은 그대로 두고 이 학생만 다른 선생님이 맡습니다. 누르면 바로 반영되고, 반을 옮기면 반 담임으로
                     돌아갑니다.
                   </div>
+                </div>
+              </div>
+
+              {/* ★ 장학 '종류' 와 다르다 — 여기는 **이 학생에게 실제로 부여된 것**이다.
+                     코드로 잇기 때문에 마스터에 없는 값은 서버가 막는다 */}
+              <div className="frow">
+                <label>장학</label>
+                <div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', minHeight: 34 }}>
+                    {scholar.items.length === 0 && <span style={{ color: 'var(--muted)' }}>없음</span>}
+                    {scholar.items.map((it) => (
+                      <span key={it.id} className="mk verified" style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                        {scholarMasters.find((m) => m.code === it.scholarshipType)?.name ?? it.scholarshipType}
+                        {it.discountRate ? ` ${it.discountRate}%` : ''}
+                        <button
+                          type="button"
+                          className="btn"
+                          style={{ padding: '0 5px', fontSize: 11 }}
+                          disabled={scholar.busy}
+                          title="회수합니다"
+                          onClick={() => void removeScholarship(it, infoEdit.row.enrollmentId)}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                    <select
+                      className="sel"
+                      value={scholar.pick}
+                      onChange={(e) => setScholar({ ...scholar, pick: e.target.value })}
+                    >
+                      <option value="">장학 고르기</option>
+                      {scholarMasters.map((m) => (
+                        <option key={m.id} value={m.code}>
+                          {m.name} ({m.discountRate}%)
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="btn"
+                      disabled={scholar.busy || scholar.pick === ''}
+                      onClick={() => void addScholarship(infoEdit.row.enrollmentId)}
+                    >
+                      부여
+                    </button>
+                  </div>
+                  {scholarMasters.length === 0 && (
+                    <div className="hint">등록된 장학 종류가 없습니다. 기초 관리 → 장학 종류에서 먼저 만드세요.</div>
+                  )}
+                  {scholar.err && <div className="hint" style={{ color: 'var(--red)' }}>{scholar.err}</div>}
                 </div>
               </div>
 

@@ -26,6 +26,7 @@ import {
   listAccounts,
   replaceRoles,
   unlockAccount,
+  updateStaff,
   withdrawAccount,
   type AccountRow,
   type AccountStatus,
@@ -329,6 +330,15 @@ function Content() {
   const { principal, me } = useAuth()
   const isSuper = (me?.roles ?? principal?.roles ?? []).some((r) => r === 'SUPER_ADMIN')
   const [menuEdit, setMenuEdit] = useState<AccountRow | null>(null)
+  /* 인적사항 수정. **로그인 아이디는 없다** — 서버가 막는다(감사 로그 주체가 끊긴다) */
+  const [infoEdit, setInfoEdit] = useState<{
+    row: AccountRow
+    name: string
+    phone: string
+    deptName: string
+    positionName: string
+  } | null>(null)
+  const [infoErr, setInfoErr] = useState<string | null>(null)
   const [tab, setTab] = useState('users')
   const [masked, setMasked] = useState(true)
   const [branch, setBranch] = useState('')
@@ -605,9 +615,9 @@ function Content() {
       {
         key: 'act',
         header: '',
-        /* ★ 버튼 5개가 들어간다. 좁히면 글자가 **세로로 눌린다** — 메뉴 버튼을 넣고
+        /* ★ 버튼 6개가 들어간다. 좁히면 글자가 **세로로 눌린다** — 메뉴 버튼을 넣고
              160px 그대로 뒀다가 '비/밀/번/호' 가 됐다 */
-        width: '286px',
+        width: '330px',
         align: 'center',
         value: () => '',
         render: (r) => (
@@ -628,6 +638,25 @@ function Content() {
               onClick={() => setMenuEdit(r)}
             >
               메뉴
+            </button>
+            {/* ★ 계정을 만든 뒤 이름·연락처·부서를 고칠 자리가 없었다(2026-09-27 실테스트 P2).
+                   로그인 아이디는 서버가 막는다 — 바꾸면 감사 로그의 주체가 끊긴다 */}
+            <button
+              className="btn"
+              style={{ padding: '4px 9px', fontSize: 11.5, whiteSpace: 'nowrap' }}
+              disabled={busy === r.accountId || r.personId === null || r.status === 'WITHDRAWN'}
+              title={r.personId === null ? '인적사항이 없는 계정입니다' : '이름·연락처·부서를 고칩니다'}
+              onClick={() =>
+                setInfoEdit({
+                  row: r,
+                  name: r.name ?? '',
+                  phone: r.phone ?? '',
+                  deptName: r.deptName ?? '',
+                  positionName: r.positionName ?? '',
+                })
+              }
+            >
+              정보
             </button>
             <button
               className="btn"
@@ -673,8 +702,89 @@ function Content() {
     [busy, isSuper],
   )
 
+  /** 바뀐 칸만 보낸다. 강사는 부서·직급이 없다 */
+  async function saveInfo() {
+    const personId = infoEdit?.row.personId
+    if (infoEdit === null || personId == null) return
+    const r = infoEdit.row
+    setBusy(r.accountId)
+    setInfoErr(null)
+    const changes: { name?: string; phone?: string; deptName?: string; positionName?: string } = {}
+    if (infoEdit.name.trim() !== (r.name ?? '')) changes.name = infoEdit.name.trim()
+    if (infoEdit.phone.trim() !== (r.phone ?? '')) changes.phone = infoEdit.phone.trim()
+    if (r.accountType !== 'TEACHER') {
+      if (infoEdit.deptName.trim() !== (r.deptName ?? '')) changes.deptName = infoEdit.deptName.trim()
+      if (infoEdit.positionName.trim() !== (r.positionName ?? '')) changes.positionName = infoEdit.positionName.trim()
+    }
+    try {
+      if (Object.keys(changes).length > 0) {
+        await updateStaff(r.accountType === 'TEACHER' ? 'TEACHER' : 'EMPLOYEE', personId, changes)
+        setActionMsg(`${infoEdit.name.trim()} 인적사항을 수정했습니다.`)
+        list.reload()
+      }
+      setInfoEdit(null)
+    } catch (err) {
+      setInfoErr(err instanceof ApiError ? err.message : '수정하지 못했습니다.')
+    } finally {
+      setBusy(null)
+    }
+  }
+
   return (
     <div className="p-matrix">
+      {infoEdit && (
+        <Modal
+          title="인적사항 수정"
+          sub={`${infoEdit.row.loginId} · 로그인 아이디는 바꿀 수 없습니다`}
+          confirmLabel="저장"
+          busy={busy === infoEdit.row.accountId}
+          error={infoErr}
+          confirmDisabled={infoEdit.name.trim() === ''}
+          onConfirm={() => void saveInfo()}
+          onClose={() => setInfoEdit(null)}
+        >
+          <div className="frow">
+            <label className="req">이름</label>
+            <input
+              className="inp"
+              maxLength={20}
+              value={infoEdit.name}
+              onChange={(e) => setInfoEdit({ ...infoEdit, name: e.target.value })}
+            />
+          </div>
+          <div className="frow">
+            <label>연락처</label>
+            <input
+              className="inp"
+              maxLength={20}
+              value={infoEdit.phone}
+              onChange={(e) => setInfoEdit({ ...infoEdit, phone: e.target.value })}
+            />
+          </div>
+          {infoEdit.row.accountType !== 'TEACHER' && (
+            <div className="frow">
+              <label>부서 · 직급</label>
+              <div className="two">
+                <input
+                  className="inp"
+                  maxLength={32}
+                  placeholder="부서"
+                  value={infoEdit.deptName}
+                  onChange={(e) => setInfoEdit({ ...infoEdit, deptName: e.target.value })}
+                />
+                <input
+                  className="inp"
+                  maxLength={32}
+                  placeholder="직급"
+                  value={infoEdit.positionName}
+                  onChange={(e) => setInfoEdit({ ...infoEdit, positionName: e.target.value })}
+                />
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+
       {menuEdit && (
         <MenuModal
           row={menuEdit}
