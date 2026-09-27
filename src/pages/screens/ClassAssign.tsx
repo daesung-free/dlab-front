@@ -3,15 +3,19 @@ import { DataTable, Modal, useServerTable, type Column } from '../../components/
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
 import {
+  assignHomeroom,
   assignStudentsToClass,
   createClass,
+  deleteClass,
   listClasses,
   releaseStudentFromClass,
+  updateClass,
   type BulkAssignResult,
   type ClassGroup,
   type ClassType,
 } from '../../api/classes'
 import { copyMastersToYear, describeCopied } from '../../api/masters'
+import { listTeachers, type TeacherRow } from '../../api/accounts'
 import { useAcademy } from '../../auth/AcademyContext'
 import { SORTABLE, TRACK_LABEL, retakeLabel, searchStudents, type Student } from '../../api/students'
 import { createScreenSignal } from './screenSignal'
@@ -69,6 +73,19 @@ function Content() {
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<BulkAssignResult | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  /* 반 관리(이름·정원·담임·삭제). 반 카드를 누르면 열린다 —
+     **담임을 붙일 자리가 없어 사유 승인·상담·반 공지가 통째로 막혀 있었다**(2026-09-27 실테스트) */
+  const [editing, setEditing] = useState<ClassGroup | null>(null)
+  const [form, setForm] = useState<{ name: string; capacity: string; teacherId: string }>({
+    name: '',
+    capacity: '',
+    teacherId: '',
+  })
+  const [teachers, setTeachers] = useState<TeacherRow[]>([])
+  const [editBusy, setEditBusy] = useState(false)
+  const [editErr, setEditErr] = useState<string | null>(null)
+  const [removing, setRemoving] = useState<ClassGroup | null>(null)
+  const [note, setNote] = useState<string | null>(null)
 
   const loadClasses = useCallback(async () => {
     if (!academyReady) return
@@ -94,6 +111,93 @@ function Content() {
   useEffect(() => {
     void loadClasses()
   }, [loadClasses])
+
+  /* 담임 선택지. **강사(kind=TEACHER)만 나온다** — 직원으로 등록한 사람은 여기에 없다.
+     계정 등록의 '구분' 이 이것을 가른다(AdminUser 안내 참고) */
+  useEffect(() => {
+    if (academyId === null) {
+      setTeachers([])
+      return
+    }
+    let alive = true
+    listTeachers(academyId)
+      .then((list) => alive && setTeachers(list))
+      .catch(() => alive && setTeachers([]))
+    return () => {
+      alive = false
+    }
+  }, [academyId])
+
+  function openEdit(c: ClassGroup) {
+    setEditing(c)
+    setForm({
+      name: c.name,
+      capacity: c.capacity === null ? '' : String(c.capacity),
+      teacherId: c.homeroomTeacherId === null ? '' : String(c.homeroomTeacherId),
+    })
+    setEditErr(null)
+  }
+
+  /**
+   * 반 수정 저장.
+   *
+   * ★ **담임은 다른 경로다**(`PUT /homeroom`). 서버가 축을 나눠 뒀다 — 담임이 바뀌면
+   *   사유 승인이 올라가는 사람이 바뀌므로 이름 고치기와 한 요청으로 묶지 않는다.
+   *   그래서 두 번 부르고, **무엇이 됐고 무엇이 안 됐는지** 나눠 알린다.
+   * ★ 정원을 비우려면 `clearCapacity` 다. 빈 칸을 0 으로 보내면 '정원 0명' 이 된다.
+   */
+  async function saveEdit() {
+    if (editing === null) return
+    setEditBusy(true)
+    setEditErr(null)
+    const done: string[] = []
+    try {
+      const nameChanged = form.name.trim() !== editing.name
+      const capNow = editing.capacity === null ? '' : String(editing.capacity)
+      const capChanged = form.capacity.trim() !== capNow
+      if (nameChanged || capChanged) {
+        await updateClass(editing.id, {
+          name: nameChanged ? form.name.trim() : undefined,
+          capacity: capChanged && form.capacity.trim() !== '' ? Number(form.capacity) : undefined,
+          clearCapacity: capChanged && form.capacity.trim() === '' ? true : undefined,
+        })
+        done.push('반 정보를 고쳤습니다')
+      }
+      const teacherNow = editing.homeroomTeacherId === null ? '' : String(editing.homeroomTeacherId)
+      if (form.teacherId !== '' && form.teacherId !== teacherNow) {
+        await assignHomeroom(editing.id, Number(form.teacherId))
+        done.push('담임을 지정했습니다')
+      }
+      setEditing(null)
+      await loadClasses()
+      setNote(done.length > 0 ? `${editing.name} — ${done.join(' · ')}.` : '바뀐 것이 없습니다.')
+    } catch (err) {
+      const why = err instanceof ApiError ? err.message : '저장하지 못했습니다.'
+      setEditErr(done.length > 0 ? `${done.join(' · ')} — 그다음에서 멈췄습니다: ${why}` : why)
+      if (done.length > 0) await loadClasses()
+    } finally {
+      setEditBusy(false)
+    }
+  }
+
+  /** 반 삭제. 배정된 학생이 있으면 서버가 막는다 — 그 문구를 그대로 보여준다 */
+  async function removeClass() {
+    if (removing === null) return
+    setEditBusy(true)
+    setEditErr(null)
+    try {
+      await deleteClass(removing.id)
+      const gone = removing.name
+      setRemoving(null)
+      setEditing(null)
+      await loadClasses()
+      setNote(`${gone} 반을 지웠습니다.`)
+    } catch (err) {
+      setEditErr(err instanceof ApiError ? err.message : '지우지 못했습니다.')
+    } finally {
+      setEditBusy(false)
+    }
+  }
 
   /* 헤더에서 반을 만들면 목록을 다시 읽는다. 첫 렌더의 0 은 건너뛴다 */
   const classesVer = classesSignal.useVersion()
@@ -179,9 +283,117 @@ function Content() {
         </div>
       )}
 
+      {note && (
+        <div className="note-box" role="status">
+          <div>{note}</div>
+        </div>
+      )}
+
+      {editing && (
+        <Modal
+          title={`${editing.name} 반 관리`}
+          sub="이름·정원·담임을 고칩니다. 담임은 강사로 등록된 분만 고를 수 있습니다."
+          confirmLabel="저장"
+          busy={editBusy}
+          error={editErr}
+          onConfirm={() => void saveEdit()}
+          onClose={() => setEditing(null)}
+        >
+          <div className="frow">
+            <label className="req">반 이름</label>
+            <input className="inp" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          </div>
+          <div className="frow">
+            <label>정원</label>
+            <div>
+              <input
+                className="inp"
+                type="number"
+                min={1}
+                max={999}
+                value={form.capacity}
+                onChange={(e) => setForm({ ...form, capacity: e.target.value })}
+              />
+              {/* 비우면 '정원 없는 반' 이다 — 0 명이 아니다 */}
+              <div className="hint">비워 두면 정원 없는 반이 됩니다.</div>
+            </div>
+          </div>
+          <div className="frow">
+            <label>담임</label>
+            <div>
+              <select
+                className="sel"
+                value={form.teacherId}
+                onChange={(e) => setForm({ ...form, teacherId: e.target.value })}
+              >
+                <option value="">{editing.homeroomTeacherName ?? '미지정'}</option>
+                {teachers.map((t) => (
+                  <option key={t.id} value={String(t.id)}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+              <div className="hint">
+                {teachers.length === 0
+                  ? '이 지점에 등록된 강사가 없습니다. 사용자 관리에서 구분을 「선생님」으로 등록하세요.'
+                  : '담임은 사유 승인·상담·반 공지를 맡습니다. 해제는 다른 담임으로 바꾸는 것으로 합니다.'}
+              </div>
+            </div>
+          </div>
+          <div className="note-box" style={{ marginTop: 10 }}>
+            <div>
+              소속 학생 <b>{editing.memberCount ?? 0}명</b>. 반을 지우려면 먼저 배정을 해제해야 합니다.
+            </div>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
+            <button
+              type="button"
+              className="btn"
+              style={{ color: 'var(--red)', borderColor: 'var(--red)' }}
+              disabled={editBusy}
+              onClick={() => setRemoving(editing)}
+            >
+              <Icon name="trash-2" size={14} /> 반 지우기
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {removing && (
+        <Modal
+          title={`${removing.name} 반을 지울까요?`}
+          sub="되돌릴 수 없습니다."
+          confirmLabel="지우기"
+          danger
+          busy={editBusy}
+          error={editErr}
+          onConfirm={() => void removeClass()}
+          onClose={() => setRemoving(null)}
+        >
+          <div className="note-box">
+            <div>
+              배정된 학생이 있으면 지워지지 않습니다. 먼저 <b>배정 해제</b>를 해 주세요.
+            </div>
+          </div>
+        </Modal>
+      )}
+
       <div className="stat-strip">
+        {/* ★ 카드를 누르면 반 관리(이름·정원·담임·삭제)가 열린다. 담임을 붙일 자리가
+               여기밖에 없다 — 반을 만들고 나면 손댈 방법이 없었다 */}
         {classes.map((c) => (
-          <div className="stat" key={c.id}>
+          <div
+            className="stat"
+            key={c.id}
+            role="button"
+            tabIndex={0}
+            style={{ cursor: 'pointer' }}
+            title="누르면 이름·정원·담임을 고치거나 반을 지울 수 있습니다"
+            onClick={() => openEdit(c)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') openEdit(c)
+            }}
+          >
             <div className="l">
               <Icon name="layout-grid" size={13} /> {c.name}
             </div>

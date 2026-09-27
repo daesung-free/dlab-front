@@ -8,12 +8,17 @@ import { useAuth } from '../../auth/AuthContext'
 import { listClasses, setClassRoom } from '../../api/classes'
 import { fetchPenaltyItems } from '../../api/penalties'
 import {
+  createLocker,
+  createLockerBlock,
   createSeatArea,
   createSeatGrid,
+  deleteLocker,
   deleteSeatArea,
   deleteSeatMaster,
+  listLockers,
   listSeatAreas,
   listSeatMasters,
+  renameLocker,
   renameSeatArea,
 } from '../../api/facility'
 import {
@@ -376,8 +381,45 @@ const MASTERS: MasterDef[] = [
     key: 'locker',
     label: '사물함',
     icon: 'archive',
-    load: async () => [],
-    note: '사물함은 배정 관리 화면에서 다룹니다 — 목록이 학생 배정과 함께 옵니다.',
+    /* ★ 등록할 화면이 어디에도 없었다 — 배정 관리는 **있는 사물함을 나눠 주는** 화면이라
+         사물함 자체를 들일 수가 없었다(2026-09-27 실테스트). 여기서 들인다 */
+    load: async (a) => {
+      const list = await listLockers(a)
+      return list.map((l) => ({
+        id: l.id,
+        name: l.lockerNo,
+        // 배정된 학생이 있으면 지우지 못한다 — 목록에서 미리 보여준다
+        memo: l.studentName ? `${l.studentName} 배정 중` : null,
+      }))
+    },
+    /* ★ 이름 칸이 **번호**다. 시작·끝을 비우면 그 번호로 한 칸, 채우면 앞말로 붙여
+         그 범위를 한 번에 만든다(`L-` + 1~40 → L-001 … L-040). 사물함은 보통 수십 칸을
+         한꺼번에 들이므로 한 칸씩 만들게 두면 쓸 수 없다 */
+    create: async (academyId, _y, name, extra) => {
+      const start = (extra?.startNo ?? '').trim()
+      const end = (extra?.endNo ?? '').trim()
+      if (start !== '' && end !== '') {
+        if (Number(end) < Number(start)) throw new Error('끝 번호가 시작 번호보다 작습니다.')
+        const made = await createLockerBlock({
+          academyId,
+          prefix: name.trim() || undefined,
+          startNo: Number(start),
+          endNo: Number(end),
+        })
+        return { id: made[0]?.id ?? 0, name: `${made.length}칸` }
+      }
+      if (start !== '' || end !== '') throw new Error('시작 번호와 끝 번호를 모두 넣어 주세요.')
+      const made = await createLocker(academyId, name.trim())
+      return { id: made.id, name: made.lockerNo }
+    },
+    createExtra: [
+      { key: 'startNo', label: '시작 번호', placeholder: '1 (한 칸만 만들면 비웁니다)' },
+      { key: 'endNo', label: '끝 번호', placeholder: '40' },
+    ],
+    rename: (id, name) => renameLocker(id, name.trim()),
+    remove: deleteLocker,
+    has: { memo: true },
+    note: '이름 칸에 번호를 넣습니다. 시작·끝 번호를 비우면 한 칸, 채우면 그 범위를 한 번에 만듭니다("L-" + 1~40 → L-001 … L-040). 학생 배정은 배정 관리 화면에서 합니다.',
   },
   {
     key: 'scholarship',

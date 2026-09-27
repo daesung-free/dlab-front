@@ -14,6 +14,9 @@ import {
   getMealPolicy,
   saveMealPolicy,
   listMealOrders,
+  listMealOrderWindows,
+  setMealOrderWindow,
+  cancelMealOrderItem,
   type MealClosure,
   type MealDay,
   type MealOrder,
@@ -297,6 +300,15 @@ function Content() {
   const [masked, setMasked] = useState(true)
   const [reason, setReason] = useState(CLOSURE_REASONS[0])
   const [deadlineDays, setDeadlineDays] = useState(3)
+  /* 월 접수 기간. **이 기간 밖에는 앱에서 다음 달 신청 화면이 열리지 않는다** —
+     저장 전 값과 비교해야 '바뀐 것 없음' 판정이 맞는다 */
+  /* 관리자 취소. **3일 제한을 받지 않는 유일한 경로**라 어느 끼니를 지우는지 고르게 한다 */
+  const [canceling, setCanceling] = useState<MealOrder | null>(null)
+  const [cancelPick, setCancelPick] = useState<number[]>([])
+  const [cancelBusy, setCancelBusy] = useState(false)
+  const [cancelErr, setCancelErr] = useState<string | null>(null)
+  const [win, setWin] = useState<{ from: string; to: string }>({ from: '', to: '' })
+  const [savedWin, setSavedWin] = useState<{ from: string; to: string }>({ from: '', to: '' })
   const [month, setMonth] = useState(thisMonth())
   /* 헤더 '기간 선택' — 이번 달·지난 달·다음 달을 한 번에. 본문 월 칸과 같은 값을 쓴다 */
   const monthVer = monthSignal.useVersion()
@@ -329,18 +341,111 @@ function Content() {
     if (academyId === null) return
     setSavingPolicy(true)
     setPolicyNote(null)
+    /* ★ 두 가지를 저장한다 — 마감 일수와 월 접수 기간. **바뀐 것만** 보낸다.
+         둘 다 앱 화면을 여닫는 값이라 무엇이 저장됐는지 그대로 알린다 */
+    const done: string[] = []
     try {
       const year = Number(month.slice(0, 4))
-      const saved = await saveMealPolicy(academyId, year, deadlineDays)
-      setPolicy({ academyId, year, deadlineDays: saved, registered: true })
-      setDeadlineDays(saved)
-      setPolicyNote({ ok: true, text: `이용일 ${saved}일 전까지로 저장했습니다. 앱 신청·취소가 이 기준으로 막힙니다.` })
+      if (policy === null || deadlineDays !== policy.deadlineDays) {
+        const saved = await saveMealPolicy(academyId, year, deadlineDays)
+        setPolicy({ academyId, year, deadlineDays: saved, registered: true })
+        setDeadlineDays(saved)
+        done.push(`마감은 이용일 ${saved}일 전까지`)
+      }
+      if (win.from !== savedWin.from || win.to !== savedWin.to) {
+        if (win.from === '' || win.to === '') {
+          throw new ApiError(0, 'INVALID', '접수 시작일과 종료일을 모두 정해 주세요.')
+        }
+        const saved = await setMealOrderWindow({
+          academyId,
+          targetMonth: month,
+          startsOn: win.from,
+          endsOn: win.to,
+        })
+        const next = { from: saved.startsOn, to: saved.endsOn }
+        setWin(next)
+        setSavedWin(next)
+        done.push(`${month} 접수는 ${saved.startsOn} ~ ${saved.endsOn}`)
+      }
+      setPolicyNote({
+        ok: true,
+        text: done.length > 0 ? `${done.join(' · ')} 로 저장했습니다.` : '바뀐 것이 없습니다.',
+      })
     } catch (err) {
-      setPolicyNote({ ok: false, text: err instanceof ApiError ? err.message : '마감 정책을 저장하지 못했습니다.' })
+      setPolicyNote({ ok: false, text: err instanceof ApiError ? err.message : '저장하지 못했습니다.' })
     } finally {
       setSavingPolicy(false)
     }
   }
+
+  /**
+   * 고른 끼니를 취소한다.
+   *
+   * ★ **일괄 API 가 없어 한 건씩 부른다.** 중간에 실패하면 앞의 것은 이미 취소된 상태로
+   *   남으므로, 몇 건이 됐고 몇 건이 안 됐는지 그대로 알린다(CLAUDE.md 4).
+   * ★ 취소한 끼니는 되살릴 수 없다 — 다시 신청해야 한다.
+   */
+  async function runCancel() {
+    if (canceling === null || cancelPick.length === 0) return
+    setCancelBusy(true)
+    setCancelErr(null)
+    let done = 0
+    try {
+      for (const id of cancelPick) {
+        await cancelMealOrderItem(id)
+        done += 1
+      }
+      setCanceling(null)
+      setCancelPick([])
+      await load()
+      setPolicyNote({ ok: true, text: `${done}끼니를 취소했습니다.` })
+    } catch (err) {
+      const why = err instanceof ApiError ? err.message : '취소하지 못했습니다.'
+      setCancelErr(done > 0 ? `${done}건은 취소됐고 나머지에서 멈췄습니다 — ${why}` : why)
+      if (done > 0) await load()
+    } finally {
+      setCancelBusy(false)
+    }
+  }
+
+  /** 취소 버튼이 붙은 주문 표. 남은(취소 안 된) 끼니가 있어야 누를 수 있다 */
+  const orderColumns: Column<MealOrder>[] = useMemo(
+    () => [
+      ...ORDER_COLUMNS,
+      {
+        key: 'act',
+        header: '',
+        width: '92px',
+        align: 'center',
+        value: () => '',
+        render: (r) => {
+          const left = r.items.filter((i) => i.canceledAt === null).length
+          return (
+            <button
+              className="btn"
+              style={{ padding: '4px 9px', fontSize: 11.5 }}
+              disabled={left === 0}
+              title={left === 0 ? '취소할 끼니가 없습니다' : '이용일이 지나지 않은 끼니를 취소합니다'}
+              onClick={() => {
+                setCanceling(r)
+                setCancelPick([])
+                setCancelErr(null)
+              }}
+            >
+              취소
+            </button>
+          )
+        },
+      },
+    ],
+    [],
+  )
+
+  /** 마감 일수든 접수 기간이든 하나라도 바뀌었나 */
+  const dirty =
+    (policy !== null && deadlineDays !== policy.deadlineDays) ||
+    win.from !== savedWin.from ||
+    win.to !== savedWin.to
 
   const load = useCallback(async () => {
     if (academyId === null) {
@@ -350,17 +455,23 @@ function Content() {
     setLoading(true)
     setError(null)
     try {
-      const [days, cls, ords, pol] = await Promise.all([
+      const [days, cls, ords, pol, wins] = await Promise.all([
         listMealMonthly(academyId, month),
         listMealClosures(academyId, month),
         listMealOrders(academyId, month),
         getMealPolicy(academyId, Number(month.slice(0, 4))),
+        listMealOrderWindows(academyId, Number(month.slice(0, 4))),
       ])
       setDayList(days)
       setClosureList(cls)
       setOrders(ords)
       setPolicy(pol)
       setDeadlineDays(pol.deadlineDays)
+      // 기간은 달마다 따로다 — 지금 보고 있는 달의 것만 칸에 올린다
+      const w = wins.find((x) => x.targetMonth === month)
+      const next = { from: w?.startsOn ?? '', to: w?.endsOn ?? '' }
+      setWin(next)
+      setSavedWin(next)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '급식 정보를 불러오지 못했습니다.')
       setDayList([])
@@ -550,6 +661,46 @@ function Content() {
               <br />
               중단을 나중에 풀어도 <b>취소된 신청은 되살아나지 않습니다.</b>
             </div>
+          </div>
+        </Modal>
+      )}
+
+      {canceling && (
+        <Modal
+          title={`${canceling.studentName} 님의 급식을 취소할까요?`}
+          sub={`${canceling.targetMonth} · 주문번호 ${canceling.orderNo}`}
+          confirmLabel={`${cancelPick.length}끼니 취소`}
+          danger
+          busy={cancelBusy}
+          error={cancelErr}
+          confirmDisabled={cancelPick.length === 0}
+          onConfirm={() => void runCancel()}
+          onClose={() => setCanceling(null)}
+        >
+          <div className="note-box">
+            <div>
+              앱에서는 <b>이용일 {deadlineDays}일 전까지만</b> 취소됩니다. 여기서는 그 제한 없이 취소되지만,
+              <b> 취소한 끼니는 되살릴 수 없습니다</b> — 다시 신청해야 합니다. 결제된 건은 환불이 따로 필요합니다.
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 10, maxHeight: 260, overflowY: 'auto' }}>
+            {canceling.items
+              .filter((i) => i.canceledAt === null)
+              .map((i) => (
+                <label key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                  <input
+                    type="checkbox"
+                    checked={cancelPick.includes(i.id)}
+                    onChange={(e) =>
+                      setCancelPick((prev) => (e.target.checked ? [...prev, i.id] : prev.filter((x) => x !== i.id)))
+                    }
+                  />
+                  <span>
+                    {i.mealDate} · {i.mealType === 'LUNCH' ? '점심' : i.mealType === 'DINNER' ? '저녁' : i.mealType}
+                  </span>
+                  {i.unitPrice !== null && <span style={{ color: 'var(--muted)' }}>{won(i.unitPrice)}</span>}
+                </label>
+              ))}
           </div>
         </Modal>
       )}
@@ -769,9 +920,19 @@ function Content() {
                   <Icon name="calendar-range" size={15} /> 월 접수 기간
                 </div>
                 <div className="two" style={{ margin: '4px 0 10px' }}>
-                  {/* 저장할 곳이 없는 값이다 — 고칠 수 있게 두면 저장된 줄 안다 */}
-                  <input className="inp" type="date" defaultValue="2026-05-18" disabled data-soon title="준비 중입니다" />
-                  <input className="inp" type="date" defaultValue="2026-05-27" disabled data-soon title="준비 중입니다" />
+                  {/* 지금 보고 있는 달({month})의 기간이다. 달을 바꾸면 그 달 값으로 다시 올라온다 */}
+                  <input
+                    className="inp"
+                    type="date"
+                    value={win.from}
+                    onChange={(e) => setWin({ ...win, from: e.target.value })}
+                  />
+                  <input
+                    className="inp"
+                    type="date"
+                    value={win.to}
+                    onChange={(e) => setWin({ ...win, to: e.target.value })}
+                  />
                 </div>
                 <ul>
                   <li>기간 밖에는 다음 달 신청 화면이 열리지 않음</li>
@@ -798,9 +959,10 @@ function Content() {
               )}
               <button
                 className="btn"
-                disabled={!policy || savingPolicy || deadlineDays === policy.deadlineDays}
+                disabled={savingPolicy || !dirty}
                 onClick={() => {
                   if (policy) setDeadlineDays(policy.deadlineDays)
+                  setWin(savedWin)
                   setPolicyNote(null)
                 }}
               >
@@ -808,13 +970,9 @@ function Content() {
               </button>
               <button
                 className="btn pri"
-                disabled={savingPolicy || academyId === null || deadlineDays === policy?.deadlineDays}
+                disabled={savingPolicy || academyId === null || !dirty}
                 title={
-                  academyId === null
-                    ? '지점을 먼저 선택하세요'
-                    : deadlineDays === policy?.deadlineDays
-                      ? '바뀐 것이 없습니다'
-                      : undefined
+                  academyId === null ? '지점을 먼저 선택하세요' : !dirty ? '바뀐 것이 없습니다' : undefined
                 }
                 onClick={() => void savePolicy()}
               >
@@ -1025,7 +1183,7 @@ function Content() {
         {tab === 'orders' && (
           <div style={{ padding: 14 }}>
             <DataTable
-              columns={ORDER_COLUMNS}
+              columns={orderColumns}
               rows={orders}
               rowKey={(r) => String(r.id)}
               masked={masked}

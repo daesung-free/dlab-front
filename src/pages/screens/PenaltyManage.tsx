@@ -28,7 +28,7 @@ import {
   type PenaltyTriggerType,
   type RuleConditionGroup,
 } from '../../api/penalties'
-import type { EnrollmentStatus } from '../../api/students'
+import { searchStudents, type EnrollmentStatus, type Student } from '../../api/students'
 import { createScreenSignal } from './screenSignal'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
@@ -115,6 +115,11 @@ function Content() {
   const [grantDate, setGrantDate] = useState(todayStr)
   const [granting, setGranting] = useState(false)
   const [grantMsg, setGrantMsg] = useState<string | null>(null)
+  /* ★ 학생을 직접 골라 주는 길. 예전에는 **부여 대상을 내역 표에서만** 고를 수 있어,
+       내역이 0건인 지점에서는 수기 부여를 아예 못 했다(순환. 2026-09-27 실테스트) */
+  const [students, setStudents] = useState<Student[]>([])
+  const [studentQuery, setStudentQuery] = useState('')
+  const [picked, setPicked] = useState<number[]>([])
 
   const year = new Date().getFullYear()
 
@@ -215,11 +220,29 @@ function Content() {
   /** 취소 확인 모달 */
   const [confirming, setConfirming] = useState<PenaltyRow | null>(null)
 
+  /* 재원생 명단. 부여는 재원생에게만 한다 — 퇴원생에게 점수를 줄 일은 없다 */
+  useEffect(() => {
+    if (academyId === null) {
+      setStudents([])
+      return
+    }
+    let alive = true
+    searchStudents({ status: 'ENROLLED', size: 2000, academyId })
+      .then((p) => alive && setStudents(p.rows))
+      .catch(() => alive && setStudents([]))
+    return () => {
+      alive = false
+    }
+  }, [academyId])
+
   const selectedEnrollments = useMemo(() => {
     const byId = new Map(rows.map((r) => [String(r.id), r.enrollmentId]))
     // 같은 학생의 이력을 여러 건 골랐을 수 있다 — 중복 부여를 막으려면 학생 단위로 접는다
     return [...new Set(selected.map((id) => byId.get(id)).filter((v): v is number => v !== undefined))]
   }, [selected, rows])
+
+  /** 실제 부여 대상 — 내역에서 고른 학생 + 직접 고른 학생(중복은 접는다) */
+  const targets = useMemo(() => [...new Set([...selectedEnrollments, ...picked])], [selectedEnrollments, picked])
 
   const columns: Column<PenaltyRow>[] = useMemo(
     () => [
@@ -314,12 +337,12 @@ function Content() {
   }
 
   async function grant() {
-    if (selectedEnrollments.length === 0 || itemId === '') return
+    if (targets.length === 0 || itemId === '') return
     setGranting(true)
     setGrantMsg(null)
     try {
       const count = await grantPenalties({
-        enrollmentIds: selectedEnrollments,
+        enrollmentIds: targets,
         itemId: Number(itemId),
         reason: grantReason.trim() || undefined,
         occurredAt: grantDate || undefined,
@@ -419,7 +442,7 @@ function Content() {
               <span className="ico">
                 <Icon name="pencil" size={15} />
               </span>
-              선택 {selectedEnrollments.length}명 일괄 점수부여 (수기)
+              {targets.length}명에게 점수 부여 (수기)
             </div>
             <div className="r">
               <button className="btn" onClick={() => setGrantOpen(false)}>
@@ -428,6 +451,63 @@ function Content() {
             </div>
           </div>
           <div className="card-sec-b">
+            {/* ★ 학생을 직접 고르는 자리. 내역에서 고른 학생이 있으면 그 위에 더해진다 */}
+            <div className="frow">
+              <label className="req">학생</label>
+              <div>
+                <input
+                  className="inp"
+                  placeholder="이름 · 학번으로 찾기"
+                  value={studentQuery}
+                  onChange={(e) => setStudentQuery(e.target.value)}
+                />
+                <div
+                  style={{
+                    marginTop: 6,
+                    maxHeight: 168,
+                    overflowY: 'auto',
+                    border: '1px solid var(--line)',
+                    borderRadius: 8,
+                    padding: 6,
+                  }}
+                >
+                  {students.length === 0 && <div className="hint">재원생 명단을 불러오지 못했습니다.</div>}
+                  {students
+                    .filter((st) => {
+                      const q = studentQuery.trim()
+                      return q === '' || st.name.includes(q) || (st.studentNo ?? '').includes(q)
+                    })
+                    .slice(0, 200)
+                    .map((st) => (
+                      <label
+                        key={st.enrollmentId}
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, padding: '2px 0' }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={picked.includes(st.enrollmentId)}
+                          onChange={(e) =>
+                            setPicked((prev) =>
+                              e.target.checked
+                                ? [...prev, st.enrollmentId]
+                                : prev.filter((x) => x !== st.enrollmentId),
+                            )
+                          }
+                        />
+                        <span>
+                          {st.studentNo ?? '-'} · {st.name}
+                        </span>
+                      </label>
+                    ))}
+                </div>
+                <div className="hint">
+                  {selectedEnrollments.length > 0
+                    ? `아래 내역에서 고른 ${selectedEnrollments.length}명이 함께 들어갑니다.`
+                    : '이름을 쳐서 찾은 뒤 체크하세요. 재원생만 나옵니다.'}
+                </div>
+              </div>
+            </div>
+
             <div className="frow">
               <label className="req">항목</label>
               <select className="sel" value={itemId} onChange={(e) => setItemId(e.target.value)}>
@@ -463,10 +543,10 @@ function Content() {
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <button
                   className="btn pri"
-                  disabled={granting || itemId === '' || selectedEnrollments.length === 0}
+                  disabled={granting || itemId === '' || targets.length === 0}
                   onClick={() => void grant()}
                 >
-                  <Icon name="check" size={14} /> {granting ? '부여 중…' : `${selectedEnrollments.length}명 부여`}
+                  <Icon name="check" size={14} /> {granting ? '부여 중…' : `${targets.length}명 부여`}
                 </button>
                 <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>
                   점수는 항목 값 그대로라 조정할 수 없습니다. 저장 시 학생 앱 Daily Report 에 즉시 반영됩니다.
@@ -495,8 +575,10 @@ function Content() {
         }
         toolbar={
           <>
-            <button className="btn" disabled={selected.length === 0} onClick={() => setGrantOpen(true)}>
-              <Icon name="plus" size={14} /> 선택 일괄 점수부여
+            {/* 내역이 0건인 지점에서도 눌려야 한다 — 예전에는 표에서 고른 것이 있어야만
+                열려서, 첫 부여를 할 방법이 아예 없었다 */}
+            <button className="btn" disabled={academyId === null} onClick={() => setGrantOpen(true)}>
+              <Icon name="plus" size={14} /> 점수 부여
             </button>
             {serverMasked ? (
               <span className="dt-count" style={{ color: 'var(--muted)' }}>

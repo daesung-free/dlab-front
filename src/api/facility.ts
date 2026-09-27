@@ -20,6 +20,37 @@ export function listLockers(academyId: number): Promise<Locker[]> {
   return request<Locker[]>('/api/v1/admin/masters/lockers', { query: { academyId } })
 }
 
+/** 사물함 한 칸 등록 */
+export function createLocker(academyId: number, lockerNo: string): Promise<Locker> {
+  return request<Locker>('/api/v1/admin/masters/lockers', { method: 'POST', body: { academyId, lockerNo } })
+}
+
+/**
+ * 사물함 블록 일괄 등록.
+ *
+ * ★ 한 칸씩 만들 일이 아니다 — 보통 수십 칸을 한 번에 들인다.
+ * ★ `digits` 는 0 을 채우는 자릿수다(3 이면 `L-007`). 비우면 3자리.
+ */
+export function createLockerBlock(body: {
+  academyId: number
+  prefix?: string
+  startNo: number
+  endNo: number
+  digits?: number
+}): Promise<Locker[]> {
+  return request<Locker[]>('/api/v1/admin/masters/lockers/bulk', { method: 'POST', body })
+}
+
+/** 사물함 번호 변경 */
+export function renameLocker(lockerId: number, lockerNo: string): Promise<Locker> {
+  return request<Locker>(`/api/v1/admin/masters/lockers/${lockerId}`, { method: 'PUT', body: { lockerNo } })
+}
+
+/** 사물함 삭제. 배정된 학생이 있으면 서버가 막는다 */
+export function deleteLocker(lockerId: number): Promise<void> {
+  return request<void>(`/api/v1/admin/masters/lockers/${lockerId}`, { method: 'DELETE' })
+}
+
 export function assignLocker(lockerId: number, enrollmentId: number): Promise<Locker> {
   return request<Locker>(`/api/v1/admin/masters/lockers/${lockerId}/assignment`, {
     method: 'PUT',
