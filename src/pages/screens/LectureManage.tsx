@@ -16,10 +16,9 @@ import {
   type LectureAttendanceStatus,
   listLectures,
   changeLectureStatus,
-  createLecture,
+  createLectureFull,
   deleteLecture,
   deleteLectureSession,
-  createLectureSession,
   setLectureVisible,
   cancelApplication,
   promoteApplicant,
@@ -29,6 +28,7 @@ import {
   type LectureSession,
 } from '../../api/lectures'
 import { listTeachers, type TeacherRow } from '../../api/accounts'
+import { listRooms, type Room } from '../../api/masters'
 import { createBilling, listStudentBillings } from '../../api/billing'
 import { searchStudents } from '../../api/students'
 import type { Mockup } from './types'
@@ -182,7 +182,8 @@ const APPLICANT_COLUMNS: Column<ApplicantRow>[] = [
 
 /* ══ 특강 개설 ══ */
 
-const ROOMS = ['201호', '202호', '301호', '302호', '401호']
+/* ★ 강의실은 **지점마다 다르다.** 예전에는 이 다섯 개가 화면에 박혀 있어서, 없는 호실이
+     선택지로 뜨고 실제 호실은 고를 수 없었다(2026-09-27 실테스트). 기초 관리의 강의실을 읽는다 */
 const TRACK_TARGETS = ['전체', '자연계열', '인문계열']
 const DOW_LABELS = ['월', '화', '수', '목', '금', '토']
 
@@ -232,7 +233,7 @@ const EMPTY_DRAFT: LectureDraft = {
   name: '',
   month: '2026-07',
   teacherId: null,
-  room: ROOMS[0],
+  room: '',
   capacity: 25,
   fee: 280000,
   target: '전체',
@@ -322,6 +323,7 @@ function Content() {
   const [selectedApply, setSelectedApply] = useState<string[]>([])
   const [selectedWait, setSelectedWait] = useState<string[]>([])
   const [draft, setDraft] = useState<LectureDraft | null>(null)
+  const [rooms, setRooms] = useState<Room[]>([])
 
   /* ── 실연동 ── */
   const { academyId } = useAcademy()
@@ -479,6 +481,21 @@ function Content() {
     listTeachers(academyId)
       .then((v) => alive && setTeachers(v))
       .catch(() => alive && setTeachers([]))
+    return () => {
+      alive = false
+    }
+  }, [academyId])
+
+  /* 강의실 선택지 — 지점마다 다르다. 사용 중지된 방은 빼고 받는다 */
+  useEffect(() => {
+    if (academyId === null) {
+      setRooms([])
+      return
+    }
+    let alive = true
+    listRooms(academyId, true)
+      .then((v) => alive && setRooms(v))
+      .catch(() => alive && setRooms([]))
     return () => {
       alive = false
     }
@@ -644,70 +661,45 @@ function Content() {
     setSaveNote(null)
     setError(null)
 
-    let made: ApiLecture | null = null
+    /* ★ **한 번에 만든다**(2026-09-27 서버 추가). 예전에는 등록 → 상세 → 회차 N건 →
+         상태 → 노출로 최대 다섯 번 나눠 보냈고, 중간에 끊기면 회차 없는 특강이나
+         기간 없는 특강이 남았다. 지금은 중간에 실패하면 **아무것도 안 만들어진다.**
+       ★ 접수 기간만 시점이라 변환이 필요하다. 날짜 문자열 그대로 보내면 400 이고,
+         `+'T00:00:00Z'` 로 붙이면 UTC 자정 = 한국 09:00 이 된다. */
     try {
-      made = await createLecture({
+      const made = await createLectureFull({
         academyId,
         year: Number(draft.month.slice(0, 4)),
         lectureType: 'LECTURE',
         name: draft.name.trim(),
-      })
-    } catch (err) {
-      setSaving('')
-      setSaveNote({ ok: false, text: err instanceof ApiError ? err.message : '특강을 만들지 못했습니다.' })
-      return
-    }
-
-    const steps: string[] = ['특강을 만들었습니다']
-
-    try {
-      await updateLecture(made.id, {
         capacity: draft.capacity,
         fee: draft.fee,
-        startDate: draft.startDate,
-        endDate: draft.endDate,
-        /* ★ 접수 기간만 시점이다(lectures.ts 주석). 날짜 문자열 그대로 보내면 400.
-             ★ `+'T00:00:00Z'` 로 붙이면 UTC 자정 = 한국 09:00 이 된다. 로컬로 해석시켜 변환한다. */
+        startDate: draft.startDate || undefined,
+        endDate: draft.endDate || undefined,
         applyFrom: toInstant(draft.applyFrom, '00:00'),
         applyTo: toInstant(draft.applyTo, '23:59'),
         teacherId: draft.teacherId ?? undefined,
         description: draft.memo || undefined,
+        sessions: sessions.map((date) => ({ date, room: draft.room || undefined })),
+        status: mode === 'open' ? 'OPEN' : undefined,
+        visible: mode === 'open' ? true : undefined,
       })
-      steps.push('상세 정보를 저장했습니다')
-    } catch {
-      steps.push('상세 정보(정원·기간·담당)는 저장하지 못했습니다 — 목록에서 수정해 주세요')
+      await loadLectures()
+      setSaving('')
+      setDraft(null)
+      setTab('list')
+      setSaveNote({
+        ok: true,
+        text:
+          mode === 'open'
+            ? `${made.name} — 회차 ${sessions.length}건과 함께 만들고 접수를 열었습니다.`
+            : `${made.name} — 회차 ${sessions.length}건과 함께 만들었습니다. 접수는 목록에서 엽니다.`,
+      })
+    } catch (err) {
+      setSaving('')
+      // 담당 강사 없이 OPEN 을 누른 경우가 여기로 온다 — 서버 문구가 무엇을 해야 하는지 말해준다
+      setSaveNote({ ok: false, text: err instanceof ApiError ? err.message : '특강을 만들지 못했습니다.' })
     }
-
-    let done = 0
-    for (const date of sessions) {
-      try {
-        await createLectureSession(made.id, { sessionDate: date, room: draft.room })
-        done += 1
-      } catch {
-        break
-      }
-    }
-    steps.push(
-      done === sessions.length
-        ? `회차 ${done}건을 만들었습니다`
-        : `회차는 ${sessions.length}건 중 ${done}건만 만들어졌습니다 — 나머지는 다시 추가해 주세요`,
-    )
-
-    if (mode === 'open') {
-      try {
-        await changeLectureStatus(made.id, 'OPEN')
-        await setLectureVisible(made.id, true)
-        steps.push('접수를 열고 앱에 노출했습니다')
-      } catch {
-        steps.push('접수 열기는 실패했습니다 — 목록에서 상태를 바꿔 주세요')
-      }
-    }
-
-    await loadLectures()
-    setSaving('')
-    setDraft(null)
-    setTab('list')
-    setSaveNote({ ok: true, text: steps.join(' · ') })
   }
 
   /**
@@ -920,10 +912,13 @@ function Content() {
             >
               <Icon name="save" size={14} /> {saving === 'draft' ? '저장 중…' : '임시 저장'}
             </button>
+            {/* ★ 담당 강사 없이도 **임시 저장은 된다**(준비 중인 특강을 저장하려고 그렇게 뒀다).
+                   접수 시작만 서버가 막으므로 그 버튼에서만 먼저 알린다 — 만들고 나서
+                   "접수 열기 실패" 로 알려주면 반쯤 만들어진 특강이 남는다 */}
             <button
               className="btn pri"
-              disabled={!canSave || saving !== ''}
-              title={saveBlockReason}
+              disabled={!canSave || saving !== '' || draft.teacherId === null}
+              title={draft.teacherId === null ? '담당 강사를 정해야 접수를 시작할 수 있습니다' : saveBlockReason}
               onClick={() => void saveDraft('open')}
             >
               <Icon name="send" size={14} /> {saving === 'open' ? '개설 중…' : '개설 · 접수 시작'}
@@ -966,13 +961,21 @@ function Content() {
 
               <div className="frow">
                 <label className="req">강의실</label>
-                <select className="sel" value={draft.room} onChange={(e) => patch({ room: e.target.value })}>
-                  {ROOMS.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
-                </select>
+                <div>
+                  <select className="sel" value={draft.room} onChange={(e) => patch({ room: e.target.value })}>
+                    <option value="">선택하세요</option>
+                    {rooms.map((r) => (
+                      <option key={r.id} value={r.name ?? r.roomNo}>
+                        {r.name ? `${r.roomNo} · ${r.name}` : r.roomNo}
+                      </option>
+                    ))}
+                  </select>
+                  {rooms.length === 0 && (
+                    <div className="hint">
+                      이 지점에 등록된 강의실이 없습니다. 기초 관리 → 강의실에서 먼저 등록하세요.
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="frow">

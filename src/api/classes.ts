@@ -137,6 +137,36 @@ export function createClass(body: {
   return request<ClassGroup>('/api/v1/admin/classes', { method: 'POST', body })
 }
 
+/**
+ * 반 기본정보 수정(이름·정원).
+ *
+ * ★ **담임은 여기가 아니다**(`assignHomeroom`). 서버가 축을 나눠 뒀다 — 담임이 바뀌면
+ *   사유 승인이 올라가는 사람이 바뀌므로 이름 고치기와 같이 다루면 안 된다.
+ * ★ 정원을 **비우려면** `clearCapacity: true` 다. `capacity: 0` 이 아니다.
+ */
+export function updateClass(
+  classId: number,
+  body: { name?: string; capacity?: number; clearCapacity?: boolean },
+): Promise<ClassGroup> {
+  return request<ClassGroup>(`/api/v1/admin/classes/${classId}`, { method: 'PUT', body })
+}
+
+/**
+ * 반 담임 지정.
+ *
+ * ★ 담임은 **사유 승인·상담·반 공지의 주체**다. 반을 만들어도 담임을 못 붙이면
+ *   그 업무가 통째로 막힌다(2026-09-27 실테스트에서 P1 으로 올라왔다).
+ * ★ 강사(`kind=TEACHER`)만 고를 수 있다 — 직원으로 등록한 사람은 목록에 없다.
+ */
+export function assignHomeroom(classId: number, teacherId: number): Promise<ClassGroup> {
+  return request<ClassGroup>(`/api/v1/admin/classes/${classId}/homeroom`, { method: 'PUT', body: { teacherId } })
+}
+
+/** 반 삭제. 배정된 학생이 있으면 서버가 막는다(그 문구를 그대로 보여준다) */
+export function deleteClass(classId: number): Promise<void> {
+  return request<void>(`/api/v1/admin/classes/${classId}`, { method: 'DELETE' })
+}
+
 /** 반 강의실 지정·해제. roomId 를 비우면(null) 해제한다 */
 export function setClassRoom(classId: number, roomId: number | null): Promise<ClassGroup> {
   return request<ClassGroup>(`/api/v1/admin/classes/${classId}/room`, { method: 'PUT', body: { roomId } })

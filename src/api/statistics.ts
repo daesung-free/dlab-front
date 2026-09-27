@@ -1,4 +1,4 @@
-import { request } from './client'
+import { downloadFile, request } from './client'
 
 /* 대시보드 집계 — GET /api/v1/admin/statistics
  *
@@ -31,8 +31,14 @@ export interface Statistics {
     ranking: { name: string; minutes: number }[]
   }
   penalty: { meritPoints: number; demeritPoints: number; count: number }
-  meals: { appliedTotal: number; applied: Record<string, number>; canceled: Record<string, number> }
-  revenue: { billedAmount: number; receivedAmount: number; unpaidAmount: number; byType: Record<string, number> }
+  /**
+   * 대시보드 '오늘 처리할 일' 두 줄. **지금 이 순간 값이라 조회 기간과 무관하다**(2026-09-27 서버).
+   * 승인 대기는 담임도 봐야 하는데 `/approvals/board` 는 담임에게 403 이라, 집계로 받는다.
+   */
+  todo?: { pendingApprovals: number; unexcusedAbsentToday: number } | null
+  /** ★ 담임 계정에는 **null 로 온다**(2026-09-25 서버). 급식·수납은 담임이 볼 것이 아니다 */
+  meals: { appliedTotal: number; applied: Record<string, number>; canceled: Record<string, number> } | null
+  revenue: { billedAmount: number; receivedAmount: number; unpaidAmount: number; byType: Record<string, number> } | null
 }
 
 export function getStatistics(params: {
@@ -101,4 +107,17 @@ export function getStudentStatistics(params: {
   asOf?: string
 }): Promise<StudentStatRow[]> {
   return request<StudentStatRow[]>('/api/v1/admin/statistics/students', { query: { ...params } })
+}
+
+/**
+ * 순공시간 엑셀 — 기간별 학생 순공시간.
+ *
+ * ★ 화면 표가 아니라 **서버가 만든다.** 기간이 길면 줄이 수천 개라 화면에서 만들 값이 아니다.
+ * ★ `from`·`to` 가 필수다.
+ */
+export function exportStudyTime(
+  params: { academyId?: number; from: string; to: string; size?: number },
+  filename = '순공시간.xlsx',
+): Promise<void> {
+  return downloadFile('/api/v1/admin/statistics/study-time/export', filename, { query: { ...params } })
 }

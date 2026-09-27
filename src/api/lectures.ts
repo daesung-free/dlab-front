@@ -141,6 +141,39 @@ export function createLecture(body: {
 }
 
 /**
+ * 한 번에 개설 — 특강 + 회차 + 상태 + 노출 (2026-09-27 서버 추가).
+ *
+ * ★ **중간에 실패하면 아무것도 안 만들어진다**(서버가 한 트랜잭션으로 묶는다).
+ *   예전에는 등록 → 상세 → 회차 N건 → 상태 → 노출로 최대 다섯 번 나눠 보내서,
+ *   중간에 끊기면 **반쪽짜리 특강**이 남았다(회차 없는 특강·기간 없는 특강).
+ * ★ `status: 'OPEN'` 이면 **담당 강사가 있어야 한다** — 없으면 400 이다.
+ *   접수 기간(`applyFrom`·`applyTo`)도 함께 보내야 접수 기간 없이 열리는 일이 없다.
+ * ★ 접수 기간만 시점(Instant)이고 수업 기간은 날짜다 — 서버 계약이 그렇게 갈려 있다.
+ */
+export function createLectureFull(body: {
+  academyId: number
+  year: number
+  lectureType: LectureType
+  name: string
+  categoryId?: number
+  teacherId?: number
+  capacity?: number
+  fee?: number
+  description?: string
+  /** yyyy-MM-dd */
+  startDate?: string
+  endDate?: string
+  /** Instant */
+  applyFrom?: string
+  applyTo?: string
+  sessions?: { date: string; startTime?: string; endTime?: string; room?: string }[]
+  status?: LectureStatus
+  visible?: boolean
+}): Promise<Lecture> {
+  return request<Lecture>('/api/v1/admin/lectures/full', { method: 'POST', body })
+}
+
+/**
  * 앱 노출 전환 (0803 "개설 시에만 노출").
  *
  * ★ `status` 와 **별개 축이다.** 접수를 열어도(`OPEN`) 노출을 안 켜면 앱에 안 보인다 —

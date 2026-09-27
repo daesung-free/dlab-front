@@ -18,6 +18,15 @@ import { useAcademy } from '../../auth/AcademyContext'
 import { useAuth } from '../../auth/AuthContext'
 import { listTeachers, type TeacherRow } from '../../api/accounts'
 import { ApiError } from '../../api/client'
+import { issueAppTemporaryPassword, unlockAppAccount } from '../../api/accounts'
+import {
+  grantScholarship,
+  listSelectableScholarships,
+  listStudentScholarships,
+  revokeScholarship,
+  type ScholarshipItem,
+  type ScholarshipMaster,
+} from '../../api/masters'
 import {
   GRADE_LABEL,
   SORTABLE,
@@ -37,6 +46,7 @@ import {
   searchStudents,
   type EnrollmentStatus,
   type GradeType,
+  type AppAccount,
   type Student,
   type TrackType,
 } from '../../api/students'
@@ -212,6 +222,52 @@ function infoOf(s: Student): Record<InfoKey, string> {
     grade: s.grade ?? '',
     track: s.track ?? '',
   }
+}
+
+/**
+ * 앱 계정 한 줄 — 로그인 아이디 · 상태 · 버튼.
+ *
+ * ★ `locked`(로그인 실패 잠금)와 `status`(관리자 정지)는 **다른 축이다.** 서버가 섞지 않으므로
+ *   화면도 섞지 않는다 — 잠금 해제는 `locked` 만 본다.
+ */
+function AppAccountRow({
+  who,
+  account,
+  busyId,
+  onUnlock,
+  onTemp,
+}: {
+  who: string
+  account: AppAccount
+  busyId: number | null
+  onUnlock: (a: AppAccount) => void
+  onTemp: (a: AppAccount) => void
+}) {
+  const busy = busyId === account.accountId
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minHeight: 34 }}>
+      <span style={{ fontSize: 12.5, color: 'var(--muted)', width: 52 }}>{who}</span>
+      <code style={{ fontSize: 11.5 }}>{account.loginId}</code>
+      {account.locked ? (
+        <span className="mk brandnew" title={account.lockedAt ? `${account.lockedAt.slice(0, 16).replace('T', ' ')} 잠김` : undefined}>
+          잠김
+        </span>
+      ) : account.status === 'SUSPENDED' ? (
+        <span className="mk supplement">정지</span>
+      ) : (
+        <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>정상</span>
+      )}
+      {account.mustChangePassword && <span className="mk supplement">임시 비밀번호</span>}
+      {account.locked && (
+        <button type="button" className="btn" style={{ padding: '3px 9px', fontSize: 11.5 }} disabled={busy} onClick={() => onUnlock(account)}>
+          {busy ? '푸는 중…' : '잠금 해제'}
+        </button>
+      )}
+      <button type="button" className="btn" style={{ padding: '3px 9px', fontSize: 11.5 }} disabled={busy} onClick={() => onTemp(account)}>
+        임시 비밀번호
+      </button>
+    </div>
+  )
 }
 
 function Content() {
@@ -399,9 +455,102 @@ function Content() {
     }
   }
 
+  /** 앱 계정 잠금 해제·임시 비밀번호. 학생 한 명 안에서 여러 계정(본인 + 학부모)을 다룬다 */
+  const [acct, setAcct] = useState<{ busyId: number | null; msg: string | null; err: string | null }>({
+    busyId: null,
+    msg: null,
+    err: null,
+  })
+  /* 장학 — **종류 마스터와 다른 것이다.** 여기는 '누구에게 갔나'(부여 내역)다.
+     내역을 볼 자리가 없어 명단의 장학 칸이 어디서 온 값인지 알 수 없었다(2026-09-27 P2) */
+  const [scholar, setScholar] = useState<{ items: ScholarshipItem[]; pick: string; busy: boolean; err: string | null }>({
+    items: [],
+    pick: '',
+    busy: false,
+    err: null,
+  })
+  const [scholarMasters, setScholarMasters] = useState<ScholarshipMaster[]>([])
+
+  /** 푼 뒤 목록·상세를 다시 읽어 잠금 표시가 사라지게 한다 */
+  async function unlockApp(a: AppAccount, who: string) {
+    setAcct({ busyId: a.accountId, msg: null, err: null })
+    try {
+      await unlockAppAccount(a.accountId)
+      setAcct({ busyId: null, msg: `${who} 계정(${a.loginId}) 잠금을 풀었습니다.`, err: null })
+      if (infoEdit) {
+        const fresh = await getStudent(infoEdit.row.enrollmentId)
+        setInfoEdit((cur) => (cur && cur.row.enrollmentId === fresh.enrollmentId ? { ...cur, loaded: fresh } : cur))
+      }
+      table.reload()
+    } catch (e) {
+      setAcct({ busyId: null, msg: null, err: e instanceof ApiError ? e.message : '잠금을 풀지 못했습니다.' })
+    }
+  }
+
+  /** 임시 비밀번호는 **다시 볼 수 없다** — 받은 자리에서 그대로 보여준다 */
+  async function issueTemp(a: AppAccount, who: string) {
+    setAcct({ busyId: a.accountId, msg: null, err: null })
+    try {
+      const r = await issueAppTemporaryPassword(a.accountId)
+      setAcct({
+        busyId: null,
+        msg: `${who} 임시 비밀번호: ${r.temporaryPassword} — 이 자리에서만 보입니다. 본인에게 전달하세요.`,
+        err: null,
+      })
+      if (infoEdit) {
+        const fresh = await getStudent(infoEdit.row.enrollmentId)
+        setInfoEdit((cur) => (cur && cur.row.enrollmentId === fresh.enrollmentId ? { ...cur, loaded: fresh } : cur))
+      }
+    } catch (e) {
+      setAcct({ busyId: null, msg: null, err: e instanceof ApiError ? e.message : '임시 비밀번호를 만들지 못했습니다.' })
+    }
+  }
+
+  /* 부여 드롭다운 — **사용 중인 장학만** 온다. 지점·연도가 바뀌면 다시 읽는다 */
+  useEffect(() => {
+    let alive = true
+    listSelectableScholarships(new Date().getFullYear(), academyId ?? undefined)
+      .then((v) => alive && setScholarMasters(v))
+      .catch(() => alive && setScholarMasters([]))
+    return () => {
+      alive = false
+    }
+  }, [academyId])
+
+  async function addScholarship(enrollmentId: number) {
+    if (scholar.pick === '') return
+    setScholar((c) => ({ ...c, busy: true, err: null }))
+    try {
+      // 할인율은 안 보낸다 — 서버가 마스터 값을 복사한다(다르게 보내면 400)
+      await grantScholarship(enrollmentId, scholar.pick)
+      const items = await listStudentScholarships(enrollmentId)
+      setScholar({ items, pick: '', busy: false, err: null })
+      table.reload()
+    } catch (e) {
+      setScholar((c) => ({ ...c, busy: false, err: e instanceof ApiError ? e.message : '장학을 주지 못했습니다.' }))
+    }
+  }
+
+  async function removeScholarship(item: ScholarshipItem, enrollmentId: number) {
+    setScholar((c) => ({ ...c, busy: true, err: null }))
+    try {
+      await revokeScholarship(item.id)
+      const items = await listStudentScholarships(enrollmentId)
+      setScholar({ items, pick: '', busy: false, err: null })
+      table.reload()
+    } catch (e) {
+      setScholar((c) => ({ ...c, busy: false, err: e instanceof ApiError ? e.message : '장학을 회수하지 못했습니다.' }))
+    }
+  }
+
   function openInfo(r: Student) {
     setInfoErr(null)
     setInfoDone(null)
+    setAcct({ busyId: null, msg: null, err: null })
+    setScholar({ items: [], pick: '', busy: false, err: null })
+    void listStudentScholarships(r.enrollmentId)
+      .then((items) => setScholar((c) => ({ ...c, items })))
+      .catch(() => setScholar((c) => ({ ...c, items: [] })))
     setHr({ open: false, teachers: null, teacherId: '', reason: '', busy: false, err: null })
     setInfoEdit({ row: r, loaded: null, form: emptyInfo() })
     void getStudent(r.enrollmentId)
@@ -881,6 +1030,91 @@ function Content() {
                     반은 그대로 두고 이 학생만 다른 선생님이 맡습니다. 누르면 바로 반영되고, 반을 옮기면 반 담임으로
                     돌아갑니다.
                   </div>
+                </div>
+              </div>
+
+              {/* ★ 장학 '종류' 와 다르다 — 여기는 **이 학생에게 실제로 부여된 것**이다.
+                     코드로 잇기 때문에 마스터에 없는 값은 서버가 막는다 */}
+              <div className="frow">
+                <label>장학</label>
+                <div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', minHeight: 34 }}>
+                    {scholar.items.length === 0 && <span style={{ color: 'var(--muted)' }}>없음</span>}
+                    {scholar.items.map((it) => (
+                      <span key={it.id} className="mk verified" style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                        {scholarMasters.find((m) => m.code === it.scholarshipType)?.name ?? it.scholarshipType}
+                        {it.discountRate ? ` ${it.discountRate}%` : ''}
+                        <button
+                          type="button"
+                          className="btn"
+                          style={{ padding: '0 5px', fontSize: 11 }}
+                          disabled={scholar.busy}
+                          title="회수합니다"
+                          onClick={() => void removeScholarship(it, infoEdit.row.enrollmentId)}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                    <select
+                      className="sel"
+                      value={scholar.pick}
+                      onChange={(e) => setScholar({ ...scholar, pick: e.target.value })}
+                    >
+                      <option value="">장학 고르기</option>
+                      {scholarMasters.map((m) => (
+                        <option key={m.id} value={m.code}>
+                          {m.name} ({m.discountRate}%)
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="btn"
+                      disabled={scholar.busy || scholar.pick === ''}
+                      onClick={() => void addScholarship(infoEdit.row.enrollmentId)}
+                    >
+                      부여
+                    </button>
+                  </div>
+                  {scholarMasters.length === 0 && (
+                    <div className="hint">등록된 장학 종류가 없습니다. 기초 관리 → 장학 종류에서 먼저 만드세요.</div>
+                  )}
+                  {scholar.err && <div className="hint" style={{ color: 'var(--red)' }}>{scholar.err}</div>}
+                </div>
+              </div>
+
+              {/* ★ 앱 계정. **학생이 비밀번호를 5회 틀리면 잠기고 저절로 안 풀린다** —
+                     풀어 줄 자리가 없어서 그 학생은 앱을 못 썼다(2026-09-27 실테스트).
+                  ★ '가입 안 함' 과 '잠김' 은 다른 상태다. 가입 안 한 학생은 계정 자체가 없다. */}
+              <div className="frow">
+                <label>앱 계정</label>
+                <div>
+                  {infoEdit.loaded.appAccount == null ? (
+                    <div style={{ color: 'var(--muted)' }}>앱에 가입하지 않았습니다.</div>
+                  ) : (
+                    <AppAccountRow
+                      who="학생"
+                      account={infoEdit.loaded.appAccount}
+                      busyId={acct.busyId}
+                      onUnlock={(a) => void unlockApp(a, '학생')}
+                      onTemp={(a) => void issueTemp(a, '학생')}
+                    />
+                  )}
+                  {(infoEdit.loaded.guardianAccounts ?? []).map((g, i) => (
+                    <AppAccountRow
+                      key={g.accountId}
+                      who={`학부모${(infoEdit.loaded?.guardianAccounts?.length ?? 0) > 1 ? ` ${i + 1}` : ''}`}
+                      account={g}
+                      busyId={acct.busyId}
+                      onUnlock={(a) => void unlockApp(a, '학부모')}
+                      onTemp={(a) => void issueTemp(a, '학부모')}
+                    />
+                  ))}
+                  {acct.msg && <div className="hint" style={{ color: 'var(--mint-d)' }}>{acct.msg}</div>}
+                  {acct.err && <div className="hint" style={{ color: 'var(--red)' }}>{acct.err}</div>}
                 </div>
               </div>
             </>

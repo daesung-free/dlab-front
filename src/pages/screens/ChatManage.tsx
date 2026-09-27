@@ -4,12 +4,16 @@ import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
+import { listClasses, type ClassGroup } from '../../api/classes'
+import { searchStudents, type Student } from '../../api/students'
 import {
   NOTICE_SCOPE_LABEL,
   deleteNotice,
   listNotices,
   postNoticeToAll,
   postNoticeToBranch,
+  postNoticeToClass,
+  postNoticeToStudent,
   patchNotice,
   type Notice as ApiNotice,
 } from '../../api/notices'
@@ -180,7 +184,14 @@ function Content() {
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   // 전체 발송은 본사만 가능하다 — 서버가 경로 단위로 권한을 건다
-  const [scope, setScope] = useState<'ALL' | 'BRANCH'>('BRANCH')
+  /* ★ 반·개인 공지는 **담임 업무의 기본**인데 화면이 지점·전체만 보내고 있었다.
+       호출 함수는 있었는데 부르는 자리가 없었다(2026-09-27 실테스트 P2) */
+  const [scope, setScope] = useState<'ALL' | 'BRANCH' | 'CLASS' | 'INDIVIDUAL'>('BRANCH')
+  const [classId, setClassId] = useState('')
+  const [enrollmentId, setEnrollmentId] = useState('')
+  const [studentQuery, setStudentQuery] = useState('')
+  const [classes, setClasses] = useState<ClassGroup[]>([])
+  const [students, setStudents] = useState<Student[]>([])
   const [saving, setSaving] = useState(false)
   /* 삭제는 되돌릴 수 없고 학생 앱에서도 빠진다 — 한 번 묻는다 */
   const [removing, setRemoving] = useState<ApiNotice | null>(null)
@@ -223,14 +234,37 @@ function Content() {
     if (inboxVer > 0) setTab('request')
   }, [inboxVer])
 
+  /* 반·학생 선택지. 공지 작성 창을 열 때만 필요하지만 지점이 바뀌면 같이 바뀐다 */
+  useEffect(() => {
+    if (academyId === null) {
+      setClasses([])
+      setStudents([])
+      return
+    }
+    let alive = true
+    void listClasses(new Date().getFullYear(), academyId)
+      .then((v) => alive && setClasses(v.filter((c) => c.academyId === academyId)))
+      .catch(() => alive && setClasses([]))
+    void searchStudents({ status: 'ENROLLED', size: 2000, academyId })
+      .then((p) => alive && setStudents(p.rows))
+      .catch(() => alive && setStudents([]))
+    return () => {
+      alive = false
+    }
+  }, [academyId])
+
   async function send() {
     if (title.trim() === '' || content.trim() === '') return
     setSaving(true)
     try {
       if (scope === 'ALL') await postNoticeToAll(title.trim(), content.trim())
+      else if (scope === 'CLASS') await postNoticeToClass(Number(classId), title.trim(), content.trim())
+      else if (scope === 'INDIVIDUAL') await postNoticeToStudent(Number(enrollmentId), title.trim(), content.trim())
       else if (academyId !== null) await postNoticeToBranch(academyId, title.trim(), content.trim())
       setTitle('')
       setContent('')
+      setClassId('')
+      setEnrollmentId('')
       setComposing(false)
       await load()
     } catch (err) {
@@ -365,12 +399,71 @@ function Content() {
                   <div className="card-sec-b">
                     <div className="frow">
                       <label className="req">발송 범위</label>
-                      <select className="sel" value={scope} onChange={(e) => setScope(e.target.value as 'ALL' | 'BRANCH')}>
+                      <select
+                        className="sel"
+                        value={scope}
+                        onChange={(e) => setScope(e.target.value as 'ALL' | 'BRANCH' | 'CLASS' | 'INDIVIDUAL')}
+                      >
                         {/* 전체 발송은 본사만 — 지점이 하나만 보이는 계정에는 뜨지 않는다 */}
                         {academies.length > 1 && <option value="ALL">전체 (본사)</option>}
                         <option value="BRANCH">지점</option>
+                        <option value="CLASS">반</option>
+                        <option value="INDIVIDUAL">학생 한 명</option>
                       </select>
                     </div>
+
+                    {scope === 'CLASS' && (
+                      <div className="frow">
+                        <label className="req">반</label>
+                        <div>
+                          <select className="sel" value={classId} onChange={(e) => setClassId(e.target.value)}>
+                            <option value="">선택하세요</option>
+                            {classes.map((c) => (
+                              <option key={c.id} value={String(c.id)}>
+                                {c.name}
+                                {c.homeroomTeacherName ? ` · ${c.homeroomTeacherName}` : ''}
+                              </option>
+                            ))}
+                          </select>
+                          {classes.length === 0 && <div className="hint">이 지점에 등록된 반이 없습니다.</div>}
+                        </div>
+                      </div>
+                    )}
+
+                    {scope === 'INDIVIDUAL' && (
+                      <div className="frow">
+                        <label className="req">학생</label>
+                        <div>
+                          <input
+                            className="inp"
+                            placeholder="이름 · 학번으로 찾기"
+                            value={studentQuery}
+                            onChange={(e) => setStudentQuery(e.target.value)}
+                          />
+                          <select
+                            className="sel"
+                            style={{ marginTop: 6 }}
+                            value={enrollmentId}
+                            onChange={(e) => setEnrollmentId(e.target.value)}
+                          >
+                            <option value="">선택하세요</option>
+                            {students
+                              .filter((st) => {
+                                const q = studentQuery.trim()
+                                return q === '' || st.name.includes(q) || (st.studentNo ?? '').includes(q)
+                              })
+                              .slice(0, 200)
+                              .map((st) => (
+                                <option key={st.enrollmentId} value={String(st.enrollmentId)}>
+                                  {st.studentNo ?? '-'} · {st.name}
+                                </option>
+                              ))}
+                          </select>
+                          {/* 개인 공지는 그 학생과 학부모에게만 간다 — 반 전체로 새지 않는다 */}
+                          <div className="hint">고른 학생과 그 학부모에게만 갑니다.</div>
+                        </div>
+                      </div>
+                    )}
                     <div className="frow">
                       <label className="req">제목</label>
                       <input className="inp" value={title} onChange={(e) => setTitle(e.target.value)} />
@@ -385,7 +478,14 @@ function Content() {
                       </button>
                       <button
                         className="btn pri"
-                        disabled={saving || !title.trim() || !content.trim() || (scope === 'BRANCH' && academyId === null)}
+                        disabled={
+                          saving ||
+                          !title.trim() ||
+                          !content.trim() ||
+                          (scope === 'BRANCH' && academyId === null) ||
+                          (scope === 'CLASS' && classId === '') ||
+                          (scope === 'INDIVIDUAL' && enrollmentId === '')
+                        }
                         onClick={() => void send()}
                       >
                         <Icon name="send" size={14} /> {saving ? '발송 중…' : '발송'}

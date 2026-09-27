@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DataTable, ExcelButton, type Column } from '../../components/common'
+import { DataTable, ExcelButton, Modal, type Column } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
+import { listClasses, type ClassGroup } from '../../api/classes'
 import { useAcademy } from '../../auth/AcademyContext'
 import {
   QUESTION_TYPE_LABEL,
@@ -10,6 +11,8 @@ import {
   SURVEY_RUN_STATE_LABEL,
   SURVEY_TYPE_LABEL,
   closeSurvey,
+  deleteSurvey,
+  updateSurvey,
   exportSurveyResponses,
   createSurvey as createSurveyApi,
   getSurveyResult,
@@ -118,7 +121,14 @@ interface Survey {
 
 const KINDS: Survey['kind'][] = ['가채점', '만족도', '수요조사', '기타']
 
-const TARGETS = ['전체 재원생', '자연계열', '인문계열', '급식 신청자', '1반', '2반', '3반', '4반']
+/* ★ 예전에는 여기에 `['전체 재원생','자연계열','인문계열','급식 신청자','1반'…'4반']` 이
+     **박혀 있었다.** 고르든 말든 전부 지점 전체(BRANCH)로 나갔고, 실제 반 이름과도 달랐다
+     (대구에는 '테스트_N수1반' 하나뿐인데 1~4반이 떴다. 2026-09-27 실테스트).
+     지금은 지점 전체 + **그 지점의 진짜 반**을 읽어서 보여주고, 고른 값이 실제로 나간다.
+   ★ 계열·급식 신청자는 서버에 그 범위가 없다(scope 는 ALL·BRANCH·CLASS 셋뿐) —
+     고를 수 없게 두되 지우지는 않는다. 생기면 여기에 붙인다. */
+const BRANCH_TARGET = '전체 재원생'
+const UNSUPPORTED_TARGETS = ['자연계열', '인문계열', '급식 신청자']
 
 function q(id: string, type: QType, title: string, options: string[] = [], required = true): Question {
   return { id, type, title, required, options }
@@ -375,6 +385,26 @@ function Content() {
   const [apiLoading, setApiLoading] = useState(true)
   const [apiError, setApiError] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
+  /* 설문 대상 선택지. 반 이름을 화면에 박아 두면 실제 반과 어긋난다 */
+  const [classes, setClasses] = useState<ClassGroup[]>([])
+  /* 설문 수정(제목·안내문·기간). **문항·대상은 서버가 못 바꾸게 한다** — 응답이 섞이기 때문이다 */
+  const [editing, setEditing] = useState<{ row: SurveySummary; title: string; opensAt: string; closesAt: string } | null>(null)
+  const [removing, setRemoving] = useState<SurveySummary | null>(null)
+  const [rowBusy, setRowBusy] = useState(false)
+
+  useEffect(() => {
+    if (academyId === null) {
+      setClasses([])
+      return
+    }
+    let alive = true
+    listClasses(new Date().getFullYear(), academyId)
+      .then((v) => alive && setClasses(v.filter((c) => c.academyId === academyId)))
+      .catch(() => alive && setClasses([]))
+    return () => {
+      alive = false
+    }
+  }, [academyId])
   const [apiNotice, setApiNotice] = useState<string | null>(null)
 
   const loadSurveys = useCallback(async () => {
@@ -433,10 +463,13 @@ function Content() {
       return
     }
 
+    /* 대상이 숫자면 반 id 다 — 그 반에게만 간다. 아니면 지점 전체 */
+    const classId = /^\d+$/.test(d.target) ? Number(d.target) : null
     const body: SurveyCreate = {
       surveyType: d.kind === '가채점' ? 'GRADE_INPUT' : 'GENERAL',
-      scope: 'BRANCH',
+      scope: classId === null ? 'BRANCH' : 'CLASS',
       academyId,
+      ...(classId === null ? {} : { classId }),
       title: d.title.trim(),
       anonymous: true,
       /* ★ 입력칸은 datetime-local 이라 값이 이미 `2026-09-10T09:00` 이다.
@@ -468,6 +501,45 @@ function Content() {
       await loadSurveys()
     } catch (err) {
       setApiError(err instanceof ApiError ? err.message : '마감하지 못했습니다.')
+    }
+  }
+
+  async function saveEdit() {
+    if (editing === null) return
+    const opensAt = toInstant(editing.opensAt)
+    const closesAt = toInstant(editing.closesAt)
+    if (!opensAt || !closesAt) {
+      setApiError('응답 기간을 시작·마감 둘 다 입력하세요.')
+      return
+    }
+    setRowBusy(true)
+    try {
+      await updateSurvey(editing.row.id, { title: editing.title.trim(), opensAt, closesAt })
+      setEditing(null)
+      setApiNotice('설문을 수정했습니다.')
+      await loadSurveys()
+    } catch (err) {
+      setApiError(err instanceof ApiError ? err.message : '수정하지 못했습니다.')
+    } finally {
+      setRowBusy(false)
+    }
+  }
+
+  async function removeOne() {
+    if (removing === null) return
+    setRowBusy(true)
+    try {
+      await deleteSurvey(removing.id)
+      const gone = removing.title
+      setRemoving(null)
+      setApiNotice(`${gone} 설문을 지웠습니다.`)
+      await loadSurveys()
+    } catch (err) {
+      // 응답이 있으면 서버가 막는다 — 그 문구를 그대로 띄우고 '마감' 을 권한다
+      setApiError(err instanceof ApiError ? err.message : '지우지 못했습니다.')
+      setRemoving(null)
+    } finally {
+      setRowBusy(false)
     }
   }
 
@@ -548,11 +620,34 @@ function Content() {
             <button
               className="btn"
               style={{ padding: '4px 9px', fontSize: 11.5 }}
+              onClick={() =>
+                setEditing({
+                  row: r,
+                  title: r.title,
+                  opensAt: (r.opensAt ?? '').slice(0, 16),
+                  closesAt: (r.closesAt ?? '').slice(0, 16),
+                })
+              }
+              title="제목과 기간을 고칩니다. 문항·대상은 못 바꿉니다"
+            >
+              수정
+            </button>
+            <button
+              className="btn"
+              style={{ padding: '4px 9px', fontSize: 11.5 }}
               disabled={r.status === 'CLOSED'}
               onClick={() => void closeOne(r.id)}
               title="기간이 남아도 즉시 마감합니다"
             >
               마감
+            </button>
+            <button
+              className="btn"
+              style={{ padding: '4px 9px', fontSize: 11.5, color: 'var(--red)' }}
+              onClick={() => setRemoving(r)}
+              title="응답이 있으면 지워지지 않습니다"
+            >
+              삭제
             </button>
           </div>
         ),
@@ -694,13 +789,26 @@ function Content() {
               <>
                 <div className="frow">
                   <label className="req">대상</label>
-                  <select className="sel" value={draft.target} onChange={(e) => patch({ target: e.target.value })}>
-                    {TARGETS.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
+                  <div>
+                    <select className="sel" value={draft.target} onChange={(e) => patch({ target: e.target.value })}>
+                      <option value={BRANCH_TARGET}>{BRANCH_TARGET}</option>
+                      {classes.map((c) => (
+                        <option key={c.id} value={String(c.id)}>
+                          {c.name}
+                        </option>
+                      ))}
+                      {UNSUPPORTED_TARGETS.map((t) => (
+                        <option key={t} value={t} disabled>
+                          {t} (준비 중)
+                        </option>
+                      ))}
+                    </select>
+                    <div className="hint">
+                      {classes.length === 0
+                        ? '이 지점에 등록된 반이 없습니다. 반을 만들면 반별로 보낼 수 있습니다.'
+                        : '반을 고르면 그 반 학생에게만 갑니다.'}
+                    </div>
+                  </div>
                 </div>
 
                 <div className="frow">
@@ -911,6 +1019,62 @@ function Content() {
 
   return (
     <>
+      {editing && (
+        <Modal
+          title="설문 수정"
+          sub="제목과 응답 기간만 고칩니다. 문항·대상은 응답이 섞여 바꿀 수 없습니다."
+          confirmLabel="저장"
+          busy={rowBusy}
+          confirmDisabled={editing.title.trim() === ''}
+          onConfirm={() => void saveEdit()}
+          onClose={() => setEditing(null)}
+        >
+          <div className="frow">
+            <label className="req">설문명</label>
+            <input
+              className="inp"
+              value={editing.title}
+              onChange={(e) => setEditing({ ...editing, title: e.target.value })}
+            />
+          </div>
+          <div className="frow">
+            <label className="req">응답 기간</label>
+            <div className="two">
+              <input
+                className="inp"
+                type="datetime-local"
+                value={editing.opensAt}
+                onChange={(e) => setEditing({ ...editing, opensAt: e.target.value })}
+              />
+              <input
+                className="inp"
+                type="datetime-local"
+                value={editing.closesAt}
+                onChange={(e) => setEditing({ ...editing, closesAt: e.target.value })}
+              />
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {removing && (
+        <Modal
+          title={`${removing.title} 설문을 지울까요?`}
+          sub="되돌릴 수 없습니다."
+          confirmLabel="지우기"
+          danger
+          busy={rowBusy}
+          onConfirm={() => void removeOne()}
+          onClose={() => setRemoving(null)}
+        >
+          <div className="note-box">
+            <div>
+              응답이 들어온 설문은 지워지지 않습니다. 더 받지 않으려면 <b>마감</b>을 쓰세요.
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {/* ★ 이 스트립은 서버가 아니라 화면 안의 상수(SURVEYS·TEMPLATES)로 그린다.
              아래 목록은 서버 값이라 **위아래 숫자가 안 맞는다.** 어디까지가 실데이터인지
              화면이 스스로 밝히지 않으면 보는 사람이 구분할 방법이 없다. */}
