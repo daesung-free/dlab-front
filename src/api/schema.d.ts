@@ -4353,6 +4353,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/lectures/full": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 한 번에 개설 — 특강 + 회차 + 상태 + 노출
+         * @description 한 번에 개설 — 특강 + 회차 + 상태 + 노출.
+         *
+         *      <p>개설 화면이 저장 한 번에 요청 5개를 보내던 것을 한 번으로 줄인다. 중간에 실패하면
+         *      <b>아무것도 만들어지지 않는다</b> — 담당 「미지정」·회차 0개인 반쪽 특강이 남지 않는다.
+         *
+         *      <p>단건 API(<code>POST /lectures</code>, <code>POST /{id</code>/sessions} …)는 그대로 둔다 —
+         *      이미 만든 특강에 회차를 더하거나 상태만 바꾸는 일이 따로 있다.
+         */
+        post: operations["createFully"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/lectures/applications/{applicationId}/promote": {
         parameters: {
             query?: never;
@@ -12613,6 +12639,26 @@ export interface components {
             /** Format: int32 */
             graduationYear?: number;
         };
+        /** @description 앱 계정 상태. */
+        AccountView: {
+            /** Format: int64 */
+            accountId?: number;
+            loginId?: string;
+            /** @enum {string} */
+            status?: "PENDING" | "ACTIVE" | "SUSPENDED" | "WITHDRAWN";
+            /**
+             * @description 지금 잠겨 있는가. <b><code>status</code> 와 별개다</b> —
+             *                      관리자 정지(SUSPENDED)와 로그인 실패 잠금은 다른 사건이다
+             */
+            locked?: boolean;
+            /**
+             * Format: date-time
+             * @description 잠긴 시각. 잠기지 않았으면 비어 있다
+             */
+            lockedAt?: string;
+            /** @description 임시 비밀번호 상태. 바꾸기 전에는 앱이 다른 화면으로 못 간다 */
+            mustChangePassword?: boolean;
+        };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
          *      성공: { "success": true, "data": ... }
@@ -12707,6 +12753,8 @@ export interface components {
              *                                지정이 없으면 <code>null</code>
              */
             homeroomOverride?: components["schemas"]["HomeroomOverrideView"];
+            appAccount?: components["schemas"]["AccountView"];
+            guardianAccounts?: components["schemas"]["AccountView"][];
             /** @description 개인정보가 가려졌는지. 화면이 "원본 보기" 안내를 띄우는 근거다 */
             masked?: boolean;
         };
@@ -14125,6 +14173,47 @@ export interface components {
             sessionNo?: number;
             /** Format: date */
             sessionDate?: string;
+            startTime?: string;
+            endTime?: string;
+            room?: string;
+        };
+        /**
+         * @description 한 번에 개설 — 특강 + 회차 + 상태 + 노출.
+         *
+         *      <p>개설 화면이 저장 한 번에 요청 5개를 보내던 것을 한 번으로 줄인다. 중간에 실패하면
+         *      <b>아무것도 만들어지지 않는다</b> — 반쪽짜리 특강이 남지 않는다.
+         */
+        LectureCreateFull: {
+            /** Format: int64 */
+            academyId: number;
+            /** Format: int32 */
+            year: number;
+            /** @enum {string} */
+            lectureType?: "LECTURE" | "BRIEFING";
+            name: string;
+            /** Format: int64 */
+            categoryId?: number;
+            /** Format: int64 */
+            teacherId?: number;
+            /** Format: int32 */
+            capacity?: number;
+            /** Format: int32 */
+            fee?: number;
+            description?: string;
+            /** @description 회차 목록. 비우면 회차 없이 만든다 */
+            sessions?: components["schemas"]["SessionInput"][];
+            /**
+             * @description <code>OPEN</code> 이면 담당 강사가 있어야 한다. 비우면 준비 중이다
+             * @enum {string}
+             */
+            status?: "DRAFT" | "OPEN" | "CLOSED" | "DONE" | "CANCELED";
+            /** @description 앱 노출 여부. 상태와 별개 축이다 */
+            visible?: boolean;
+        };
+        /** @description 한 번에 개설할 때 넘기는 회차 하나. */
+        SessionInput: {
+            /** Format: date */
+            date: string;
             startTime?: string;
             endTime?: string;
             room?: string;
@@ -17397,8 +17486,12 @@ export interface components {
             attendance?: components["schemas"]["AttendanceStat"];
             studyTime?: components["schemas"]["StudyTimeStat"];
             penalty?: components["schemas"]["PenaltyStat"];
+            /** @description 담임에게는 비어 있다 — 담임 업무가 아니다 */
             meals?: components["schemas"]["MealStat"];
+            /** @description 담임에게는 비어 있다 */
             revenue?: components["schemas"]["RevenueStat"];
+            /** @description 오늘 처리할 것. 화면 상단 카드 2개가 쓴다 */
+            todo?: components["schemas"]["TodoStat"];
         };
         PenaltyStat: {
             /** Format: int64 */
@@ -17458,6 +17551,25 @@ export interface components {
             /** Format: int64 */
             countedDays?: number;
             ranking?: components["schemas"]["RankingRow"][];
+        };
+        /**
+         * @description 오늘 처리할 것.
+         *
+         *      <p>둘 다 <b>지금 이 순간의 값</b>이라 기간(from·to)과 무관하다 — 기간을 바꿔도
+         *      이 숫자는 그대로다. 화면이 기간 필터 옆에 두면 오해를 부른다.
+         */
+        TodoStat: {
+            /**
+             * Format: int64
+             * @description 승인 대기 중인 신청(사유·정기일정·방화벽 전부)
+             */
+            pendingApprovals?: number;
+            /**
+             * Format: int64
+             * @description 오늘 사유 없이 등원 기록이 없는 학생 수.
+             *                                  <b>확정 전 값</b>이라 등원하면 줄어든다
+             */
+            unexcusedAbsentToday?: number;
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -26253,6 +26365,30 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseSession"];
+                };
+            };
+        };
+    };
+    createFully: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LectureCreateFull"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseLectureDetail"];
                 };
             };
         };
