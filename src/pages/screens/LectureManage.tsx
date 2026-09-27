@@ -16,10 +16,9 @@ import {
   type LectureAttendanceStatus,
   listLectures,
   changeLectureStatus,
-  createLecture,
+  createLectureFull,
   deleteLecture,
   deleteLectureSession,
-  createLectureSession,
   setLectureVisible,
   cancelApplication,
   promoteApplicant,
@@ -662,77 +661,45 @@ function Content() {
     setSaveNote(null)
     setError(null)
 
-    let made: ApiLecture | null = null
+    /* ★ **한 번에 만든다**(2026-09-27 서버 추가). 예전에는 등록 → 상세 → 회차 N건 →
+         상태 → 노출로 최대 다섯 번 나눠 보냈고, 중간에 끊기면 회차 없는 특강이나
+         기간 없는 특강이 남았다. 지금은 중간에 실패하면 **아무것도 안 만들어진다.**
+       ★ 접수 기간만 시점이라 변환이 필요하다. 날짜 문자열 그대로 보내면 400 이고,
+         `+'T00:00:00Z'` 로 붙이면 UTC 자정 = 한국 09:00 이 된다. */
     try {
-      made = await createLecture({
+      const made = await createLectureFull({
         academyId,
         year: Number(draft.month.slice(0, 4)),
         lectureType: 'LECTURE',
         name: draft.name.trim(),
-      })
-    } catch (err) {
-      setSaving('')
-      setSaveNote({ ok: false, text: err instanceof ApiError ? err.message : '특강을 만들지 못했습니다.' })
-      return
-    }
-
-    const steps: string[] = ['특강을 만들었습니다']
-
-    try {
-      await updateLecture(made.id, {
         capacity: draft.capacity,
         fee: draft.fee,
-        startDate: draft.startDate,
-        endDate: draft.endDate,
-        /* ★ 접수 기간만 시점이다(lectures.ts 주석). 날짜 문자열 그대로 보내면 400.
-             ★ `+'T00:00:00Z'` 로 붙이면 UTC 자정 = 한국 09:00 이 된다. 로컬로 해석시켜 변환한다. */
+        startDate: draft.startDate || undefined,
+        endDate: draft.endDate || undefined,
         applyFrom: toInstant(draft.applyFrom, '00:00'),
         applyTo: toInstant(draft.applyTo, '23:59'),
         teacherId: draft.teacherId ?? undefined,
         description: draft.memo || undefined,
+        sessions: sessions.map((date) => ({ date, room: draft.room || undefined })),
+        status: mode === 'open' ? 'OPEN' : undefined,
+        visible: mode === 'open' ? true : undefined,
       })
-      steps.push('상세 정보를 저장했습니다')
-    } catch {
-      steps.push('상세 정보(정원·기간·담당)는 저장하지 못했습니다 — 목록에서 수정해 주세요')
+      await loadLectures()
+      setSaving('')
+      setDraft(null)
+      setTab('list')
+      setSaveNote({
+        ok: true,
+        text:
+          mode === 'open'
+            ? `${made.name} — 회차 ${sessions.length}건과 함께 만들고 접수를 열었습니다.`
+            : `${made.name} — 회차 ${sessions.length}건과 함께 만들었습니다. 접수는 목록에서 엽니다.`,
+      })
+    } catch (err) {
+      setSaving('')
+      // 담당 강사 없이 OPEN 을 누른 경우가 여기로 온다 — 서버 문구가 무엇을 해야 하는지 말해준다
+      setSaveNote({ ok: false, text: err instanceof ApiError ? err.message : '특강을 만들지 못했습니다.' })
     }
-
-    let done = 0
-    for (const date of sessions) {
-      try {
-        await createLectureSession(made.id, { sessionDate: date, room: draft.room })
-        done += 1
-      } catch {
-        break
-      }
-    }
-    steps.push(
-      done === sessions.length
-        ? `회차 ${done}건을 만들었습니다`
-        : `회차는 ${sessions.length}건 중 ${done}건만 만들어졌습니다 — 나머지는 다시 추가해 주세요`,
-    )
-
-    if (mode === 'open') {
-      try {
-        await changeLectureStatus(made.id, 'OPEN')
-        await setLectureVisible(made.id, true)
-        steps.push('접수를 열고 앱에 노출했습니다')
-      } catch (err) {
-        /* ★ 이유를 그대로 보여준다. 서버가 담당 강사 없는 특강의 접수 시작을 막는데
-             (2026-09-25, "담당 강사를 지정해야 접수를 시작할 수 있습니다"),
-             '실패했습니다' 로 뭉뚱그리면 무엇을 고쳐야 하는지 알 수 없다 */
-        steps.push(
-          err instanceof ApiError
-            ? `접수 열기는 실패했습니다 — ${err.message}`
-            : '접수 열기는 실패했습니다 — 목록에서 상태를 바꿔 주세요',
-        )
-      }
-    }
-
-    await loadLectures()
-    setSaving('')
-    setDraft(null)
-    setTab('list')
-    setSaveNote({ ok: true, text: steps.join(' · ') })
   }
 
   /**
