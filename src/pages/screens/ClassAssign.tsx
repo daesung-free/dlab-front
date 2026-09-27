@@ -326,7 +326,11 @@ function Content() {
                 value={form.teacherId}
                 onChange={(e) => setForm({ ...form, teacherId: e.target.value })}
               >
-                <option value="">{editing.homeroomTeacherName ?? '미지정'}</option>
+                {/* ★ 첫 항목은 '바꾸지 않음' 이다. 현재 담임 이름만 적어 뒀더니 아래 목록에도
+                       같은 사람이 있어 **한 사람이 두 번 뜨는 것처럼 보였다**(2026-09-27 운영 확인) */}
+                <option value="">
+                  {editing.homeroomTeacherName ? `그대로 두기 (지금 ${editing.homeroomTeacherName})` : '담임 없음'}
+                </option>
                 {teachers.map((t) => (
                   <option key={t.id} value={String(t.id)}>
                     {t.name}
