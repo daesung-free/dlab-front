@@ -29,6 +29,7 @@ import {
   type LectureSession,
 } from '../../api/lectures'
 import { listTeachers, type TeacherRow } from '../../api/accounts'
+import { listRooms, type Room } from '../../api/masters'
 import { createBilling, listStudentBillings } from '../../api/billing'
 import { searchStudents } from '../../api/students'
 import type { Mockup } from './types'
@@ -182,7 +183,8 @@ const APPLICANT_COLUMNS: Column<ApplicantRow>[] = [
 
 /* ══ 특강 개설 ══ */
 
-const ROOMS = ['201호', '202호', '301호', '302호', '401호']
+/* ★ 강의실은 **지점마다 다르다.** 예전에는 이 다섯 개가 화면에 박혀 있어서, 없는 호실이
+     선택지로 뜨고 실제 호실은 고를 수 없었다(2026-09-27 실테스트). 기초 관리의 강의실을 읽는다 */
 const TRACK_TARGETS = ['전체', '자연계열', '인문계열']
 const DOW_LABELS = ['월', '화', '수', '목', '금', '토']
 
@@ -232,7 +234,7 @@ const EMPTY_DRAFT: LectureDraft = {
   name: '',
   month: '2026-07',
   teacherId: null,
-  room: ROOMS[0],
+  room: '',
   capacity: 25,
   fee: 280000,
   target: '전체',
@@ -322,6 +324,7 @@ function Content() {
   const [selectedApply, setSelectedApply] = useState<string[]>([])
   const [selectedWait, setSelectedWait] = useState<string[]>([])
   const [draft, setDraft] = useState<LectureDraft | null>(null)
+  const [rooms, setRooms] = useState<Room[]>([])
 
   /* ── 실연동 ── */
   const { academyId } = useAcademy()
@@ -479,6 +482,21 @@ function Content() {
     listTeachers(academyId)
       .then((v) => alive && setTeachers(v))
       .catch(() => alive && setTeachers([]))
+    return () => {
+      alive = false
+    }
+  }, [academyId])
+
+  /* 강의실 선택지 — 지점마다 다르다. 사용 중지된 방은 빼고 받는다 */
+  useEffect(() => {
+    if (academyId === null) {
+      setRooms([])
+      return
+    }
+    let alive = true
+    listRooms(academyId, true)
+      .then((v) => alive && setRooms(v))
+      .catch(() => alive && setRooms([]))
     return () => {
       alive = false
     }
@@ -976,13 +994,21 @@ function Content() {
 
               <div className="frow">
                 <label className="req">강의실</label>
-                <select className="sel" value={draft.room} onChange={(e) => patch({ room: e.target.value })}>
-                  {ROOMS.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
-                </select>
+                <div>
+                  <select className="sel" value={draft.room} onChange={(e) => patch({ room: e.target.value })}>
+                    <option value="">선택하세요</option>
+                    {rooms.map((r) => (
+                      <option key={r.id} value={r.name ?? r.roomNo}>
+                        {r.name ? `${r.roomNo} · ${r.name}` : r.roomNo}
+                      </option>
+                    ))}
+                  </select>
+                  {rooms.length === 0 && (
+                    <div className="hint">
+                      이 지점에 등록된 강의실이 없습니다. 기초 관리 → 강의실에서 먼저 등록하세요.
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="frow">

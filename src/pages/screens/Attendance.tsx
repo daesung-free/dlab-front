@@ -25,10 +25,12 @@ import {
   addTagging,
   exportAttendance,
   fetchAttendanceBoard,
+  listAttendanceModifications,
   fixAttendanceStatus,
   recalculateStudyTime,
   type FixableStatus,
   type TaggingEvent,
+  type AttendanceModification,
   type AttendanceRow,
   type AttendanceStatus,
 } from '../../api/attendance'
@@ -124,6 +126,8 @@ function Content() {
     reason: string
   } | null>(null)
   const [fixBusy, setFixBusy] = useState(false)
+  /* 그 학생의 정정 이력. **왜 결석이 정상 등원이 됐나** 에 답할 유일한 근거라 정정 화면에서 바로 보여준다 */
+  const [fixHistory, setFixHistory] = useState<AttendanceModification[] | null>(null)
   const [fixErr, setFixErr] = useState<string | null>(null)
 
   // 반 드롭다운은 하드코딩하지 않는다 — 지점·연도마다 다르다
@@ -294,6 +298,11 @@ function Content() {
             title={r.status === 'NOT_YET' ? '아직 지나지 않은 날입니다' : undefined}
             onClick={() => {
               setFixErr(null)
+              setFixHistory(null)
+              // 이 학생·이 날의 정정 이력. 실패해도 정정 자체는 되어야 하므로 조용히 비운다
+              void listAttendanceModifications(r.enrollmentId, r.date)
+                .then(setFixHistory)
+                .catch(() => setFixHistory([]))
               setFixing({
                 row: r,
                 mode: 'tagging',
@@ -352,6 +361,26 @@ function Content() {
           onConfirm={() => void submitFix()}
           onClose={() => setFixing(null)}
         >
+          {/* ★ 이 학생·이 날을 **누가 왜 고쳤는지**. 정정은 사람이 손으로 바꾸는 일이라
+                 나중에 "왜 결석이 정상 등원이 됐나" 에 답할 근거가 이것뿐이다 */}
+          {fixHistory !== null && fixHistory.length > 0 && (
+            <div className="note-box" style={{ marginBottom: 10 }}>
+              <div>
+                <b>이 날은 이미 {fixHistory.length}번 고쳤습니다.</b>
+                {fixHistory.slice(0, 3).map((h) => (
+                  <div key={h.id} style={{ fontSize: 12, marginTop: 4 }}>
+                    {h.modifiedAt.slice(0, 16).replace('T', ' ')} ·{' '}
+                    {h.addedEvent
+                      ? `${TAGGING_EVENT_LABEL[h.addedEvent] ?? h.addedEvent} 태깅 추가`
+                      : `${ATTENDANCE_STATUS_LABEL[h.beforeStatus as AttendanceStatus] ?? h.beforeStatus ?? '-'} → ${
+                          ATTENDANCE_STATUS_LABEL[h.afterStatus as AttendanceStatus] ?? h.afterStatus ?? '-'
+                        }`}
+                    {h.reason ? ` · ${h.reason}` : ''}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {/* ★ 두 방식이 다르다. 시각을 아는 경우(늦게 왔지만 몇 시인지 안다)는 태깅이 맞다 —
                  등·하원 시각이 생기고 순공시간이 다시 계산된다. 상태 정정은 결과만 못박는다. */}
           <div className="frow">

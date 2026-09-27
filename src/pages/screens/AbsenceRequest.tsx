@@ -13,6 +13,7 @@ import {
   fetchAbsenceRequests,
   registerAbsenceRequest,
   rejectRequest,
+  revokeRequest,
   type AbsenceRequestRow,
   type AbsenceType,
   type ApprovalStatus,
@@ -85,6 +86,9 @@ function Content() {
   /** 반려 사유 입력 모달. 사유는 학생·학부모에게 그대로 전달된다 */
   const [rejecting, setRejecting] = useState<{ row: AbsenceRequestRow; reason: string } | null>(null)
   const [rejectErr, setRejectErr] = useState<string | null>(null)
+  /* 승인 철회 — 승인된 건에만 뜬다. 사유가 필수다 */
+  const [revoking, setRevoking] = useState<{ row: AbsenceRequestRow; reason: string } | null>(null)
+  const [revokeErr, setRevokeErr] = useState<string | null>(null)
   const [actionMsg, setActionMsg] = useState<string | null>(null)
 
   // 서버 기본값과 같은 범위를 명시해서 보낸다 — 화면에 적은 기간과 실제 조회 범위를 맞추려는 것
@@ -123,20 +127,24 @@ function Content() {
    * ★ 반려는 **성공한 뒤에** 모달을 닫는다. 먼저 닫으면 서버가 거부했을 때 길게 쓴 사유가
    *   통째로 날아가고, 오류는 뒤 화면에 떠서 무엇이 문제인지도 모른다.
    */
-  async function act(row: AbsenceRequestRow, kind: 'approve' | 'reject', reason = '') {
+  async function act(row: AbsenceRequestRow, kind: 'approve' | 'reject' | 'revoke', reason = '') {
     setActing(row.approvalRequestId)
     setActionMsg(null)
     try {
       if (kind === 'approve') await approveRequest(row.approvalRequestId)
+      else if (kind === 'revoke') await revokeRequest(row.approvalRequestId, reason)
       else await rejectRequest(row.approvalRequestId, reason)
-      setActionMsg(`${row.name} · ${ABSENCE_TYPE_LABEL[row.type]} 건을 ${kind === 'approve' ? '승인' : '반려'}했습니다.`)
+      const what = kind === 'approve' ? '승인' : kind === 'revoke' ? '승인 철회' : '반려'
+      setActionMsg(`${row.name} · ${ABSENCE_TYPE_LABEL[row.type]} 건을 ${what}했습니다.`)
       setRejecting(null)
+      setRevoking(null)
       board.reload()
     } catch (err) {
       // 권한(대리승인 허용 범위)·이미 처리됨이 여기로 온다. 서버 문구를 그대로 보여준다
       const msg = err instanceof ApiError ? err.message : '처리에 실패했습니다.'
       // 반려 모달이 열려 있으면 그 안에서 보여준다 — 뒤 화면 배너는 모달에 가려 안 보인다
       if (kind === 'reject') setRejectErr(msg)
+      else if (kind === 'revoke') setRevokeErr(msg)
       else setActionMsg(msg)
     } finally {
       setActing(null)
@@ -226,8 +234,65 @@ function Content() {
     [acting],
   )
 
+  /* ★ 승인된 건에는 '승인 철회' 를 둔다. 승인 뒤 사정이 바뀌는 일이 실제로 있는데
+       (병원에 안 가게 됐다) 되돌릴 자리가 없어 그 상태로 굳었다 */
+  const approvedColumns = useMemo<Column<AbsenceRequestRow>[]>(
+    () => [
+      ...columns.filter((c) => c.key !== 'act'),
+      {
+        key: 'act',
+        header: '',
+        width: '110px',
+        align: 'center',
+        value: () => '',
+        render: (r) => (
+          <button
+            className="btn"
+            style={{ padding: '4px 10px', fontSize: 11.5, color: 'var(--red)' }}
+            disabled={acting === r.approvalRequestId}
+            onClick={() => setRevoking({ row: r, reason: '' })}
+            title="승인을 되돌립니다. 사유가 남습니다"
+          >
+            승인 철회
+          </button>
+        ),
+      },
+    ],
+    [columns, acting],
+  )
+
   return (
     <>
+      {revoking && (
+        <Modal
+          title="승인 철회"
+          sub={`${revoking.row.name} · ${ABSENCE_TYPE_LABEL[revoking.row.type]} 건의 승인을 되돌립니다.`}
+          confirmLabel="철회"
+          danger
+          busy={acting === revoking.row.approvalRequestId}
+          confirmDisabled={revoking.reason.trim() === ''}
+          error={revokeErr}
+          onConfirm={() => void act(revoking.row, 'revoke', revoking.reason.trim())}
+          onClose={() => setRevoking(null)}
+        >
+          <div className="note-box">
+            <div>
+              되돌리면 그 시간은 다시 <b>무단</b>이 됩니다. 벌점이 붙는지는 사유에 따라 갈리므로
+              나중에 판단할 수 있게 적어 주세요.
+            </div>
+          </div>
+          <div className="frow" style={{ marginTop: 10 }}>
+            <label className="req">사유</label>
+            <input
+              className="inp"
+              placeholder="예: 잘못 신청한 건으로 확인됨"
+              value={revoking.reason}
+              onChange={(e) => setRevoking({ ...revoking, reason: e.target.value })}
+            />
+          </div>
+        </Modal>
+      )}
+
       {rejecting && (
         <Modal
           title="반려 사유"
@@ -328,7 +393,8 @@ function Content() {
         <div style={{ padding: 14 }}>
           <DataTable
             nowrap
-            columns={columns}
+            /* 승인 탭에서는 '승인 철회' 가 붙은 열을 쓴다 */
+            columns={tab === 'APPROVED' ? approvedColumns : columns}
             rows={rows}
             rowKey={(r) => String(r.id)}
             loading={board.loading}

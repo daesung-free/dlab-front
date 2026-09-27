@@ -135,6 +135,24 @@ export function createSurvey(body: SurveyCreate): Promise<SurveySummary> {
   return request<SurveySummary>('/api/v1/admin/surveys', { method: 'POST', body })
 }
 
+/**
+ * 제목·안내문·기간 수정.
+ *
+ * ★ **범위·대상·문항은 못 바꾼다**(서버 계약). 이미 응답이 들어온 설문의 문항을 바꾸면
+ *   앞 응답과 뒤 응답이 서로 다른 질문의 답이 되기 때문이다 — 그럴 때는 새로 만든다.
+ */
+export function updateSurvey(
+  surveyId: number,
+  body: { title: string; description?: string; opensAt: string; closesAt: string },
+): Promise<SurveySummary> {
+  return request<SurveySummary>(`/api/v1/admin/surveys/${surveyId}`, { method: 'PUT', body })
+}
+
+/** 설문 삭제. 응답이 있으면 서버가 막는다 — 그때는 조기 마감을 쓴다 */
+export function deleteSurvey(surveyId: number): Promise<void> {
+  return request<void>(`/api/v1/admin/surveys/${surveyId}`, { method: 'DELETE' })
+}
+
 /** 조기 마감. 기간이 남았어도 닫는다 */
 export function closeSurvey(surveyId: number): Promise<void> {
   return request<void>(`/api/v1/admin/surveys/${surveyId}/close`, { method: 'PATCH' })
