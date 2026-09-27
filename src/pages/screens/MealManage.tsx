@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DataTable, ExcelButton, MaskToggle, Modal, Unfilled, type Column } from '../../components/common'
+import { DataTable, ExcelButton, MaskToggle, Modal, NotAllowed, Unfilled, type Column } from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
@@ -324,6 +324,8 @@ function Content() {
   const [policyNote, setPolicyNote] = useState<{ ok: boolean; text: string } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  /** 이 계정에 안 열린 화면인가(403). 숫자를 하나도 안 그린다 */
+  const [denied, setDenied] = useState(false)
   const [busy, setBusy] = useState(false)
   /* 중단일 등록 확인 — ★ 서버는 등록하는 순간 그날 신청을 전부 취소하고, 중단을 풀어도
        되살리지 않는다. 날짜 한 번 눌러 수십 건이 취소되던 것을 막으려고 먼저 묻는다 */
@@ -473,6 +475,8 @@ function Content() {
       setWin(next)
       setSavedWin(next)
     } catch (err) {
+      /* ★ 권한으로 막힌 것은 고장이 아니다 — 표를 0 으로 그리면 "오늘 0건" 으로 읽힌다 */
+      if (err instanceof ApiError && err.code === 'FORBIDDEN') setDenied(true)
       setError(err instanceof ApiError ? err.message : '급식 정보를 불러오지 못했습니다.')
       setDayList([])
       setClosureList([])
@@ -561,6 +565,8 @@ function Content() {
     if (existing) void removeClosure(existing.id)
     else setClosureAsk(d)
   }
+
+  if (denied) return <NotAllowed what="급식 관리" />
 
   return (
     <div className="p-meal">
