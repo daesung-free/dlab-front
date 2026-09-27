@@ -14200,6 +14200,14 @@ export interface components {
             /** Format: int32 */
             fee?: number;
             description?: string;
+            /** Format: date */
+            startDate?: string;
+            /** Format: date */
+            endDate?: string;
+            /** Format: date-time */
+            applyFrom?: string;
+            /** Format: date-time */
+            applyTo?: string;
             /** @description 회차 목록. 비우면 회차 없이 만든다 */
             sessions?: components["schemas"]["SessionInput"][];
             /**
