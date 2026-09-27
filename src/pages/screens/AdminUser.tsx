@@ -192,7 +192,9 @@ function MenuModal({ row, onClose, onSaved }: { row: AccountRow; onClose: () => 
         if (!alive) return
         setCatalog(all)
         setRestricted(mine.restricted)
-        setPicked(new Set(mine.menus.map((m) => m.code)))
+        /* ★ 계정별 설정이 없으면(`restricted: false`) **역할 기본값**이 지금 보이는 목록이다.
+             빈 `menus` 를 그리면 "아무 메뉴도 못 본다" 로 읽힌다 — 실제와 반대다 */
+        setPicked(new Set((mine.restricted ? mine.menus : (mine.defaults ?? [])).map((m) => m.code)))
       })
       .catch((e) => alive && setErr(e instanceof ApiError ? e.message : '메뉴 목록을 불러오지 못했습니다.'))
     return () => {
@@ -234,7 +236,7 @@ function MenuModal({ row, onClose, onSaved }: { row: AccountRow; onClose: () => 
       onSaved(
         res.restricted
           ? `${row.loginId} 에게 메뉴 ${res.menus.length}개만 보이도록 저장했습니다. 다음 로그인부터 적용됩니다.`
-          : `${row.loginId} 의 메뉴 제한을 풀었습니다. 전체 메뉴가 보입니다.`,
+          : `${row.loginId} 의 개별 설정을 지웠습니다. 권한 기본값대로 보입니다.`,
       )
       return true
     } catch (e) {
@@ -251,8 +253,8 @@ function MenuModal({ row, onClose, onSaved }: { row: AccountRow; onClose: () => 
       title={`${row.loginId} 에게 보여줄 메뉴`}
       sub={
         restricted
-          ? '지금 아래 체크된 메뉴만 보입니다. 체크를 전부 풀고 저장하면 제한이 풀려 전체가 보입니다.'
-          : '지금은 제한이 없어 전체 메뉴가 보입니다. 필요한 것만 체크해 저장하세요.'
+          ? '이 계정에만 따로 정해 둔 상태입니다. 체크를 전부 풀고 저장하면 설정이 지워지고 권한 기본값으로 돌아갑니다.'
+          : '지금은 권한 기본값대로 보입니다(아래 체크된 것). 여기서 고치면 이 계정에만 적용됩니다 — 기본값보다 우선합니다.'
       }
       confirmLabel="저장"
       busy={saving}
@@ -276,10 +278,10 @@ function MenuModal({ row, onClose, onSaved }: { row: AccountRow; onClose: () => 
               type="button"
               style={{ marginLeft: 'auto' }}
               disabled={saving || !restricted}
-              title={restricted ? '제한을 풀어 전체 메뉴를 보여줍니다' : '지금도 제한이 없습니다'}
+              title={restricted ? '이 계정의 개별 설정을 지우고 권한 기본값으로 되돌립니다' : '개별 설정이 없습니다'}
               onClick={() => void save([]).then((ok) => ok && onClose())}
             >
-              제한 해제
+              기본값으로
             </button>
           </div>
 

@@ -44,8 +44,17 @@ export function listMyMenus(): Promise<MenuNode[]> {
  */
 export interface AccountMenus {
   accountId: number
+  /** 계정별 설정이 **있는가**. false 면 역할 기본값으로 내려간다(메뉴가 없다는 뜻이 아니다) */
   restricted: boolean
   menus: MenuNode[]
+  /**
+   * 역할 기본값 — **그 계정에 지금 실제로 내려가는 메뉴**다(2026-09-27 서버 추가).
+   *
+   * ★ `restricted: false` 일 때 설정 화면은 **이걸로 체크해 그려야 한다.** `menus` 는 비어 있는데
+   *   그걸 그리면 "이 계정은 아무 메뉴도 못 본다" 로 읽힌다 — 실제로는 역할 기본값이 보인다.
+   * ★ **계정별 설정이 역할 기본값을 이긴다**(서버 확인). 역할이 빼 둔 메뉴도 체크해 저장하면 보인다.
+   */
+  defaults?: MenuNode[]
 }
 
 export function getAccountMenus(accountId: number): Promise<AccountMenus> {
