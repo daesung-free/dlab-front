@@ -79,6 +79,16 @@ interface RequestOptions {
   /** 로그인·재발급처럼 토큰을 붙이면 안 되는(또는 붙일 수 없는) 요청 */
   anonymous?: boolean
   /**
+   * 조회 전용 계정에서도 보낸다.
+   *
+   * ★ **계정 자신을 위한 요청에만 쓴다**(비밀번호 변경). 조회 전용 가드가 GET 아닌 것을
+   *   전부 막는데, 서버는 임시 비밀번호 상태에서 `PASSWORD_CHANGE_REQUIRED` 로 모든 요청을
+   *   막는다. 둘이 겹치면 **비밀번호를 바꿀 길이 없어 계정이 영구히 잠긴다**
+   *   (2026-09-27 실테스트에서 실제로 그랬다. CSS 가드만 풀고 여기를 안 풀어 두 번 막혔다).
+   * ★ 업무 데이터를 바꾸는 요청에는 절대 쓰지 않는다 — 조회 전용의 뜻이 사라진다.
+   */
+  allowReadOnly?: boolean
+  /**
    * 401 을 "세션이 끊겼다"로 해석하지 않는다. 기본은 해석한다(재발급 시도 → 실패면 토큰 삭제).
    *
    * ★ 비밀번호 변경처럼 **입력값이 틀려서** 401 이 오는 엔드포인트가 있다. 서버가
@@ -140,7 +150,7 @@ async function refreshTokens(): Promise<boolean> {
 
 async function send(path: string, opts: RequestOptions): Promise<Response> {
   // 조회 전용 계정은 쓰기를 **보내기 전에** 막는다. 로그인·재발급은 anonymous 라 예외다
-  if (readOnlyMode && !opts.anonymous && (opts.method ?? 'GET') !== 'GET') {
+  if (readOnlyMode && !opts.anonymous && !opts.allowReadOnly && (opts.method ?? 'GET') !== 'GET') {
     throw new ApiError(403, 'READ_ONLY', '조회 전용 계정입니다. 등록·수정·삭제는 할 수 없습니다.')
   }
   const token = opts.anonymous ? null : getAccessToken()
