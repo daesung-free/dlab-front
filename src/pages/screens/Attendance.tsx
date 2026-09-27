@@ -17,6 +17,7 @@ import { Icon } from '../../components/Icon'
 import { useAcademy } from '../../auth/AcademyContext'
 import { ApiError } from '../../api/client'
 import { listClasses } from '../../api/classes'
+import { exportStudyTime } from '../../api/statistics'
 import {
   ATTENDANCE_STATUS,
   ATTENDANCE_STATUS_LABEL,
@@ -553,6 +554,26 @@ function Content() {
               rows={rows}
               masked={effectiveMasked}
               download={() => exportAttendance({ ...params, unmask: !effectiveMasked || undefined }, '출결_현황.xlsx')}
+            />
+            {/* ★ 순공시간은 출결 표의 한 칸이지만 **기간 단위로 따로 뽑는 일**이 많다.
+                   기간이 길면 줄이 수천 개라 서버가 만든다 */}
+            <ExcelButton
+              filename="순공시간"
+              label="순공시간"
+              columns={columns}
+              rows={rows}
+              masked={effectiveMasked}
+              download={() =>
+                exportStudyTime(
+                  {
+                    academyId: academyId ?? undefined,
+                    // 화면이 기간이면 그 기간, 하루면 그날 하루로 뽑는다
+                    from: ranged ? (range?.from ?? date) : date,
+                    to: ranged ? (range?.to ?? date) : date,
+                  },
+                  '순공시간.xlsx',
+                )
+              }
             />
           </>
         }

@@ -3,6 +3,7 @@ import { DataTable, Modal, type Column } from '../../components/common'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
 import { useAuth } from '../../auth/AuthContext'
+import { listAcademies, updateAcademy, type Academy } from '../../api/academies'
 import {
   getBranchConfig,
   listBranchConfigHistory,
@@ -71,6 +72,16 @@ function Content() {
 
   /* clear 면 '값 비우기' — value 에 지금 값을 다시 받는다(서버가 그 값과 같아야 지운다) */
   const [edit, setEdit] = useState<{ row: Row; kind: EditKind; value: string; clear?: boolean } | null>(null)
+  /* 지점 자체(이름·정식명·등원 기준 시각). 설정값과 다른 축이라 모달을 따로 둔다 —
+     ★ **등원 기준 시각이 지각 판정 기준이다**(2026-09-27 P2. 고칠 자리가 없었다) */
+  const [acadEdit, setAcadEdit] = useState<{
+    row: Row
+    acadNm: string
+    fullNm: string
+    deadline: string
+  } | null>(null)
+  const [acadErr, setAcadErr] = useState<string | null>(null)
+  const [academies, setAcademies] = useState<Academy[]>([])
   const [modalErr, setModalErr] = useState<string | null>(null)
   const [reissue, setReissue] = useState<Row | null>(null)
   /** 재발급 결과. secret 은 여기서 놓치면 다시 못 본다 */
@@ -213,11 +224,29 @@ function Content() {
       {
         key: 'act',
         header: '',
-        width: '380px',
+        width: '470px',
         align: 'center',
         value: () => '',
         render: (r) => (
           <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+            {/* 지점 이름·등원 기준 시각. 설정값(PG·장비)과 다른 축이라 따로 연다 */}
+            <button
+              className="btn"
+              style={{ padding: '4px 8px', fontSize: 11.5, whiteSpace: 'nowrap' }}
+              disabled={busy !== null}
+              onClick={() => {
+                setAcadErr(null)
+                const a = academies.find((x) => x.id === r.academyId)
+                setAcadEdit({
+                  row: r,
+                  acadNm: a?.acadNm ?? r.academyName,
+                  fullNm: a?.fullNm ?? '',
+                  deadline: (a?.attendanceDeadline ?? '').slice(0, 5),
+                })
+              }}
+            >
+              지점 정보
+            </button>
             <button
               className="btn"
               style={{ padding: '4px 8px', fontSize: 11.5, whiteSpace: 'nowrap' }}
@@ -268,6 +297,39 @@ function Content() {
     [busy],
   )
 
+  useEffect(() => {
+    if (!isSuper) return
+    let alive = true
+    listAcademies()
+      .then((v) => alive && setAcademies(v))
+      .catch(() => alive && setAcademies([]))
+    return () => {
+      alive = false
+    }
+  }, [isSuper])
+
+  /** 지점 정보 저장. 이름은 필수다 */
+  async function saveAcademy() {
+    if (acadEdit === null) return
+    setBusy(acadEdit.row.academyId)
+    setAcadErr(null)
+    try {
+      await updateAcademy(acadEdit.row.academyId, {
+        acadNm: acadEdit.acadNm.trim(),
+        fullNm: acadEdit.fullNm.trim() || undefined,
+        // 서버는 HH:mm:ss 를 받는다. 칸은 HH:mm 이라 초를 붙인다
+        attendanceDeadline: acadEdit.deadline ? `${acadEdit.deadline}:00` : undefined,
+      })
+      setAcademies(await listAcademies())
+      setNotice(`${acadEdit.acadNm.trim()} 지점 정보를 바꿨습니다.`)
+      setAcadEdit(null)
+    } catch (err) {
+      setAcadErr(err instanceof ApiError ? err.message : '지점 정보를 바꾸지 못했습니다.')
+    } finally {
+      setBusy(null)
+    }
+  }
+
   if (!isSuper) {
     return (
       <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
@@ -287,6 +349,54 @@ function Content() {
 
   return (
     <>
+      {acadEdit && (
+        <Modal
+          title={`${acadEdit.row.academyName} 지점 정보`}
+          sub="지점코드·상점코드는 대성전산이 부여한 값이라 바꿀 수 없습니다."
+          confirmLabel="저장"
+          busy={busy === acadEdit.row.academyId}
+          error={acadErr}
+          confirmDisabled={acadEdit.acadNm.trim() === ''}
+          onConfirm={() => void saveAcademy()}
+          onClose={() => setAcadEdit(null)}
+        >
+          <div className="frow">
+            <label className="req">지점명</label>
+            <input
+              className="inp"
+              maxLength={100}
+              value={acadEdit.acadNm}
+              onChange={(e) => setAcadEdit({ ...acadEdit, acadNm: e.target.value })}
+            />
+          </div>
+          <div className="frow">
+            <label>정식 명칭</label>
+            <input
+              className="inp"
+              maxLength={100}
+              placeholder="예: D.Lab 분당"
+              value={acadEdit.fullNm}
+              onChange={(e) => setAcadEdit({ ...acadEdit, fullNm: e.target.value })}
+            />
+          </div>
+          <div className="frow">
+            <label>등원 기준 시각</label>
+            <div>
+              <input
+                className="inp"
+                type="time"
+                value={acadEdit.deadline}
+                onChange={(e) => setAcadEdit({ ...acadEdit, deadline: e.target.value })}
+              />
+              {/* 바꾸면 그날부터 지각 집계가 달라진다 — 조용히 저장하면 안 되는 값이다 */}
+              <div className="hint">
+                이 시각 이후 첫 태깅이 <b>지각</b>입니다. 바꾸면 그날부터 지각 판정이 달라집니다.
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {error && (
         <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
           {error}
