@@ -159,6 +159,26 @@ export function unlockAccount(accountId: number): Promise<void> {
 }
 
 /**
+ * 학생·학부모 **앱 계정** 잠금 해제.
+ *
+ * ★ 직원 계정과 경로가 다르다(`unlockAccount` 는 직원용이다). 화면이 학생 목록을 그리는 한
+ *   경로도 앱 계정이어야 한다 — 두 경로의 권한 검사·감사 주체가 갈라지는 날 조용히 어긋난다.
+ * ★ 잠겨 있지 않아도 성공이다(멱등).
+ */
+export function unlockAppAccount(accountId: number): Promise<void> {
+  return request<void>(`/api/v1/admin/app-accounts/${accountId}/unlock`, { method: 'POST' })
+}
+
+/**
+ * 앱 계정 임시 비밀번호 발급. **다시 볼 수 없으니** 화면이 그 자리에서 한 번 보여줘야 한다.
+ */
+export function issueAppTemporaryPassword(accountId: number): Promise<{ temporaryPassword: string }> {
+  return request<{ temporaryPassword: string }>(`/api/v1/admin/app-accounts/${accountId}/temporary-password`, {
+    method: 'POST',
+  })
+}
+
+/**
  * 임시 비밀번호 발급. 응답으로 오는 비밀번호는 **다시 볼 수 없다**.
  *
  * ★ 잠금 해제와 같은 이유로 **직원 경로**를 쓴다(2026-09-16 생김). 앱 경로도 같은 계정을

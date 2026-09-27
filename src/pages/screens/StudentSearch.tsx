@@ -18,6 +18,7 @@ import { useAcademy } from '../../auth/AcademyContext'
 import { useAuth } from '../../auth/AuthContext'
 import { listTeachers, type TeacherRow } from '../../api/accounts'
 import { ApiError } from '../../api/client'
+import { issueAppTemporaryPassword, unlockAppAccount } from '../../api/accounts'
 import {
   GRADE_LABEL,
   SORTABLE,
@@ -37,6 +38,7 @@ import {
   searchStudents,
   type EnrollmentStatus,
   type GradeType,
+  type AppAccount,
   type Student,
   type TrackType,
 } from '../../api/students'
@@ -212,6 +214,52 @@ function infoOf(s: Student): Record<InfoKey, string> {
     grade: s.grade ?? '',
     track: s.track ?? '',
   }
+}
+
+/**
+ * 앱 계정 한 줄 — 로그인 아이디 · 상태 · 버튼.
+ *
+ * ★ `locked`(로그인 실패 잠금)와 `status`(관리자 정지)는 **다른 축이다.** 서버가 섞지 않으므로
+ *   화면도 섞지 않는다 — 잠금 해제는 `locked` 만 본다.
+ */
+function AppAccountRow({
+  who,
+  account,
+  busyId,
+  onUnlock,
+  onTemp,
+}: {
+  who: string
+  account: AppAccount
+  busyId: number | null
+  onUnlock: (a: AppAccount) => void
+  onTemp: (a: AppAccount) => void
+}) {
+  const busy = busyId === account.accountId
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minHeight: 34 }}>
+      <span style={{ fontSize: 12.5, color: 'var(--muted)', width: 52 }}>{who}</span>
+      <code style={{ fontSize: 11.5 }}>{account.loginId}</code>
+      {account.locked ? (
+        <span className="mk brandnew" title={account.lockedAt ? `${account.lockedAt.slice(0, 16).replace('T', ' ')} 잠김` : undefined}>
+          잠김
+        </span>
+      ) : account.status === 'SUSPENDED' ? (
+        <span className="mk supplement">정지</span>
+      ) : (
+        <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>정상</span>
+      )}
+      {account.mustChangePassword && <span className="mk supplement">임시 비밀번호</span>}
+      {account.locked && (
+        <button type="button" className="btn" style={{ padding: '3px 9px', fontSize: 11.5 }} disabled={busy} onClick={() => onUnlock(account)}>
+          {busy ? '푸는 중…' : '잠금 해제'}
+        </button>
+      )}
+      <button type="button" className="btn" style={{ padding: '3px 9px', fontSize: 11.5 }} disabled={busy} onClick={() => onTemp(account)}>
+        임시 비밀번호
+      </button>
+    </div>
+  )
 }
 
 function Content() {
@@ -399,9 +447,52 @@ function Content() {
     }
   }
 
+  /** 앱 계정 잠금 해제·임시 비밀번호. 학생 한 명 안에서 여러 계정(본인 + 학부모)을 다룬다 */
+  const [acct, setAcct] = useState<{ busyId: number | null; msg: string | null; err: string | null }>({
+    busyId: null,
+    msg: null,
+    err: null,
+  })
+
+  /** 푼 뒤 목록·상세를 다시 읽어 잠금 표시가 사라지게 한다 */
+  async function unlockApp(a: AppAccount, who: string) {
+    setAcct({ busyId: a.accountId, msg: null, err: null })
+    try {
+      await unlockAppAccount(a.accountId)
+      setAcct({ busyId: null, msg: `${who} 계정(${a.loginId}) 잠금을 풀었습니다.`, err: null })
+      if (infoEdit) {
+        const fresh = await getStudent(infoEdit.row.enrollmentId)
+        setInfoEdit((cur) => (cur && cur.row.enrollmentId === fresh.enrollmentId ? { ...cur, loaded: fresh } : cur))
+      }
+      table.reload()
+    } catch (e) {
+      setAcct({ busyId: null, msg: null, err: e instanceof ApiError ? e.message : '잠금을 풀지 못했습니다.' })
+    }
+  }
+
+  /** 임시 비밀번호는 **다시 볼 수 없다** — 받은 자리에서 그대로 보여준다 */
+  async function issueTemp(a: AppAccount, who: string) {
+    setAcct({ busyId: a.accountId, msg: null, err: null })
+    try {
+      const r = await issueAppTemporaryPassword(a.accountId)
+      setAcct({
+        busyId: null,
+        msg: `${who} 임시 비밀번호: ${r.temporaryPassword} — 이 자리에서만 보입니다. 본인에게 전달하세요.`,
+        err: null,
+      })
+      if (infoEdit) {
+        const fresh = await getStudent(infoEdit.row.enrollmentId)
+        setInfoEdit((cur) => (cur && cur.row.enrollmentId === fresh.enrollmentId ? { ...cur, loaded: fresh } : cur))
+      }
+    } catch (e) {
+      setAcct({ busyId: null, msg: null, err: e instanceof ApiError ? e.message : '임시 비밀번호를 만들지 못했습니다.' })
+    }
+  }
+
   function openInfo(r: Student) {
     setInfoErr(null)
     setInfoDone(null)
+    setAcct({ busyId: null, msg: null, err: null })
     setHr({ open: false, teachers: null, teacherId: '', reason: '', busy: false, err: null })
     setInfoEdit({ row: r, loaded: null, form: emptyInfo() })
     void getStudent(r.enrollmentId)
@@ -881,6 +972,38 @@ function Content() {
                     반은 그대로 두고 이 학생만 다른 선생님이 맡습니다. 누르면 바로 반영되고, 반을 옮기면 반 담임으로
                     돌아갑니다.
                   </div>
+                </div>
+              </div>
+
+              {/* ★ 앱 계정. **학생이 비밀번호를 5회 틀리면 잠기고 저절로 안 풀린다** —
+                     풀어 줄 자리가 없어서 그 학생은 앱을 못 썼다(2026-09-27 실테스트).
+                  ★ '가입 안 함' 과 '잠김' 은 다른 상태다. 가입 안 한 학생은 계정 자체가 없다. */}
+              <div className="frow">
+                <label>앱 계정</label>
+                <div>
+                  {infoEdit.loaded.appAccount == null ? (
+                    <div style={{ color: 'var(--muted)' }}>앱에 가입하지 않았습니다.</div>
+                  ) : (
+                    <AppAccountRow
+                      who="학생"
+                      account={infoEdit.loaded.appAccount}
+                      busyId={acct.busyId}
+                      onUnlock={(a) => void unlockApp(a, '학생')}
+                      onTemp={(a) => void issueTemp(a, '학생')}
+                    />
+                  )}
+                  {(infoEdit.loaded.guardianAccounts ?? []).map((g, i) => (
+                    <AppAccountRow
+                      key={g.accountId}
+                      who={`학부모${(infoEdit.loaded?.guardianAccounts?.length ?? 0) > 1 ? ` ${i + 1}` : ''}`}
+                      account={g}
+                      busyId={acct.busyId}
+                      onUnlock={(a) => void unlockApp(a, '학부모')}
+                      onTemp={(a) => void issueTemp(a, '학부모')}
+                    />
+                  ))}
+                  {acct.msg && <div className="hint" style={{ color: 'var(--mint-d)' }}>{acct.msg}</div>}
+                  {acct.err && <div className="hint" style={{ color: 'var(--red)' }}>{acct.err}</div>}
                 </div>
               </div>
             </>

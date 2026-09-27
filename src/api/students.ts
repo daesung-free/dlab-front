@@ -91,6 +91,28 @@ export interface Student {
   retakeCount: number | null
   /** 서버가 개인정보를 가려서 보냈는지. true면 phone·birthDate가 이미 마스킹된 값이다 */
   masked: boolean
+  /**
+   * 학생의 앱 계정. **앱에 가입하지 않았으면 없다**(`null`) — '가입 안 함' 과 '잠김' 은 다른 상태다.
+   * (2026-09-27 추가. 그전에는 잠긴 계정을 찾을 방법이 화면에 없어 풀어줄 수 없었다)
+   */
+  appAccount?: AppAccount | null
+  /** 학부모 계정. 한 학부모가 형제 둘에 연결돼 있으면 양쪽 학생에 다 나온다 */
+  guardianAccounts?: AppAccount[]
+}
+
+/** 앱 계정 한 개(학생·학부모 공통) */
+export interface AppAccount {
+  accountId: number
+  loginId: string
+  /**
+   * 계정 상태. **`locked` 와 다른 축이다** — `SUSPENDED`(관리자 정지)와
+   * 로그인 실패 잠금은 다른 사건이라 서버가 섞지 않는다. 잠금 해제 버튼은 `locked` 만 본다.
+   */
+  status: string
+  locked: boolean
+  lockedAt: string | null
+  /** 임시 비밀번호 상태. 재발급 직후가 이렇다 */
+  mustChangePassword: boolean
 }
 
 /** 서버가 받아주는 정렬 키. 이 밖의 값은 무시된다(400이 아니다) — 위 주석 참고. */
