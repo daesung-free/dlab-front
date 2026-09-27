@@ -99,6 +99,32 @@ export function listMealOrderWindows(academyId: number, year: number): Promise<M
   return request<MealOrderWindow[]>('/api/v1/admin/meals/order-windows', { query: { academyId, year } })
 }
 
+/**
+ * 신청 가능 기간 설정(월 단위).
+ *
+ * ★ 같은 달을 다시 보내면 **덮어쓴다**(서버가 월로 찾는다).
+ * ★ 이 기간 밖에서는 학생 앱이 신청·취소를 못 한다 — 데스크가 대신 넣는 경로는 아직 없다.
+ */
+export function setMealOrderWindow(body: {
+  academyId: number
+  /** yyyy-MM */
+  targetMonth: string
+  startsOn: string
+  endsOn: string
+}): Promise<MealOrderWindow> {
+  return request<MealOrderWindow>('/api/v1/admin/meals/order-windows', { method: 'PUT', body })
+}
+
+/**
+ * 관리자 급식 취소 — **3일 제한을 받지 않는다**.
+ *
+ * ★ 학생 앱은 3일 전까지만 취소할 수 있다. 그 뒤 사정이 생기면 데스크가 이걸로 취소한다.
+ * ★ 취소하면 그 끼니는 **되살릴 수 없다** — 다시 신청해야 한다. 확인 창을 거쳐 부른다.
+ */
+export function cancelMealOrderItem(itemId: number): Promise<void> {
+  return request<void>(`/api/v1/admin/meals/orders/items/${itemId}`, { method: 'DELETE' })
+}
+
 export function createMealClosure(academyId: number, date: string, reason: string): Promise<MealClosure> {
   return request<MealClosure>('/api/v1/admin/meals/closures', {
     method: 'POST',
