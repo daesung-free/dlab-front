@@ -904,14 +904,22 @@ function Content() {
 
             <div className="frow">
               <label className="req">구분</label>
-              <select
-                className="sel"
-                value={form.kind}
-                onChange={(e) => setF('kind', e.target.value as StaffKind)}
-              >
-                <option value="EMPLOYEE">직원 (부서·직급을 함께 넣습니다)</option>
-                <option value="TEACHER">선생님</option>
-              </select>
+              {/* ★ 이 구분이 **특강·상담의 담당자 목록을 가른다.** 권한을 '담당선생님' 으로 골라도
+                     구분이 '직원' 이면 강사 목록에 안 나와서, 특강 개설이 끝까지 막힌다
+                     ("등록된 강사가 없습니다"). 실테스트에서 실제로 막혔다(2026-09-27) */}
+              <div>
+                <select
+                  className="sel"
+                  value={form.kind}
+                  onChange={(e) => setF('kind', e.target.value as StaffKind)}
+                >
+                  <option value="EMPLOYEE">직원 (부서·직급을 함께 넣습니다)</option>
+                  <option value="TEACHER">선생님</option>
+                </select>
+                <div className="hint">
+                  수업을 맡는 분은 <b>선생님</b>으로 등록하세요. 그래야 특강·상담의 담당자로 고를 수 있습니다.
+                </div>
+              </div>
             </div>
 
             <div className="frow">

@@ -31,8 +31,9 @@ export interface Statistics {
     ranking: { name: string; minutes: number }[]
   }
   penalty: { meritPoints: number; demeritPoints: number; count: number }
-  meals: { appliedTotal: number; applied: Record<string, number>; canceled: Record<string, number> }
-  revenue: { billedAmount: number; receivedAmount: number; unpaidAmount: number; byType: Record<string, number> }
+  /** ★ 담임 계정에는 **null 로 온다**(2026-09-25 서버). 급식·수납은 담임이 볼 것이 아니다 */
+  meals: { appliedTotal: number; applied: Record<string, number>; canceled: Record<string, number> } | null
+  revenue: { billedAmount: number; receivedAmount: number; unpaidAmount: number; byType: Record<string, number> } | null
 }
 
 export function getStatistics(params: {
