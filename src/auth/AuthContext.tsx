@@ -14,6 +14,15 @@ interface AuthState {
   me: Me | null
   signedIn: boolean
   /**
+   * 담임(TEACHER) **만** 가진 계정인가.
+   *
+   * ★ 매트릭스상 담임은 공지 작성이 '없음' 이고 설문도 자기가 만든 것이 아니다 —
+   *   그런데 메뉴에는 들어 있어 **삭제 버튼까지 눌렸다**(2026-09-28 테스트 회신).
+   *   서버가 조일 때까지 화면에서 먼저 막는다.
+   * ★ 관리자 역할이 하나라도 섞이면 그쪽 권한으로 쓸 수 있으므로 **only** 를 본다.
+   */
+  teacherOnly: boolean
+  /**
    * 조회 전용 계정인가 — READONLY 만 가진 계정.
    *
    * ★ 다른 역할 판정은 **권한 매트릭스가 확정돼야** 할 수 있다. READONLY 만은 정의가
@@ -111,7 +120,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // 하나라도 다른 역할이 섞이면 그쪽 권한으로 쓰기가 가능하다
     const readOnly = roles.length > 0 && roles.every((r) => r === 'READONLY')
     const canSeeAdmin = roles.some((r) => r === 'SUPER_ADMIN' || r === 'BRANCH_ADMIN')
-    return { principal, me, signedIn: principal !== null, readOnly, canSeeAdmin, allowedMenus, login, logout }
+    const teacherOnly = roles.length > 0 && roles.every((r) => r === 'TEACHER')
+    return { principal, me, signedIn: principal !== null, readOnly, teacherOnly, canSeeAdmin, allowedMenus, login, logout }
   }, [token, me, allowedMenus, login, logout])
 
   /* API 클라이언트에도 알려준다 — 쓰기를 **보내기 전에** 막기 위해서다.
