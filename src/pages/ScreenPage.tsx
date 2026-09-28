@@ -28,8 +28,14 @@ export function ScreenPage() {
      ★ 이건 **보이기 차단일 뿐**이다 — 실제 차단은 서버가 API 단에서 한다.
        아직 목록을 못 읽었으면(null) 막지 않는다. 막아버리면 응답이 늦은 순간
        새로고침한 사람이 자기 화면에서 튕긴다 */
+  /* 아직 못 읽었으면(null) **그리지도 않는다.** 예전에는 "막지 않는다" 로 뒀는데,
+     그 사이 본문이 한 번 마운트되어 조회가 나가버린다 — 권한 없는 담임 계정으로
+     주소를 직접 열면 급식 요청 5건이 403 으로 깨진 뒤 안내로 바뀌었다(2026-09-28 운영 확인).
+     사용자에게는 빨간 오류가 스쳤다가 사라지는 것으로 보인다. 되돌려 보내지 않으니
+     기다려도 튕기지 않는다 — 읽기 실패하면 빈 Set 이 와서 어차피 풀린다 */
+  const checking = allowedMenus === null
   const blocked =
-    (s.groupId === 'admin' && !canSeeAdmin) || !canSeeScreenAs(s.id, allowedMenus, isSuper)
+    !checking && ((s.groupId === 'admin' && !canSeeAdmin) || !canSeeScreenAs(s.id, allowedMenus, isSuper))
 
   const mockup = MOCKUPS[s.id]
   if (!mockup) return <Navigate to="/" replace />
@@ -58,7 +64,7 @@ export function ScreenPage() {
         }
         title={title}
         icon={navItem?.icon ?? s.icon}
-        actions={blocked ? undefined : mockup.actions}
+        actions={blocked || checking ? undefined : mockup.actions}
       />
       {/* ★ 지점을 고르기 전에는 대부분의 화면이 **조회를 아예 시작하지 않는다.**
              전 지점 권한 계정의 기본값이 미선택이라 본사 관리자가 가장 먼저 만나는 상태인데,
@@ -66,13 +72,14 @@ export function ScreenPage() {
              실제로 그 상태로 점검하다 급식·특강·설문을 전부 '미구현'으로 판정한 일이 있었다.
              화면마다 따로 붙이면 또 빠지는 곳이 생기므로 여기 한 곳에 둔다. */}
       {blocked && <NotAllowed what={title} />}
-      {!blocked && selectable && academyId === null && !mockup.allBranches && (
+      {checking && <div className="note-box"><div>화면을 여는 중입니다…</div></div>}
+      {!blocked && !checking && selectable && academyId === null && !mockup.allBranches && (
         <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
           <b>위에서 지점을 먼저 고르세요.</b> 고르기 전에는 이 화면이 조회를 시작하지 않습니다 —
           지금 보이는 값은 실제 데이터가 아닐 수 있습니다.
         </div>
       )}
-      {!blocked && <mockup.Content />}
+      {!blocked && !checking && <mockup.Content />}
     </>
   )
 }
