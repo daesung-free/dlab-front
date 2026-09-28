@@ -5,6 +5,7 @@ import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
 import { listClasses, type ClassGroup } from '../../api/classes'
 import { useAcademy } from '../../auth/AcademyContext'
+import { useAuth } from '../../auth/AuthContext'
 import {
   QUESTION_TYPE_LABEL,
   SCOPE_LABEL,
@@ -391,6 +392,9 @@ function Content() {
   const [editing, setEditing] = useState<{ row: SurveySummary; title: string; opensAt: string; closesAt: string } | null>(null)
   const [removing, setRemoving] = useState<SurveySummary | null>(null)
   const [rowBusy, setRowBusy] = useState(false)
+  /* 담임은 설문을 고치거나 지울 수 없다 — 메뉴에는 들어 있지만 쓰기는 매트릭스 밖이다
+     (2026-09-28 테스트 회신). 결과 보기·마감은 담당 업무라 남긴다 */
+  const { teacherOnly } = useAuth()
 
   useEffect(() => {
     if (academyId === null) {
@@ -617,21 +621,23 @@ function Content() {
             >
               결과
             </button>
-            <button
-              className="btn"
-              style={{ padding: '4px 9px', fontSize: 11.5 }}
-              onClick={() =>
-                setEditing({
-                  row: r,
-                  title: r.title,
-                  opensAt: (r.opensAt ?? '').slice(0, 16),
-                  closesAt: (r.closesAt ?? '').slice(0, 16),
-                })
-              }
-              title="제목과 기간을 고칩니다. 문항·대상은 못 바꿉니다"
-            >
-              수정
-            </button>
+            {!teacherOnly && (
+              <button
+                className="btn"
+                style={{ padding: '4px 9px', fontSize: 11.5 }}
+                onClick={() =>
+                  setEditing({
+                    row: r,
+                    title: r.title,
+                    opensAt: (r.opensAt ?? '').slice(0, 16),
+                    closesAt: (r.closesAt ?? '').slice(0, 16),
+                  })
+                }
+                title="제목과 기간을 고칩니다. 문항·대상은 못 바꿉니다"
+              >
+                수정
+              </button>
+            )}
             <button
               className="btn"
               style={{ padding: '4px 9px', fontSize: 11.5 }}
@@ -641,14 +647,16 @@ function Content() {
             >
               마감
             </button>
-            <button
-              className="btn"
-              style={{ padding: '4px 9px', fontSize: 11.5, color: 'var(--red)' }}
-              onClick={() => setRemoving(r)}
-              title="응답이 있으면 지워지지 않습니다"
-            >
-              삭제
-            </button>
+            {!teacherOnly && (
+              <button
+                className="btn"
+                style={{ padding: '4px 9px', fontSize: 11.5, color: 'var(--red)' }}
+                onClick={() => setRemoving(r)}
+                title="응답이 있으면 지워지지 않습니다"
+              >
+                삭제
+              </button>
+            )}
           </div>
         ),
       },
@@ -1327,11 +1335,11 @@ function Content() {
   )
 }
 
-export const surveyMockup: Mockup = {
-  Content,
-  /* 본문에 같은 기능이 이미 있었고 헤더 것만 막혀 있었다 — 중복된 채로 눌리지 않으면
-     고장으로 읽힌다. 본문으로 신호를 보내 같은 동작을 하게 한다 */
-  actions: (
+/** 헤더 액션 — 담임에게는 만들기 버튼을 내지 않는다(행 버튼과 같은 판단) */
+function SurveyHeaderActions() {
+  const { teacherOnly } = useAuth()
+  if (teacherOnly) return null
+  return (
     <>
       <button className="btn" onClick={() => fromTemplateSignal.bump()}>
         <Icon name="copy" size={14} /> 템플릿에서 생성
@@ -1340,5 +1348,12 @@ export const surveyMockup: Mockup = {
         <Icon name="plus" size={14} /> 설문 생성
       </button>
     </>
-  ),
+  )
+}
+
+export const surveyMockup: Mockup = {
+  Content,
+  /* 본문에 같은 기능이 이미 있었고 헤더 것만 막혀 있었다 — 중복된 채로 눌리지 않으면
+     고장으로 읽힌다. 본문으로 신호를 보내 같은 동작을 하게 한다 */
+  actions: <SurveyHeaderActions />,
 }

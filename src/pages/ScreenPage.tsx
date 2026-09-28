@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthContext'
 import { findScreen } from '../data/menu'
 import { canSeeScreenAs } from '../data/menuCodes'
 import { NAV, navCatOfScreen, navSectionOfScreen } from '../data/nav'
+import { NotAllowed } from '../components/common'
 import { PageHead } from '../components/PageHead'
 import { MOCKUPS } from './screens'
 import './screen.css'
@@ -20,12 +21,15 @@ export function ScreenPage() {
   const isSuper = (me?.roles ?? principal?.roles ?? []).some((r) => r === 'SUPER_ADMIN')
   const s = screenId ? findScreen(screenId) : undefined
   if (!s) return <Navigate to="/" replace />
-  /* 메뉴에서 감춰도 주소를 직접 치면 열린다 — 화면 단위로도 같은 판단을 건다 */
-  if (s.groupId === 'admin' && !canSeeAdmin) return <Navigate to="/" replace />
-  /* ★ 계정별 메뉴 노출. 이건 **보이기 차단일 뿐**이다 — 실제 차단은 서버가 API 단에서 한다.
-        아직 목록을 못 읽었으면(null) 막지 않는다. 막아버리면 응답이 늦은 순간
-        새로고침한 사람이 자기 화면에서 튕긴다 */
-  if (!canSeeScreenAs(s.id, allowedMenus, isSuper)) return <Navigate to="/" replace />
+  /* 메뉴에서 감춰도 주소를 직접 치면 열린다 — 화면 단위로도 같은 판단을 건다.
+     ★ **되돌려 보내지 않고 이유를 말한다.** 예전에는 대시보드로 조용히 튕겼는데,
+       안내서가 화면 이름으로 길을 안내하기 때문에 따라오던 사람은 "화면이 안 열린다" 로 읽는다
+       (2026-09-28 테스트 회신). 권한이 없다는 한 줄이면 거기서 끝난다.
+     ★ 이건 **보이기 차단일 뿐**이다 — 실제 차단은 서버가 API 단에서 한다.
+       아직 목록을 못 읽었으면(null) 막지 않는다. 막아버리면 응답이 늦은 순간
+       새로고침한 사람이 자기 화면에서 튕긴다 */
+  const blocked =
+    (s.groupId === 'admin' && !canSeeAdmin) || !canSeeScreenAs(s.id, allowedMenus, isSuper)
 
   const mockup = MOCKUPS[s.id]
   if (!mockup) return <Navigate to="/" replace />
@@ -54,20 +58,21 @@ export function ScreenPage() {
         }
         title={title}
         icon={navItem?.icon ?? s.icon}
-        actions={mockup.actions}
+        actions={blocked ? undefined : mockup.actions}
       />
       {/* ★ 지점을 고르기 전에는 대부분의 화면이 **조회를 아예 시작하지 않는다.**
              전 지점 권한 계정의 기본값이 미선택이라 본사 관리자가 가장 먼저 만나는 상태인데,
              화면에 따라 빈 표나 고정값이 그대로 보여 '정상 조회'로 착각하게 된다.
              실제로 그 상태로 점검하다 급식·특강·설문을 전부 '미구현'으로 판정한 일이 있었다.
              화면마다 따로 붙이면 또 빠지는 곳이 생기므로 여기 한 곳에 둔다. */}
-      {selectable && academyId === null && !mockup.allBranches && (
+      {blocked && <NotAllowed what={title} />}
+      {!blocked && selectable && academyId === null && !mockup.allBranches && (
         <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
           <b>위에서 지점을 먼저 고르세요.</b> 고르기 전에는 이 화면이 조회를 시작하지 않습니다 —
           지금 보이는 값은 실제 데이터가 아닐 수 있습니다.
         </div>
       )}
-      <mockup.Content />
+      {!blocked && <mockup.Content />}
     </>
   )
 }

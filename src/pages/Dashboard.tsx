@@ -38,7 +38,8 @@ function Card({
    * ★ 배포본을 처음 열어본 사람이 대시보드만 보고 "전부 목업"이라고 판단한 적이 있다.
    *   숫자가 그럴듯할수록 오해가 커진다 — 비어 있는 카드보다 **차 있는 카드가 더 위험하다.**
    */
-  mock?: boolean
+  /** 'partial' 이면 카드 안에 실데이터와 예시가 섞여 있다 — 줄마다 따로 표시한다 */
+  mock?: boolean | 'partial'
   children: React.ReactNode
 }) {
   return (
@@ -54,7 +55,7 @@ function Card({
           <div className="r">
             {mock && (
               <span className="mk supplement" title="집계 기능이 준비되면 실제 숫자로 바뀝니다">
-                표시용 예시
+                {mock === 'partial' ? '일부 예시' : '표시용 예시'}
               </span>
             )}
             {right}
@@ -163,6 +164,17 @@ export function Dashboard() {
       {/* ★ 권한으로 막힌 것은 **고장이 아니다.** 담임 계정은 집계 메뉴가 열려 있어도 서버가
              403 을 준다 — 로그인 직후 첫 화면에 빨간 「권한이 없습니다」가 떠서 고장으로
              보였다(2026-09-27 실테스트). 종류를 갈라 문구를 다르게 쓴다 */}
+      {/* 어느 카드가 실제 값인지 화면이 스스로 밝힌다 — 딱지가 없는 카드가 실데이터다 */}
+      <div className="note-box">
+        <div>
+          <span className="mk supplement" style={{ marginRight: 5 }}>
+            표시용 예시
+          </span>
+          딱지가 붙은 카드는 <b>아직 준비 중인 값</b>입니다. 딱지가 없는 카드(오늘 출결·급식·수납·순공시간
+          랭킹)는 실제 데이터입니다. <b>일부 예시</b>는 카드 안에서 줄마다 갈립니다.
+        </div>
+      </div>
+
       {stats.error && stats.errorCode === 'FORBIDDEN' && (
         <div className="note-box">이 계정에는 지점 전체 집계가 열려 있지 않습니다. 아래 목록은 담당 범위로 보입니다.</div>
       )}
@@ -246,7 +258,7 @@ export function Dashboard() {
         <div className="dash-col">
           <Card
             title="오늘 처리할 일"
-            mock
+            mock="partial"
             icon="list-checks"
             /* 긴급 개수는 '값이 있는 긴급 줄' 만 센다 — 못 받은 줄까지 세면 없는 일이 긴급으로 잡힌다 */
             right={<span className="mk brandnew">{TODOS.filter((t) => t.tone === 'urgent').length}줄</span>}
@@ -282,7 +294,16 @@ export function Dashboard() {
                     <Icon name={t.icon} size={16} />
                   </span>
                   <div className="body">
-                    <div className="lb">{t.label}</div>
+                    <div className="lb">
+                      {t.label}
+                      {/* 실데이터로 바꾼 줄과 아직 예시인 줄이 한 카드에 섞여 있다 —
+                          줄마다 밝히지 않으면 어디까지 진짜인지 알 수 없다 */}
+                      {live === undefined && (
+                        <span className="mk supplement" style={{ marginLeft: 5 }}>
+                          예시
+                        </span>
+                      )}
+                    </div>
                     <div className="hint">{t.hint}</div>
                   </div>
                   <div className="cnt">

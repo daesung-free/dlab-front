@@ -4,6 +4,7 @@ import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
+import { useAuth } from '../../auth/AuthContext'
 import { listClasses, type ClassGroup } from '../../api/classes'
 import { searchStudents, type Student } from '../../api/students'
 import {
@@ -181,6 +182,9 @@ function Content() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [composing, setComposing] = useState(false)
+  /* ★ 담임은 공지가 매트릭스상 '없음' 인데 메뉴에 들어 있어 **삭제까지 눌렸다**
+       (2026-09-28 테스트 회신). 서버가 조일 때까지 화면에서 먼저 막는다 */
+  const { teacherOnly } = useAuth()
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   // 전체 발송은 본사만 가능하다 — 서버가 경로 단위로 권한을 건다
@@ -511,24 +515,29 @@ function Content() {
                           style={{ padding: '4px 8px', fontSize: 11 }}
                           onClick={() => void toggle(r, 'pinned')}
                           title="상단 고정"
+                          disabled={teacherOnly}
                         >
                           {r.pinned ? '고정 해제' : '고정'}
                         </button>
-                        <button
-                          className="btn"
-                          style={{ padding: '4px 8px', fontSize: 11 }}
-                          onClick={() => void toggle(r, 'banner')}
-                          title="배너 노출"
-                        >
-                          {r.banner ? '배너 끄기' : '배너'}
-                        </button>
-                        <button
-                          className="btn"
-                          style={{ padding: '4px 8px', fontSize: 11, color: 'var(--red)' }}
-                          onClick={() => setRemoving(r)}
-                        >
-                          삭제
-                        </button>
+                        {!teacherOnly && (
+                          <button
+                            className="btn"
+                            style={{ padding: '4px 8px', fontSize: 11 }}
+                            onClick={() => void toggle(r, 'banner')}
+                            title="배너 노출"
+                          >
+                            {r.banner ? '배너 끄기' : '배너'}
+                          </button>
+                        )}
+                        {!teacherOnly && (
+                          <button
+                            className="btn"
+                            style={{ padding: '4px 8px', fontSize: 11, color: 'var(--red)' }}
+                            onClick={() => setRemoving(r)}
+                          >
+                            삭제
+                          </button>
+                        )}
                       </div>
                     ),
                   },
@@ -545,9 +554,11 @@ function Content() {
                   </>
                 }
                 toolbar={
-                  <button className="btn pri" onClick={() => setComposing((v) => !v)}>
-                    <Icon name="plus" size={14} /> {composing ? '작성 취소' : '공지 작성'}
-                  </button>
+                  !teacherOnly && (
+                    <button className="btn pri" onClick={() => setComposing((v) => !v)}>
+                      <Icon name="plus" size={14} /> {composing ? '작성 취소' : '공지 작성'}
+                    </button>
+                  )
                 }
               />
             </>
@@ -655,16 +666,24 @@ function Content() {
 const composeSignal = createScreenSignal()
 const inboxSignal = createScreenSignal()
 
-export const chatMockup: Mockup = {
-  Content,
-  actions: (
+/** 헤더 액션 — 담임에게는 '공지 작성' 을 내지 않는다(본문 버튼과 같은 판단) */
+function HeaderActions() {
+  const { teacherOnly } = useAuth()
+  return (
     <>
       <button className="btn" onClick={() => inboxSignal.bump()}>
         <Icon name="inbox" size={14} /> 수신함
       </button>
-      <button className="btn pri" onClick={() => composeSignal.bump()}>
-        <Icon name="plus" size={14} /> 공지 작성
-      </button>
+      {!teacherOnly && (
+        <button className="btn pri" onClick={() => composeSignal.bump()}>
+          <Icon name="plus" size={14} /> 공지 작성
+        </button>
+      )}
     </>
-  ),
+  )
+}
+
+export const chatMockup: Mockup = {
+  Content,
+  actions: <HeaderActions />,
 }
