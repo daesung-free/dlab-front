@@ -686,18 +686,26 @@ function Content() {
         align: 'center',
         value: () => '',
         render: (r) => (
+          /* ★ 목록 버튼만 막고 **템플릿 탭을 빠뜨렸었다**(2026-09-28) — 여기로 들어가면
+                담임도 설문을 만들고 문항을 고칠 수 있었다. 같은 판단을 건다 */
           <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-            <button className="btn pri" style={{ padding: '4px 9px', fontSize: 11.5 }} onClick={() => instantiate(r)}>
-              설문 생성
-            </button>
-            <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} onClick={() => editTemplate(r)}>
-              수정
-            </button>
+            {teacherOnly ? (
+              <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>보기 전용</span>
+            ) : (
+              <>
+                <button className="btn pri" style={{ padding: '4px 9px', fontSize: 11.5 }} onClick={() => instantiate(r)}>
+                  설문 생성
+                </button>
+                <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} onClick={() => editTemplate(r)}>
+                  수정
+                </button>
+              </>
+            )}
           </div>
         ),
       },
     ],
-    [instantiate, editTemplate],
+    [instantiate, editTemplate, teacherOnly],
   )
 
   /* ══ 편집기 화면 ══ */
@@ -1180,9 +1188,12 @@ function Content() {
               toolbar={
                 <>
                   <ExcelButton filename="설문_목록" columns={columns} rows={surveys} masked={false} />
-                  <button className="btn pri" onClick={createSurvey}>
-                    <Icon name="plus" size={14} /> 설문 생성
-                  </button>
+                  {/* 담임은 설문을 만들지 않는다 — 헤더·행 버튼과 같은 판단이다 */}
+                  {!teacherOnly && (
+                    <button className="btn pri" onClick={createSurvey}>
+                      <Icon name="plus" size={14} /> 설문 생성
+                    </button>
+                  )}
                 </>
               }
             />
