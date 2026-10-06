@@ -3446,9 +3446,12 @@ GET /api/v1/admin/admission-reservations             → 400 필수 파라미터
 서버가 토큰으로 거른다 — 전 지점 권한자면 조건이 빠지고, 지점 관리자면 자기 지점만 온다.
 상세·메모·상태이력·전환도 같은 검사를 거쳐 남의 지점 건 id 를 넣으면 못 가져온다.
 
-⚠️ **미확인** — 로컬 예약이 0건이라 `admin`·`branch` 두 계정 모두 `[]` 였다. 백엔드가 서버
-코드(`AdmissionReservationAdminService.search`)를 읽어 알려준 내용이고, **내가 응답으로 확인한
-것이 아니다.** 시드가 들어오면 지점 계정으로 확인한다.
+**확인했다**(2026-10-06, 시드 7건 — 분당 6 · 일산 1):
+
+```
+본사 admin  → 7건  RSV-2026-9001~9007   (ac8 6건 + ac2 1건)
+분당 branch → 6건  RSV-2026-9007(일산)이 빠진다
+```
 
 → 처음 이 항목에 「지점 관리자가 남의 지점 지원자의 이름·연락처를 받는다」고 적었는데
 **지점 계정으로 호출해 보지 않고 쓴 추측이었다.** 그대로 두면 백엔드가 없는 버그를 찾는다.
@@ -3458,29 +3461,56 @@ GET /api/v1/admin/admission-reservations             → 400 필수 파라미터
 "왜 여기만 다르냐"가 된다. 그래서 **지점을 고른 동안에만** 그 지점 건으로 좁히고,
 아직 안 골랐으면(`null`) 전부 보여준다. 보안 장치가 아니라 **선택을 따르는 것**이다.
 
-### 40-2. 상세가 목록과 같은 모양이다 — 접수 폼 값이 안 온다
+### 40-2. 상세에 접수 폼 값이 실렸다 (2026-10-06 해결)
 
-`GET /{reservationId}` 응답이 `ReservationView` 로 목록과 동일하다. 오는 값은
-`id · rsvCd · year · academyId · studentName · studentTel · parentTel · stdGrade · schoolName ·
-status · statusName · converted · enrollmentId · studentNo · createdAt` 뿐이다.
+처음에는 `GET /{reservationId}` 가 목록과 같은 모양이라 이름·학교·연락처뿐이었다. 요청해서
+접수 폼 값이 상세에 실렸다 — `birth`·`gender`·`admissionDate`·`schoolRecord`·`schoolType`·
+`universityName`·`zipCode`·`address`·`addressDetail`·`agreePrivacy`·`agreeMarketing`.
 
-접수 폼(`AdmissionRequest`)은 이보다 훨씬 많이 받는다 — `birth`(생년) · `previousAcademy`(출신
-학원) · `admissionDate`(등원 희망일) · `foundPath`(알게 된 경로) · `admissionStandard`(입학기준) ·
-`schoolRecord`(내신) · `universityName` · `agreePrivacy`(개인정보 동의) · 주소. **들어온 값인데
-관리자 조회로 안 나온다.**
+**날짜가 두 형식이다 — 섞으면 조용히 400이다.**
 
-→ 카드와 상세에 `<Unfilled/>` 로 자리를 잡아 뒀다. 담당자가 전화를 걸기 전에 볼 정보가
-이름·학교·연락처뿐이라 실제로 부족하다. 상세 응답에 실어 달라고 요청해 둠.
+| 값 | 형식 | 비고 |
+|---|---|---|
+| 접수 폼의 `birth`·`admissionDate` | **`yyyyMMdd` 구분자 없음** | `birth VARCHAR(8)`. 수신 전문 그대로 보관 |
+| `createdAt` 등 서버가 만든 값 | ISO | |
+| 전환(`convert`)에 보내는 `admissionDate` | **`yyyy-MM-dd`** | `yyyyMMdd` 로 보내면 400 |
+
+접수 폼 쪽은 **형식 검증이 없다** — 빈 문자열도 `"2008031"`(7자)도 통과한다(백엔드 회신).
+그래서 화면은 8자리 숫자만 날짜로 바꾸고 **아니면 `-`** 로 떨어뜨린다(`formatYmd`).
+⚠️ 9자 이상은 접수 자체가 400 으로 거부된다 — 홈페이지가 `"2008-03-12"`(10자)를 보내면
+그 지원자 접수가 실패한다. 시너지 연동 전에 확인받을 항목으로 백엔드가 올려 뒀다.
+
+**코드 숫자는 아직 이름이 없다.** `previousAcademy`·`foundPath`·`examType`·`admissionStandard`
+는 숫자로만 오고 `GET /api/v1/admin/admission-codes?group=…`(직원 JWT, 지점은 토큰)가
+**빈 배열**이다(시너지 대기). 숫자를 그대로 보여주지 않고 `<Unfilled/>` 로 둔다 —
+「유입경로 3」은 담당자가 읽어도 할 일이 달라지지 않는다.
+
+**화면에서 직접 푸는 두 코드**(코드표에 없고 컬럼 주석에만 있다 — 백엔드 회신):
+
+- `stdGrade` — `1` 고1 · `2` 고2 · `3` 고3 · `N` N수생.
+  ⚠️ **재원생 학년(`HIGH2`·`HIGH3`·`N_SU`)과 다른 값이다.** 입학예약은 아직 학생이 아니라
+  규격서 코드를 쓰고 전환될 때 재원생 체계로 옮겨진다 — 두 화면을 같은 매핑으로 묶지 않는다
+- `schoolType`(내신 종류) — `91` 일반고 · `92` 특목·자사고
 
 ### 40-3. 좌석 대기 · 장학 신청 KPI 는 셀 수가 없다
 
 시안 KPI 6개 중 '좌석 대기'·'장학 신청' 은 예약 건에 그 여부가 없어 못 센다
 (`<Unfilled/>`). 나머지는 상태별 건수로 센다.
 
-### 40-4. 전환은 되돌릴 수 없다
+### 40-4. 전환은 「입학 확정」에서만 되고, 되돌릴 수 없다
 
-`POST /{id}/convert` 는 학생을 만들고 `converted` 를 true 로 굳힌다. **되돌리는 API 가 없다** —
-화면에서 모달로 한 번 더 받고, 전환된 카드에는 전환 버튼을 주지 않는다.
+`POST /{id}/convert` 는 학생을 만들고 `converted` 를 true 로 굳힌다. **되돌리는 API 가 없다.**
+
+**상태 제약을 눌러 보고 알았다**(2026-10-06). 다른 상태에서 부르면 400 이다.
+
+```
+POST /admission-reservations/1/convert   {"grade":"N_SU","admissionDate":"2026-03-02"}
+→ 400 「입학확정」 상태에서만 정식 접수로 전환합니다. 현재 통화필요 입니다.
+```
+
+처음에는 전환되지 않은 카드 **전부**에 전환 버튼을 달아 뒀다 — 눌러도 400 이라
+**"저장이 안 된다"로 읽힌다.** 입학 확정이 아닌 카드는 버튼을 막고
+「먼저 상태를 「입학 확정」으로 옮겨 주세요」로 바꿨다.
 
 ### 40-5. 신규 수신은 고정 키가 필요하다 (백엔드 회신 2026-10-06)
 
@@ -3495,7 +3525,18 @@ status · statusName · converted · enrollmentId · studentNo · createdAt` 뿐
 
 같은 `requestId` 로 두 번 보내면 저장하지 않고 **먼저 들어온 접수번호를 그대로** 돌려준다(멱등).
 
-### 40-6. 아직 못 눌러 본 것
+### 40-6. 쓰기 전부 확인 (2026-10-06)
 
-로컬에 예약이 **0건**이라 칸반에 카드가 없고, **상태 변경·메모·상태 이력·원생 전환을
-실제로 눌러 보지 못했다.** 시드가 들어오면 확인하고 이 항목을 고친다.
+시드 7건으로 화면에서 실제로 눌러 봤다. 전부 200, 4xx·JS 오류 0건.
+
+```
+POST /admission-reservations/3/memos        200   메모 추가
+DELETE /admission-reservations/memos/3      200   메모 삭제
+POST /admission-reservations/3/status       200   상담 완료 → 보류 (이유 함께)
+POST /admission-reservations/2/status       200   → 입학 확정
+POST /admission-reservations/2/convert      200   원생 전환 (등원일 2026-03-02)
+```
+
+화면 쪽도 확인했다 — 지점 선택(분당)에 일산 건이 안 섞인다 · 학년이 「고3」·「N수생」으로
+풀린다 · 생년·내신·주소·동의가 보인다 · 상태 이력이 보인다 · 전환된 카드는 전환 버튼 대신
+학번을 보여준다 · 등원일을 비우면 전환 확인이 눌리지 않는다.

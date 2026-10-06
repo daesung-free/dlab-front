@@ -9137,6 +9137,17 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * 상세 — <b>접수 폼으로 들어온 항목까지</b> 함께 내린다
+         * @description 상세 — <b>접수 폼으로 들어온 항목까지</b> 함께 내린다.
+         *
+         *      <p>목록과 같은 모양이면 카드에 적을 것이 이름·학교·연락처뿐이어서, <b>담당자가 전화를
+         *      걸기 전에 볼 정보가 없다.</b> 생년·등원 희망일·유입경로가 저장은 되는데 응답에만
+         *      빠져 있었다.
+         *
+         *      <p><b>목록에는 싣지 않는다.</b> 칸반이 수백 건을 한 번에 받는 화면이라, 행마다 주소·동의
+         *      항목까지 실으면 목록이 몇 배로 커진다.
+         */
         get: operations["detail_2"];
         put?: never;
         post?: never;
@@ -9154,6 +9165,26 @@ export interface paths {
             cookie?: never;
         };
         get: operations["statusLogs_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/admission-codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 그룹별 값 목록.
+         * @description 그룹별 값 목록. 전 지점 공통과 내 지점 것을 함께 준다.
+         */
+        get: operations["codes_1"];
         put?: never;
         post?: never;
         delete?: never;
@@ -20316,6 +20347,93 @@ export interface components {
          *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
          *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
          */
+        ApiResponseReservationDetailView: {
+            success?: boolean;
+            data?: components["schemas"]["ReservationDetailView"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        /**
+         * @description 상세. 목록({@link ReservationView ReservationView})에 접수 폼 항목을 더한 것이다.
+         *
+         *      <p>⚠️ <b>코드 항목은 숫자로 내려간다</b>(출신학원·유입경로·전형·입학기준). 값 목록을
+         *      아직 받지 못해 이름이 없다 — 이름은 <code>GET /api/v1/admin/admission-codes</code>로
+         *      따로 받아 화면에서 잇는다. 응답에 이름을 함께 싣지 않는 이유는, 목록·필터에서도 같은
+         *      이름이 필요한데 행마다 같은 문자열이 반복되고 <b>"언제의 이름인가"를 응답이
+         *      결정해 버리기</b> 때문이다.
+         *
+         *      <p>⚠️ 연락처·생년·주소를 <b>가리지 않고 내린다.</b> 이 화면은 담당자가 지원자에게
+         *      전화를 거는 업무라 연락처 열람이 업무 자체이고, 목록이 이미 그렇게 돌고 있다.
+         *      권한 매트릭스가 확정되면 열람 범위를 함께 정리한다.
+         */
+        ReservationDetailView: {
+            /** Format: int64 */
+            id?: number;
+            rsvCd?: string;
+            /** Format: int32 */
+            year?: number;
+            /** Format: int64 */
+            academyId?: number;
+            studentName?: string;
+            studentTel?: string;
+            parentTel?: string;
+            stdGrade?: string;
+            schoolName?: string;
+            /** Format: int32 */
+            schoolCode?: number;
+            /** @enum {string} */
+            status?: "CALL_NEEDED" | "CANCELED" | "CONSULTED" | "ON_HOLD" | "CONFIRMED" | "NOT_REGISTERED";
+            statusName?: string;
+            converted?: boolean;
+            /** Format: int64 */
+            enrollmentId?: number;
+            studentNo?: string;
+            birth?: string;
+            gender?: string;
+            /** @description 등원 희망일(<code>yyyyMMdd</code> 문자열). 규격서 형식 그대로다 */
+            admissionDate?: string;
+            /**
+             * Format: int32
+             * @description 계열. ⚠️ 수집·노출을 멈추기로 한 항목인데 수신 전문에 남아 있어
+             *                           값이 들어오는 경우가 있다 — 화면에 쓰지 말 것
+             */
+            track?: number;
+            /** Format: int32 */
+            previousAcademy?: number;
+            /** Format: int32 */
+            foundPath?: number;
+            foundPathText?: string;
+            /** Format: int32 */
+            examType?: number;
+            /** Format: int32 */
+            admissionStandard?: number;
+            /** Format: int32 */
+            schoolType?: number;
+            schoolRecord?: number;
+            universityName?: string;
+            /** Format: int32 */
+            universityGrade?: number;
+            /** Format: int32 */
+            rejectReason?: number;
+            rejectReasonText?: string;
+            zipCode?: string;
+            address?: string;
+            addressDetail?: string;
+            agreePrivacy?: boolean;
+            agreeMarketing?: boolean;
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
         ApiResponseListStatusLogView: {
             success?: boolean;
             data?: components["schemas"]["StatusLogView"][];
@@ -20348,6 +20466,32 @@ export interface components {
         ApiResponseListMemoView: {
             success?: boolean;
             data?: components["schemas"]["MemoView"][];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        AdminAdmissionCodeView: {
+            group?: string;
+            code?: string;
+            name?: string;
+            /**
+             * Format: int32
+             * @description 규격서의 순번. 과목처럼 순번으로 넘기는 항목이 있어 함께 내린다
+             */
+            idx?: number;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseListAdminAdmissionCodeView: {
+            success?: boolean;
+            data?: components["schemas"]["AdminAdmissionCodeView"][];
             meta?: components["schemas"]["PageMeta"];
             error?: components["schemas"]["ErrorBody"];
         };
@@ -32727,7 +32871,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponseReservationView"];
+                    "*/*": components["schemas"]["ApiResponseReservationDetailView"];
                 };
             };
         };
@@ -32750,6 +32894,32 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseListStatusLogView"];
+                };
+            };
+        };
+    };
+    codes_1: {
+        parameters: {
+            query: {
+                /**
+                 * @description <code>ACAD</code>(출신학원) · <code>ADMI</code>(지원기준) · <code>EXAM</code>(전형) ·
+                 *                   <code>FIND</code>(알게된 경로) · <code>SUBJECT</code>(과목)
+                 */
+                group: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListAdminAdmissionCodeView"];
                 };
             };
         };
