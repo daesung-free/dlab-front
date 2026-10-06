@@ -332,8 +332,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 이 계정에 지정된 메뉴.
-         * @description 이 계정에 지정된 메뉴. <code>restricted=false</code> 면 제한이 걸려 있지 않은 것이다.
+         * 이 계정에 지정된 메뉴
+         * @description 이 계정에 지정된 메뉴. <code>restricted=false</code> 면 계정별 설정이 <b>없는</b> 것이다.
+         *
+         *      <p>설정이 없는 계정에는 <b>역할 기본값</b>이 내려간다(<code>defaults</code>) — 화면은 그걸로
+         *      체크박스 초기 상태를 그린다. 빈 상태로 그리면 저장을 누르는 순간 제한 해제가 되어
+         *      <b>감춰 뒀던 메뉴가 전부 다시 열린다.</b>
          */
         get: operations["ofAccount"];
         /**
@@ -2130,6 +2134,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/homepage/admissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 입학예약 접수
+         * @description 입학예약 접수.
+         *
+         *      <p>같은 <code>requestId</code>가 다시 오면 저장하지 않고 <b>먼저 들어온 건의 접수번호</b>를
+         *      그대로 돌려준다 — 홈페이지는 성공으로 처리하면 된다.
+         */
+        post: operations["create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/homepage/admissions/{reservationNo}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 성적표 파일
+         * @description 성적표 파일.
+         *
+         *      <p>접수번호를 먼저 받아야 올릴 수 있다 — 어느 신청의 파일인지 알아야 해서다.
+         *      본문은 <code>data:</code> 접두사가 있든 없든 Base64 문자열을 받는다.
+         */
+        post: operations["uploadFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/app/surveys/{surveyId}/responses": {
         parameters: {
             query?: never;
@@ -2534,7 +2584,7 @@ export interface paths {
          *      <p>신청하면 <b>학부모와 담당선생님에게 동시에</b> 알림이 간다. 승인 자체는 공통 승인
          *      라우팅이 처리하며, 제한시간이 지나면 담당선생님에게 넘어간다.
          */
-        post: operations["create"];
+        post: operations["create_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2739,8 +2789,13 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 현재 선택값.
-         * @description 현재 선택값. 없으면 아직 안 골랐다는 뜻이라 화면이 선택을 요구한다.
+         * 현재 선택값 + <b>지금 실제로 적용되는 승인자</b>
+         * @description 현재 선택값 + <b>지금 실제로 적용되는 승인자</b>.
+         *
+         *      <p><code>preferred</code>가 비어 있으면 아직 안 골랐다는 뜻이고, 그래도 <code>items</code>에는
+         *      <b>지점 정책값이 적용된 결과</b>가 들어 있다. 신청 화면은 이 값을 <b>표시만</b> 하면 된다 —
+         *      거기서 바꾸게 하면 동의 기록이 신청 횟수만큼 쌓이고, 한 번 고른 학생에게는
+         *      그 뒤로 관리자 지점 설정이 적용되지 않는다.
          */
         get: operations["currentPrimaryApprover"];
         put?: never;
@@ -2827,7 +2882,7 @@ export interface paths {
          * 개설.
          * @description 개설. 문항까지 한 번에 받는다 — 문항 없는 설문이 앱에 노출되는 순간이 없어야 한다.
          */
-        post: operations["create_1"];
+        post: operations["create_2"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3549,7 +3604,7 @@ export interface paths {
          * 루틴 등록.
          * @description 루틴 등록.
          */
-        post: operations["create_2"];
+        post: operations["create_3"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3642,7 +3697,7 @@ export interface paths {
         };
         get: operations["list_3"];
         put?: never;
-        post: operations["create_3"];
+        post: operations["create_4"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3669,7 +3724,7 @@ export interface paths {
          *      <p>시간이 겹치면 거부된다 — 한 시각이 두 교시에 걸리면
          *      <b>출결 판정과 순공시간이 흔들린다.</b>
          */
-        post: operations["create_4"];
+        post: operations["create_5"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3775,7 +3830,7 @@ export interface paths {
          *      <p>⚠️ 응답의 상태는 <code>CREATED</code> 다. <b>결제된 것이 아니라 링크가 만들어진 것</b>이고,
          *      화면도 그렇게 보여야 한다 — "결제 완료" 로 표시하면 데스크가 받은 줄 안다.
          */
-        post: operations["create_5"];
+        post: operations["create_6"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3854,7 +3909,7 @@ export interface paths {
          *      <p>⚠️ <b>학생명 변수가 필수다</b> — 다자녀 학부모가 "이거 누구 얘기지" 하고
          *      헷갈리지 않아야 한다. 빠지면 등록이 거부된다.
          */
-        post: operations["create_6"];
+        post: operations["create_7"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4025,7 +4080,7 @@ export interface paths {
          * 업체 등록.
          * @description 업체 등록. 이름 중복은 거부한다.
          */
-        post: operations["create_7"];
+        post: operations["create_8"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4322,7 +4377,7 @@ export interface paths {
          * 특강 등록.
          * @description 특강 등록. 회차는 따로 추가한다 — 회차 없는 특강은 신청을 받을 수 없다.
          */
-        post: operations["create_8"];
+        post: operations["create_9"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4419,7 +4474,7 @@ export interface paths {
          *      <p><b>전 지점 공통(<code>academyId</code> 없음)은 본사만</b> 만든다 — 지점 관리자가 넣으면
          *      다른 지점 드롭다운에도 뜬다. 사유 카테고리·휴일과 같은 규칙이다.
          */
-        post: operations["create_9"];
+        post: operations["create_10"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4711,7 +4766,7 @@ export interface paths {
          * @description 시험 회차 + 과목 등록. <b>과목 없이는 만들 수 없다</b> —
          *      만들면 학생 화면에 제목만 있고 입력 칸이 없는 빈 표가 그려진다.
          */
-        post: operations["create_10"];
+        post: operations["create_11"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4804,8 +4859,11 @@ export interface paths {
         get: operations["mySlots"];
         put?: never;
         /**
-         * 일괄 개설.
+         * 일괄 개설
          * @description 일괄 개설. 이미 있는 시각은 건너뛴다 — 오전을 연 뒤 오후를 추가하는 흐름이 있다.
+         *
+         *      <p><code>endDate</code>를 주면 <b>날짜 범위로 한 번에</b> 만든다. <code>daysOfWeek</code>로
+         *      요일을 고를 수 있다(비우면 범위 안 모든 날).
          */
         post: operations["open"];
         delete?: never;
@@ -4834,7 +4892,7 @@ export interface paths {
          * 반 생성.
          * @description 반 생성.
          */
-        post: operations["create_11"];
+        post: operations["create_12"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4983,7 +5041,7 @@ export interface paths {
          *      <p><b>같은 학생에게 같은 이름으로 또 청구하면 거부된다.</b> 정말 두 번 받는 경우에만
          *      <code>allowDuplicate</code>를 켠다.
          */
-        post: operations["create_12"];
+        post: operations["create_13"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5023,7 +5081,7 @@ export interface paths {
          */
         get: operations["list_13"];
         put?: never;
-        post: operations["create_13"];
+        post: operations["create_14"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5352,7 +5410,7 @@ export interface paths {
          */
         get: operations["list_14"];
         put?: never;
-        post: operations["create_14"];
+        post: operations["create_15"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5399,7 +5457,7 @@ export interface paths {
          * 등록.
          * @description 등록. 정원(수시 6·정시 3)을 넘으면 거절한다.
          */
-        post: operations["create_15"];
+        post: operations["create_16"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5562,7 +5620,7 @@ export interface paths {
          *      <p><b>전 지점 공통(<code>academyId</code> 없음)은 본사만</b> 만든다 — 지점 관리자가 넣으면
          *      다른 지점 드롭다운에도 뜬다. 휴일 등록과 같은 규칙이다.
          */
-        post: operations["create_16"];
+        post: operations["create_17"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6471,6 +6529,29 @@ export interface paths {
         patch: operations["update_16"];
         trace?: never;
     };
+    "/api/v1/homepage/codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 선택 항목 값 목록 — 홈페이지 화면의 드롭다운을 채운다
+         * @description 선택 항목 값 목록 — 홈페이지 화면의 드롭다운을 채운다.
+         *
+         *      <p>⚠️ <b>값 목록을 아직 받지 못했다.</b> 지금은 빈 배열이 나간다
+         *      (출신학원 <code>ACAD</code> · 지원기준 <code>ADMI</code> · 전형 <code>EXAM</code> · 알게된 경로 <code>FIND</code>).
+         */
+        get: operations["codes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/app/surveys": {
         parameters: {
             query?: never;
@@ -7228,6 +7309,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/app/attendance/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 기간 출결 요약 — 순공·출석률·지각·결석·조퇴·외출 건수
+         * @description 기간 출결 요약 — 순공·출석률·지각·결석·조퇴·외출 건수.
+         *
+         *      <p>목록(`GET /app/attendance`)과 따로 둔다. 화면이 일별 이벤트를 받아 직접 세면
+         *      <b>집계 기준이 앱에 박히고</b> 월 하나를 보려고 전 기간을 받아와야 한다.
+         */
+        get: operations["summary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/app/attendance/penalties": {
         parameters: {
             query?: never;
@@ -7236,8 +7340,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 상벌점 — 누적 점수 + 내역.
+         * 상벌점 — 누적 점수 + 내역
          * @description 상벌점 — 누적 점수 + 내역. 벌점은 음수로 내려간다.
+         *
+         *      <p><code>from</code>/<code>to</code>를 주면 <b>그 기간 내역</b>과 <b>기간 증감</b>이 함께 온다.
+         *      누적 점수(<code>total</code>)는 기간과 무관하게 항상 전체다 — 제적 기준이 누적이라서다.
          */
         get: operations["penalties"];
         put?: never;
@@ -7970,7 +8077,7 @@ export interface paths {
          * 합계.
          * @description 합계. 목록과 같은 조건으로 계산된다.
          */
-        get: operations["summary"];
+        get: operations["summary_1"];
         put?: never;
         post?: never;
         delete?: never;
@@ -8149,7 +8256,7 @@ export interface paths {
          *      <p>알림톡은 <b>건당 과금</b>이라 <code>sent</code>가 정산 근거다 — <code>total</code>은
          *      시도한 수라 실패·건너뜀이 섞여 있다.
          */
-        get: operations["summary_1"];
+        get: operations["summary_2"];
         put?: never;
         post?: never;
         delete?: never;
@@ -8212,8 +8319,9 @@ export interface paths {
          * 내가 볼 메뉴
          * @description 내가 볼 메뉴. 로그인 후 화면이 이걸로 좌측 메뉴를 그린다.
          *
-         *      <p>설정이 없는 계정에는 <b>전체</b>가 내려온다 — 화면이 "설정 없음" 을 따로 다루지
-         *      않아도 되게 한다.
+         *      <p>설정이 없는 계정에는 <b>역할 기본값</b>이 내려온다. 예전에는 전체가 내려가서
+         *      담임 사이드바에 급식·수납처럼 열려 있지 않은 메뉴가 그대로 보였다 —
+         *      눌러 봐야 안 된다는 것을 알게 됐다.
          */
         get: operations["mine_1"];
         put?: never;
@@ -10156,9 +10264,12 @@ export interface components {
         AccountMenuView: {
             /** Format: int64 */
             accountId?: number;
-            /** @description 제한이 걸려 있는가. <code>false</code> 면 역할 권한 그대로다 */
+            /** @description 계정별 설정이 있는가. <code>false</code> 면 <code>defaults</code> 가 실제로 내려간다 */
             restricted?: boolean;
+            /** @description 계정별로 지정된 메뉴. 설정이 없으면 빈 목록이다 */
             menus?: components["schemas"]["MenuView"][];
+            /** @description 그 계정의 역할 기본 메뉴. <b>계정별 설정이 있으면 그쪽이 이긴다</b> */
+            defaults?: components["schemas"]["MenuView"][];
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -11760,6 +11871,7 @@ export interface components {
              *                         미복귀 판정이 맞는다
              */
             occurredAt: string;
+            reasonName?: string;
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -11783,6 +11895,77 @@ export interface components {
             sourceRowId?: number;
             status?: string;
             message?: string;
+        };
+        /**
+         * @description 접수 항목.
+         *
+         *      <p>이름을 A안의 축약어(<code>rsv_nm</code>·<code>std_tel</code>)가 아니라 읽을 수 있는 말로 둔다 —
+         *      새로 붙이는 쪽이 옛 약어를 배울 이유가 없다.
+         */
+        AdmissionRequest: {
+            requestId: string;
+            academyCode: string;
+            /** Format: int32 */
+            year?: number;
+            name: string;
+            studentTel: string;
+            parentTel: string;
+            gender?: string;
+            birth?: string;
+            /** Format: int32 */
+            track?: number;
+            admissionDate?: string;
+            grade?: string;
+            /** Format: int32 */
+            examType?: number;
+            /** Format: int32 */
+            admissionStandard?: number;
+            /** Format: int32 */
+            schoolType?: number;
+            schoolRecord?: number;
+            universityName?: string;
+            /** Format: int32 */
+            universityGrade?: number;
+            /** Format: int32 */
+            rejectReason?: number;
+            rejectReasonText?: string;
+            /** Format: int32 */
+            foundPath?: number;
+            foundPathText?: string;
+            /** Format: int32 */
+            previousAcademy?: number;
+            /** Format: int32 */
+            highSchoolCode?: number;
+            highSchoolName?: string;
+            zipCode?: string;
+            address?: string;
+            addressDetail?: string;
+            agreePrivacy?: string;
+            agreeMarketing?: string;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseReceipt: {
+            success?: boolean;
+            data?: components["schemas"]["Receipt"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        Receipt: {
+            /** @description 접수번호. 파일 업로드와 조회가 이 값을 쓴다 */
+            reservationNo?: string;
+        };
+        FileRequest: {
+            /** @description <code>data:</code> 접두사가 있어도 되고 Base64 본문만 보내도 된다 */
+            file: string;
         };
         /**
          * @description 응답 제출.
@@ -14665,6 +14848,9 @@ export interface components {
         ConsultOpenSlots: {
             /** Format: date */
             date: string;
+            /** Format: date */
+            endDate?: string;
+            daysOfWeek?: ("MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY" | "SUNDAY")[];
             from: string;
             to: string;
             /** Format: int32 */
@@ -14781,6 +14967,8 @@ export interface components {
             track?: "HUMANITIES" | "SCIENCE" | "ART" | "COMMON";
             schoolName?: string;
             seatCd?: string;
+            examStudentNo?: string;
+            examSubmitNo?: string;
             /** Format: int64 */
             academyId?: number;
             academyName?: string;
@@ -15954,6 +16142,26 @@ export interface components {
          *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
          *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
          */
+        ApiResponseListCodeView: {
+            success?: boolean;
+            data?: components["schemas"]["CodeView"][];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        CodeView: {
+            code?: string;
+            name?: string;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
         ApiResponseListSurveySummary: {
             success?: boolean;
             data?: components["schemas"]["SurveySummary"][];
@@ -16545,8 +16753,15 @@ export interface components {
          *      <p>순공시간은 <b>확정된 날의 합</b>이라 오늘 몫은 다음날 반영된다.
          *      <code>confirmedDays</code>를 함께 내려, 화면이 "며칠 기준인지"를 밝힐 수 있게 한다 —
          *      안 밝히면 월초에 출석률 100%가 이상하게 보인다.
+         *
+         *      <p>★ <b><code>month</code>를 함께 내린다.</b> 화면이 고른 달과 서버가 계산한 달이 같은지
+         *      확인할 수 있어야 한다 — 비우고 부르면 서버가 이번 달로 정하므로, 응답만 보고는
+         *      어느 달 숫자인지 알 수 없다.
+         *
+         *      <p><code>weeklyStudyMinutes</code>는 <b>항상 이번 주</b>다. 고른 달과 무관하다.
          */
         Metrics: {
+            month?: string;
             /** Format: int32 */
             weeklyStudyMinutes?: number;
             /** Format: int32 */
@@ -16558,6 +16773,19 @@ export interface components {
             attendanceRate?: number;
             /** Format: int32 */
             confirmedDays?: number;
+            /** Format: int32 */
+            lateDays?: number;
+            /** Format: int32 */
+            absentDays?: number;
+            /** Format: int32 */
+            earlyLeaveDays?: number;
+            /**
+             * Format: int32
+             * @description 외출 <b>건수</b>(태깅 이벤트 기준). 사유외출은 따로 센다
+             */
+            outingCount?: number;
+            /** Format: int32 */
+            excusedOutingCount?: number;
         };
         /**
          * @description 상단 프로필.
@@ -17067,20 +17295,64 @@ export interface components {
          *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
          *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
          */
+        ApiResponseSummary: {
+            success?: boolean;
+            data?: components["schemas"]["Summary"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        /** @description 기간 출결 요약. */
+        Summary: {
+            /** Format: int32 */
+            studyMinutes?: number;
+            /**
+             * Format: int32
+             * @description 확정된 날이 없으면 <code>null</code> — 0%로 내리면 결석한 것처럼 보인다
+             */
+            attendanceRate?: number;
+            /** Format: int32 */
+            confirmedDays?: number;
+            /** Format: int32 */
+            lateDays?: number;
+            /** Format: int32 */
+            absentDays?: number;
+            /** Format: int32 */
+            earlyLeaveDays?: number;
+            /**
+             * Format: int32
+             * @description 외출 <b>건수</b>. 일자 상태가 아니라 태깅 이벤트라 같은 날 두 번이면 2다
+             */
+            outingCount?: number;
+            /** Format: int32 */
+            excusedOutingCount?: number;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
         ApiResponsePenalties: {
             success?: boolean;
             data?: components["schemas"]["Penalties"];
             meta?: components["schemas"]["PageMeta"];
             error?: components["schemas"]["ErrorBody"];
         };
-        /** @description 상벌점. */
         Penalties: {
             /**
              * Format: int32
-             * @description <b>벌점은 음수</b>다. 부호를 그대로 내려 앱이 상점·벌점을 구분한다 —
-             *                   절댓값으로 바꾸면 상쇄가 사라진다
+             * @description <b>전체 기간 누적</b> — 제적 기준(40점)이 보는 값
              */
             total?: number;
+            /**
+             * Format: int32
+             * @description 선택한 기간의 증감. 기간을 주지 않았으면 <code>null</code>
+             */
+            periodPoints?: number;
             items?: components["schemas"]["PenaltyRow"][];
         };
         PenaltyRow: {
@@ -17148,6 +17420,53 @@ export interface components {
             data?: components["schemas"]["ApprovalResponse"][];
             meta?: components["schemas"]["PageMeta"];
             error?: components["schemas"]["ErrorBody"];
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponsePrimaryApproverView: {
+            success?: boolean;
+            data?: components["schemas"]["PrimaryApproverView"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        EffectiveApproverView: {
+            /** @enum {string} */
+            requestType?: "FIREWALL_UNLOCK" | "ABSENCE_REASON" | "REGULAR_SCHEDULE";
+            /** @enum {string} */
+            effective?: "PARENT" | "TEACHER" | "AUTO" | "ADMIN";
+            /**
+             * @description <code>STUDENT_CHOICE</code>면 학생 선택이 지점 설정을 덮고 있다는 뜻
+             * @enum {string}
+             */
+            source?: "STUDENT_CHOICE" | "BRANCH_POLICY";
+            /**
+             * @description 지점 정책값. <code>effective</code>와 다르면 선택이 덮은 것이다
+             * @enum {string}
+             */
+            branchDefault?: "PARENT" | "TEACHER" | "AUTO" | "ADMIN";
+            /** Format: int32 */
+            timeoutMinutes?: number;
+            /** @enum {string} */
+            escalationApproverType?: "PARENT" | "TEACHER" | "AUTO" | "ADMIN";
+        };
+        PrimaryApproverView: {
+            /**
+             * @description 학생이 고른 값. <b>비어 있으면 아직 안 골랐다</b>
+             * @enum {string}
+             */
+            preferred?: "PARENT" | "TEACHER" | "AUTO" | "ADMIN";
+            /** Format: date-time */
+            agreedAt?: string;
+            /** @description 유형별로 지금 적용되는 승인자 */
+            items?: components["schemas"]["EffectiveApproverView"][];
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -17860,6 +18179,11 @@ export interface components {
              * @description 이탈 시작 시각. 이탈 중이 아니면 비어 있다
              */
             seatLeftAt?: string;
+            /**
+             * @description 이탈 사유(이탈 위치). 키오스크가 지점별로 관리하는 이름이고,
+             *                             보내기 전이면 비어 있다
+             */
+            seatLeaveReason?: string;
             /** Format: int64 */
             enrollmentId?: number;
             studentNo?: string;
@@ -17976,6 +18300,11 @@ export interface components {
             /** Format: int64 */
             minutes?: number;
             resolved?: boolean;
+            /**
+             * @description 이탈 사유(이탈 위치). 키오스크가 보내기 전이면 비어 있다 —
+             *                        화면은 비었을 때 「-」로 두면 된다
+             */
+            reasonName?: string;
             /** @description 이 행의 이름이 가려졌는지 */
             masked?: boolean;
         };
@@ -23235,6 +23564,60 @@ export interface operations {
             };
         };
     };
+    create: {
+        parameters: {
+            query?: never;
+            header?: {
+                Authorization?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdmissionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseReceipt"];
+                };
+            };
+        };
+    };
+    uploadFile: {
+        parameters: {
+            query?: never;
+            header?: {
+                Authorization?: string;
+            };
+            path: {
+                reservationNo: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseVoid"];
+                };
+            };
+        };
+    };
     submit: {
         parameters: {
             query?: {
@@ -23722,7 +24105,7 @@ export interface operations {
             };
         };
     };
-    create: {
+    create_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -23999,7 +24382,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ApiResponsePrimaryApproverResponse"];
+                    "*/*": components["schemas"]["ApiResponsePrimaryApproverView"];
                 };
             };
         };
@@ -24098,7 +24481,7 @@ export interface operations {
             };
         };
     };
-    create_1: {
+    create_2: {
         parameters: {
             query?: never;
             header?: never;
@@ -25052,7 +25435,7 @@ export interface operations {
             };
         };
     };
-    create_2: {
+    create_3: {
         parameters: {
             query?: never;
             header?: never;
@@ -25193,7 +25576,7 @@ export interface operations {
             };
         };
     };
-    create_3: {
+    create_4: {
         parameters: {
             query?: never;
             header?: never;
@@ -25243,7 +25626,7 @@ export interface operations {
             };
         };
     };
-    create_4: {
+    create_5: {
         parameters: {
             query?: never;
             header?: never;
@@ -25448,7 +25831,7 @@ export interface operations {
             };
         };
     };
-    create_5: {
+    create_6: {
         parameters: {
             query?: never;
             header?: never;
@@ -25540,7 +25923,7 @@ export interface operations {
             };
         };
     };
-    create_6: {
+    create_7: {
         parameters: {
             query?: never;
             header?: never;
@@ -25785,7 +26168,7 @@ export interface operations {
             };
         };
     };
-    create_7: {
+    create_8: {
         parameters: {
             query?: never;
             header?: never;
@@ -26308,7 +26691,7 @@ export interface operations {
             };
         };
     };
-    create_8: {
+    create_9: {
         parameters: {
             query?: never;
             header?: never;
@@ -26454,7 +26837,7 @@ export interface operations {
             };
         };
     };
-    create_9: {
+    create_10: {
         parameters: {
             query?: never;
             header?: never;
@@ -26886,7 +27269,7 @@ export interface operations {
             };
         };
     };
-    create_10: {
+    create_11: {
         parameters: {
             query?: never;
             header?: never;
@@ -27117,7 +27500,7 @@ export interface operations {
             };
         };
     };
-    create_11: {
+    create_12: {
         parameters: {
             query?: never;
             header?: never;
@@ -27328,7 +27711,7 @@ export interface operations {
             };
         };
     };
-    create_12: {
+    create_13: {
         parameters: {
             query?: never;
             header?: never;
@@ -27406,7 +27789,7 @@ export interface operations {
             };
         };
     };
-    create_13: {
+    create_14: {
         parameters: {
             query?: never;
             header?: never;
@@ -27786,7 +28169,7 @@ export interface operations {
             };
         };
     };
-    create_14: {
+    create_15: {
         parameters: {
             query?: never;
             header?: never;
@@ -27856,7 +28239,7 @@ export interface operations {
             };
         };
     };
-    create_15: {
+    create_16: {
         parameters: {
             query?: never;
             header?: never;
@@ -28119,7 +28502,7 @@ export interface operations {
             };
         };
     };
-    create_16: {
+    create_17: {
         parameters: {
             query?: never;
             header?: never;
@@ -29480,6 +29863,31 @@ export interface operations {
             };
         };
     };
+    codes: {
+        parameters: {
+            query: {
+                group: string;
+                academyCode: string;
+            };
+            header?: {
+                Authorization?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListCodeView"];
+                };
+            };
+        };
+    };
     list_17: {
         parameters: {
             query?: {
@@ -29979,6 +30387,12 @@ export interface operations {
             query?: {
                 /** @description <b>학부모만</b> 쓴다. 계정 하나에 자녀가 여럿이라 서버가 고를 수 없다 */
                 studentId?: number;
+                /**
+                 * @description 보려는 달(<code>yyyy-MM</code>). 비우면 이번 달.
+                 *                       ★ <b>주간 순공은 이 값과 무관하게 항상 이번 주</b>다 — 지난달을 골랐을 때
+                 *                       "그 달의 몇째 주"가 정해지지 않는데, 임의로 고르면 화면 이름과 다른 값이 된다
+                 */
+                month?: string;
             };
             header?: never;
             path?: never;
@@ -30279,10 +30693,37 @@ export interface operations {
             };
         };
     };
+    summary: {
+        parameters: {
+            query: {
+                studentId?: number;
+                from: string;
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseSummary"];
+                };
+            };
+        };
+    };
     penalties: {
         parameters: {
             query?: {
                 studentId?: number;
+                /** @description 비우면 전체 기간. <code>to</code>와 함께 주어야 한다 */
+                from?: string;
+                to?: string;
             };
             header?: never;
             path?: never;
@@ -31098,7 +31539,7 @@ export interface operations {
             };
         };
     };
-    summary: {
+    summary_1: {
         parameters: {
             query: {
                 academyId?: number;
@@ -31300,7 +31741,7 @@ export interface operations {
             };
         };
     };
-    summary_1: {
+    summary_2: {
         parameters: {
             query?: {
                 academyId?: number;
