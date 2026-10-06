@@ -4,12 +4,17 @@ import { Modal, Unfilled, useServerData } from '../../components/common'
 import { useAcademy } from '../../auth/AcademyContext'
 import {
   CONVERT_GRADE_LABEL,
+  GENDER_LABEL,
+  SCHOOL_TYPE_LABEL,
+  STD_GRADE_LABEL,
   RESERVATION_FLOW,
   RESERVATION_STATUS_LABEL,
   addReservationMemo,
   changeReservationStatus,
   convertReservation,
   deleteReservationMemo,
+  formatYmd,
+  getReservation,
   listReservationMemos,
   listReservations,
   listStatusLogs,
@@ -215,7 +220,7 @@ function Content() {
                   >
                     <div className="lead-top">
                       <span className="nm">{r.studentName ?? '이름 없음'}</span>
-                      {r.stdGrade && <span className="cat na">{r.stdGrade}</span>}
+                      {r.stdGrade && <span className="cat na">{STD_GRADE_LABEL[r.stdGrade] ?? r.stdGrade}</span>}
                     </div>
                     <div className="lead-meta">
                       {r.schoolName ?? '학교 미입력'}
@@ -259,6 +264,13 @@ function Detail({
   /* 훅은 조건 객체를 받는다 — id 하나짜리도 객체로 감싸고 useMemo 를 건다.
      매 렌더 새 객체면 무한 요청이 된다 */
   const idParams = useMemo(() => ({ id: row.id }), [row.id])
+  /* 접수 폼 값(생년·등원희망일·내신·주소)은 **상세에만** 온다. 목록 행에는 없어서
+     카드를 열 때 한 번 더 읽는다 */
+  const detail = useServerData({
+    fetcher: ({ id }: { id: number }) => getReservation(id),
+    params: idParams,
+    errorMessage: '접수 내용을 불러오지 못했습니다.',
+  })
   const memos = useServerData({
     fetcher: ({ id }: { id: number }) => listReservationMemos(id),
     params: idParams,
@@ -281,6 +293,8 @@ function Detail({
   const [delMemo, setDelMemo] = useState<number | null>(null)
 
   const [convert, setConvert] = useState(false)
+
+  const d = detail.data
 
   async function submitStatus() {
     if (status === row.status && !reason.trim()) {
@@ -359,14 +373,71 @@ function Detail({
         <div className="frow">
           <label>학교 · 학년</label>
           <div>
-            {row.schoolName ?? '-'} · {row.stdGrade ?? '-'}
+            {row.schoolName ?? '-'} ·{' '}
+            {row.stdGrade ? (STD_GRADE_LABEL[row.stdGrade] ?? row.stdGrade) : '-'}
           </div>
         </div>
         <div className="frow">
-          <label>접수 폼 상세</label>
+          <label>생년 · 성별</label>
           <div>
-            <Unfilled reason="생년·출신학원·등원희망일·유입경로·입학기준이 관리자 조회에 오지 않는다" />
-            <div className="hint">생년 · 출신 학원 · 등원 희망일 · 알게 된 경로가 들어갈 자리입니다.</div>
+            {detail.loading && detail.data === null ? (
+              '불러오는 중…'
+            ) : (
+              <>
+                {formatYmd(d?.birth ?? null) ?? '-'} ·{' '}
+                {d?.gender ? (GENDER_LABEL[d.gender] ?? d.gender) : '-'}
+              </>
+            )}
+          </div>
+        </div>
+        <div className="frow">
+          <label>등원 희망일</label>
+          <div>{formatYmd(d?.admissionDate ?? null) ?? '-'}</div>
+        </div>
+        <div className="frow">
+          <label>내신</label>
+          <div>
+            {d?.schoolRecord != null ? `주요교과평균 ${d.schoolRecord}등급` : '-'}
+            {d?.schoolType != null && (
+              <div className="hint">{SCHOOL_TYPE_LABEL[d.schoolType] ?? '내신 종류 미확인'}</div>
+            )}
+            {d?.universityName && (
+              <div className="hint">
+                {d.universityName}
+                {d.universityGrade != null ? ` · ${d.universityGrade}등급` : ''}
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="frow">
+          <label>출신 학원 · 경로</label>
+          <div>
+            {/* ★ 코드 숫자를 그대로 쓰지 않는다. 이름 목록이 아직 비어 있어
+                   「유입경로 3」이 되는데, 담당자가 읽어도 할 일이 달라지지 않는다 */}
+            {d?.foundPathText ? (
+              d.foundPathText
+            ) : (
+              <Unfilled reason="출신학원·유입경로·전형·입학기준이 코드 숫자로만 오고 이름 목록이 아직 비어 있다" />
+            )}
+          </div>
+        </div>
+        <div className="frow">
+          <label>주소</label>
+          <div>
+            {d?.address ? (
+              <>
+                {d.address} {d.addressDetail ?? ''}
+                {d.zipCode && <div className="hint">우편번호 {d.zipCode}</div>}
+              </>
+            ) : (
+              '-'
+            )}
+          </div>
+        </div>
+        <div className="frow">
+          <label>동의</label>
+          <div>
+            개인정보 {d?.agreePrivacy ? '동의' : '미동의'} · 마케팅 {d?.agreeMarketing ? '동의' : '미동의'}
           </div>
         </div>
 
@@ -409,12 +480,21 @@ function Detail({
               <div>
                 학번 <b>{row.studentNo ?? '-'}</b> 으로 전환이 끝났습니다.
               </div>
-            ) : (
+            ) : row.status === 'CONFIRMED' ? (
               <>
                 <button className="btn" type="button" onClick={() => setConvert(true)}>
                   원생으로 전환
                 </button>
                 <div className="hint">전환하면 학생이 만들어지고 되돌릴 수 없습니다.</div>
+              </>
+            ) : (
+              /* ★ 서버가 **입학 확정에서만** 전환을 받는다. 다른 상태에서 버튼을 주면
+                    눌러도 400 이라 "저장이 안 된다"로 읽힌다(2026-10-06 로컬 확인) */
+              <>
+                <button className="btn" type="button" disabled data-soon title="입학 확정으로 옮긴 뒤 전환할 수 있습니다">
+                  원생으로 전환
+                </button>
+                <div className="hint">먼저 상태를 「입학 확정」으로 옮겨 주세요.</div>
               </>
             )}
           </div>
