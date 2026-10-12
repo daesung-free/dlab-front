@@ -4,6 +4,12 @@
    =========================================================== */
 .frow { display: grid; grid-template-columns: 112px 1fr; gap: 12px; align-items: start; margin-bottom: 14px; }
 .frow > label { font-size: 12.5px; color: var(--ink-2); font-weight: 600; padding-top: 9px; }
+/* 읽기 전용 줄 — 값이 **입력칸이 아니라 그냥 글자**일 때 쓴다.
+   ★ 기본 라벨은 `.inp` 의 9px 안쪽 여백에 맞춰 내려가 있다. 값이 평범한 글자면
+     그 9px 만큼 라벨만 아래로 밀려 **줄이 어긋나 보인다**(수정 이력 모달에서 실제로 그랬다). */
+.frow.ro > label { padding-top: 0; }
+.frow.ro { margin-bottom: 10px; }
+
 .frow .req::after { content: ' *'; color: var(--red); }
 .frow:last-child { margin-bottom: 0; }
 

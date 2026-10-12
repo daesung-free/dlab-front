@@ -185,6 +185,39 @@ export const NAV: NavCat[] = [
         ],
       },
       {
+        name: '출입 · 출근',
+        items: [
+          {
+            screenId: 'door-code',
+            label: '도어락 번호',
+            icon: 'key-round',
+            added: true,
+            note: '추가개발 8. 아침 긴급 출입에 안내할 번호',
+          },
+          {
+            screenId: 'emergency-access',
+            label: '긴급 출입 내역',
+            icon: 'door-open',
+            added: true,
+            note: '추가개발 10. 학생 QR 요청 기록',
+          },
+          {
+            screenId: 'morning-check',
+            label: '오전 출근 확인',
+            icon: 'alarm-clock',
+            added: true,
+            note: '추가개발 11. 매일 07:05 검사·발송',
+          },
+          {
+            screenId: 'staff-attendance',
+            label: '직원 출근 기록',
+            icon: 'user-check',
+            added: true,
+            note: '추가개발 12. 기록 수정·이력',
+          },
+        ],
+      },
+      {
         name: '배정 · 특강 · 실적',
         items: [
           { screenId: 'admin-assign', label: '배정 관리', added: true, note: '사물함·독서실. 기숙사 제외' },

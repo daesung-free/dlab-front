@@ -172,9 +172,6 @@ function Content() {
               검색 해제
             </button>
           )}
-          <span className="mk" style={{ marginLeft: 2 }}>
-            {rows.length}건
-          </span>
         </div>
       </div>
 
@@ -364,20 +361,20 @@ function Detail({
           </div>
         )}
 
-        <div className="frow">
+        <div className="frow ro">
           <label>연락처</label>
           <div>
             학생 {row.studentTel ?? '-'} · 학부모 {row.parentTel ?? '-'}
           </div>
         </div>
-        <div className="frow">
+        <div className="frow ro">
           <label>학교 · 학년</label>
           <div>
             {row.schoolName ?? '-'} ·{' '}
             {row.stdGrade ? (STD_GRADE_LABEL[row.stdGrade] ?? row.stdGrade) : '-'}
           </div>
         </div>
-        <div className="frow">
+        <div className="frow ro">
           <label>생년 · 성별</label>
           <div>
             {detail.loading && detail.data === null ? (
@@ -390,11 +387,11 @@ function Detail({
             )}
           </div>
         </div>
-        <div className="frow">
+        <div className="frow ro">
           <label>등원 희망일</label>
           <div>{formatYmd(d?.admissionDate ?? null) ?? '-'}</div>
         </div>
-        <div className="frow">
+        <div className="frow ro">
           <label>내신</label>
           <div>
             {d?.schoolRecord != null ? `주요교과평균 ${d.schoolRecord}등급` : '-'}
@@ -409,7 +406,7 @@ function Detail({
             )}
           </div>
         </div>
-        <div className="frow">
+        <div className="frow ro">
           <label>출신 학원 · 경로</label>
           <div>
             {/* ★ 코드 숫자를 그대로 쓰지 않는다. 이름 목록이 아직 비어 있어
@@ -421,7 +418,7 @@ function Detail({
             )}
           </div>
         </div>
-        <div className="frow">
+        <div className="frow ro">
           <label>주소</label>
           <div>
             {d?.address ? (
@@ -434,7 +431,7 @@ function Detail({
             )}
           </div>
         </div>
-        <div className="frow">
+        <div className="frow ro">
           <label>동의</label>
           <div>
             개인정보 {d?.agreePrivacy ? '동의' : '미동의'} · 마케팅 {d?.agreeMarketing ? '동의' : '미동의'}
