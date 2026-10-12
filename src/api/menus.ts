@@ -20,6 +20,15 @@ export interface MenuNode {
    *   (대기자 관리·시간표·신상기록부). API 가 생기면 서버 차단까지 함께 걸린다.
    */
   enforceable: boolean
+  /**
+   * 화면이 없는 **권한** 항목인가(2026-10-12 추가). 긴급 출입 알림 수신·직원 출근 기록 수정처럼
+   * 눌러서 들어갈 화면이 없는 것들이다.
+   *
+   * ★ **사이드바에서 거르는 일은 서버가 한다** — `/menus/mine` 에서 빠져 내려오고,
+   *   자주 쓰는 메뉴에 담으려 하면 거절된다. 화면이 또 거르지 않는다.
+   *   여기서는 **설정 화면의 체크박스를 「권한」으로 묶어 보여주는 용도**로만 쓴다.
+   */
+  actionOnly?: boolean
 }
 
 /** 설정 화면이 쓰는 카탈로그. 전체 메뉴 트리가 온다 */
@@ -64,17 +73,31 @@ export function getAccountMenus(accountId: number): Promise<AccountMenus> {
 /**
  * 계정의 메뉴 노출 설정.
  *
+ * ★ **`restricted` 를 반드시 함께 보낸다 — 빠지면 400이다**(2026-10-12 서버 변경).
+ *   전에는 **빈 배열이 「제한 해제」**였고, 그래서 「아무것도 못 보게」를 표현할 방법이
+ *   없었다. 담당자가 전부 해제하고 저장하면 **정반대로 전부 열렸다.** 두 뜻을 한 값에
+ *   겹쳐 놨던 것이 원인이라 서버가 축을 갈랐다.
+ *
+ *   ```
+ *   { restricted: false, menuCodes: [] }      개별 설정 삭제 → 역할 기본값
+ *   { restricted: true,  menuCodes: [...] }   그 메뉴만
+ *   { restricted: true,  menuCodes: [] }      400 — 계정 정지로 처리할 일이다
+ *   ```
+ *
  * ★ **통째로 보낸다.** 더하기·빼기가 아니라 교체다 — 보낸 목록이 곧 전부다.
- * ★ **빈 배열이면 제한 해제**다. 아무것도 못 보게 하려고 빈 배열을 보내면 반대가 된다.
  * ★ **부모 코드를 준다고 자식이 열리지 않는다.** 각 코드가 독립이라 부모를 체크하면
  *   자식까지 함께 실어 보내야 한다(`parentCode` 로 묶는다) — 서버가 자동으로 포함하면
  *   "수납현황만 보여주려 했는데 청구기준 편집까지 열리는" 것을 막을 수 없다.
  * ★ 최고관리자만 호출된다.
  */
-export function setAccountMenus(accountId: number, menuCodes: string[]): Promise<AccountMenus> {
+export function setAccountMenus(
+  accountId: number,
+  restricted: boolean,
+  menuCodes: string[],
+): Promise<AccountMenus> {
   return request<AccountMenus>(`/api/v1/admin/staff/accounts/${accountId}/menus`, {
     method: 'PUT',
-    body: { menuCodes },
+    body: { restricted, menuCodes },
   })
 }
 
