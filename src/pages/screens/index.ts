@@ -46,6 +46,11 @@ import { timetableMockup } from './Timetable'
 import { readingRoomMockup } from './ReadingRoom'
 import { paymentGateMockup } from './PaymentGate'
 import { appManageMockup } from './AppManage'
+/* 추가개발 — 긴급 출입 · 오전 출근 확인 */
+import { doorCodeMockup } from './DoorCode'
+import { emergencyAccessMockup } from './EmergencyAccess'
+import { morningCheckMockup } from './MorningCheck'
+import { staffAttendanceMockup } from './StaffAttendance'
 
 /**
  * screenId(= data/menu.ts) → 화면 목업.
@@ -104,6 +109,12 @@ export const MOCKUPS: Record<string, Mockup> = {
   'reading-room': readingRoomMockup, // F-C-4 독서실 좌석배치표 ⭐
   'payment-gate': paymentGateMockup, // F-C-5 결제 관리
   'app-manage': appManageMockup, // F-C-6 앱 운영 관리
+
+  /* ── 추가개발 (긴급출입 전달문서 1008) ── */
+  'door-code': doorCodeMockup, // F-추가-8 도어락 번호 ⭐ 실연동
+  'emergency-access': emergencyAccessMockup, // F-추가-10 긴급 출입 내역
+  'morning-check': morningCheckMockup, // F-추가-11 오전 출근 확인
+  'staff-attendance': staffAttendanceMockup, // F-추가-12 직원 출근 기록
 }
 
 export type { Mockup }
