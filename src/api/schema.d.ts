@@ -3217,6 +3217,15 @@ export interface paths {
          *      <p>상세 정보(생년월일·성별·출신학교·주소)와 등원일을 <b>함께 받아 한 번에 끝낸다</b> —
          *      등록과 수정으로 나누면 뒤가 실패했을 때 학생만 남고, 화면은 "저장 실패"로만 알려
          *      담당자가 다시 등록해 중복이 생긴다.
+         *
+         *      <h2>★ 홈페이지 입학예약과 겹치면 멈춘다 (피드백 6-3①)</h2>
+         *      홈페이지 입학상담예약과 데스크 신규접수는 <b>서로 다른 경로</b>라, 예약을 넣은 학생을
+         *      여기서 그냥 등록하면 <b>같은 사람이 두 건으로 쌓인다</b> — 한쪽은 대기자 목록에 남고
+         *      한쪽은 재원생이 되어 둘을 잇는 단서가 이름뿐이다.
+         *
+         *      <p><b>자동으로 합치지 않는다.</b> 동명이인이 있고 전환은 학번을 채번해 되돌릴 수
+         *      없다 — 후보를 <code>409</code>로 알려주고 담당자가 「그 예약을 전환」과 「다른 사람입니다」
+         *      중에서 고른다. 후자면 <code>confirmedNotDuplicate</code>를 실어 다시 보낸다.
          */
         post: operations["admit"];
         delete?: never;
@@ -5947,6 +5956,10 @@ export interface paths {
          *
          *      <p>★ <b>「입학확정」 상태에서만</b> 되고, <b>한 번만</b> 된다. 학번 채번은 기존 신규
          *      접수 경로를 그대로 탄다.
+         *
+         *      <p>★ <b>이미 등록된 같은 학생이 있으면 멈춘다</b>(피드백 6-3①, <code>409</code>). 신규접수
+         *      쪽만 막으면 <b>데스크가 먼저 등록하는 순서에서 중복이 그대로 통과한다.</b> 담당자가
+         *      「다른 사람입니다」를 고르면 <code>confirmedNotDuplicate</code>를 실어 다시 보낸다.
          */
         post: operations["convert"];
         delete?: never;
@@ -9062,6 +9075,39 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/meals/daily": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 일자별 신청 명단 — <b>그날 누가 먹는가</b> (피드백 5-4)
+         * @description 일자별 신청 명단 — <b>그날 누가 먹는가</b> (피드백 5-4).
+         *
+         *      <p>{@link com.dlab.api.admin.meal.AdminMealController#monthly #monthly}는 달력 칸의 인원 수까지만 알려준다. 배식대에서 필요한 것은
+         *      숫자가 아니라 명단이고, <code>/orders</code>는 월 단위 주문이라 그날만 추리려면
+         *      주문마다 항목을 펼쳐 봐야 한다.
+         *
+         *      <h2>★ 「신청 vs 배식 대조」는 여기 없다 — 만들지 말 것</h2>
+         *      배식 태깅(식사체크) 결과가 <b>키오스크에서 우리 쪽으로 들어오는 경로가 아직 없다.</b>
+         *      대조 화면을 만들어도 "실제로 먹은 사람" 칸을 채울 값이 없고, <b>빈 칸은 "안 먹었다"로
+         *      읽힌다</b> — 그 상태로 내보내면 신청했는데 안 먹은 것처럼 보이는 학생이 전원이 된다.
+         *      수신 경로가 정해지면 이 응답에 칸을 더한다.
+         *
+         *      <p>이름은 권한에 따라 가려지고, 가려졌는지는 <code>masked</code>로 알려준다 — 화면이
+         *      모르면 또 가려 이름이 통째로 사라지거나 "잘못 저장됐다"는 오인 문의가 생긴다.
+         */
+        get: operations["daily_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/masters/scholarship-masters/selectable": {
         parameters: {
             query?: never;
@@ -9978,6 +10024,38 @@ export interface paths {
             cookie?: never;
         };
         get: operations["statusLogs_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/admission-reservations/duplicates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 같은 사람의 입학예약 찾기 — <b>중복 등록 방지</b> (피드백 6-3①)
+         * @description 같은 사람의 입학예약 찾기 — <b>중복 등록 방지</b> (피드백 6-3①).
+         *
+         *      <p>홈페이지로 입학상담예약을 넣은 학생을 데스크에서 그냥 등록하면 <b>같은 사람이
+         *      두 건으로 쌓인다.</b> 화면이 저장 전에 「같은 분의 입학예약이 있습니다」를 띄우려면
+         *      이 경로가 필요하다 — 저장 차단만 있으면 담당자는 전부 입력한 뒤에야 알게 되고,
+         *      차단 응답에는 <b>이름·연락처가 실리지 않으므로</b>(로그에 남는다) 안내 문구를 만들
+         *      재료도 없다.
+         *
+         *      <p>★ <b>자동으로 합치지 않는다.</b> 동명이인이 실제로 있고 전환은 학번을 채번해
+         *      되돌릴 수 없다 — 찾아서 알려주고 사람이 고른다.
+         *
+         *      <p>판정은 <b>[이름 + 생년월일] 또는 [이름 + 연락처]</b>다. 이름만으로는 동명이인이
+         *      전부 걸리고, 셋을 모두 요구하면 생년월일을 안 받은 건에서 아무것도 안 걸린다.
+         */
+        get: operations["duplicates"];
         put?: never;
         post?: never;
         delete?: never;
@@ -14085,6 +14163,7 @@ export interface components {
             englishName?: string;
             /** Format: int32 */
             graduationYear?: number;
+            confirmedNotDuplicate?: boolean;
         };
         /** @description 앱 계정 상태. */
         AccountView: {
@@ -17074,6 +17153,12 @@ export interface components {
             grade?: "HIGH2" | "HIGH3" | "N_SU" | "STAFF";
             /** Format: date */
             admissionDate?: string;
+            /**
+             * @description 담당자가 「다른 사람입니다」를 고른 경우 <code>true</code>.
+             *                                   <b>자동 병합을 하지 않으므로 사람의 선택이 유일한
+             *                                   통과 수단이다</b> — 기본값(<code>false</code>)은 차단이다
+             */
+            confirmedNotDuplicate?: boolean;
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -20951,6 +21036,57 @@ export interface components {
          *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
          *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
          */
+        ApiResponseMealDailyRosterResponse: {
+            success?: boolean;
+            data?: components["schemas"]["MealDailyRosterResponse"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        /**
+         * @description 일자별 신청 명단.
+         *
+         *      <p><b>점심·저녁을 합치지 않는다.</b> 배식이 따로 돌고 인원도 다르다 — 한 목록에
+         *      섞어 끼니 칸으로만 구분하면 화면이 매번 다시 갈라야 하고, 인원 수도 직접 세게 된다.
+         */
+        MealDailyRosterResponse: {
+            /** Format: date */
+            date?: string;
+            /** Format: int32 */
+            lunchCount?: number;
+            /** Format: int32 */
+            dinnerCount?: number;
+            lunch?: components["schemas"]["MealDailyRosterRow"][];
+            dinner?: components["schemas"]["MealDailyRosterRow"][];
+            /** @description 이름이 가려졌는지. 가려진 걸 모르면 화면이 또 가려 이름이 사라진다 */
+            masked?: boolean;
+        };
+        /** @description 명단 한 행. */
+        MealDailyRosterRow: {
+            /**
+             * Format: int64
+             * @description 끼니 항목 id — <b>명단에서 바로 취소</b>할 수 있게 함께 내린다
+             *                         (<code>DELETE /meals/orders/items/{itemId</code>}가 이 단위다)
+             */
+            orderItemId?: number;
+            /** Format: int64 */
+            enrollmentId?: number;
+            studentNo?: string;
+            studentName?: string;
+            /** @description 반. 미배정이면 <code>null</code> */
+            className?: string;
+            /** @description 좌석번호. 미배정이면 <code>null</code> */
+            seatCd?: string;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
         ApiResponseListClosureResponse: {
             success?: boolean;
             data?: components["schemas"]["ClosureResponse"][];
@@ -22504,6 +22640,54 @@ export interface components {
         ApiResponseListMemoView: {
             success?: boolean;
             data?: components["schemas"]["MemoView"][];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        /**
+         * @description 중복 후보 한 건 — 화면의 「같은 분의 입학예약이 있습니다」 카드.
+         *
+         *      <p>이름·생년·연락처를 <b>가리지 않고</b> 내린다. 이 화면은 담당자가 "같은 사람인가"를
+         *      눈으로 판단하는 자리라 가리면 판단이 불가능하고, 대기자 목록·상세가 이미 같은
+         *      값을 그대로 내린다.
+         */
+        AdmissionDuplicateView: {
+            /** Format: int64 */
+            reservationId?: number;
+            rsvCd?: string;
+            /** Format: int32 */
+            year?: number;
+            /** Format: int64 */
+            academyId?: number;
+            studentName?: string;
+            /** @description 규격서 형식 그대로의 <code>yyyyMMdd</code> 문자열이다 */
+            birth?: string;
+            studentTel?: string;
+            parentTel?: string;
+            /** @enum {string} */
+            status?: "CALL_NEEDED" | "CANCELED" | "CONSULTED" | "ON_HOLD" | "CONFIRMED" | "NOT_REGISTERED";
+            statusName?: string;
+            /**
+             * @description 무엇이 같아서 걸렸는가(<code>BIRTH</code>/<code>TEL</code>). 카드가
+             *                       「생년월일이 같습니다」까지 보여줘야 사람이 판단할 수 있다
+             * @enum {string}
+             */
+            matchedBy?: "BIRTH" | "TEL";
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseListAdmissionDuplicateView: {
+            success?: boolean;
+            data?: components["schemas"]["AdmissionDuplicateView"][];
             meta?: components["schemas"]["PageMeta"];
             error?: components["schemas"]["ErrorBody"];
         };
@@ -34913,6 +35097,29 @@ export interface operations {
             };
         };
     };
+    daily_1: {
+        parameters: {
+            query: {
+                academyId?: number;
+                date: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMealDailyRosterResponse"];
+                };
+            };
+        };
+    };
     selectableScholarships: {
         parameters: {
             query: {
@@ -35910,6 +36117,39 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseListStatusLogView"];
+                };
+            };
+        };
+    };
+    duplicates: {
+        parameters: {
+            query: {
+                academyId?: number;
+                /** @description 비우면 올해 */
+                year?: number;
+                name: string;
+                /**
+                 * @description <code>yyyyMMdd</code> 또는 <code>yyyy-MM-dd</code>. <b>숫자만 뽑아 비교</b>하므로
+                 *                       형식이 달라도 된다 — 규격서 필드가 문자열이라 날짜로 바꿔 비교하면
+                 *                       형식이 다른 값에서 터진다
+                 */
+                birth?: string;
+                /** @description 학부모 또는 학생 연락처. 하이픈이 있어도 된다 */
+                parentTel?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListAdmissionDuplicateView"];
                 };
             };
         };

@@ -4,14 +4,17 @@ import { Icon } from '../../components/Icon'
 import { Tabs } from '../../components/Tabs'
 import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
-import { getSeatLayout, listSeatAreas, type SeatArea, type SeatCell } from '../../api/facility'
 import {
   clearPatrolRound,
+  listPatrolAreas,
   listPatrolMarks,
+  listPatrolSeats,
   listPatrols,
   savePatrol,
+  type PatrolArea,
   type PatrolMarkDef,
   type PatrolRecord,
+  type PatrolSeat as SrvSeat,
 } from '../../api/patrols'
 import type { Mockup } from './types'
 import './reading-room.css'
@@ -88,7 +91,7 @@ const FALLBACK_MARKS: PatrolMarkDef[] = [
 
 const ROUNDS = [1, 2, 3, 4, 5] as const
 
-interface Seat extends SeatCell {
+interface Seat extends SrvSeat {
   row: number
   col: number
 }
@@ -99,9 +102,9 @@ function Content() {
   const [tab, setTab] = useState('map')
   const [date] = useState(() => todayStr())
 
-  const [areas, setAreas] = useState<SeatArea[]>([])
+  const [areas, setAreas] = useState<PatrolArea[]>([])
   const [areaId, setAreaId] = useState<number | null>(null)
-  const [cells, setCells] = useState<SeatCell[]>([])
+  const [cells, setCells] = useState<SrvSeat[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
@@ -152,7 +155,7 @@ function Content() {
   const reloadAreas = useCallback(async () => {
     if (academyId === null) return
     try {
-      const list = await listSeatAreas(academyId)
+      const list = await listPatrolAreas(academyId)
       setAreas(list)
       /* 첫 구역을 자동으로 고른다 — 평소 순찰은 구역을 돌며 한다. `null` 은 「구역 전체」다 */
       setAreaId((prev) => (prev !== null && list.some((a) => a.id === prev) ? prev : (list[0]?.id ?? null)))
@@ -173,7 +176,9 @@ function Content() {
     }
     setLoading(true)
     try {
-      setCells(await getSeatLayout(areaId, !masked))
+      /* ★ **순찰 전용 조회다.** 좌석 화면(`/seats/*`)은 담임에게 닫혀 있다 —
+         거기로 부르면 담임은 좌석표가 통째로 비어 보인다 */
+      setCells(await listPatrolSeats(areaId))
       setError(null)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '배치도를 불러오지 못했습니다.')
@@ -214,6 +219,9 @@ function Content() {
   useEffect(() => {
     void loadRound()
   }, [loadRound])
+
+  /** 서버가 이름을 가려 보냈는가 — 그러면 화면에서 풀 수 없다 */
+  const serverMasked = cells.some((c) => c.masked)
 
   const seats = useMemo<Seat[]>(() => cells.map((c) => ({ ...c, row: c.yPos ?? 1, col: c.xPos ?? 1 })), [cells])
 
@@ -319,7 +327,6 @@ function Content() {
           seatCd: r.seatCd ?? '-',
           studentNo: r.studentNo,
           studentName: r.studentName,
-          className: null as string | null,
           mark: r.mark as string | null,
         }))
         .sort((a, b) => a.seatCd.localeCompare(b.seatCd))
@@ -333,7 +340,6 @@ function Content() {
         seatCd: s.seatCd,
         studentNo: s.studentNo,
         studentName: s.studentName,
-        className: s.className,
         mark: markOf(s.enrollmentId),
       }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -344,7 +350,9 @@ function Content() {
       { key: 'seatCd', header: '좌석', width: '80px', align: 'center', sortable: true, value: (r) => r.seatCd },
       { key: 'studentNo', header: '학번', width: '110px', value: (r) => r.studentNo ?? '-' },
       { key: 'studentName', header: '이름', width: '100px', mask: 'name', value: (r) => r.studentName ?? '-' },
-      { key: 'className', header: '반', width: '90px', align: 'center', value: (r) => r.className ?? '-' },
+      /* ★ 반은 **순찰 전용 조회에 안 온다**(배정 관리에 쓰는 값이라 서버가 뺐다).
+         `<Unfilled/>` 로 두지 않는다 — 그건 「서버에 요청할 것」이라는 뜻인데, 이건
+         **요청하면 안 되는 값**이다. 순찰에 필요한 것은 좌석과 사람뿐이다 */
       {
         key: 'mark',
         header: `${round}회차`,
@@ -444,7 +452,20 @@ function Content() {
                 </option>
               ))}
             </select>
-            <MaskToggle masked={masked} onChange={setMasked} />
+            {/* ★ 순찰 전용 좌석 조회는 **서버가 이미 가려서 준다**(푸는 파라미터가 없다).
+                   토글을 살려 두면 **눌러도 아무 일이 없어** 고장으로 읽힌다.
+                ★ 좌석배치표는 원본이 보이는데 **여기만 가려지는 이유**: 그쪽은 「누구에게 어느
+                   좌석을 줄 것인가」라 배정 대상을 고르려면 원본이 필요하고, 순찰은 「지금 이
+                   자리가 어떤 상태인가」라 **좌석번호를 보고 찍는 일**이다. 역할로 가르지도
+                   않는다 — 그러면 「본사가 볼 때만 이름이 뜨는」 화면이 되어 더 헷갈린다.
+                ★ 그래서 **갈 곳을 함께 알려준다**(원본은 좌석배치표에서). 그 한 줄이 없으면
+                   「왜 여기만 가려지지」가 남는다 */}
+            <MaskToggle
+              masked={masked}
+              onChange={setMasked}
+              disabled={serverMasked}
+              disabledReason="순찰은 좌석 기준이라 이름을 가립니다. 원본은 좌석배치표에서 보세요"
+            />
             {/* ★ 앱에도 같은 순찰 화면이 있어 같은 회차를 나눠 찍는다 — 저쪽에서 찍은 것은
                 다시 읽어야 보인다. 안 그러면 「왜 안 보이지」로 두 번 찍게 된다 */}
             <button
