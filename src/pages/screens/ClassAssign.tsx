@@ -681,7 +681,12 @@ function Content() {
 function ClassActions() {
   const { academyId } = useAcademy()
   const year = new Date().getFullYear()
-  const [draft, setDraft] = useState<{ name: string; classType: ClassType; capacity: string } | null>(null)
+  const [draft, setDraft] = useState<{
+    name: string
+    classType: ClassType
+    capacity: string
+    examClassNo: string
+  } | null>(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   /** 끝났다고 알리는 모달. 반 등록·전년도 복사 둘이 같이 쓴다 — 제목까지 함께 담는다 */
@@ -734,9 +739,18 @@ function ClassActions() {
         classType: draft.classType,
         /* 비우면 **정원 없는 반**이 된다. 0 을 보내면 아무도 못 들어가는 반이 된다 */
         capacity: cap === '' ? undefined : Number(cap),
+        /* 비우면 **학생을 배정할 수 없는 반**이 된다 — 서버가 400 으로 막는다 */
+        examClassNo: draft.examClassNo.trim() === '' ? undefined : Number(draft.examClassNo),
       })
       setDraft(null)
-      setDone({ title: '반을 만들었습니다', text: `${r.name} · 담임은 아직 지정되지 않았습니다.` })
+      /* ★ 번호 없이 만들면 **학생을 못 넣는다.** 만든 직후에 말해 주지 않으면
+         배정하려다 400 을 보고서야 알게 된다 */
+      setDone({
+        title: '반을 만들었습니다',
+        text: r.examClassNo
+          ? `${r.name} · 시험용 반 번호 ${r.examClassNo} · 담임은 아직 지정되지 않았습니다.`
+          : `${r.name} · 담임은 아직 지정되지 않았습니다. 시험용 반 번호가 없어 아직 학생을 배정할 수 없습니다 — 반 정보에서 번호를 넣어 주세요.`,
+      })
       classesSignal.bump()
     } catch (e) {
       /* 같은 해 같은 이름은 서버가 400 으로 막는다 — 문구가 그대로 쓸 만하다 */
@@ -765,7 +779,7 @@ function ClassActions() {
         title={academyId === null ? '지점을 먼저 선택하세요' : undefined}
         onClick={() => {
           setErr(null)
-          setDraft({ name: '', classType: 'FIXED', capacity: '' })
+          setDraft({ name: '', classType: 'FIXED', capacity: '', examClassNo: '' })
         }}
       >
         <Icon name="plus" size={14} /> 반 등록
@@ -835,6 +849,28 @@ function ClassActions() {
               </div>
             </div>
           </div>
+          {/* ★ 학번의 **앞자리**다(학번 = 반 번호 + 순번). 비우면 그 반에는 학생을 못 넣는다 —
+                 학번은 키패드 출결·식사체크가 쓰는 번호라, 없는 학생은 키패드를 못 쓴다 */}
+          <div className="frow">
+            <label>시험용 반 번호</label>
+            <div>
+              <input
+                className="inp"
+                type="number"
+                min={1}
+                max={99}
+                placeholder="예) 11"
+                value={draft.examClassNo}
+                onChange={(e) => setDraft({ ...draft, examClassNo: e.target.value })}
+              />
+              <div className="hint">
+                학번의 앞자리가 됩니다(예: 11 → <b>1101</b>). <b>비우면 이 반에는 학생을 배정할 수 없습니다.</b>{' '}
+                {/* ⚠️ 10의 배수를 막는 이유 — 10반 1번(10|01)이 1반 1번(1|001)과 같은 학번이 된다 */}
+                10 · 20 같은 <b>10의 배수는 쓸 수 없습니다</b> — 다른 반과 학번이 겹칩니다.
+              </div>
+            </div>
+          </div>
+
           <div className="frow">
             <label>정원</label>
             <div>
