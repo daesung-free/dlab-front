@@ -68,6 +68,12 @@ export interface ReservationRow {
   enrollmentId: number | null
   studentNo: string | null
   createdAt: string | null
+  /**
+   * 등원 희망일 (**구분자 없는 `yyyyMMdd`** — 접수 폼 값 그대로다. `createdAt` 은 ISO 라 섞인다).
+   *
+   * ★ 만석일 때 **누구를 먼저 받을지**가 이 날짜와 접수일로 갈린다(디랩 피드백 5-3).
+   */
+  admissionDate?: string | null
 }
 
 /**

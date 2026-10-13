@@ -80,8 +80,12 @@ function toRow(s: ConsultStatusRow): StudentRow {
     id: String(s.enrollmentId),
     name: s.name,
     meta,
+    /* ★ 초도 상담은 등원 1주일 이내다. 7일이 지난 미상담은 **다른 말로** 띄운다 —
+          '미상담' 하나로 묶으면 어제 온 학생과 3주째 방치된 학생이 같아 보인다 */
     tag: s.neverConsulted
-      ? { label: '미상담', tone: 'risk' }
+      ? (s.daysSinceAdmission ?? 0) > 7
+        ? { label: `초도 ${s.daysSinceAdmission}일 경과`, tone: 'risk' }
+        : { label: '미상담', tone: 'na' }
       : s.lastConsultType
         ? { label: CONSULT_TYPE_LABEL[s.lastConsultType], tone: 'na' }
         : undefined,

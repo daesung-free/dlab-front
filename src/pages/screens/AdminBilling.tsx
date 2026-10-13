@@ -9,6 +9,7 @@ import type { GradeType } from '../../api/students'
 import {
   PAYMENT_METHOD_LABEL,
   createBillingStandard,
+  updateBillingStandard,
   deleteBillingStandard,
   listBillingStandards,
   copyBillingStandardsYear,
@@ -63,6 +64,7 @@ const MONTHS_IN_YEAR = Array.from({ length: 12 }, (_, i) => i + 1)
 function standardColumns(
   onToggle: (r: BillingStandard) => void,
   onDelete: (r: BillingStandard) => void,
+  onEdit: (r: BillingStandard) => void,
   busy: boolean,
 ): Column<BillingStandard>[] {
   return [
@@ -144,6 +146,20 @@ function standardColumns(
       /* ★ '사용 중지'와 삭제는 다른 일이다. 중지는 과거 청구를 그대로 두고 앞으로만 안 쓰는
            것이고, 삭제는 기준 자체를 없앤다. 잘못 만든 것을 치우려면 삭제가 필요하다 —
            없으면 중지된 껍데기가 목록에 계속 쌓인다. */
+      key: 'edit',
+      header: '',
+      width: '60px',
+      align: 'center',
+      value: () => '',
+      /* ★ 지금까지 **고칠 길이 없었다.** 금액·납기·결제수단 오타를 중지 + 재등록으로만
+            처리해야 했는데, 코드가 중복이라 재등록이 막히는 경우가 있었다 */
+      render: (r) => (
+        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled={busy} onClick={() => onEdit(r)}>
+          수정
+        </button>
+      ),
+    },
+    {
       key: 'del',
       header: '',
       width: '60px',
@@ -355,6 +371,10 @@ function Content() {
 
   /* 청구 기준 등록. **코드·항목·금액 방식이 필수**라 이름만 받는 창으로는 못 만든다 */
   const [newStd, setNewStd] = useState<NewStandard | null>(null)
+  /* 수정 모드. null 이면 신규 등록이다 — 모달 하나를 둘 다 쓴다.
+     ★ 지금까지 **고칠 길이 아예 없어서** 금액·납기 오타를 중지 + 재등록으로만 처리했다.
+       코드가 중복이라 재등록이 막히는 경우가 있어 사실상 손을 못 댔다(디랩 피드백 1013) */
+  const [editingStdId, setEditingStdId] = useState<number | null>(null)
   const [newStdErr, setNewStdErr] = useState<string | null>(null)
   const [delStd, setDelStd] = useState<BillingStandard | null>(null)
 
@@ -393,11 +413,44 @@ function Content() {
    *   두 방식을 한 칸으로 합치면 단가표 기준인데 금액이 박혀 버린다.
    * ★ `code` 는 나중에 바꿀 수 없다(PUT 에 code 가 없다). 등록할 때만 정한다.
    */
+  /** 수정 모달 열기 — 등록 모달을 그대로 쓰되 코드·항목만 잠근다 */
+  function openStandardEdit(r: BillingStandard) {
+    setEditingStdId(r.id)
+    setNewStdErr(null)
+    setNewStd({
+      code: r.code,
+      itemType: r.itemType,
+      name: r.name,
+      amountSource: r.amountSource,
+      amount: r.amount == null ? '' : String(r.amount),
+      dueDesc: r.dueDesc ?? '',
+      paymentMethod: r.paymentMethod ?? '',
+      memo: r.memo ?? '',
+    })
+  }
+
   async function submitStandard() {
     if (!newStd) return
     setBusy(true)
     setNewStdErr(null)
     try {
+      if (editingStdId !== null) {
+        /* ★ `name`·`amountSource` 는 **한 칸만 고쳐도 함께 보내야 한다**(서버 필수).
+              코드·항목 구분은 못 바꾼다 — 그건 다른 기준을 새로 만드는 것이다 */
+        await updateBillingStandard(editingStdId, {
+          name: newStd.name.trim(),
+          amountSource: newStd.amountSource,
+          amount: newStd.amountSource === 'FIXED' ? Number(newStd.amount) || 0 : undefined,
+          dueDesc: newStd.dueDesc.trim() || undefined,
+          paymentMethod: newStd.paymentMethod || undefined,
+          memo: newStd.memo.trim() || undefined,
+        })
+        await load()
+        setNewStd(null)
+        setEditingStdId(null)
+        setNotice('청구 기준을 고쳤습니다.')
+        return
+      }
       await createBillingStandard({
         academyId: academyId ?? undefined,
         year,
@@ -608,18 +661,26 @@ function Content() {
 
       {newStd && (
         <Modal
-          title="청구 기준 등록"
-          sub={`${year}년 청구 항목을 하나 만듭니다. 코드는 나중에 바꿀 수 없습니다.`}
-          confirmLabel="등록"
+          title={editingStdId === null ? '청구 기준 등록' : '청구 기준 수정'}
+          sub={
+            editingStdId === null
+              ? `${year}년 청구 항목을 하나 만듭니다. 코드는 나중에 바꿀 수 없습니다.`
+              : '코드와 항목 구분은 바꿀 수 없습니다 — 그건 다른 기준을 새로 만드는 것입니다.'
+          }
+          confirmLabel={editingStdId === null ? '등록' : '저장'}
           busy={busy}
           error={newStdErr}
           confirmDisabled={
-            newStd.code.trim() === '' ||
+            (editingStdId === null && newStd.code.trim() === '') ||
             newStd.name.trim() === '' ||
             (newStd.amountSource === 'FIXED' && Number(newStd.amount) <= 0)
           }
           onConfirm={() => void submitStandard()}
-          onClose={() => setNewStd(null)}
+          onClose={() => {
+            setNewStd(null)
+            setEditingStdId(null)
+            setNewStdErr(null)
+          }}
         >
           <div className="frow">
             <label className="req">코드</label>
@@ -628,6 +689,7 @@ function Content() {
                 className="inp"
                 value={newStd.code}
                 placeholder="예: TUITION-2026"
+                disabled={editingStdId !== null}
                 onChange={(e) => setNewStd({ ...newStd, code: e.target.value })}
               />
               <div className="hint">등록 후에는 바꿀 수 없습니다. 영문·숫자·하이픈을 씁니다.</div>
@@ -639,6 +701,7 @@ function Content() {
             <select
               className="sel"
               value={newStd.itemType}
+              disabled={editingStdId !== null}
               onChange={(e) => setNewStd({ ...newStd, itemType: e.target.value as BillingItemType })}
             >
               {(Object.keys(ITEM_TYPE_LABEL) as BillingItemType[]).map((k) => (
@@ -902,7 +965,7 @@ function Content() {
           {tab === 'billing' ? (
             <>
               <DataTable
-                columns={standardColumns(toggleStandard, setDelStd, busy)}
+                columns={standardColumns(toggleStandard, setDelStd, openStandardEdit, busy)}
                 rows={standards}
                 rowKey={(r) => String(r.id)}
                 masked={false}
