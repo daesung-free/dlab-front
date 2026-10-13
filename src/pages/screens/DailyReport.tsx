@@ -1,8 +1,29 @@
-import { useMemo, useState } from 'react'
-import {DataTable, ExcelButton, MaskToggle, type Column, MockNotice } from '../../components/common'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  DataTable,
+  ExcelButton,
+  MaskToggle,
+  SearchForm,
+  Unfilled,
+  todayStr,
+  useMaskDefault,
+  useServerTable,
+  type Column,
+  type Field,
+  type SearchValues,
+  MockNotice,
+} from '../../components/common'
+import { useAcademy } from '../../auth/AcademyContext'
+import { listClasses, type ClassGroup } from '../../api/classes'
+import { DR_SORTABLE, listDailyReports, minutesText, type DailyReportRow } from '../../api/dailyReports'
+import { recalculateStudyTime } from '../../api/attendance'
+import { ApiError } from '../../api/client'
+import { createScreenSignal } from './screenSignal'
+
+/* 헤더의 「재집계」 ↔ 본문. 부모가 달라 props 로 못 내린다 */
+const recalcSignal = createScreenSignal()
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
-import { MOCK_STUDENTS } from './mockStudents'
 import type { Mockup } from './types'
 
 /* F-4.11-6 Daily Report 집계 — 신규개발-요구사항신규
@@ -11,76 +32,29 @@ import type { Mockup } from './types'
  * ⚠ #26 / I-6 (중) — 순공시간 산출 정의(입퇴실/좌석없음 반영 기준) 미확정.
  *   실행가이드: "순공시간산출 확정후 배치확정, 미확정시 원시로그 집계만" */
 
-type Scope = 'ALL' | 'BRANCH' | 'CLASS'
-type Period = 'DAY' | 'WEEK' | 'MONTH'
-
-const SCOPES: { key: Scope; label: string }[] = [
-  { key: 'ALL', label: '전체' },
-  { key: 'BRANCH', label: '지점' },
-  { key: 'CLASS', label: '반' },
-]
-const PERIODS: { key: Period; label: string }[] = [
-  { key: 'DAY', label: '일간' },
-  { key: 'WEEK', label: '주간' },
-  { key: 'MONTH', label: '월간' },
-]
-
-interface RankRow {
-  id: string
-  rank: number
-  studentNo: string
-  name: string
-  classNo: string
-  branch: string
-  /** 순공시간(분) */
-  studyMin: number
-  /** 재실시간(분) — 순공 정의가 확정되면 여기서 차감 규칙이 정해진다 */
-  presentMin: number
-  qna: number
-  routine: number
-  attendance: string
-  feedback: boolean
-}
-
-function buildRanks(period: Period): RankRow[] {
-  const mult = period === 'DAY' ? 1 : period === 'WEEK' ? 6 : 24
-  return MOCK_STUDENTS.filter((s) => s.status === '재원')
-    .map((s, i) => {
-      const present = (520 + ((i * 37) % 180)) * mult
-      const study = Math.round(present * (0.72 + ((i % 20) / 100)))
-      return {
-        id: s.id,
-        rank: 0,
-        studentNo: s.studentNo,
-        name: s.name,
-        classNo: s.classNo,
-        branch: s.branch,
-        studyMin: study,
-        presentMin: present,
-        qna: (i % 4) * (period === 'DAY' ? 1 : 3),
-        routine: 60 + ((i * 11) % 41),
-        attendance: i % 13 === 12 ? '결석' : i % 5 === 4 ? '지각' : '정상',
-        feedback: i % 3 !== 2,
-      }
-    })
-    .sort((a, b) => b.studyMin - a.studyMin)
-    .map((r, i) => ({ ...r, rank: i + 1 }))
-}
-
+/** 달력 뷰(목업)가 쓰는 분 → 'Nh MMm' */
 function hhmm(min: number): string {
   return `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, '0')}m`
 }
 
-const COLUMNS: Column<RankRow>[] = [
+/** 집계값이 없으면 **0 이 아니라 빈칸**이다 — 「집계 안 한 날」과 「0분」은 다르다 */
+function num(v: number | null | undefined): string {
+  return v == null ? '' : String(v)
+}
+
+const COLUMNS: Column<DailyReportRow>[] = [
   {
-    key: 'rank',
+    key: 'studyRank',
     header: '순위',
     width: '70px',
     align: 'center',
-    sortable: true,
-    value: (r) => r.rank,
+    /* ★ 순위는 **서버가 센다.** 화면이 세면 페이징된 그 페이지 안에서만 매겨져
+       2페이지 첫 줄이 또 1등이 된다 */
+    value: (r) => r.studyRank ?? '',
     render: (r) =>
-      r.rank <= 3 ? (
+      r.studyRank == null ? (
+        <span style={{ color: 'var(--muted)' }}>-</span>
+      ) : r.studyRank <= 3 ? (
         <span
           style={{
             display: 'inline-grid',
@@ -88,82 +62,110 @@ const COLUMNS: Column<RankRow>[] = [
             width: 22,
             height: 22,
             borderRadius: '50%',
-            background: ['#E8920F', '#8B94A3', '#B87333'][r.rank - 1],
+            background: ['#E8920F', '#8B94A3', '#B87333'][r.studyRank - 1],
             color: '#fff',
             fontSize: 11,
             fontWeight: 800,
           }}
         >
-          {r.rank}
+          {r.studyRank}
         </span>
       ) : (
-        <span style={{ color: 'var(--muted)' }}>{r.rank}</span>
+        <span style={{ color: 'var(--muted)' }}>{r.studyRank}</span>
       ),
   },
-  { key: 'studentNo', header: '학번', width: '100px', value: (r) => r.studentNo },
-  { key: 'name', header: '이름', width: '84px', mask: 'name', value: (r) => r.name },
-  { key: 'classNo', header: '반', width: '56px', align: 'center', value: (r) => r.classNo },
+  { key: 'studentNo', header: '학번', width: '104px', value: (r) => r.studentNo ?? '-' },
+  { key: 'studentName', header: '이름', width: '88px', mask: 'name', value: (r) => r.studentName ?? '-' },
+  { key: 'className', header: '반', width: '92px', align: 'center', value: (r) => r.className ?? '-' },
   {
-    key: 'studyMin',
+    key: 'studyMinutes',
     header: '순공시간',
-    width: '106px',
+    width: '112px',
     align: 'right',
-    sortable: true,
-    value: (r) => r.studyMin,
-    render: (r) => <b style={{ color: 'var(--mint-d)' }}>{hhmm(r.studyMin)}</b>,
+    value: (r) => r.studyMinutes ?? '',
+    render: (r) =>
+      r.studyMinutes == null ? (
+        <span style={{ color: 'var(--muted)' }}>집계 전</span>
+      ) : (
+        <b style={{ color: 'var(--mint-d)' }}>{minutesText(r.studyMinutes)}</b>
+      ),
   },
   {
-    key: 'presentMin',
+    key: 'presenceMinutes',
     header: '재실시간',
-    width: '106px',
+    width: '112px',
     align: 'right',
-    sortable: true,
-    value: (r) => r.presentMin,
-    render: (r) => <span style={{ color: 'var(--muted)' }}>{hhmm(r.presentMin)}</span>,
-  },
-  {
-    key: 'ratio',
-    header: '집중도',
-    width: '96px',
-    align: 'right',
-    value: (r) => r.studyMin / r.presentMin,
-    render: (r) => {
-      const pct = Math.round((r.studyMin / r.presentMin) * 100)
-      return <span style={{ color: pct >= 80 ? 'var(--green)' : 'var(--amber)', fontWeight: 700 }}>{pct}%</span>
-    },
-  },
-  { key: 'qna', header: '질의응답', width: '84px', align: 'right', sortable: true, value: (r) => r.qna },
-  {
-    key: 'routine',
-    header: '루틴 이행',
-    width: '92px',
-    align: 'right',
-    sortable: true,
-    value: (r) => r.routine,
-    render: (r) => `${r.routine}%`,
-  },
-  {
-    key: 'attendance',
-    header: '출결',
-    width: '76px',
-    align: 'center',
-    value: (r) => r.attendance,
+    value: (r) => r.presenceMinutes ?? '',
     render: (r) => (
-      <span className={`mk ${r.attendance === '정상' ? 'verified' : 'brandnew'}`}>{r.attendance}</span>
+      <span style={{ color: 'var(--muted)' }}>
+        {r.presenceMinutes == null ? '집계 전' : minutesText(r.presenceMinutes)}
+      </span>
     ),
   },
   {
-    key: 'feedback',
-    header: '셀프 피드백',
+    key: 'concentration',
+    header: '집중도',
     width: '96px',
-    align: 'center',
-    value: (r) => (r.feedback ? '작성' : '미작성'),
+    align: 'right',
+    value: () => '',
+    /* ★ **화면에서 계산하지 않는다.** 전에는 순공/재실로 나눠 퍼센트를 그렸는데,
+       그건 우리가 만든 숫자일 뿐이다 — 산식이 요구사항에 없어 서버도 안 만든다.
+       만들어 보여주면 **화면이 그걸 사실로 보여주는 것**이 된다 */
+    render: () => <Unfilled reason="집중도 산식이 아직 정해지지 않았습니다" />,
+  },
+  {
+    key: 'routineCompletionRate',
+    header: '루틴 이행',
+    width: '96px',
+    align: 'right',
+    value: (r) => r.routineCompletionRate ?? '',
+    /* ★ 「루틴이 없던 기간」과 「0% 이행」은 다르다 */
     render: (r) =>
-      r.feedback ? (
-        <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>작성</span>
+      r.routineCompletionRate == null ? (
+        <span style={{ color: 'var(--muted)' }}>판정 없음</span>
       ) : (
-        <span style={{ fontSize: 11.5, color: 'var(--amber)', fontWeight: 700 }}>미작성</span>
+        <span>
+          {r.routineCompletionRate}%
+          <span style={{ color: 'var(--muted)', fontSize: 11, marginLeft: 4 }}>
+            {r.routineDone ?? 0}/{r.routineJudged ?? 0}
+          </span>
+        </span>
       ),
+  },
+  {
+    key: 'attendedDays',
+    header: '출석일',
+    width: '92px',
+    align: 'right',
+    value: (r) => r.attendedDays ?? '',
+    render: (r) => (
+      <span>
+        {num(r.attendedDays)}
+        {r.measuredDays != null && <span style={{ color: 'var(--muted)', fontSize: 11 }}> / {r.measuredDays}</span>}
+      </span>
+    ),
+  },
+  {
+    key: 'missingCheckOutDays',
+    header: '하원 미태그',
+    width: '104px',
+    align: 'right',
+    value: (r) => r.missingCheckOutDays ?? '',
+    /* ★ 이 값이 크면 **그 학생의 순공시간을 믿으면 안 된다** — 0분이 아니라 안 센 것이다 */
+    render: (r) =>
+      (r.missingCheckOutDays ?? 0) > 0 ? (
+        <span style={{ color: 'var(--amber)', fontWeight: 700 }} title="하원 시각을 넣으면 다음 집계에 들어갑니다">
+          {r.missingCheckOutDays}일
+        </span>
+      ) : (
+        <span style={{ color: 'var(--muted)' }}>-</span>
+      ),
+  },
+  {
+    key: 'homeroomTeacherName',
+    header: '담임',
+    width: '88px',
+    value: (r) => r.homeroomTeacherName ?? '-',
   },
 ]
 
@@ -173,74 +175,174 @@ const DAYS_IN_MONTH = 31
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
 
 function Content() {
+  const { academyId } = useAcademy()
   const [tab, setTab] = useState('rank')
-  const [scope, setScope] = useState<Scope>('ALL')
-  const [period, setPeriod] = useState<Period>('DAY')
-  const [masked, setMasked] = useState(true)
+  const [masked, setMasked] = useState(useMaskDefault())
+  const [classes, setClasses] = useState<ClassGroup[]>([])
 
-  const ranks = useMemo(() => buildRanks(period), [period])
-  const rows = useMemo(() => (scope === 'CLASS' ? ranks.filter((r) => r.classNo === '3반') : ranks), [ranks, scope])
+  /* ★ 기간은 **반드시 받는다**(from·to 필수). 기본은 이번 달 1일~오늘이다 —
+     「오늘 하루」로 두면 새벽에 열었을 때 통째로 비어 보인다(집계가 밤에 돈다) */
+  const [query, setQuery] = useState<SearchValues>(() => {
+    const t = todayStr()
+    return { period: { from: `${t.slice(0, 8)}01`, to: t }, classId: '' }
+  })
 
-  const avgStudy = Math.round(rows.reduce((a, r) => a + r.studyMin, 0) / (rows.length || 1))
-  const noFeedback = rows.filter((r) => !r.feedback).length
+  useEffect(() => {
+    if (academyId === null) {
+      setClasses([])
+      return
+    }
+    let alive = true
+    listClasses(new Date().getFullYear(), academyId)
+      .then((v) => alive && setClasses(v.filter((c) => c.academyId === academyId)))
+      .catch(() => alive && setClasses([]))
+    return () => {
+      alive = false
+    }
+  }, [academyId])
+
+  const fields = useMemo<Field[]>(
+    () => [
+      { name: 'period', label: '기간', type: 'dateRange' },
+      {
+        name: 'classId',
+        label: '반',
+        type: 'select',
+        options: [{ value: '', label: '전체' }, ...classes.map((c) => ({ value: String(c.id), label: c.name }))],
+      },
+    ],
+    [classes],
+  )
+
+  /* ★ useMemo 없이 넘기면 매 렌더 새 객체라 **무한 요청**이 된다 */
+  const params = useMemo(() => {
+    const r = query.period
+    const range = r && typeof r === 'object' && !Array.isArray(r) ? r : { from: '', to: '' }
+    const cid = typeof query.classId === 'string' ? query.classId : ''
+    const t = todayStr()
+    return {
+      academyId: academyId ?? undefined,
+      /* ★ from·to 는 **필수**다. 비면 서버가 400 을 주므로 오늘로 채운다 */
+      from: range.from || `${t.slice(0, 8)}01`,
+      to: range.to || t,
+      classId: cid === '' ? undefined : Number(cid),
+    }
+  }, [query, academyId])
+
+  const table = useServerTable({
+    fetcher: listDailyReports,
+    params,
+    sortable: DR_SORTABLE,
+    enabled: academyId !== null,
+  })
+
+  const [recalc, setRecalc] = useState<{ busy: boolean; msg: string | null; err: string | null }>({
+    busy: false,
+    msg: null,
+    err: null,
+  })
+
+  /* ★ **오늘은 대상이 아니다.** 아직 하원 전이라 값이 계속 늘어 저장할 시점이 아니다 —
+     서버도 오늘을 빼고 돈다. 화면이 보고 있는 기간 그대로 넘긴다 */
+  const recalcV = recalcSignal.useVersion()
+  useEffect(() => {
+    if (recalcV === 0) return
+    setRecalc({ busy: true, msg: null, err: null })
+    recalculateStudyTime({ academyId: academyId ?? undefined, from: params.from, to: params.to })
+      .then((r) => {
+        /* ★ 0 이 와도 실패가 아니다 — 「확정된 날이 없다」는 뜻이다 */
+        setRecalc({
+          busy: false,
+          err: null,
+          msg:
+            r.updated > 0
+              ? `${params.from} ~ ${params.to} · ${r.updated}건을 다시 계산했습니다.`
+              : '다시 계산할 확정된 날이 없습니다. 오늘은 하원 뒤에 집계됩니다.',
+        })
+        table.reload()
+      })
+      .catch((e) => setRecalc({ busy: false, msg: null, err: e instanceof ApiError ? e.message : '다시 계산하지 못했습니다.' }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recalcV])
+
+  const rows = table.rows
+  /* ★ **집계가 없는 학생은 빼고** 평균을 낸다. null 을 0 으로 치면 평균이 통째로 내려간다 */
+  const measured = rows.filter((r) => r.studyMinutes != null)
+  const avgStudy =
+    measured.length === 0 ? null : Math.round(measured.reduce((a, r) => a + (r.studyMinutes ?? 0), 0) / measured.length)
+  const top = rows.find((r) => r.studyRank === 1) ?? null
+  /* ★ 하원 태깅이 빠진 날이 있으면 **그 학생의 순공시간을 믿으면 안 된다** */
+  const missing = rows.filter((r) => (r.missingCheckOutDays ?? 0) > 0).length
 
   return (
     <>
-      <MockNotice reason="관리자용 집계 도메인이 서버에 없습니다. 학생 한 명씩은 조회되지만 순공·집중도 순위는 집계가 없습니다." />
-      <div className="stat-strip c6">
+      <div className="stat-strip c4">
         <div className="stat">
           <div className="l">
             <Icon name="users" size={13} /> 집계 대상
           </div>
-          <div className="v">{rows.length}</div>
-          <div className="d">{SCOPES.find((s) => s.key === scope)?.label}</div>
+          <div className="v">{table.serverPaging?.totalElements ?? rows.length}</div>
+          <div className="d">{params.from} ~ {params.to}</div>
         </div>
         <div className="stat">
           <div className="l">
             <Icon name="timer" size={13} /> 평균 순공
           </div>
           <div className="v" style={{ fontSize: 18 }}>
-            {hhmm(avgStudy)}
+            {avgStudy == null ? '-' : minutesText(avgStudy)}
           </div>
-          <div className="d">{PERIODS.find((p) => p.key === period)?.label} 기준</div>
+          <div className="d">집계된 {measured.length}명 기준</div>
         </div>
         <div className="stat">
           <div className="l">
             <Icon name="trophy" size={13} /> 1위
           </div>
           <div className="v" style={{ fontSize: 18 }}>
-            {hhmm(rows[0]?.studyMin ?? 0)}
+            {top?.studyMinutes == null ? '-' : minutesText(top.studyMinutes)}
           </div>
-          <div className="d">{masked ? '***' : rows[0]?.name}</div>
+          <div className="d">{top == null ? '집계 없음' : masked ? '***' : (top.studentName ?? '-')}</div>
         </div>
         <div className="stat">
           <div className="l">
-            <Icon name="message-square" size={13} /> 셀프 피드백 미작성
+            <Icon name="triangle-alert" size={13} /> 하원 미태그
           </div>
-          <div className="v" style={{ color: 'var(--amber)' }}>
-            {noFeedback}
+          <div className="v" style={{ color: missing > 0 ? 'var(--amber)' : undefined }}>
+            {missing}
           </div>
-          <div className="d warn">독려 대상</div>
-        </div>
-        <div className="stat">
-          <div className="l">
-            <Icon name="bell" size={13} /> 야간 요약 푸시
-          </div>
-          <div className="v" style={{ fontSize: 15, paddingTop: 6 }}>
-            23:00
-          </div>
-          <div className="d">앱 알림 일괄 발송</div>
-        </div>
-        <div className="stat">
-          <div className="l">
-            <Icon name="history" size={13} /> 배치 집계
-          </div>
-          <div className="v" style={{ fontSize: 15, paddingTop: 6 }}>
-            scope × period
-          </div>
-          <div className="d">매일 23:00 실행</div>
+          <div className="d">{missing > 0 ? '순공시간이 적게 잡힙니다' : '없음'}</div>
         </div>
       </div>
+
+      {/* ★ 0 과 빈칸을 가르는 안내. 안 적으면 「공부 안 한 학생」으로 읽는다 */}
+      <div className="note-box">
+        <div>
+          하원 태깅이 없는 날은 <b>집계하지 않습니다</b> — 0분이 아니라 빈칸입니다. 출결 관리에서 하원 시각을
+          넣으면 다음 집계에 들어갑니다.
+        </div>
+      </div>
+
+      {recalc.busy && (
+        <div className="note-box" role="status">
+          <div>다시 계산하는 중입니다…</div>
+        </div>
+      )}
+      {recalc.msg && (
+        <div className="note-box" role="status">
+          <div>{recalc.msg}</div>
+        </div>
+      )}
+      {recalc.err && (
+        <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+          {recalc.err}
+        </div>
+      )}
+      {table.error && (
+        <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+          {table.error}
+        </div>
+      )}
+
+      <SearchForm fields={fields} initial={query} onSearch={setQuery} />
 
       <div className="card-sec">
         <Tabs
@@ -259,38 +361,28 @@ function Content() {
               nowrap
               columns={COLUMNS}
               rows={rows}
-              rowKey={(r) => r.id}
+              rowKey={(r) => String(r.enrollmentId)}
               masked={masked}
-              pageSize={12}
+              loading={table.loading}
+              serverPaging={table.serverPaging}
               countLabel={
                 <>
-                  랭킹 <b>{rows.length}</b>명 · <code style={{ fontSize: 11 }}>study_time_rankings</code>
+                  집계 <b>{table.serverPaging?.totalElements ?? rows.length}</b>명
                 </>
               }
               toolbar={
                 <>
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    {SCOPES.map((s) => (
-                      <button key={s.key} className={`chip${scope === s.key ? ' on' : ''}`} onClick={() => setScope(s.key)}>
-                        {s.label}
-                      </button>
-                    ))}
-                  </div>
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    {PERIODS.map((p) => (
-                      <button key={p.key} className={`chip${period === p.key ? ' on' : ''}`} onClick={() => setPeriod(p.key)}>
-                        {p.label}
-                      </button>
-                    ))}
-                  </div>
                   <MaskToggle masked={masked} onChange={setMasked} />
-                  <ExcelButton filename="순공시간_랭킹" columns={COLUMNS} rows={rows} masked={masked} />
+                  <ExcelButton filename="Daily_Report_집계" columns={COLUMNS} rows={rows} masked={masked} />
                 </>
               }
             />
           </div>
         ) : (
           <div className="card-sec-b">
+            {/* ★ 달력은 **앱 화면용 API**(`/app/daily-reports/monthly`)다 — 학생 본인 것만 준다.
+                   관리자가 남의 달력을 보는 경로가 없어 예시로 둔다 */}
+            <MockNotice reason="학생 한 명의 달력을 관리자가 보는 경로가 아직 없습니다. 앱에서 학생 본인이 보는 화면입니다." />
             <div style={{ fontSize: 12.5, marginBottom: 12, color: 'var(--muted)' }}>
               학생 1명의 2026-05 일자별 집계 — 앱 Daily Report 달력이 그리는 데이터입니다.
             </div>
@@ -365,9 +457,14 @@ export const dailyReportMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled data-soon title="준비 중입니다">기간 선택 ▾</button>
-      <button className="btn" disabled data-soon title="준비 중입니다">
-        <Icon name="refresh-cw" size={14} /> 배치 재집계
+      {/* ★ 「기간 선택」 버튼은 없앴다 — 기간은 본문 검색에 있다. 누를 수 없는 버튼이
+             값을 말할 이유가 없다 */}
+      <button
+        className="btn"
+        title="출결을 고쳤거나 교시를 바꿨을 때 순공시간을 다시 계산합니다. 오늘은 하원 뒤에 집계됩니다"
+        onClick={() => recalcSignal.bump()}
+      >
+        <Icon name="refresh-cw" size={14} /> 순공시간 다시 계산
       </button>
     </>
   ),

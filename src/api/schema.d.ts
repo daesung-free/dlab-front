@@ -362,6 +362,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/student-profiles/{enrollmentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 한 학생의 신상기록부
+         * @description 한 학생의 신상기록부.
+         *
+         *      <p>아직 안 썼으면 <b>404 다</b>. 빈 껍데기를 200 으로 내리면 화면이 「작성됨」으로
+         *      읽어 상담 현황과 어긋난다.
+         */
+        get: operations["get"];
+        /**
+         * 작성·수정
+         * @description 작성·수정.
+         *
+         *      <p>★ <b>한 장을 통째로 받는다.</b> 보내지 않은 칸은 비워진다 — 부분 갱신으로 두면
+         *      「지운 것」과 「안 보낸 것」을 구분할 수 없어 <b>잘못 적은 건강 메모를 지울 수 없다</b>.
+         *
+         *      <p>목표대학도 <b>표 전체</b>를 보낸다. 뺀 줄은 soft delete 로 남는다.
+         */
+        put: operations["save_1"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/staff/accounts/{accountId}/roles": {
         parameters: {
             query?: never;
@@ -1342,7 +1374,7 @@ export interface paths {
          * 있으면 고치고 없으면 만든다.
          * @description 있으면 고치고 없으면 만든다. 유형당 1행이다.
          */
-        put: operations["save_1"];
+        put: operations["save_2"];
         post?: never;
         /**
          * 정책 삭제
@@ -3384,6 +3416,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/student-profile-forms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 양식 목록 — 지점 양식 + 전 지점 공통
+         * @description 양식 목록 — 지점 양식 + 전 지점 공통.
+         *
+         *      <p>I-17 확정 전에는 <b>공통 한 행만 있는 것이 정상</b>이다.
+         */
+        get: operations["list_1"];
+        put?: never;
+        /**
+         * 양식 등록
+         * @description 양식 등록.
+         *
+         *      <p>★ <b>등록만 하면 쓰이지 않는다</b>(<code>active</code> 기본값 <code>false</code>).
+         *      미확정 양식이 앱에 떠서 학생이 쓰기 시작하면 확정본과 어긋난 답이 쌓인다 —
+         *      켜는 것은 별 호출이다.
+         */
+        post: operations["create_3"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/staff/teachers": {
         parameters: {
             query?: never;
@@ -3544,7 +3606,7 @@ export interface paths {
          * 그 지점 직원 목록.
          * @description 그 지점 직원 목록.
          */
-        get: operations["list_1"];
+        get: operations["list_2"];
         put?: never;
         /**
          * 직원 등록.
@@ -3863,13 +3925,13 @@ export interface paths {
          * 그 달 루틴 목록.
          * @description 그 달 루틴 목록.
          */
-        get: operations["list_2"];
+        get: operations["list_3"];
         put?: never;
         /**
          * 루틴 등록.
          * @description 루틴 등록.
          */
-        post: operations["create_3"];
+        post: operations["create_4"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3960,9 +4022,9 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_3"];
+        get: operations["list_4"];
         put?: never;
-        post: operations["create_4"];
+        post: operations["create_5"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3980,7 +4042,7 @@ export interface paths {
          * 교시 목록.
          * @description 교시 목록.
          */
-        get: operations["list_4"];
+        get: operations["list_5"];
         put?: never;
         /**
          * 교시 등록
@@ -3989,7 +4051,7 @@ export interface paths {
          *      <p>시간이 겹치면 거부된다 — 한 시각이 두 교시에 걸리면
          *      <b>출결 판정과 순공시간이 흔들린다.</b>
          */
-        post: operations["create_5"];
+        post: operations["create_6"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4095,7 +4157,7 @@ export interface paths {
          *      <p>⚠️ 응답의 상태는 <code>CREATED</code> 다. <b>결제된 것이 아니라 링크가 만들어진 것</b>이고,
          *      화면도 그렇게 보여야 한다 — "결제 완료" 로 표시하면 데스크가 받은 줄 안다.
          */
-        post: operations["create_6"];
+        post: operations["create_7"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4197,7 +4259,7 @@ export interface paths {
          * 전체 목록 — 이벤트 순으로 나와 A-C3 매핑표처럼 읽힌다.
          * @description 전체 목록 — 이벤트 순으로 나와 A-C3 매핑표처럼 읽힌다.
          */
-        get: operations["list_5"];
+        get: operations["list_6"];
         put?: never;
         /**
          * 알림 템플릿 등록
@@ -4206,7 +4268,7 @@ export interface paths {
          *      <p>⚠️ <b>학생명 변수가 필수다</b> — 다자녀 학부모가 "이거 누구 얘기지" 하고
          *      헷갈리지 않아야 한다. 빠지면 등록이 거부된다.
          */
-        post: operations["create_7"];
+        post: operations["create_8"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4371,13 +4433,13 @@ export interface paths {
          * 업체 목록.
          * @description 업체 목록. 내린 업체는 빠진다 — 지워지지는 않는다(과거 주문의 정산 근거).
          */
-        get: operations["list_6"];
+        get: operations["list_7"];
         put?: never;
         /**
          * 업체 등록.
          * @description 업체 등록. 이름 중복은 거부한다.
          */
-        post: operations["create_8"];
+        post: operations["create_9"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4668,13 +4730,13 @@ export interface paths {
          * 특강 목록.
          * @description 특강 목록. 지점·연도 범위가 걸린다.
          */
-        get: operations["list_7"];
+        get: operations["list_8"];
         put?: never;
         /**
          * 특강 등록.
          * @description 특강 등록. 회차는 따로 추가한다 — 회차 없는 특강은 신청을 받을 수 없다.
          */
-        post: operations["create_9"];
+        post: operations["create_10"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4762,7 +4824,7 @@ export interface paths {
          * 목록.
          * @description 목록. <b>전 지점 공통 + 그 지점 것</b>을 합쳐서 준다.
          */
-        get: operations["list_8"];
+        get: operations["list_9"];
         put?: never;
         /**
          * 등록
@@ -4771,7 +4833,7 @@ export interface paths {
          *      <p><b>전 지점 공통(<code>academyId</code> 없음)은 본사만</b> 만든다 — 지점 관리자가 넣으면
          *      다른 지점 드롭다운에도 뜬다. 사유 카테고리·휴일과 같은 규칙이다.
          */
-        post: operations["create_10"];
+        post: operations["create_11"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4819,7 +4881,7 @@ export interface paths {
          *      <p>지점 계정은 <b>전 지점 공통 + 자기 지점</b>, 본사는 <b>전 지점</b>을 본다.
          *      <code>academyId</code>를 주면 그 지점으로 좁힌다.
          */
-        get: operations["list_9"];
+        get: operations["list_10"];
         put?: never;
         /**
          * 공휴일 등록
@@ -5056,14 +5118,14 @@ export interface paths {
          * 등록된 시험 회차 목록.
          * @description 등록된 시험 회차 목록.
          */
-        get: operations["list_10"];
+        get: operations["list_11"];
         put?: never;
         /**
          * 시험 회차 + 과목 등록.
          * @description 시험 회차 + 과목 등록. <b>과목 없이는 만들 수 없다</b> —
          *      만들면 학생 화면에 제목만 있고 입력 칸이 없는 빈 표가 그려진다.
          */
-        post: operations["create_11"];
+        post: operations["create_12"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5128,7 +5190,7 @@ export interface paths {
          * 기간별 상담 목록.
          * @description 기간별 상담 목록. <code>teacherId</code>로 담임별 필터.
          */
-        get: operations["list_11"];
+        get: operations["list_12"];
         put?: never;
         /**
          * 상담 일지 작성.
@@ -5212,7 +5274,7 @@ export interface paths {
          * 반 생성.
          * @description 반 생성.
          */
-        post: operations["create_12"];
+        post: operations["create_13"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5352,7 +5414,7 @@ export interface paths {
          * 지점·연도 청구 목록.
          * @description 지점·연도 청구 목록. 미납자 추출은 <code>/admin/receipt-status</code>가 담당한다.
          */
-        get: operations["list_12"];
+        get: operations["list_13"];
         put?: never;
         /**
          * 청구 생성
@@ -5361,7 +5423,7 @@ export interface paths {
          *      <p><b>같은 학생에게 같은 이름으로 또 청구하면 거부된다.</b> 정말 두 번 받는 경우에만
          *      <code>allowDuplicate</code>를 켠다.
          */
-        post: operations["create_13"];
+        post: operations["create_14"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5399,9 +5461,9 @@ export interface paths {
          * 청구기준 목록.
          * @description 청구기준 목록.
          */
-        get: operations["list_13"];
+        get: operations["list_14"];
         put?: never;
-        post: operations["create_14"];
+        post: operations["create_15"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5728,9 +5790,9 @@ export interface paths {
          * 그 해 행사 — <b>지점 행사와 전 지점 공통을 합쳐서</b> 내린다.
          * @description 그 해 행사 — <b>지점 행사와 전 지점 공통을 합쳐서</b> 내린다.
          */
-        get: operations["list_14"];
+        get: operations["list_15"];
         put?: never;
-        post: operations["create_15"];
+        post: operations["create_16"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5777,7 +5839,7 @@ export interface paths {
          * 등록.
          * @description 등록. 정원(수시 6·정시 3)을 넘으면 거절한다.
          */
-        post: operations["create_16"];
+        post: operations["create_17"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5904,7 +5966,7 @@ export interface paths {
          * 목록.
          * @description 목록. 화면 탭(대기/승인/반려)이 <code>status</code>로 걸린다.
          */
-        get: operations["list_15"];
+        get: operations["list_16"];
         put?: never;
         /**
          * 관리자 직접 등록
@@ -5931,7 +5993,7 @@ export interface paths {
          * 목록.
          * @description 목록. <b>전 지점 공통 + 그 지점 것</b>을 합쳐서 준다.
          */
-        get: operations["list_16"];
+        get: operations["list_17"];
         put?: never;
         /**
          * 등록
@@ -5940,7 +6002,7 @@ export interface paths {
          *      <p><b>전 지점 공통(<code>academyId</code> 없음)은 본사만</b> 만든다 — 지점 관리자가 넣으면
          *      다른 지점 드롭다운에도 뜬다. 휴일 등록과 같은 규칙이다.
          */
-        post: operations["create_17"];
+        post: operations["create_18"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6021,7 +6083,7 @@ export interface paths {
          *      <p>담임은 <b>맡은 학생만</b> 열 수 있다. 남의 반 학생은 "없다"로 답한다 — 403 으로 막으면
          *      그 학생이 존재한다는 사실이 새어나간다.
          */
-        get: operations["get"];
+        get: operations["get_1"];
         put?: never;
         post?: never;
         /**
@@ -6071,6 +6133,26 @@ export interface paths {
          *      <p><code>rfidNo</code> 를 비우면 <b>카드 해제</b>다 — 분실 신고 후 재발급 전까지.
          */
         patch: operations["changeCard"];
+        trace?: never;
+    };
+    "/api/v1/admin/student-profile-forms/{formId}/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * 켜기·끄기.
+         * @description 켜기·끄기.
+         */
+        patch: operations["changeActive_2"];
         trace?: never;
     };
     "/api/v1/admin/staff/teachers/{teacherId}": {
@@ -6358,7 +6440,7 @@ export interface paths {
          * 사용 중지·재개.
          * @description 사용 중지·재개. <b>지우지 않는다</b> — 과거 결제가 어느 가맹점으로 나갔는지가 남아야 한다.
          */
-        patch: operations["changeActive_2"];
+        patch: operations["changeActive_3"];
         trace?: never;
     };
     "/api/v1/admin/penalty-rules/{ruleId}/active": {
@@ -6850,7 +6932,7 @@ export interface paths {
          * 사용/중지.
          * @description 사용/중지. 지난 기수 기준은 지우지 않고 내린다.
          */
-        patch: operations["changeActive_3"];
+        patch: operations["changeActive_4"];
         trace?: never;
     };
     "/api/v1/admin/app-config/{platform}/versions": {
@@ -6961,7 +7043,7 @@ export interface paths {
          * 내게 배포된 설문 목록.
          * @description 내게 배포된 설문 목록.
          */
-        get: operations["list_17"];
+        get: operations["list_18"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7388,7 +7470,7 @@ export interface paths {
          * 신청할 수 있는 특강 목록 (A-15).
          * @description 신청할 수 있는 특강 목록 (A-15). 정원이 찬 것도 나오되 마감으로 표시된다.
          */
-        get: operations["list_18"];
+        get: operations["list_19"];
         put?: never;
         post?: never;
         delete?: never;
@@ -8602,7 +8684,7 @@ export interface paths {
          * 그 달에 정기일정을 낸 학생 전체.
          * @description 그 달에 정기일정을 낸 학생 전체.
          */
-        get: operations["list_19"];
+        get: operations["list_20"];
         put?: never;
         post?: never;
         delete?: never;
@@ -8645,7 +8727,7 @@ export interface paths {
          * 수납현황 목록.
          * @description 수납현황 목록.
          */
-        get: operations["list_20"];
+        get: operations["list_21"];
         put?: never;
         post?: never;
         delete?: never;
@@ -8887,7 +8969,7 @@ export interface paths {
          *      <p>열람 수(<code>readCount</code>)를 함께 내린다 — 공지마다 세면 쿼리가 행 수만큼
          *      나가므로 ID를 모아 한 번에 읽는다.
          */
-        get: operations["list_21"];
+        get: operations["list_22"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9178,7 +9260,7 @@ export interface paths {
          * 대상에 붙은 파일 목록.
          * @description 대상에 붙은 파일 목록.
          */
-        get: operations["list_22"];
+        get: operations["list_23"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9220,7 +9302,7 @@ export interface paths {
          * 요청 내역.
          * @description 요청 내역. 지점을 비우면 전 지점(전 지점 권한자만).
          */
-        get: operations["list_23"];
+        get: operations["list_24"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9292,6 +9374,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/daily-reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 지점·기간의 학생별 집계 + 순위
+         * @description 지점·기간의 학생별 집계 + 순위.
+         *
+         *      <p><b>기존 두 API로는 이 화면을 그릴 수 없다.</b> <code>/statistics</code>는 지점 전체
+         *      개요이고 학생별 통계는 한 명씩만 준다 — 전교생을 줄 세우려면 학생 수만큼 호출해야
+         *      하고, 200명짜리 지점이면 쿼리가 200번이다. 그래서 목록을 서버가 한 번에 만든다.
+         *
+         *      <p><b>순위는 서버가 센다.</b> 화면이 세면 페이징된 그 페이지 안에서만 등수가 매겨져
+         *      2페이지 첫 줄이 또 1등이 된다. 동점은 같은 등수이고 다음은 건너뛴다(1, 1, 3) —
+         *      앱 순공 랭킹과 같은 규칙이라 두 화면의 등수가 갈리지 않는다.
+         *
+         *      <p>⚠️ <b>하원 태깅이 없는 날은 집계하지 않는다</b>(2026-10-13 확정 — 직원이 하원
+         *      시각을 수기 입력한다). 그 날 수는 <code>missingCheckOutDays</code>로 따로 내려가고
+         *      순공·재실 합계에는 들어가지 않는다. 0으로 채우면 <b>진짜 0분과 구분되지 않아</b>
+         *      담당자가 그 학생을 「공부 안 한 학생」으로 읽는다.
+         *
+         *      <p>⚠️ <b><code>concentration</code>(집중도)은 항상 비어 있다 — 정의 미확정</b>이다.
+         *      산식이 요구사항에 없어 서버가 만들지 않는다.
+         *
+         *      <p>기본 정렬은 순공시간 많은 순이고 <code>sort</code>로 바꿀 수 있다. 허용되는 키는
+         *      <code>studentNo · studentName · className · studyMinutes · presenceMinutes ·
+         *      routineCompletionRate · missingCheckOutDays</code>이고 그 밖의 값은 무시된다.
+         */
+        get: operations["board_2"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/consults/students/{enrollmentId}": {
         parameters: {
             query?: never;
@@ -9345,7 +9467,7 @@ export interface paths {
          * 전 지점.
          * @description 전 지점. 설정이 없는 지점도 빈 행으로 나온다 — 화면이 9개를 다 그린다.
          */
-        get: operations["list_24"];
+        get: operations["list_25"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9368,7 +9490,7 @@ export interface paths {
          *      <p>⚠️ 키오스크 자격증명·PG 코드가 들어 있다 — <b>이 응답을 가입 화면 같은
          *      무인증 경로로 흘리지 말 것.</b>
          */
-        get: operations["get_1"];
+        get: operations["get_2"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9531,7 +9653,7 @@ export interface paths {
          *      <p><b>재원생 전원이 나온다.</b> 태깅한 학생만 주면 결석자가 목록에서 사라져
          *      "오늘 결석 몇 명"을 셀 수 없다.
          */
-        get: operations["board_2"];
+        get: operations["board_3"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9616,7 +9738,7 @@ export interface paths {
          * 승인 요청 현황.
          * @description 승인 요청 현황.
          */
-        get: operations["board_3"];
+        get: operations["board_4"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9636,7 +9758,7 @@ export interface paths {
          * 신청유형 3종을 전부 내린다.
          * @description 신청유형 3종을 전부 내린다. 안 정한 유형은 <code>configured=false</code>로 나온다.
          */
-        get: operations["list_25"];
+        get: operations["list_26"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9656,7 +9778,7 @@ export interface paths {
          * 앱 설정 목록(최소 지원 버전·점검 모드).
          * @description 앱 설정 목록(최소 지원 버전·점검 모드). 앱이 부팅할 때 첫 번째로 읽는 값이다.
          */
-        get: operations["list_26"];
+        get: operations["list_27"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9812,7 +9934,7 @@ export interface paths {
          * 목록.
          * @description 목록. 상태·이름·연락처로 좁힌다.
          */
-        get: operations["list_27"];
+        get: operations["list_28"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9897,7 +10019,7 @@ export interface paths {
          *
          *      <p>지점 관리자에게는 <b>자기 지점만</b> 보인다.
          */
-        get: operations["list_28"];
+        get: operations["list_29"];
         put?: never;
         post?: never;
         delete?: never;
@@ -11113,6 +11235,113 @@ export interface components {
             reason?: string;
             /** Format: date-time */
             at?: string;
+        };
+        StudentProfileSaveRequest: {
+            /**
+             * Format: int64
+             * @description 쓴 양식. <b>비워도 된다</b> — I-17 미확정이라 양식 행 없이도 돌아야 한다
+             */
+            formId?: number;
+            healthNote?: string;
+            healthItems?: {
+                [key: string]: unknown;
+            };
+            lifeNote?: string;
+            lifeItems?: {
+                [key: string]: unknown;
+            };
+            /** @description 양식이 정의한 나머지 항목의 답 */
+            answers?: {
+                [key: string]: unknown;
+            };
+            universities?: components["schemas"]["StudentProfileUniversityRequest"][];
+            /**
+             * Format: date-time
+             * @description 소급 입력용. 비우면 <b>최초 작성 시각을 건드리지 않는다</b> —
+             *                        수정할 때마다 지금 시각으로 덮으면 「언제 받았나」가 사라진다
+             */
+            writtenAt?: string;
+        };
+        StudentProfileUniversityRequest: {
+            universityName: string;
+            departmentName?: string;
+            screeningName?: string;
+            /**
+             * Format: int64
+             * @description 합격증. <b><code>POST /admin/files/private</code> 로 먼저 올리고
+             *                               그 id 를 보낸다</b> — 신상기록부는 파일을 보관하지 않는다
+             */
+            certificateFileId?: number;
+            /**
+             * @description 직원의 합불 확인. <b><code>null</code> 이 「아직 확인 안 함」</b>이고
+             *                               <code>false</code> 는 불합격이다
+             */
+            passed?: boolean;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseStudentProfileResponse: {
+            success?: boolean;
+            data?: components["schemas"]["StudentProfileResponse"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        StudentProfileResponse: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            enrollmentId?: number;
+            studentNo?: string;
+            studentName?: string;
+            /** Format: int64 */
+            formId?: number;
+            formName?: string;
+            healthNote?: string;
+            healthItems?: {
+                [key: string]: unknown;
+            };
+            lifeNote?: string;
+            lifeItems?: {
+                [key: string]: unknown;
+            };
+            answers?: {
+                [key: string]: unknown;
+            };
+            universities?: components["schemas"]["StudentProfileUniversityRow"][];
+            /** Format: date-time */
+            writtenAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /**
+             * @description 민감 항목(건강상태)이 가려졌는지. ★ <b>화면이 「저장이 안 됐다」로
+             *                    오인하지 않게 서버가 알려준다</b> — 가려진 것과 비어 있는 것은 다르다
+             */
+            masked?: boolean;
+        };
+        StudentProfileUniversityRow: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int32 */
+            sortOrder?: number;
+            universityName?: string;
+            departmentName?: string;
+            screeningName?: string;
+            /**
+             * Format: int64
+             * @description 합격증 파일 id. <b>주소가 아니다</b> — 비공개 파일이라
+             *                               볼 때마다 <code>GET /admin/files/{id</code>/url} 로 짧은 주소를 받는다
+             */
+            certificateFileId?: number;
+            certificateFileName?: string;
+            passed?: boolean;
         };
         ReplaceRoles: {
             roles: ("SUPER_ADMIN" | "BRANCH_ADMIN" | "TEACHER" | "STAFF" | "READONLY")[];
@@ -14159,6 +14388,64 @@ export interface components {
             data?: "REGISTERED" | "OT_DONE" | "PARENT_LINKED" | "SCHEDULE_SET" | "ACTIVE";
             meta?: components["schemas"]["PageMeta"];
             error?: components["schemas"]["ErrorBody"];
+        };
+        StudentProfileFormRequest: {
+            /**
+             * Format: int64
+             * @description 비우면 <b>전 지점 공통</b> — 본사만 만들 수 있다
+             */
+            academyId?: number;
+            /** Format: int32 */
+            year?: number;
+            /**
+             * @description 비우면 <b>전 학년 공통</b>. I-17 확정 전에는 비워 둔다
+             * @enum {string}
+             */
+            gradeType?: "HIGH2" | "HIGH3" | "N_SU" | "STAFF";
+            name: string;
+            /** @description 항목 정의. 화면이 이걸 읽어 입력칸을 그린다 */
+            schema?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Format: int32
+             * @description 비우면 1. <b>고칠 때는 버전을 올려 새로 등록</b>한다
+             */
+            version?: number;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseStudentProfileFormRow: {
+            success?: boolean;
+            data?: components["schemas"]["StudentProfileFormRow"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        StudentProfileFormRow: {
+            /** Format: int64 */
+            id?: number;
+            /**
+             * Format: int64
+             * @description <code>null</code> 이면 전 지점 공통, <code>gradeType</code> 이 null 이면 전 학년
+             */
+            academyId?: number;
+            /** Format: int32 */
+            year?: number;
+            /** @enum {string} */
+            gradeType?: "HIGH2" | "HIGH3" | "N_SU" | "STAFF";
+            name?: string;
+            schemaJson?: string;
+            /** Format: int32 */
+            version?: number;
+            active?: boolean;
         };
         /** @description 선생님(담당선생님·사감) 등록. 계정을 같이 만든다. */
         CreateTeacher: {
@@ -19168,6 +19455,22 @@ export interface components {
          *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
          *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
          */
+        ApiResponseListStudentProfileFormRow: {
+            success?: boolean;
+            data?: components["schemas"]["StudentProfileFormRow"][];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
         ApiResponseOverview: {
             success?: boolean;
             data?: components["schemas"]["Overview"];
@@ -21193,6 +21496,102 @@ export interface components {
          *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
          *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
          */
+        ApiResponseListDailyReportBoardRow: {
+            success?: boolean;
+            data?: components["schemas"]["DailyReportBoardRow"][];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        /**
+         * @description Daily Report 학생별 집계 한 줄 (F-4.11-6).
+         *
+         *      <p><b>등수는 지점·기간 전체 기준이다</b> — 반 필터를 걸거나 페이지를 넘겨도 같은
+         *      학생의 등수는 바뀌지 않는다. 화면이 페이지 안에서 다시 세면 2페이지 첫 줄이
+         *      또 1등이 된다.
+         */
+        DailyReportBoardRow: {
+            /** Format: int64 */
+            enrollmentId?: number;
+            studentNo?: string;
+            /** @description 상위 관리자가 아니면 가려져 있다(<code>masked</code>) */
+            studentName?: string;
+            /** @description 이름이 가려졌는지. 없으면 화면이 "이름이 잘못 저장됐다"로 오인한다 */
+            masked?: boolean;
+            /** Format: int64 */
+            classId?: number;
+            className?: string;
+            /** Format: int64 */
+            homeroomTeacherId?: number;
+            homeroomTeacherName?: string;
+            /**
+             * Format: int32
+             * @description 순공시간(재실 − 외출 − 급식 − 쉬는시간) 합계.
+             *                          <b>집계한 날이 없으면 비어 있다</b> — 0이 아니다
+             */
+            studyMinutes?: number;
+            /**
+             * Format: int32
+             * @description 재실시간 합계
+             */
+            presenceMinutes?: number;
+            /**
+             * Format: int32
+             * @description ⚠️ <b>항상 비어 있다 — 정의 미확정.</b> 산식이 요구사항에 없어
+             *                          서버가 만들지 않는다. 화면도 이 값을 숫자로 그리지 말 것
+             */
+            concentration?: number;
+            /** Format: int64 */
+            attendedDays?: number;
+            /** Format: int64 */
+            measuredDays?: number;
+            /**
+             * Format: int64
+             * @description 하원 태깅이 없어 <b>집계하지 않은</b> 날 수.
+             *                          직원이 하원 시각을 수기 입력하면 사라진다 — 「0분」이 아니라
+             *                          「미입력」이므로 화면도 구분해 표시해야 한다
+             */
+            missingCheckOutDays?: number;
+            /**
+             * Format: int64
+             * @description 오늘 아직 학원에 있는 날. 잠정값으로 집계에 들어가 있다
+             */
+            inProgressDays?: number;
+            /**
+             * Format: int64
+             * @description 루틴 이행(O) 건수. <b>O/X 2단계다</b>(I-19) — 부분 이행이 없다
+             */
+            routineDone?: number;
+            /** Format: int64 */
+            routineMissed?: number;
+            /** Format: int64 */
+            routineJudged?: number;
+            /**
+             * Format: int32
+             * @description 이행률(%). 판정된 건이 없으면 비어 있다 —
+             *                          "루틴이 없던 기간"과 "0% 이행"은 다르다
+             */
+            routineCompletionRate?: number;
+            /**
+             * Format: int32
+             * @description 순공시간 등수. 동점은 같은 등수이고 다음은 건너뛴다(1, 1, 3) —
+             *                          앱 순공 랭킹과 같은 규칙이다. 집계값이 없으면 비어 있다
+             */
+            studyRank?: number;
+            /** Format: int32 */
+            presenceRank?: number;
+            /** Format: int32 */
+            routineRank?: number;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
         ApiResponseListLogResponse: {
             success?: boolean;
             data?: components["schemas"]["LogResponse"][];
@@ -21253,8 +21652,8 @@ export interface components {
             /** @description 초도상담 미실시. <b>화면이 빨간 경고를 띄운다</b> */
             neverConsulted?: boolean;
             /**
-             * @description 신상기록부 작성 여부 — <b>지금은 항상 <code>null</code></b>(F-4.11-8 대기).
-             *                            <code>false</code>로 내리면 "작성 안 함"으로 읽혀 없는 사실을 만든다
+             * @description 신상기록부 작성 여부(F-4.11-9). <code>false</code>면 <b>실제로 안 쓴 것</b>이다 —
+             *                            구현 전에는 "작성 안 함"이라는 없는 사실을 만들지 않으려 <code>null</code>이었다
              */
             profileWritten?: boolean;
             /** Format: date */
@@ -22770,6 +23169,54 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseSubmission"];
+                };
+            };
+        };
+    };
+    get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enrollmentId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseStudentProfileResponse"];
+                };
+            };
+        };
+    };
+    save_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enrollmentId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudentProfileSaveRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseStudentProfileResponse"];
                 };
             };
         };
@@ -24417,7 +24864,7 @@ export interface operations {
             };
         };
     };
-    save_1: {
+    save_2: {
         parameters: {
             query?: never;
             header?: never;
@@ -26904,6 +27351,53 @@ export interface operations {
             };
         };
     };
+    list_1: {
+        parameters: {
+            query: {
+                academyId?: number;
+                year: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListStudentProfileFormRow"];
+                };
+            };
+        };
+    };
+    create_3: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudentProfileFormRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseStudentProfileFormRow"];
+                };
+            };
+        };
+    };
     teachers: {
         parameters: {
             query: {
@@ -27084,7 +27578,7 @@ export interface operations {
             };
         };
     };
-    list_1: {
+    list_2: {
         parameters: {
             query: {
                 academyId: number;
@@ -27542,7 +28036,7 @@ export interface operations {
             };
         };
     };
-    list_2: {
+    list_3: {
         parameters: {
             query: {
                 academyId: number;
@@ -27566,7 +28060,7 @@ export interface operations {
             };
         };
     };
-    create_3: {
+    create_4: {
         parameters: {
             query?: never;
             header?: never;
@@ -27687,7 +28181,7 @@ export interface operations {
             };
         };
     };
-    list_3: {
+    list_4: {
         parameters: {
             query?: never;
             header?: never;
@@ -27707,7 +28201,7 @@ export interface operations {
             };
         };
     };
-    create_4: {
+    create_5: {
         parameters: {
             query?: never;
             header?: never;
@@ -27731,7 +28225,7 @@ export interface operations {
             };
         };
     };
-    list_4: {
+    list_5: {
         parameters: {
             query: {
                 /** @description 전 지점 권한자만 지정한다. 지점 관리자는 자기 지점으로 고정된다 */
@@ -27757,7 +28251,7 @@ export interface operations {
             };
         };
     };
-    create_5: {
+    create_6: {
         parameters: {
             query?: never;
             header?: never;
@@ -27962,7 +28456,7 @@ export interface operations {
             };
         };
     };
-    create_6: {
+    create_7: {
         parameters: {
             query?: never;
             header?: never;
@@ -28083,7 +28577,7 @@ export interface operations {
             };
         };
     };
-    list_5: {
+    list_6: {
         parameters: {
             query?: never;
             header?: never;
@@ -28103,7 +28597,7 @@ export interface operations {
             };
         };
     };
-    create_7: {
+    create_8: {
         parameters: {
             query?: never;
             header?: never;
@@ -28328,7 +28822,7 @@ export interface operations {
             };
         };
     };
-    list_6: {
+    list_7: {
         parameters: {
             query?: never;
             header?: never;
@@ -28348,7 +28842,7 @@ export interface operations {
             };
         };
     };
-    create_8: {
+    create_9: {
         parameters: {
             query?: never;
             header?: never;
@@ -28847,7 +29341,7 @@ export interface operations {
             };
         };
     };
-    list_7: {
+    list_8: {
         parameters: {
             query: {
                 academyId: number;
@@ -28871,7 +29365,7 @@ export interface operations {
             };
         };
     };
-    create_9: {
+    create_10: {
         parameters: {
             query?: never;
             header?: never;
@@ -28989,7 +29483,7 @@ export interface operations {
             };
         };
     };
-    list_8: {
+    list_9: {
         parameters: {
             query?: {
                 academyId?: number;
@@ -29017,7 +29511,7 @@ export interface operations {
             };
         };
     };
-    create_10: {
+    create_11: {
         parameters: {
             query?: never;
             header?: never;
@@ -29091,7 +29585,7 @@ export interface operations {
             };
         };
     };
-    list_9: {
+    list_10: {
         parameters: {
             query: {
                 academyId?: number;
@@ -29425,7 +29919,7 @@ export interface operations {
             };
         };
     };
-    list_10: {
+    list_11: {
         parameters: {
             query: {
                 year: number;
@@ -29449,7 +29943,7 @@ export interface operations {
             };
         };
     };
-    create_11: {
+    create_12: {
         parameters: {
             query?: never;
             header?: never;
@@ -29524,7 +30018,7 @@ export interface operations {
             };
         };
     };
-    list_11: {
+    list_12: {
         parameters: {
             query: {
                 /**
@@ -29707,7 +30201,7 @@ export interface operations {
             };
         };
     };
-    create_12: {
+    create_13: {
         parameters: {
             query?: never;
             header?: never;
@@ -29895,7 +30389,7 @@ export interface operations {
             };
         };
     };
-    list_12: {
+    list_13: {
         parameters: {
             query: {
                 academyId?: number;
@@ -29918,7 +30412,7 @@ export interface operations {
             };
         };
     };
-    create_13: {
+    create_14: {
         parameters: {
             query?: never;
             header?: never;
@@ -29968,7 +30462,7 @@ export interface operations {
             };
         };
     };
-    list_13: {
+    list_14: {
         parameters: {
             query: {
                 year: number;
@@ -29996,7 +30490,7 @@ export interface operations {
             };
         };
     };
-    create_14: {
+    create_15: {
         parameters: {
             query?: never;
             header?: never;
@@ -30353,7 +30847,7 @@ export interface operations {
             };
         };
     };
-    list_14: {
+    list_15: {
         parameters: {
             query: {
                 academyId?: number;
@@ -30376,7 +30870,7 @@ export interface operations {
             };
         };
     };
-    create_15: {
+    create_16: {
         parameters: {
             query?: never;
             header?: never;
@@ -30446,7 +30940,7 @@ export interface operations {
             };
         };
     };
-    create_16: {
+    create_17: {
         parameters: {
             query?: never;
             header?: never;
@@ -30630,7 +31124,7 @@ export interface operations {
             };
         };
     };
-    list_15: {
+    list_16: {
         parameters: {
             query?: {
                 academyId?: number;
@@ -30681,7 +31175,7 @@ export interface operations {
             };
         };
     };
-    list_16: {
+    list_17: {
         parameters: {
             query?: {
                 academyId?: number;
@@ -30709,7 +31203,7 @@ export interface operations {
             };
         };
     };
-    create_17: {
+    create_18: {
         parameters: {
             query?: never;
             header?: never;
@@ -30808,7 +31302,7 @@ export interface operations {
             };
         };
     };
-    get: {
+    get_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -30900,6 +31394,30 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseStudentResponse"];
+                };
+            };
+        };
+    };
+    changeActive_2: {
+        parameters: {
+            query: {
+                active: boolean;
+            };
+            header?: never;
+            path: {
+                formId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseStudentProfileFormRow"];
                 };
             };
         };
@@ -31300,7 +31818,7 @@ export interface operations {
             };
         };
     };
-    changeActive_2: {
+    changeActive_3: {
         parameters: {
             query: {
                 active: boolean;
@@ -32000,7 +32518,7 @@ export interface operations {
             };
         };
     };
-    changeActive_3: {
+    changeActive_4: {
         parameters: {
             query?: never;
             header?: never;
@@ -32171,7 +32689,7 @@ export interface operations {
             };
         };
     };
-    list_17: {
+    list_18: {
         parameters: {
             query?: {
                 /** @description <b>학부모만</b> 쓴다. 계정 하나에 자녀가 여럿이라 서버가 고를 수 없다 */
@@ -32630,7 +33148,7 @@ export interface operations {
             };
         };
     };
-    list_18: {
+    list_19: {
         parameters: {
             query?: never;
             header?: never;
@@ -33949,7 +34467,7 @@ export interface operations {
             };
         };
     };
-    list_19: {
+    list_20: {
         parameters: {
             query?: {
                 academyId?: number;
@@ -33996,7 +34514,7 @@ export interface operations {
             };
         };
     };
-    list_20: {
+    list_21: {
         parameters: {
             query: {
                 /**
@@ -34283,7 +34801,7 @@ export interface operations {
             };
         };
     };
-    list_21: {
+    list_22: {
         parameters: {
             query?: {
                 year?: number;
@@ -34595,7 +35113,7 @@ export interface operations {
             };
         };
     };
-    list_22: {
+    list_23: {
         parameters: {
             query: {
                 ownerType: string;
@@ -34640,7 +35158,7 @@ export interface operations {
             };
         };
     };
-    list_23: {
+    list_24: {
         parameters: {
             query: {
                 academyId?: number;
@@ -34728,6 +35246,42 @@ export interface operations {
             };
         };
     };
+    board_2: {
+        parameters: {
+            query: {
+                /**
+                 * @description 지점. 전 지점 권한자만 지정할 수 있고 지점 관리자는 자기 지점으로
+                 *                       강제된다
+                 */
+                academyId?: number;
+                /** @description 조회 시작일 */
+                from: string;
+                /** @description 조회 종료일. 최대 31일이다 — 태깅 원장을 기간 통째로 읽는다 */
+                to: string;
+                /**
+                 * @description 반 필터. 비우면 지점 전체(반 미배정 포함). <b>담임은 이 값과 무관하게
+                 *                       맡은 학생만 본다</b>
+                 */
+                classId?: number;
+                pageable: components["schemas"]["Pageable"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListDailyReportBoardRow"];
+                };
+            };
+        };
+    };
     byStudent_2: {
         parameters: {
             query?: never;
@@ -34773,7 +35327,7 @@ export interface operations {
             };
         };
     };
-    list_24: {
+    list_25: {
         parameters: {
             query?: never;
             header?: never;
@@ -34793,7 +35347,7 @@ export interface operations {
             };
         };
     };
-    get_1: {
+    get_2: {
         parameters: {
             query?: never;
             header?: never;
@@ -34953,7 +35507,7 @@ export interface operations {
             };
         };
     };
-    board_2: {
+    board_3: {
         parameters: {
             query?: {
                 /**
@@ -35073,7 +35627,7 @@ export interface operations {
             };
         };
     };
-    board_3: {
+    board_4: {
         parameters: {
             query?: {
                 /** @description 비우면 내 지점. 전 지점 권한자가 비우면 <b>전 지점 합계</b>다 */
@@ -35101,7 +35655,7 @@ export interface operations {
             };
         };
     };
-    list_25: {
+    list_26: {
         parameters: {
             query: {
                 academyId?: number;
@@ -35124,7 +35678,7 @@ export interface operations {
             };
         };
     };
-    list_26: {
+    list_27: {
         parameters: {
             query?: never;
             header?: never;
@@ -35292,7 +35846,7 @@ export interface operations {
             };
         };
     };
-    list_27: {
+    list_28: {
         parameters: {
             query: {
                 year: number;
@@ -35386,7 +35940,7 @@ export interface operations {
             };
         };
     };
-    list_28: {
+    list_29: {
         parameters: {
             query?: {
                 /** @description 비활성 지점 포함. 기본은 활성만 — 셀렉트에 죽은 지점이 뜨면 안 된다 */
