@@ -58,6 +58,7 @@ import {
   type BulkAssignResult,
   type ClassGroup,
 } from '../../api/classes'
+import { studentNoText } from '../../lib/studentNo'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
 
@@ -111,7 +112,7 @@ const sortableKey = (key: string): boolean => (SORTABLE as readonly string[]).in
 
 const COLUMNS: Column<Student>[] = [
   /* 학번·이름은 가로로 밀어도 붙어 있는다 — 뒤 칸을 보다가 누구 줄인지 잃지 않게 */
-  { key: 'studentNo', header: '학번', width: '104px', sticky: true, sortable: sortableKey('studentNo'), value: (r) => r.studentNo ?? '-' },
+  { key: 'studentNo', header: '학번', width: '104px', sticky: true, sortable: sortableKey('studentNo'), value: (r) => studentNoText(r.studentNo) },
   {
     key: 'name',
     header: '이름',
@@ -793,7 +794,7 @@ function Content() {
       {statusEdit && (
         <Modal
           title="재원 상태 변경"
-          sub={`${statusEdit.row.name}(${statusEdit.row.studentNo ?? '-'}) 의 상태를 바꿉니다.`}
+          sub={`${statusEdit.row.name}(${studentNoText(statusEdit.row.studentNo)}) 의 상태를 바꿉니다.`}
           confirmLabel="변경"
           busy={changing !== null}
           error={statusErr}
@@ -895,7 +896,7 @@ function Content() {
       {reEnroll && (
         <Modal
           title="재등록"
-          sub={`${reEnroll.row.name}(${reEnroll.row.studentNo ?? '-'}) 을(를) 새 기수로 다시 등록합니다.`}
+          sub={`${reEnroll.row.name}(${studentNoText(reEnroll.row.studentNo)}) 을(를) 새 기수로 다시 등록합니다.`}
           confirmLabel="재등록"
           danger
           busy={reBusy}
@@ -912,7 +913,7 @@ function Content() {
             <div>
               <div className="tt">학번이 새로 매겨집니다</div>
               <div className="tx">
-                지금 학번 <b>{reEnroll.row.studentNo ?? '-'}</b> 은 퇴원 이력으로 남고, 새 학번을 받습니다.
+                지금 학번 <b>{studentNoText(reEnroll.row.studentNo)}</b> 은 퇴원 이력으로 남고, 새 학번을 받습니다.
                 되돌릴 수 없습니다.
               </div>
             </div>
