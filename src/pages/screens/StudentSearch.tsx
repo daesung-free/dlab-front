@@ -125,8 +125,9 @@ const COLUMNS: Column<Student>[] = [
   { key: 'grade', header: '학년', width: '64px', align: 'center', sortable: sortableKey('grade'), value: (r) => GRADE_LABEL[r.grade] ?? r.grade },
   { key: 'track', header: '계열', width: '64px', align: 'center', sortable: sortableKey('track'), value: (r) => (r.track ? TRACK_LABEL[r.track] : '-') },
   { key: 'repeat', header: '재수', width: '64px', align: 'center', value: (r) => retakeLabel(r.retakeCount) },
-  { key: 'className', header: '반', width: '58px', align: 'center', value: (r) => r.className ?? '-' },
-  { key: 'seatCd', header: '좌석', width: '68px', align: 'center', value: (r) => r.seatCd ?? '-' },
+  /* 정렬이 서버 허용키에 들어와 켠다 — 미배정은 서버가 항상 뒤로 보낸다 */
+  { key: 'className', header: '반', width: '58px', align: 'center', sortable: sortableKey('className'), value: (r) => r.className ?? '-' },
+  { key: 'seatCd', header: '좌석', width: '68px', align: 'center', sortable: sortableKey('seatCd'), value: (r) => r.seatCd ?? '-' },
   { key: 'schoolName', header: '출신학교', width: '90px', value: (r) => r.schoolName ?? '-' },
   {
     key: 'homeroomTeacher',
