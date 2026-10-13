@@ -893,7 +893,6 @@ export const annualEventsMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled data-soon title="준비 중입니다">기수 선택 ▾</button>
       <button className="btn" onClick={() => copySignal.bump()} title="작년 행사를 올해로 옮깁니다. 같은 행사는 건너뜁니다">
         <Icon name="history" size={14} /> 전년도 복사
       </button>

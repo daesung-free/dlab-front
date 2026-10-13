@@ -186,7 +186,10 @@ function Content() {
   const [tab, setTab] = useState('class')
   /** null = 전체 지점. 본사 계정만 전 지점 합계를 받는다(지점 계정은 자기 지점뿐) */
   const [branchId, setBranchId] = useState<number | null>(null)
-  const year = new Date().getFullYear()
+  /* ★ 연도를 고를 수 있게 한다. 헤더에 「기수 선택」 비활성 버튼이 있었는데, 그건
+        원래 「2026 시즌」이던 것을 이름만 바꾼 것이었다(2026-09-11) — 축은 **연도**다.
+        작년 현황을 보려면 고를 수 있어야 한다 */
+  const [year, setYear] = useState(() => new Date().getFullYear())
 
   const [classes, setClasses] = useState<ClassGroup[]>([])
   /*
@@ -433,6 +436,21 @@ function Content() {
           }
           toolbar={
             <>
+              <select
+                className="sel"
+                style={{ width: 110 }}
+                value={year}
+                onChange={(e) => setYear(Number(e.target.value))}
+              >
+                {[year + 1, year, year - 1, year - 2]
+                  .filter((y, i, a) => a.indexOf(y) === i)
+                  .sort((a, b) => b - a)
+                  .map((y) => (
+                    <option key={y} value={y}>
+                      {y}년
+                    </option>
+                  ))}
+              </select>
               <PrintButton />
               <ExcelButton filename={`학원생현황_반별_${branchName}`} columns={CLASS_COLUMNS} rows={classRows} masked={false} />
             </>
@@ -614,7 +632,6 @@ export const studentStatusMockup: Mockup = {
   allBranches: true,
   actions: (
     <>
-      <button className="btn" disabled data-soon title="준비 중입니다">기수 선택 ▾</button>
       <CompareButton />
     </>
   ),

@@ -1333,7 +1333,6 @@ export const studentSearchMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled data-soon title="준비 중입니다">기수 선택 ▾</button>
       {/* 새 화면이 아니라 신규 접수 등록(F-4.1-3)으로 보내는 입구다 — 막아둘 이유가 없었다 */}
       <Link className="btn pri" to="/s/student-enroll">
         <Icon name="user-plus" size={14} /> 신규 접수 등록

@@ -305,7 +305,6 @@ export const affairsMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled data-soon title="준비 중입니다">기수 선택 ▾</button>
     </>
   ),
 }
