@@ -414,7 +414,13 @@ function Content() {
    * ★ 지금 상태는 상세의 `homeroomOverride` 로 안다. 지정·해제 뒤에는 상세를 다시 읽는다.
    * ★ 지점관리자·본사만 — 서버도 막지만 직원에게 누르면 거절되는 버튼을 보여줄 이유가 없다.
    */
-  const { canSeeAdmin: canManageHomeroom } = useAuth()
+  const { canSeeAdmin: canManageHomeroom, teacherOnly, principal } = useAuth()
+  /* ★ 메모 삭제는 **작성자 본인과 관리자만** 한다. 메모는 「그때 그 사람이 그렇게 적었다」가
+     값이라(수정 경로를 안 만든 것과 같은 이유) **남의 기록을 담임이 지우면 그 값이 무너진다.**
+     관리자는 남긴다 — 부적절한 내용을 치울 사람이 필요하다.
+     서버도 같은 제한을 건다. 화면이 먼저 감춰야 **눌러 보고 403 으로 아는 일**이 없다 */
+  const canDeleteMemo = (m: StudentMemo) =>
+    !teacherOnly || (m.writerId != null && String(m.writerId) === principal?.accountId)
   const [hr, setHr] = useState<{
     open: boolean
     teachers: TeacherRow[] | null
@@ -1219,15 +1225,17 @@ function Content() {
                           {m.writerName?.trim() || '시스템'} · {m.createdAt?.slice(0, 16).replace('T', ' ')}
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        className="btn"
-                        style={{ padding: '2px 8px', fontSize: 11.5 }}
-                        disabled={memo.busy}
-                        onClick={() => setMemo((c) => ({ ...c, asking: m }))}
-                      >
-                        삭제
-                      </button>
+                      {canDeleteMemo(m) && (
+                        <button
+                          type="button"
+                          className="btn"
+                          style={{ padding: '2px 8px', fontSize: 11.5 }}
+                          disabled={memo.busy}
+                          onClick={() => setMemo((c) => ({ ...c, asking: m }))}
+                        >
+                          삭제
+                        </button>
+                      )}
                     </div>
                   ))}
                   {memo.err && <div className="hint" style={{ color: 'var(--red)' }}>{memo.err}</div>}
