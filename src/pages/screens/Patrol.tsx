@@ -245,7 +245,7 @@ function Content() {
     setError(null)
     try {
       const seatOf = new Map(seats.map((s) => [s.enrollmentId, s.seatCd] as const))
-      const rows = await savePatrol({
+      const sent = await savePatrol({
         academyId,
         date,
         round,
@@ -255,12 +255,10 @@ function Content() {
           mark,
         })),
       })
-      const next: Record<number, string> = {}
-      for (const r of rows) next[r.enrollmentId] = r.mark
-      setMarks(next)
-      setRecords(rows)
-      setDirty(false)
-      setNote(`${round}회차 ${rows.length}건을 저장했습니다.`)
+      /* ★ 응답은 **보낸 것만** 돌려준다. 그걸로 화면을 덮으면 **앱에서 찍은 것이 사라져
+         보인다** — 순찰은 앱에도 같은 화면이 있어 같은 회차를 나눠 찍는다. 다시 읽는다 */
+      await loadRound()
+      setNote(`${round}회차 ${sent.length}건을 저장했습니다.`)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '저장하지 못했습니다.')
     } finally {
@@ -299,6 +297,10 @@ function Content() {
     () => Array.from({ length: maxRow }, (_, i) => seats.filter((s) => s.row === i + 1).sort((a, b) => a.col - b.col)),
     [seats, maxRow],
   )
+
+  /* ★ 화면에서 지운 것은 **저장으로 사라지지 않는다** — 서버가 학생 단위로만 덮어쓴다.
+     말 안 해주면 담당자는 지워진 줄 알고 넘어가고, 새로고침하면 되살아난다 */
+  const removed = records.filter((r) => marks[r.enrollmentId] === undefined).length
 
   const seated = seats.filter((s) => s.enrollmentId !== null).length
   const checked = Object.keys(marks).length
@@ -443,6 +445,19 @@ function Content() {
               ))}
             </select>
             <MaskToggle masked={masked} onChange={setMasked} />
+            {/* ★ 앱에도 같은 순찰 화면이 있어 같은 회차를 나눠 찍는다 — 저쪽에서 찍은 것은
+                다시 읽어야 보인다. 안 그러면 「왜 안 보이지」로 두 번 찍게 된다 */}
+            <button
+              className="btn"
+              disabled={loading || saving || clearing}
+              onClick={() => {
+                setNote(null)
+                void loadRound()
+              }}
+              title={dirty ? '저장하지 않은 기록은 사라집니다' : undefined}
+            >
+              다시 읽기
+            </button>
             {/* 비우기는 저장된 것이 있을 때만 의미가 있다 — 화면에만 있는 것은 회차를 옮기면 사라진다 */}
             <button
               className="btn"
@@ -480,9 +495,13 @@ function Content() {
                 </button>
               ))}
               {/* ★ 회차를 옮기면 서버에서 다시 읽는다 — 저장 안 한 것은 그때 사라진다 */}
-              {dirty && checked > 0 && <span className="mk brandnew">저장하지 않은 기록이 있습니다</span>}
-              {dirty && checked === 0 && (
-                <span className="mk brandnew">모두 지웠습니다 — 서버에서도 지우려면 「회차 비우기」</span>
+              {dirty && checked > 0 && removed === 0 && (
+                <span className="mk brandnew">저장하지 않은 기록이 있습니다</span>
+              )}
+              {removed > 0 && (
+                <span className="mk brandnew">
+                  지운 {removed}건은 저장해도 남습니다 — 「회차 비우기」로 비우고 다시 기록하세요
+                </span>
               )}
             </div>
           </div>
