@@ -58,6 +58,7 @@ import {
   type BulkAssignResult,
   type ClassGroup,
 } from '../../api/classes'
+import { studentNoText } from '../../lib/studentNo'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
 
@@ -111,7 +112,7 @@ const sortableKey = (key: string): boolean => (SORTABLE as readonly string[]).in
 
 const COLUMNS: Column<Student>[] = [
   /* 학번·이름은 가로로 밀어도 붙어 있는다 — 뒤 칸을 보다가 누구 줄인지 잃지 않게 */
-  { key: 'studentNo', header: '학번', width: '104px', sticky: true, sortable: sortableKey('studentNo'), value: (r) => r.studentNo ?? '-' },
+  { key: 'studentNo', header: '학번', width: '104px', sticky: true, sortable: sortableKey('studentNo'), value: (r) => studentNoText(r.studentNo) },
   {
     key: 'name',
     header: '이름',
@@ -414,7 +415,13 @@ function Content() {
    * ★ 지금 상태는 상세의 `homeroomOverride` 로 안다. 지정·해제 뒤에는 상세를 다시 읽는다.
    * ★ 지점관리자·본사만 — 서버도 막지만 직원에게 누르면 거절되는 버튼을 보여줄 이유가 없다.
    */
-  const { canSeeAdmin: canManageHomeroom } = useAuth()
+  const { canSeeAdmin: canManageHomeroom, teacherOnly, principal } = useAuth()
+  /* ★ 메모 삭제는 **작성자 본인과 관리자만** 한다. 메모는 「그때 그 사람이 그렇게 적었다」가
+     값이라(수정 경로를 안 만든 것과 같은 이유) **남의 기록을 담임이 지우면 그 값이 무너진다.**
+     관리자는 남긴다 — 부적절한 내용을 치울 사람이 필요하다.
+     서버도 같은 제한을 건다. 화면이 먼저 감춰야 **눌러 보고 403 으로 아는 일**이 없다 */
+  const canDeleteMemo = (m: StudentMemo) =>
+    !teacherOnly || (m.writerId != null && String(m.writerId) === principal?.accountId)
   const [hr, setHr] = useState<{
     open: boolean
     teachers: TeacherRow[] | null
@@ -787,7 +794,7 @@ function Content() {
       {statusEdit && (
         <Modal
           title="재원 상태 변경"
-          sub={`${statusEdit.row.name}(${statusEdit.row.studentNo ?? '-'}) 의 상태를 바꿉니다.`}
+          sub={`${statusEdit.row.name}(${studentNoText(statusEdit.row.studentNo)}) 의 상태를 바꿉니다.`}
           confirmLabel="변경"
           busy={changing !== null}
           error={statusErr}
@@ -889,7 +896,7 @@ function Content() {
       {reEnroll && (
         <Modal
           title="재등록"
-          sub={`${reEnroll.row.name}(${reEnroll.row.studentNo ?? '-'}) 을(를) 새 기수로 다시 등록합니다.`}
+          sub={`${reEnroll.row.name}(${studentNoText(reEnroll.row.studentNo)}) 을(를) 새 기수로 다시 등록합니다.`}
           confirmLabel="재등록"
           danger
           busy={reBusy}
@@ -906,7 +913,7 @@ function Content() {
             <div>
               <div className="tt">학번이 새로 매겨집니다</div>
               <div className="tx">
-                지금 학번 <b>{reEnroll.row.studentNo ?? '-'}</b> 은 퇴원 이력으로 남고, 새 학번을 받습니다.
+                지금 학번 <b>{studentNoText(reEnroll.row.studentNo)}</b> 은 퇴원 이력으로 남고, 새 학번을 받습니다.
                 되돌릴 수 없습니다.
               </div>
             </div>
@@ -1219,15 +1226,17 @@ function Content() {
                           {m.writerName?.trim() || '시스템'} · {m.createdAt?.slice(0, 16).replace('T', ' ')}
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        className="btn"
-                        style={{ padding: '2px 8px', fontSize: 11.5 }}
-                        disabled={memo.busy}
-                        onClick={() => setMemo((c) => ({ ...c, asking: m }))}
-                      >
-                        삭제
-                      </button>
+                      {canDeleteMemo(m) && (
+                        <button
+                          type="button"
+                          className="btn"
+                          style={{ padding: '2px 8px', fontSize: 11.5 }}
+                          disabled={memo.busy}
+                          onClick={() => setMemo((c) => ({ ...c, asking: m }))}
+                        >
+                          삭제
+                        </button>
+                      )}
                     </div>
                   ))}
                   {memo.err && <div className="hint" style={{ color: 'var(--red)' }}>{memo.err}</div>}

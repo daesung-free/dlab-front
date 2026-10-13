@@ -22,6 +22,7 @@ import { listTeachers, type TeacherRow } from '../../api/accounts'
 import { useAcademy } from '../../auth/AcademyContext'
 import { SORTABLE, TRACK_LABEL, retakeLabel, searchStudents, type Student } from '../../api/students'
 import { createScreenSignal } from './screenSignal'
+import { studentNoText } from '../../lib/studentNo'
 import type { Mockup } from './types'
 
 /* 반을 만들면 아래 목록과 배정 드롭다운이 바로 바뀌어야 한다. 헤더 액션과 본문은
@@ -58,7 +59,7 @@ const PAGE_SIZE = 20
 const sortableKey = (key: string): boolean => (SORTABLE as readonly string[]).includes(key)
 
 const COLUMNS: Column<Student>[] = [
-  { key: 'studentNo', header: '학번', width: '100px', sortable: sortableKey('studentNo'), value: (r) => r.studentNo ?? '-' },
+  { key: 'studentNo', header: '학번', width: '100px', sortable: sortableKey('studentNo'), value: (r) => studentNoText(r.studentNo) },
   { key: 'name', header: '이름', width: '84px', sortable: sortableKey('name'), mask: 'name', value: (r) => r.name },
   { key: 'track', header: '계열', width: '64px', align: 'center', sortable: sortableKey('track'), value: (r) => (r.track ? TRACK_LABEL[r.track] : '-') },
   { key: 'repeat', header: '재수', width: '64px', align: 'center', value: (r) => retakeLabel(r.retakeCount) },
@@ -390,7 +391,7 @@ function Content() {
               masked={false}
               pageSize={15}
               columns={[
-                { key: 'studentNo', header: '학번', width: '110px', value: (r) => r.studentNo ?? '-' },
+                { key: 'studentNo', header: '학번', width: '110px', value: (r) => studentNoText(r.studentNo) },
                 { key: 'studentName', header: '이름', width: '100px', value: (r) => r.studentName },
                 { key: 'seatCd', header: '좌석', width: '80px', align: 'center', value: (r) => r.seatCd ?? '-' },
                 { key: 'schoolName', header: '출신학교', value: (r) => r.schoolName ?? '-' },

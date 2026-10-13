@@ -25,6 +25,7 @@ import {
   listPendingSignups,
   type PendingSignup,
 } from '../../api/studentSignups'
+import { studentNoText } from '../../lib/studentNo'
 import type { Mockup } from './types'
 import { importFieldLabel } from '../../lib/importFields'
 import '../../styles/forms.css'
@@ -516,7 +517,7 @@ function SignupApproval() {
         width: '110px',
         /* 승인 전에는 학번이 없을 수 있다. 서버가 안 주는 게 아니라 아직 안 매겨진 것이라
            Unfilled 가 아니라 '-' 다(CLAUDE.md 4) */
-        value: (r) => r.studentNo ?? '-',
+        value: (r) => studentNoText(r.studentNo),
       },
       { key: 'name', header: '이름', width: '100px', mask: 'name', value: (r) => r.name },
       { key: 'phone', header: '연락처', width: '130px', mask: 'phone', value: (r) => r.phone ?? '-' },
@@ -633,7 +634,7 @@ function SignupApproval() {
                 }}
               >
                 <b style={{ fontSize: 13 }}>{masked ? `${r.name[0]}*${r.name.slice(2)}` : r.name}</b>
-                <span style={{ fontSize: 12, color: 'var(--muted)' }}>{r.studentNo ?? '-'}</span>
+                <span style={{ fontSize: 12, color: 'var(--muted)' }}>{studentNoText(r.studentNo)}</span>
                 <span className="mk supplement" style={{ marginLeft: 4 }}>
                   {ONBOARDING_LABEL[r.onboardingStatus] ?? r.onboardingStatus}
                 </span>

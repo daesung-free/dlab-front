@@ -21,6 +21,7 @@ import {
 } from '../../api/admissions'
 import type { ConvertGrade, ReservationRow, ReservationStatus } from '../../api/admissions'
 import { ApiError } from '../../api/client'
+import { studentNoText } from '../../lib/studentNo'
 import type { Mockup } from './types'
 import './admission.css'
 
@@ -238,7 +239,7 @@ function Content() {
                     )}
                     {r.converted && (
                       <div className="lead-foot">
-                        <span className="src">학번 {r.studentNo ?? '-'}</span>
+                        <span className="src">학번 {studentNoText(r.studentNo)}</span>
                         <span className="mini done">원생 전환</span>
                       </div>
                     )}
@@ -481,8 +482,16 @@ function Detail({
           <label>원생 전환</label>
           <div>
             {row.converted ? (
+              /* ★ 학번은 **반 배정 때** 생긴다 — 전환 직후에는 없다(2026-10-13 채번 변경).
+                 「학번 - 으로 전환이 끝났습니다」로 쓰면 **등록이 잘못된 줄 알고 다시 접수**한다 */
               <div>
-                학번 <b>{row.studentNo ?? '-'}</b> 으로 전환이 끝났습니다.
+                {row.studentNo ? (
+                  <>
+                    학번 <b>{row.studentNo}</b> 으로 전환이 끝났습니다.
+                  </>
+                ) : (
+                  <>전환이 끝났습니다. <b>학번은 반을 배정할 때 매겨집니다.</b></>
+                )}
               </div>
             ) : row.status === 'CONFIRMED' ? (
               <>

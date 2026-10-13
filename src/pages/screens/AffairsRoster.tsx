@@ -27,6 +27,7 @@ import {
   type Student,
   type TrackType,
 } from '../../api/students'
+import { studentNoText } from '../../lib/studentNo'
 import type { Mockup } from './types'
 
 /* F-4.9 교무업무 — 명단 조회·출력 — GET /api/v1/admin/students
@@ -87,7 +88,7 @@ const UNDEFINED_COL: Column<Student> = {
 }
 
 const BASE: Column<Student>[] = [
-  { key: 'studentNo', header: '학번', width: '100px', sortable: sortableKey('studentNo'), value: (r) => r.studentNo ?? '-' },
+  { key: 'studentNo', header: '학번', width: '100px', sortable: sortableKey('studentNo'), value: (r) => studentNoText(r.studentNo) },
   { key: 'name', header: '성명', width: '84px', sortable: sortableKey('name'), mask: 'name', value: (r) => r.name },
   {
     key: 'round',
