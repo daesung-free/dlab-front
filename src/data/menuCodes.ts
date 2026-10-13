@@ -34,8 +34,10 @@ export const SCREEN_MENU_CODES: Record<string, string[]> = {
   'regular-schedule': ['schedule'],
   approval: ['approval'],
   'seat-move': ['seat'],
-  /* 순찰은 좌석을 보고 찍는 일이라 좌석 권한을 따른다. 서버에 전용 코드가 생기면 바꾼다 */
-  patrol: ['seat'],
+  /* ★ 전용 코드(`patrol`)가 서버에 생겼다(dlab-api). **`seat` 를 같이 두는 것은 넘어가는 동안만**이다 —
+     서버 배포 전에 `patrol` 만 두면 **지금 쓰는 관리자까지 화면이 막힌다**. 배포가 끝나면 `seat` 를 뺀다.
+     ★ `seat` 를 담임에게 주는 쪽으로 풀지 않았다 — 그러면 독서실 좌석배치·좌석 이탈·배정 관리까지 열린다 */
+  patrol: ['patrol', 'seat'],
   'admin-assign': ['seat'],
 
   /* 학습 */

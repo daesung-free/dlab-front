@@ -197,6 +197,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/timetables/classes/{classId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 그 반의 한 주
+         * @description 그 반의 한 주.
+         *
+         *      <p>칸마다 <b>실제 적용 강의실</b>(<code>effectiveRoomNo</code>)을 함께 내린다 —
+         *      셀 강의실이 비면 반 홈룸이다. 이 판정을 화면에 맡기면 화면마다 다르게 떨어진다.
+         */
+        get: operations["week"];
+        /**
+         * 편성 저장
+         * @description 편성 저장.
+         *
+         *      <p>★ <b>보낸 칸만 손댄다.</b> 받은 목록으로 한 주를 통째로 갈아치우면 화면 버그 하나가
+         *      편성을 날린다 — 목록을 만드는 코드가 빈 배열을 보내는 실수는 흔하다. 그래서
+         *      <b>빈 목록은 거절</b>한다.
+         *
+         *      <p>★ <b>내용이 모두 빈 칸은 「지움」</b>이다. 편성 화면은 칸을 눌러 내용을 지우는 식으로
+         *      쓰므로, 삭제를 별 경로로만 두면 저장 한 번이 통째로 트랜잭션이 되지 못한다.
+         *
+         *      <p>★ <b>같은 시간 같은 강의실은 거절된다.</b> DB 유니크가 최종 방어선이고 여기서
+         *      먼저 보는 것은 <b>어느 반이 쓰고 있는지</b>를 알려주기 위해서다.
+         */
+        put: operations["save"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/surveys/{surveyId}": {
         parameters: {
             query?: never;
@@ -1305,7 +1342,7 @@ export interface paths {
          * 있으면 고치고 없으면 만든다.
          * @description 있으면 고치고 없으면 만든다. 유형당 1행이다.
          */
-        put: operations["save"];
+        put: operations["save_1"];
         post?: never;
         /**
          * 정책 삭제
@@ -2985,6 +3022,32 @@ export interface paths {
          *      <code>GET /remaining-days</code>로 미리 받아 화면에서 고칠 수 있게 하는 편이 낫다.
          */
         post: operations["issueOnAdmission"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/timetables/copy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 전년도 복사 — 「바뀐 것만 고치기」로 넘어가게 작년 편성을 올해로 옮긴다
+         * @description 전년도 복사 — 「바뀐 것만 고치기」로 넘어가게 작년 편성을 올해로 옮긴다.
+         *
+         *      <p>★ <b>멱등하다.</b> 두 번 눌러도 같은 결과다 — 올해에 이미 있는 칸은 건너뛴다
+         *      (덮어쓰면 복사 뒤 손으로 고친 편성이 되돌려진다).
+         *
+         *      <p>★ <b>결과를 건별로 돌려준다.</b> 합계만 주면 화면이
+         *      「이 반은 작년에 같은 이름이 없어 비었습니다」를 보여줄 수 없다.
+         */
+        post: operations["copy"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7365,7 +7428,7 @@ export interface paths {
          * 주간 뷰.
          * @description 주간 뷰. @param date 그 주 아무 날짜나. 비우면 이번 주
          */
-        get: operations["week"];
+        get: operations["week_1"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7879,6 +7942,26 @@ export interface paths {
          *      모른다.</b> 화면에서 데스크가 고칠 수 있어야 한다 — 서버가 확정하면 조용히 틀린다.
          */
         get: operations["remainingDays"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/timetables": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 그 지점·연도 전체 — 「이 시간에 어느 반이 어디에」를 되짚는 화면용.
+         * @description 그 지점·연도 전체 — 「이 시간에 어느 반이 어디에」를 되짚는 화면용.
+         */
+        get: operations["year"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9015,7 +9098,7 @@ export interface paths {
          *      <p><b>조회만 한다</b> — 관리자 편집 API가 없다. 과목별 시간 배분의 주도권이
          *      학생이라는 것이 0803 답변서의 전제다.
          */
-        get: operations["week_1"];
+        get: operations["week_2"];
         put?: never;
         post?: never;
         delete?: never;
@@ -10834,6 +10917,82 @@ export interface components {
             month?: number;
             /** Format: int32 */
             teachingDays?: number;
+        };
+        TimetableCellRequest: {
+            /** @enum {string} */
+            dayOfWeek: "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY" | "SUNDAY";
+            /**
+             * Format: int64
+             * @description 교시 마스터. ★ 번호가 아니라 <b>마스터 참조</b>다 — 번호만 들면
+             *                      교시 시각을 고쳤을 때 시간표만 옛 시각으로 남는다
+             */
+            periodId: number;
+            subject?: string;
+            /** Format: int64 */
+            teacherId?: number;
+            /**
+             * Format: int64
+             * @description 그 칸에서만 쓰는 강의실(이동수업). <b>비우면 반 홈룸으로 떨어진다</b>
+             */
+            roomId?: number;
+        };
+        TimetableSaveRequest: {
+            /** @description 격자 전체를 보내도 된다 — 내용이 빈 칸은 지움으로 읽는다 */
+            cells: components["schemas"]["TimetableCellRequest"][];
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseListTimetableCellRow: {
+            success?: boolean;
+            data?: components["schemas"]["TimetableCellRow"][];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        TimetableCellRow: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            classId?: number;
+            className?: string;
+            /** @enum {string} */
+            dayOfWeek?: "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY" | "SUNDAY";
+            /** Format: int64 */
+            periodId?: number;
+            /** Format: int32 */
+            periodNo?: number;
+            periodName?: string;
+            startTime?: string;
+            endTime?: string;
+            subject?: string;
+            /** Format: int64 */
+            teacherId?: number;
+            teacherName?: string;
+            /** Format: int64 */
+            roomId?: number;
+            /** @description 그 칸에 지정된 강의실. 비어 있으면 이동수업이 아니라는 뜻이다 */
+            roomNo?: string;
+            /** Format: int64 */
+            effectiveRoomId?: number;
+            /**
+             * @description ★ <b>실제 적용 강의실</b> — 셀이 비면 반 홈룸이다.
+             *                             서버가 한 곳에서 정해 내린다
+             */
+            effectiveRoomNo?: string;
+            /** Format: int64 */
+            homeroomId?: number;
+            /**
+             * @description 반 홈룸 — 화면이 「홈룸이라서 비었다」와 「홈룸도 없다」를
+             *                             구분해 보여줄 수 있어야 한다
+             */
+            homeroomNo?: string;
         };
         /** @description 기간·안내문 수정. 범위·대상·문항은 바꿀 수 없다. */
         AdminSurveyUpdate: {
@@ -13533,6 +13692,80 @@ export interface components {
             data?: components["schemas"]["BillingView"][];
             meta?: components["schemas"]["PageMeta"];
             error?: components["schemas"]["ErrorBody"];
+        };
+        TimetableCopyRequest: {
+            /** Format: int64 */
+            academyId?: number;
+            /** Format: int32 */
+            fromYear: number;
+            /** Format: int32 */
+            toYear: number;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseTimetableCopyResponse: {
+            success?: boolean;
+            data?: components["schemas"]["TimetableCopyResponse"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        ClassCopyResult: {
+            /** Format: int64 */
+            classId?: number;
+            className?: string;
+            /**
+             * Format: int64
+             * @description 짝지은 작년 반. <code>null</code>이면 <b>작년에 같은 반이 없다</b> —
+             *                           반은 해마다 새로 만들어지므로 복사 원본·이름 둘로 맞춘다
+             */
+            sourceClassId?: number;
+            sourceClassName?: string;
+            /** Format: int32 */
+            copied?: number;
+            /**
+             * Format: int32
+             * @description 올해 이미 편성돼 있어 건너뛴 칸. ★ 두 번 눌러도 같은 결과가 되는
+             *                           이유가 이 칸들이다
+             */
+            skipped?: number;
+            /**
+             * Format: int32
+             * @description 올해에 그 교시가 없어 못 붙은 칸 — 교시 마스터를 먼저 복사해야 한다
+             */
+            periodMissing?: number;
+            /**
+             * Format: int32
+             * @description 같은 시간 같은 강의실을 올해 다른 반이 이미 쓰고 있어 건너뛴 칸
+             */
+            conflicted?: number;
+        };
+        TimetableCopyResponse: {
+            /** Format: int32 */
+            fromYear?: number;
+            /** Format: int32 */
+            toYear?: number;
+            /** Format: int32 */
+            copied?: number;
+            /** Format: int32 */
+            skipped?: number;
+            /**
+             * Format: int32
+             * @description 작년에서 짝을 못 찾은 반 수 — 화면이 이 숫자로 안내를 띄운다
+             */
+            classesWithoutSource?: number;
+            /**
+             * @description 반별 결과. ★ 합계만 주면 화면이 「이 반은 작년에 같은 이름이
+             *                                  없어 비었습니다」를 보여줄 수 없다
+             */
+            classes?: components["schemas"]["ClassCopyResult"][];
         };
         /**
          * @description 개설.
@@ -22319,6 +22552,54 @@ export interface operations {
             };
         };
     };
+    week: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                classId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListTimetableCellRow"];
+                };
+            };
+        };
+    };
+    save: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                classId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimetableSaveRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListTimetableCellRow"];
+                };
+            };
+        };
+    };
     update: {
         parameters: {
             query?: never;
@@ -24136,7 +24417,7 @@ export interface operations {
             };
         };
     };
-    save: {
+    save_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -26180,6 +26461,30 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseListBillingView"];
+                };
+            };
+        };
+    };
+    copy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimetableCopyRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseTimetableCopyResponse"];
                 };
             };
         };
@@ -32365,7 +32670,7 @@ export interface operations {
             };
         };
     };
-    week: {
+    week_1: {
         parameters: {
             query?: {
                 date?: string;
@@ -32935,6 +33240,29 @@ export interface operations {
             };
         };
     };
+    year: {
+        parameters: {
+            query: {
+                academyId?: number;
+                year: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListTimetableCellRow"];
+                };
+            };
+        };
+    };
     results_1: {
         parameters: {
             query?: never;
@@ -33138,8 +33466,7 @@ export interface operations {
     nextStudentNo: {
         parameters: {
             query: {
-                academyId?: number;
-                year: number;
+                classId: number;
             };
             header?: never;
             path?: never;
@@ -34170,7 +34497,7 @@ export interface operations {
             };
         };
     };
-    week_1: {
+    week_2: {
         parameters: {
             query: {
                 /** @description 그 주 아무 날짜나 */
