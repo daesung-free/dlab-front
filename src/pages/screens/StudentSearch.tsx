@@ -415,7 +415,12 @@ function Content() {
    * ★ 지금 상태는 상세의 `homeroomOverride` 로 안다. 지정·해제 뒤에는 상세를 다시 읽는다.
    * ★ 지점관리자·본사만 — 서버도 막지만 직원에게 누르면 거절되는 버튼을 보여줄 이유가 없다.
    */
-  const { canSeeAdmin: canManageHomeroom, teacherOnly, principal } = useAuth()
+  const { canSeeAdmin: canManageHomeroom, teacherOnly, readOnly, principal } = useAuth()
+  /* ★ 장학은 **담임·조회 전용에게 없는 정보**다(할인율·금액). 서버가 403 으로 막는데,
+     그걸 모르고 부르면 **학생 상세를 열 때마다 4xx** 가 쌓인다 — 점검 리포트에 그대로 올라온다.
+     ★ 「권한 없음」을 띄우지 않고 **칸을 통째로 숨긴다.** 빈 칸이 보이면 「장학이 없는 학생」으로
+     읽혀서, 없는 것과 못 보는 것이 구분되지 않는다 */
+  const canSeeScholarship = !teacherOnly && !readOnly
   /* ★ 메모 삭제는 **작성자 본인과 관리자만** 한다. 메모는 「그때 그 사람이 그렇게 적었다」가
      값이라(수정 경로를 안 만든 것과 같은 이유) **남의 기록을 담임이 지우면 그 값이 무너진다.**
      관리자는 남긴다 — 부적절한 내용을 치울 사람이 필요하다.
@@ -525,6 +530,10 @@ function Content() {
 
   /* 부여 드롭다운 — **사용 중인 장학만** 온다. 지점·연도가 바뀌면 다시 읽는다 */
   useEffect(() => {
+    if (!canSeeScholarship) {
+      setScholarMasters([])
+      return
+    }
     let alive = true
     listSelectableScholarships(new Date().getFullYear(), academyId ?? undefined)
       .then((v) => alive && setScholarMasters(v))
@@ -532,7 +541,7 @@ function Content() {
     return () => {
       alive = false
     }
-  }, [academyId])
+  }, [academyId, canSeeScholarship])
 
   async function addScholarship(enrollmentId: number) {
     if (scholar.pick === '') return
@@ -589,9 +598,11 @@ function Content() {
     setInfoDone(null)
     setAcct({ busyId: null, msg: null, err: null })
     setScholar({ items: [], pick: '', busy: false, err: null })
-    void listStudentScholarships(r.enrollmentId)
-      .then((items) => setScholar((c) => ({ ...c, items })))
-      .catch(() => setScholar((c) => ({ ...c, items: [] })))
+    if (canSeeScholarship) {
+      void listStudentScholarships(r.enrollmentId)
+        .then((items) => setScholar((c) => ({ ...c, items })))
+        .catch(() => setScholar((c) => ({ ...c, items: [] })))
+    }
     setHr({ open: false, teachers: null, teacherId: '', reason: '', busy: false, err: null })
     setMemo({ items: null, draft: '', busy: false, err: null, asking: null })
     void listStudentMemos(r.enrollmentId)
@@ -1095,7 +1106,10 @@ function Content() {
               </div>
 
               {/* ★ 장학 '종류' 와 다르다 — 여기는 **이 학생에게 실제로 부여된 것**이다.
-                     코드로 잇기 때문에 마스터에 없는 값은 서버가 막는다 */}
+                     코드로 잇기 때문에 마스터에 없는 값은 서버가 막는다
+                  ★ 담임·조회 전용에게는 **칸째로 안 보인다**(서버가 403). 빈 칸을 두면
+                     「장학이 없는 학생」으로 읽혀 없는 것과 못 보는 것이 섞인다 */}
+              {canSeeScholarship && (
               <div className="frow">
                 <label>장학</label>
                 <div>
@@ -1146,6 +1160,7 @@ function Content() {
                   {scholar.err && <div className="hint" style={{ color: 'var(--red)' }}>{scholar.err}</div>}
                 </div>
               </div>
+              )}
 
               {/* ★ 앱 계정. **학생이 비밀번호를 5회 틀리면 잠기고 저절로 안 풀린다** —
                      풀어 줄 자리가 없어서 그 학생은 앱을 못 썼다(2026-09-27 실테스트).

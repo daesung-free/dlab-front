@@ -113,10 +113,14 @@ export function Dashboard() {
   /* 디랩 피드백 5-1 — 지점 **전체 재원생 현황**. 집계가 재원 인원만 주므로
      대기 인원은 입학예약에서 센다(아직 원생 전환 전인 건) */
   const waitParams = useMemo(() => ({ year: new Date().getFullYear() }), [])
+  /* ★ 이 호출은 `statistics` 가 아니라 **`waiting` 권한**이다. 입학예약에는 연락처·생년월일이
+     들어 있어 담임·조회 전용에게 서버가 403 을 준다 — `canStats` 로 열어 두면 **대시보드를
+     열 때마다 4xx** 가 쌓인다(점검 리포트에 그대로 올라온다). 권한이 없으면 아예 안 부른다 */
+  const canSeeWaiting = allowedMenus !== null && hasMenuCode('waiting', allowedMenus)
   const reservations = useServerData({
     fetcher: listReservations,
     params: waitParams,
-    enabled: canStats,
+    enabled: canStats && canSeeWaiting,
     errorMessage: '대기 인원을 불러오지 못했습니다.',
   })
   const waiting = useMemo(() => {
@@ -231,9 +235,11 @@ export function Dashboard() {
           <div className="l">
             <Icon name="list-ordered" size={13} /> 대기 인원
           </div>
-          <div className="v">{reservations.data === null ? '—' : waiting}</div>
+          {/* ★ 권한이 없으면 **0 이 아니라 '—'** 다. 0 을 보여주면 「대기자가 없다」로 읽혀
+                 담당자가 빈 대기열로 판단한다 — 실제로는 못 보는 것뿐이다 */}
+          <div className="v">{!canSeeWaiting || reservations.data === null ? '—' : waiting}</div>
           <div className="d">
-            <Link to="/s/waitlist">입학 예약 →</Link>
+            {canSeeWaiting ? <Link to="/s/waitlist">입학 예약 →</Link> : <span>볼 수 있는 권한이 아닙니다</span>}
           </div>
         </div>
         <div className="att-cell">
