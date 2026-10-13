@@ -33,6 +33,13 @@ export interface ClassGroup {
    *   세지 않기 때문이다. 만든 직후 이 값을 쓰려 하면 빈다.
    */
   memberCount: number | null
+  /**
+   * 모의고사 반 번호. **반 이름과 다른 축이다** — 이름은 자유 문자열이고 수험번호는 이 숫자다.
+   *
+   * ★ **비면 그 반 학생은 수험번호를 채번하지 않는다** — 성적 업로드가 이름 매칭으로 떨어진다.
+   * ★ 같은 지점·연도에서 유일하고, **10의 배수는 쓸 수 없다**(10|01 이 1|001 과 겹친다).
+   */
+  examClassNo?: number | null
 }
 
 /** 반 명단의 학생 한 명. 학생 검색(Student)보다 필드가 적다 */
@@ -149,6 +156,26 @@ export function updateClass(
   body: { name?: string; capacity?: number; clearCapacity?: boolean },
 ): Promise<ClassGroup> {
   return request<ClassGroup>(`/api/v1/admin/classes/${classId}`, { method: 'PUT', body })
+}
+
+/**
+ * 모의고사 반 번호 — `PUT /admin/classes/{id}/exam-class-no`
+ *
+ * ★ **반 이름·정원과 다른 축이다.** 그래서 서버도 `PUT /classes` 본문에 안 받는다 —
+ *   이름만 고치려다 수험번호 축을 건드리는 것을 막는다.
+ * ★ **이미 채번된 학생의 번호는 바뀌지 않는다.** 바꾼 값은 **다음에 배정되는 학생부터**
+ *   적용된다(연구소: "최초 부여받은 학번은 절대 변경 불가"). 화면이 이걸 안 적으면
+ *   담당자가 기존 학생 번호까지 바뀐 줄 안다.
+ * ★ **같은 지점·연도에서 유일하다**(DB 제약). 「고3 1반」과 「N수 1반」이 둘 다 1이면
+ *   두 반 학생의 수험번호가 겹친다.
+ * ★ **10의 배수는 쓸 수 없다** — `10|01` 이 `1|001`(1반 1번)과 겹친다. 20·30도 같다.
+ * ★ `null` 을 보내면 해제다. 비면 그 반 학생은 수험번호를 채번하지 않는다.
+ */
+export function setExamClassNo(classId: number, examClassNo: number | null): Promise<ClassGroup> {
+  return request<ClassGroup>(`/api/v1/admin/classes/${classId}/exam-class-no`, {
+    method: 'PUT',
+    body: { examClassNo },
+  })
 }
 
 /**

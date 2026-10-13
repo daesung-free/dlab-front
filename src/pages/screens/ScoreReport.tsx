@@ -106,12 +106,39 @@ function toRow(s: Student): StudentRow {
 function Content() {
   /* 담임은 가린 채로, 관리자는 푼 채로 시작한다. 어느 쪽이든 토글로 바꾼다(디랩 1013 회신) */
   const [masked, setMasked] = useState(useMaskDefault())
+  /* 디랩 피드백 5-8 — 학년 탭 · 반 탭 · 이름 검색. 목록을 전량 들고 있어 화면에서 거른다 */
+  const [gradeTab, setGradeTab] = useState('전체')
+  const [classFilter, setClassFilter] = useState('')
+  const [keyword, setKeyword] = useState('')
+
   const { academyId, ready: academyReady } = useAcademy()
   const [students, setStudents] = useState<Student[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [forms, setForms] = useState<ExamForm[]>([])
   const [submission, setSubmission] = useState<GradeSubmission | null>(null)
   const [listLoading, setListLoading] = useState(true)
+  /* 칩은 **그 지점에 실제로 있는 학년만** 띄운다 — 고1이 없는 지점에 빈 칩을 두면
+     눌러도 0명이라 고장으로 읽힌다 */
+  const gradeTabs = useMemo(() => {
+    const present = [...new Set(students.map((s) => s.grade))]
+    const ordered = (['HIGH1', 'HIGH2', 'HIGH3', 'N_SU'] as const).filter((g) => present.includes(g as never))
+    return ['전체', ...ordered.map((g) => GRADE_LABEL[g as never] ?? g)]
+  }, [students])
+
+  const classNames = useMemo(
+    () => [...new Set(students.map((s) => s.className).filter((c): c is string => !!c))].sort(),
+    [students],
+  )
+
+  const shownStudents = useMemo(() => {
+    const kw = keyword.trim()
+    return students.filter(
+      (s) =>
+        (gradeTab === '전체' || (GRADE_LABEL[s.grade] ?? s.grade) === gradeTab) &&
+        (classFilter === '' || s.className === classFilter) &&
+        (kw === '' || s.name.includes(kw)),
+    )
+  }, [students, gradeTab, classFilter, keyword])
   const [error, setError] = useState<string | null>(null)
   const [gradeError, setGradeError] = useState<string | null>(null)
   const [subjectCode, setSubjectCode] = useState<string | null>(null)
@@ -298,10 +325,36 @@ function Content() {
       <div className="layout">
         <StudentList
           title="재원생"
-          count={`${students.length}명`}
+          count={`${shownStudents.length}명`}
           right={<MaskToggle masked={masked} onChange={setMasked} />}
-          filters={['전체']}
-          rows={students.map((x) => withMask(toRow(x), masked))}
+          filters={gradeTabs}
+          filter={gradeTab}
+          onFilterChange={setGradeTab}
+          belowFilters={
+            <>
+              <select
+                className="sel"
+                style={{ width: 130 }}
+                value={classFilter}
+                onChange={(e) => setClassFilter(e.target.value)}
+              >
+                <option value="">반 전체</option>
+                {classNames.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+              <input
+                className="inp"
+                style={{ flex: 1, minWidth: 90 }}
+                placeholder="이름"
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+              />
+            </>
+          }
+          rows={shownStudents.map((x) => withMask(toRow(x), masked))}
           selected={selectedId ?? undefined}
           onSelect={setSelectedId}
           loading={listLoading}

@@ -40,6 +40,13 @@ interface Props {
    * 이름을 가리는 화면은 푸는 수단을 같은 자리에 둬야 한다(디랩 2026-10-13 회신).
    */
   right?: ReactNode
+  /**
+   * 필터 칩 **아래** 줄(반 선택·이름 검색 등). **옵션이다** — 안 주면 지금 모양 그대로다.
+   *
+   * ★ 칩만으로는 반을 못 고른다 — 반이 열 개를 넘으면 칩이 두 줄로 접힌다.
+   *   그래서 고르는 것(select)과 거르는 것(칩)을 줄을 나눠 둔다.
+   */
+  belowFilters?: ReactNode
 }
 
 /** 상담·성적 시안이 공유하던 좌측 재원생 목록 패널 */
@@ -56,6 +63,7 @@ export function StudentList({
   loading = false,
   emptyText = '학생이 없습니다.',
   right,
+  belowFilters,
 }: Props) {
   const [innerSelected, setInnerSelected] = useState(initialSelected ?? rows[0]?.id)
   const [innerFilter, setInnerFilter] = useState(filters[0])
@@ -88,6 +96,11 @@ export function StudentList({
           </button>
         ))}
       </div>
+      {belowFilters && (
+        <div className="filter-row" style={{ paddingTop: 0, gap: 6 }}>
+          {belowFilters}
+        </div>
+      )}
       <div className="slist">
         {rows.length === 0 && (
           <div className="dt-empty">{loading ? '불러오는 중…' : emptyText}</div>
