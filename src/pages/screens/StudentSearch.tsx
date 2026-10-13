@@ -18,6 +18,7 @@ import { useAcademy } from '../../auth/AcademyContext'
 import { useAuth } from '../../auth/AuthContext'
 import { listTeachers, type TeacherRow } from '../../api/accounts'
 import { ApiError } from '../../api/client'
+import { formatPhone } from '../../lib/mask'
 import { issueAppTemporaryPassword, unlockAppAccount } from '../../api/accounts'
 import {
   grantScholarship,
@@ -959,7 +960,15 @@ function Content() {
                         placeholder={f.placeholder}
                         value={infoEdit.form[f.key]}
                         onChange={(e) =>
-                          setInfoEdit({ ...infoEdit, form: { ...infoEdit.form, [f.key]: e.target.value } })
+                          setInfoEdit({
+                            ...infoEdit,
+                            form: {
+                              ...infoEdit.form,
+                              /* 전화번호만 000-0000-0000 으로 맞춘다(디랩 1013, 4-5).
+                                 입력 중에도 부르므로 자릿수가 모자라면 있는 만큼만 끊는다 */
+                              [f.key]: f.key === 'phone' ? formatPhone(e.target.value) : e.target.value,
+                            },
+                          })
                         }
                       />
                     )}

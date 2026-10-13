@@ -4,6 +4,7 @@ import { DataTable, MaskToggle, Modal, Unfilled, type Column } from '../../compo
 import { Tabs } from '../../components/Tabs'
 import { ApiError } from '../../api/client'
 import { clearDraft, loadDraft, saveDraft } from '../../lib/draft'
+import { formatPhone } from '../../lib/mask'
 import { useAcademy } from '../../auth/AcademyContext'
 import {
   GRADE_LABEL,
@@ -268,7 +269,7 @@ function EnrollForm() {
                   className="inp"
                   placeholder="학생 010-0000-0000"
                   value={form.phone}
-                  onChange={(e) => set('phone', e.target.value)}
+                  onChange={(e) => set('phone', formatPhone(e.target.value))}
                   maxLength={20}
                 />
                 <div className="link-box" style={{ alignItems: 'center' }}>

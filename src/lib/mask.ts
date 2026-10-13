@@ -65,3 +65,23 @@ export function maskValue(kind: MaskKind | undefined, v: string): string {
   if (!kind || !v) return v
   return FNS[kind](v)
 }
+
+/**
+ * 전화번호를 `000-0000-0000` 모양으로 맞춘다(디랩 피드백 1013, 4-5 "전화번호는 형식으로").
+ *
+ * ★ **입력 중에도 부른다.** 그래서 자릿수가 모자라면 **있는 만큼만** 끊는다 —
+ *   다 쳐야 하이픈이 생기면 지우다가 커서가 튄다.
+ * ★ 숫자 외는 버린다. 붙여넣기로 `010.1234.5678` 이나 `+82 10…` 이 들어와도 같은 모양이 된다.
+ * ★ 02 로 시작하는 서울 번호는 `02-0000-0000` 이다 — 앞자리가 2자리다.
+ */
+export function formatPhone(v: string): string {
+  const d = v.replace(/\D/g, '').slice(0, 11)
+  if (d.startsWith('02')) {
+    if (d.length <= 2) return d
+    if (d.length <= 6) return `${d.slice(0, 2)}-${d.slice(2)}`
+    return `${d.slice(0, 2)}-${d.slice(2, 6)}-${d.slice(6, 10)}`
+  }
+  if (d.length <= 3) return d
+  if (d.length <= 7) return `${d.slice(0, 3)}-${d.slice(3)}`
+  return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`
+}
