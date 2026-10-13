@@ -73,6 +73,7 @@ export const NAV: NavCat[] = [
           { screenId: 'student-absence', label: '사유 신청 관리', added: true },
           { screenId: 'reading-room', label: '독서실 좌석배치표' },
           { screenId: 'seat-move', label: '좌석 이탈 · 복귀', added: true, note: '키오스크 대체 앱 신청' },
+          { screenId: 'patrol', label: '순찰 관리', icon: 'footprints', added: true, note: '태블릿에서 좌석 체크' },
         ],
       },
       {

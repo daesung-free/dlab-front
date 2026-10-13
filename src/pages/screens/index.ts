@@ -48,6 +48,7 @@ import { paymentGateMockup } from './PaymentGate'
 import { appManageMockup } from './AppManage'
 /* 추가개발 — 긴급 출입 · 오전 출근 확인 */
 import { doorCodeMockup } from './DoorCode'
+import { patrolMockup } from './Patrol'
 import { emergencyAccessMockup } from './EmergencyAccess'
 import { morningCheckMockup } from './MorningCheck'
 import { staffAttendanceMockup } from './StaffAttendance'
@@ -111,6 +112,7 @@ export const MOCKUPS: Record<string, Mockup> = {
   'app-manage': appManageMockup, // F-C-6 앱 운영 관리
 
   /* ── 추가개발 (긴급출입 전달문서 1008) ── */
+  patrol: patrolMockup, // F-추가-13 순찰 관리 (0928 피드백 1-3)
   'door-code': doorCodeMockup, // F-추가-8 도어락 번호 ⭐ 실연동
   'emergency-access': emergencyAccessMockup, // F-추가-10 긴급 출입 내역
   'morning-check': morningCheckMockup, // F-추가-11 오전 출근 확인

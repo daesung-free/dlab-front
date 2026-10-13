@@ -601,6 +601,16 @@ export const SCREENS: Screen[] = [
    * 출처다. 그래서 `code` 를 F-추가-n 으로 둔다 — 전달 문서의 「관리자 웹」 항목 번호다.
    * 9번(계정 권한 체크박스)은 기존 사용자 관리 화면에 들어가 별도 화면이 아니다. */
   {
+    id: 'patrol',
+    code: 'F-추가-13',
+    groupId: 'attendance',
+    name: '순찰 관리',
+    icon: 'footprints',
+    kind: 'brandnew',
+    phase: 4,
+    summary: '사감이 태블릿으로 좌석을 눌러 상태를 찍는다. 회차 1~5. 지금은 종이에 적고 DSA 에 또 넣는다',
+  },
+  {
     id: 'door-code',
     code: 'F-추가-8',
     groupId: 'admin',
