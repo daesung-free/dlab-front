@@ -97,6 +97,17 @@ function hhmm(v: string | null): string {
   return v === null ? '-' : v.slice(0, 5)
 }
 
+/**
+ * 외출·조퇴 구간의 시각. **등원·하원과 형식이 다르다** — 이쪽은 ISO 인스턴트고
+ * 등원·하원은 `'HH:mm:ss'` 문자열이다. 같은 함수로 자르면 `2026-` 이 찍힌다(실제로 그랬다).
+ */
+function evTime(iso: string | null): string {
+  if (!iso) return '-'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '-'
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
 function one(v: unknown): string | undefined {
   if (Array.isArray(v)) return v.length > 0 ? String(v[0]) : undefined
   if (typeof v === 'string' && v !== '') return v
@@ -244,7 +255,7 @@ function Content() {
         width: '210px',
         value: (r) =>
           (r.events ?? [])
-            .map((e) => `${INTERVAL_TYPE_LABEL[e.type] ?? e.type} ${hhmm(e.at)}`)
+            .map((e) => `${INTERVAL_TYPE_LABEL[e.type] ?? e.type} ${evTime(e.at)}`)
             .join(', '),
         render: (r) => {
           const evs = r.events ?? []
@@ -254,9 +265,9 @@ function Content() {
               {evs.map((e, i) => (
                 <div key={i} style={{ fontSize: 11.5, lineHeight: 1.45 }}>
                   <span style={{ fontWeight: 700 }}>{INTERVAL_TYPE_LABEL[e.type] ?? e.type}</span>{' '}
-                  {hhmm(e.at)}
+                  {evTime(e.at)}
                   {e.returnedAt ? (
-                    <>~{hhmm(e.returnedAt)}</>
+                    <>~{evTime(e.returnedAt)}</>
                   ) : (
                     <span
                       className={`mk ${
