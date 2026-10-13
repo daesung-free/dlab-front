@@ -1,44 +1,48 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DataTable, MaskToggle, MockNotice, useMaskDefault, type Column } from '../../components/common'
+import { DataTable, MaskToggle, todayStr, useMaskDefault, type Column } from '../../components/common'
 import { Icon } from '../../components/Icon'
 import { Tabs } from '../../components/Tabs'
 import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
 import { getSeatLayout, listSeatAreas, type SeatArea, type SeatCell } from '../../api/facility'
+import { listPatrolMarks, listPatrols, savePatrol, type PatrolMarkDef } from '../../api/patrols'
 import type { Mockup } from './types'
 import './reading-room.css'
 
-/* 순찰 관리 (0928 피드백 1-3) — 신규 기능
+/* 순찰 관리 (0928 피드백 1-3) — /api/v1/admin/patrols
  *
  * > "현재 순찰 관리는 학생 정보를 **종이에 프린트하여 아날로그로 체크**하는 중입니다.
  *    체크 후 다시 DSA에 순찰내용을 입력해야 하기에 **2번 작업**을 해야 하는 상황입니다.
  *    새 관리 프로그램에 순찰 관리 페이지를 추가하여 **태블릿에 띄워 즉시 좌석 상태를
  *    입력**할 수 있도록" (29쪽)
  *
- * ★ **좌석 배치는 실제 서버 값이다**(`/seats/layout`). 순찰 기록만 아직 서버에 없다 —
- *   앱 코드에 `GET /patrols/zones/{zoneId}/students`·`POST /patrols` 호출이 있는데
- *   서버에는 그 경로가 없다. 그래서 **배치는 진짜, 체크는 화면 안에만** 남는다.
- *   저장 경로가 생기면 `marks` 를 그대로 보내면 된다.
+ * ★ 기록은 **학생(`enrollmentId`)에 붙는다.** 좌석은 재배치되는데 순찰은 「그때 그 학생」의
+ *   상태다 — 좌석으로만 남기면 재배치 뒤 기록이 엉뚱한 사람에게 붙는다. `seatCd` 는
+ *   그때 어디 앉아 있었는지를 함께 남기는 값이고 비워도 된다.
  *
- * ★ **태블릿에서 쓴다.** 한 손으로 좌석을 눌러 상태를 바꾸는 것이 이 화면의 전부다 —
- *   좌석을 누르면 모달이 뜨는 대신 **고른 상태가 바로 찍힌다**(팔레트에서 먼저 고른다).
- *   순찰 중에 모달을 여닫게 하면 종이보다 느려진다.
+ * ★ **모아서 한 번에 저장한다.** 한 건씩 보내면 **느린 태블릿에서 누른 것이 빠진 채
+ *   넘어간다.** 응답이 저장된 전체를 돌려주므로 그 값으로 화면을 맞춘다 — 빠진 것이
+ *   바로 드러난다.
  *
- * ★ **회차를 나눠 기록한다**(1~5). 같은 좌석이라도 1회차에 '졸음', 3회차에 '화장실' 일 수
- *   있어 회차마다 따로 들고 있다 — 한 벌로 합치면 마지막 순찰만 남는다.
+ * ★ **상태 문구를 화면에 박지 않는다**(`/patrols/marks`). 상태가 늘거나 이름이 바뀌어도
+ *   화면을 안 고친다. 못 받았을 때만 아래 기본값으로 그린다.
+ *
+ * ★ **태블릿에서 쓴다.** 팔레트에서 상태를 먼저 고르고 좌석을 누르면 바로 기록된다 —
+ *   좌석마다 모달을 열면 종이보다 느려진다.
+ *
+ * ★ **회차(1~5)를 나눠 기록한다.** 같은 좌석이 1회차에 '졸음', 3회차에 '화장실' 일 수
+ *   있어 회차마다 따로 본다 — 한 벌로 합치면 마지막 순찰만 남는다.
  *
  * ★ 좌석배치표(F-C-4)와 다른 화면이다. 그쪽은 **지금 상태를 본다**(출결·이탈을 서버가
- *   합쳐 준다). 이쪽은 **사감이 눈으로 보고 찍는다** — 출처가 사람이라 축이 다르다.
+ *   합쳐 준다). 이쪽은 **사람이 눈으로 보고 남긴다** — 출처가 달라 축이 다르다.
  */
 
-/* 요구사항 29쪽의 상태 10종 그대로. **묶어서 같은 색을 준다** —
- * 색이 흩어져 있으면 「강의실과 교과실이 같은 초록인데 떨어져 있어」처럼 읽힌다.
- *
- * ★ 묶는 기준은 **사감이 그 자리에서 할 일**이다.
- *   · 주의     자리에 있는데 깨워야 한다
- *   · 원내 사유 자리에 없지만 어디 있는지 알고, 돌아온다
- *   · 잠시 비움 자리에 없고 곧 돌아온다 — 다음 회차에 확인하면 된다
- *   · 원 밖     오늘 그 자리에 없다 — 찾을 일이 아니다
+/* 색은 **묶어서** 준다 — 흩어져 있으면 「강의실과 교과실이 같은 초록인데 떨어져 있다」로
+ * 읽힌다. 묶는 기준은 **그 자리에서 할 일**이다.
+ *   · 주의       자리에 있는데 깨워야 한다
+ *   · 원내 사유   자리에 없지만 어디 있는지 알고, 돌아온다
+ *   · 잠시 비움   곧 돌아온다 — 다음 회차에 확인하면 된다
+ *   · 원 밖      오늘 그 자리에 없다 — 찾을 일이 아니다
  */
 const MARK_GROUPS = [
   { key: 'warn', label: '주의', color: 'var(--amber)' },
@@ -47,28 +51,31 @@ const MARK_GROUPS = [
   { key: 'outside', label: '원 밖', color: 'var(--muted)' },
 ] as const
 
-const MARKS = [
-  { key: 'none', label: '기본', group: 'warn' },
-  { key: 'sleep', label: '졸음', group: 'warn' },
-  { key: 'class', label: '강의실', group: 'inside' },
-  { key: 'subject', label: '교과실', group: 'inside' },
-  { key: 'qna', label: '질답', group: 'inside' },
-  { key: 'consult', label: '상담', group: 'inside' },
-  { key: 'toilet', label: '화장실', group: 'brief' },
-  { key: 'common', label: '공용공간', group: 'brief' },
-  { key: 'out', label: '외출', group: 'outside' },
-  { key: 'early', label: '조퇴', group: 'outside' },
-] as const
-
-/** 상태 → 그 묶음의 색 */
-function colorOf(key: string): string {
-  const g = MARKS.find((m) => m.key === key)?.group
-  return MARK_GROUPS.find((x) => x.key === g)?.color ?? 'var(--line)'
+/** 서버 코드 → 묶음. 서버가 `group` 을 주면 **그쪽이 이긴다** */
+const CODE_GROUP: Record<string, string> = {
+  SLEEP: 'warn',
+  CLASSROOM: 'inside',
+  SUBJECT_ROOM: 'inside',
+  QNA: 'inside',
+  CONSULT: 'inside',
+  TOILET: 'brief',
+  COMMON: 'brief',
+  OUTING: 'outside',
+  EARLY_LEAVE: 'outside',
 }
 
-type MarkKey = (typeof MARKS)[number]['key']
-
-const MARK_LABEL: Record<string, string> = Object.fromEntries(MARKS.map((m) => [m.key, m.label]))
+/** 상태 목록을 못 받았을 때만 쓴다. 요구사항 29쪽의 9종(기본 제외) */
+const FALLBACK_MARKS: PatrolMarkDef[] = [
+  { code: 'SLEEP', label: '졸음', away: false },
+  { code: 'CLASSROOM', label: '강의실', away: true },
+  { code: 'SUBJECT_ROOM', label: '교과실', away: true },
+  { code: 'QNA', label: '질답', away: true },
+  { code: 'CONSULT', label: '상담', away: true },
+  { code: 'TOILET', label: '화장실', away: true },
+  { code: 'COMMON', label: '공용공간', away: true },
+  { code: 'OUTING', label: '외출', away: true },
+  { code: 'EARLY_LEAVE', label: '조퇴', away: true },
+]
 
 const ROUNDS = [1, 2, 3, 4, 5] as const
 
@@ -81,16 +88,46 @@ function Content() {
   const { academyId } = useAcademy()
   const [masked, setMasked] = useState(useMaskDefault())
   const [tab, setTab] = useState('map')
+  const [date] = useState(() => todayStr())
+
   const [areas, setAreas] = useState<SeatArea[]>([])
   const [areaId, setAreaId] = useState<number | null>(null)
   const [cells, setCells] = useState<SeatCell[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [note, setNote] = useState<string | null>(null)
 
+  const [defs, setDefs] = useState<PatrolMarkDef[]>(FALLBACK_MARKS)
   const [round, setRound] = useState<number>(1)
-  const [pick, setPick] = useState<MarkKey>('sleep')
-  /** 회차 → (좌석id → 상태). 회차마다 따로 들고 있다 */
-  const [marks, setMarks] = useState<Record<number, Record<number, MarkKey>>>({})
+  const [pick, setPick] = useState<string>('SLEEP')
+  /** 학생 → 상태 코드. **좌석이 아니라 학생에 붙는다**(서버와 같은 축) */
+  const [marks, setMarks] = useState<Record<number, string>>({})
+  const [dirty, setDirty] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  const groupOf = useCallback(
+    (code: string) => defs.find((d) => d.code === code)?.group ?? CODE_GROUP[code] ?? 'inside',
+    [defs],
+  )
+  const colorOf = useCallback(
+    (code: string) => MARK_GROUPS.find((g) => g.key === groupOf(code))?.color ?? 'var(--line)',
+    [groupOf],
+  )
+  const labelOf = useCallback((code: string) => defs.find((d) => d.code === code)?.label ?? code, [defs])
+
+  /* 상태 목록은 바뀌는 값이 아니라 한 번만 읽는다. 못 받으면 기본값으로 계속 쓴다 —
+     순찰 자체는 돌 수 있어야 한다 */
+  useEffect(() => {
+    let alive = true
+    listPatrolMarks()
+      .then((list) => {
+        if (alive && list.length > 0) setDefs(list)
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
 
   const reloadAreas = useCallback(async () => {
     if (academyId === null) return
@@ -129,29 +166,82 @@ function Content() {
     void loadLayout()
   }, [loadLayout])
 
-  /* ★ 구역을 바꾸면 좌석이 통째로 바뀐다. 체크를 그대로 두면 **다른 구역에서 찍은 것이
-       남아** 숫자가 섞인다(좌석배치표에서 선택을 비우는 것과 같은 이유) */
+  /**
+   * 그 회차에 이미 저장된 기록을 읽어 화면을 맞춘다.
+   *
+   * ★ 회차를 옮길 때마다 **서버에서 다시 읽는다.** 화면에만 들고 있으면 **다른 사람이 돈
+   *   회차가 안 보여**, 같은 회차를 둘이 따로 저장하면 뒤가 앞을 통째로 덮는다.
+   */
+  const loadRound = useCallback(async () => {
+    if (academyId === null) return
+    try {
+      const rows = await listPatrols({ academyId, date, round })
+      const next: Record<number, string> = {}
+      for (const r of rows) next[r.enrollmentId] = r.mark
+      setMarks(next)
+      setDirty(false)
+    } catch (err) {
+      /* 서버가 아직 없으면(404) 조용히 빈 채로 둔다 — 그래도 순찰은 돌 수 있어야 한다 */
+      if (err instanceof ApiError && err.status !== 404) setError(err.message)
+      setMarks({})
+      setDirty(false)
+    }
+  }, [academyId, date, round])
+
   useEffect(() => {
-    setMarks({})
-  }, [areaId])
+    void loadRound()
+  }, [loadRound])
 
-  const seats = useMemo<Seat[]>(
-    () => cells.map((c) => ({ ...c, row: c.yPos ?? 1, col: c.xPos ?? 1 })),
-    [cells],
-  )
+  const seats = useMemo<Seat[]>(() => cells.map((c) => ({ ...c, row: c.yPos ?? 1, col: c.xPos ?? 1 })), [cells])
 
-  const current = marks[round] ?? {}
-  const markOf = (seatId: number): MarkKey => current[seatId] ?? 'none'
+  const markOf = (enrollmentId: number | null): string | null =>
+    enrollmentId === null ? null : (marks[enrollmentId] ?? null)
 
-  function tapSeat(seatId: number) {
+  function tap(enrollmentId: number | null) {
+    if (enrollmentId === null) return
     setMarks((prev) => {
-      const cur = prev[round] ?? {}
-      /* 같은 상태를 다시 누르면 지운다 — 잘못 찍었을 때 되돌릴 길이 있어야 한다 */
-      const next = { ...cur }
-      if (next[seatId] === pick) delete next[seatId]
-      else next[seatId] = pick
-      return { ...prev, [round]: next }
+      const next = { ...prev }
+      /* 같은 상태를 다시 누르면 지운다 — 잘못 눌렀을 때 되돌릴 길이 있어야 한다 */
+      if (next[enrollmentId] === pick) delete next[enrollmentId]
+      else next[enrollmentId] = pick
+      return next
     })
+    setDirty(true)
+    setNote(null)
+  }
+
+  /**
+   * 그 회차를 통째로 저장한다.
+   *
+   * ★ **보낸 목록이 그 회차의 전부**다(덮어쓰기). 화면에서 지운 것은 빼고 보내면 된다.
+   * ★ 응답으로 화면을 다시 맞춘다 — 빠진 것이 있으면 여기서 드러난다.
+   */
+  async function save() {
+    if (academyId === null) return
+    setSaving(true)
+    setError(null)
+    try {
+      const seatOf = new Map(seats.map((s) => [s.enrollmentId, s.seatCd] as const))
+      const rows = await savePatrol({
+        academyId,
+        date,
+        round,
+        marks: Object.entries(marks).map(([id, mark]) => ({
+          enrollmentId: Number(id),
+          seatCd: seatOf.get(Number(id)) ?? null,
+          mark,
+        })),
+      })
+      const next: Record<number, string> = {}
+      for (const r of rows) next[r.enrollmentId] = r.mark
+      setMarks(next)
+      setDirty(false)
+      setNote(`${round}회차 ${rows.length}건을 저장했습니다.`)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '저장하지 못했습니다.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const maxRow = seats.reduce((a, s) => Math.max(a, s.row), 0)
@@ -162,17 +252,20 @@ function Content() {
     [seats, maxRow],
   )
 
-  const checked = Object.keys(current).length
   const seated = seats.filter((s) => s.enrollmentId !== null).length
+  const checked = Object.keys(marks).length
+  /* ★ 「자리 비움」은 서버가 주는 `away` 로 센다. 코드를 화면에서 나열하면 상태가 늘 때
+     조용히 틀린다 — **졸음은 자리에 있는 것**이라 특히 섞이면 안 된다 */
+  const awayCount = Object.values(marks).filter((m) => defs.find((d) => d.code === m)?.away).length
 
   const listRows = useMemo(
     () =>
       seats
         .filter((s) => s.enrollmentId !== null)
         .sort((a, b) => a.seatCd.localeCompare(b.seatCd))
-        .map((s) => ({ ...s, mark: markOf(s.seatId) })),
+        .map((s) => ({ ...s, mark: markOf(s.enrollmentId) })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [seats, current],
+    [seats, marks],
   )
 
   const listColumns: Column<(typeof listRows)[number]>[] = useMemo(
@@ -186,34 +279,43 @@ function Content() {
         header: `${round}회차`,
         width: '130px',
         align: 'center',
-        value: (r) => (r.mark === 'none' ? '' : MARK_LABEL[r.mark]),
-        /* ★ 목록에서도 바로 찍는다 — 좌석표가 안 보이는 구역(좌표 미등록)에서도 순찰이 돌아야 한다 */
+        value: (r) => (r.mark ? labelOf(r.mark) : ''),
+        /* ★ 목록에서도 바로 기록한다 — 좌표가 없는 구역에서도 순찰이 돌아야 한다 */
         render: (r) => (
           <button
-            className={`btn${r.mark === 'none' ? '' : ' pri'}`}
+            className={`btn${r.mark ? ' pri' : ''}`}
             style={{ padding: '3px 9px', fontSize: 11.5 }}
-            onClick={() => tapSeat(r.seatId)}
-            title={`누르면 「${MARK_LABEL[pick]}」으로 기록합니다`}
+            onClick={() => tap(r.enrollmentId)}
+            title={`누르면 「${labelOf(pick)}」으로 기록합니다`}
           >
-            {r.mark === 'none' ? '기록' : MARK_LABEL[r.mark]}
+            {r.mark ? labelOf(r.mark) : '기록'}
           </button>
         ),
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [round, pick, current],
+    [round, pick, marks, defs],
   )
 
   return (
     <div className="p-rr">
-      <MockNotice reason="순찰 기록을 저장할 서버 경로가 없다 — 앱에 /patrols 호출만 있고 서버에 그 API 가 없다" />
-
       <div className="note-box">
         <div>
-          좌석을 눌러 상태를 기록합니다. <b>지금은 저장되지 않고 이 화면에서만</b> 유지됩니다 — 새로고침하면
-          사라집니다. 좌석 배치와 학생은 실제 값입니다.
+          좌석을 눌러 상태를 기록합니다. 회차마다 따로 남고, <b>저장을 눌러야 서버에 반영됩니다.</b> 자리를 옮긴
+          학생은 저장할 때의 좌석으로 기록됩니다.
         </div>
       </div>
+
+      {note && (
+        <div className="note-box" role="status">
+          <div>{note}</div>
+        </div>
+      )}
+      {error && (
+        <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+          {error}
+        </div>
+      )}
 
       <div className="stat-strip c4" style={{ marginTop: 10 }}>
         <div className="stat">
@@ -221,7 +323,7 @@ function Content() {
             <Icon name="route" size={13} /> 순찰 회차
           </div>
           <div className="v">{round}회차</div>
-          <div className="d">하루 최대 5회</div>
+          <div className="d">{date} · 하루 최대 5회</div>
         </div>
         <div className="stat">
           <div className="l">
@@ -235,24 +337,16 @@ function Content() {
             <Icon name="check-check" size={13} /> 이번 회차 기록
           </div>
           <div className="v">{checked}</div>
-          <div className="d">기록한 좌석</div>
+          <div className="d">{dirty ? '저장 전' : '저장됨'}</div>
         </div>
         <div className="stat">
           <div className="l">
             <Icon name="user-x" size={13} /> 자리 비움
           </div>
-          <div className="v">
-            {Object.values(current).filter((m) => m === 'out' || m === 'toilet' || m === 'common').length}
-          </div>
-          <div className="d">외출 · 화장실 · 공용공간</div>
+          <div className="v">{awayCount}</div>
+          <div className="d">자리에 없는 상태</div>
         </div>
       </div>
-
-      {error && (
-        <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
-          {error}
-        </div>
-      )}
 
       <div className="card-sec" style={{ marginTop: 12 }}>
         <div className="card-sec-h">
@@ -278,48 +372,49 @@ function Content() {
               ))}
             </select>
             <MaskToggle masked={masked} onChange={setMasked} />
+            <button className="btn pri" disabled={saving || !dirty} onClick={() => void save()}>
+              {saving ? '저장 중…' : '저장'}
+            </button>
           </div>
         </div>
 
         <div className="card-sec-b">
-          {/* 회차 — 먼저 고르고 그다음 좌석을 찍는다 */}
           <div className="frow">
             <label>회차</label>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
               {ROUNDS.map((r) => (
-                <button key={r} type="button" className={`chip${round === r ? ' on' : ''}`} onClick={() => setRound(r)}>
+                <button
+                  key={r}
+                  type="button"
+                  className={`chip${round === r ? ' on' : ''}`}
+                  onClick={() => setRound(r)}
+                >
                   {r}회차
-                  {Object.keys(marks[r] ?? {}).length > 0 && (
-                    <span className="mk" style={{ marginLeft: 4 }}>
-                      {Object.keys(marks[r] ?? {}).length}
-                    </span>
-                  )}
                 </button>
               ))}
+              {/* ★ 회차를 옮기면 서버에서 다시 읽는다 — 저장 안 한 것은 그때 사라진다 */}
+              {dirty && <span className="mk brandnew">저장하지 않은 기록이 있습니다</span>}
             </div>
           </div>
 
-          {/* ★ 팔레트에서 먼저 고르고 좌석을 누른다 — 좌석마다 모달을 열면 종이보다 느려진다 */}
           <div className="frow">
             <label>기록할 상태</label>
             <div style={{ display: 'grid', gap: 6 }}>
               {MARK_GROUPS.map((g) => {
-                const items = MARKS.filter((m) => m.key !== 'none' && m.group === g.key)
+                const items = defs.filter((d) => groupOf(d.code) === g.key)
                 if (items.length === 0) return null
                 return (
                   <div key={g.key} style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                    {/* 묶음 이름을 적어 색이 무엇을 뜻하는지 말한다 — 색만 같으면 "왜 같은 색이냐"가 된다 */}
-                    <span
-                      style={{ fontSize: 11, fontWeight: 700, color: g.color, width: 86, flexShrink: 0 }}
-                    >
+                    {/* 묶음 이름을 적어 색이 무엇을 뜻하는지 말한다 */}
+                    <span style={{ fontSize: 11, fontWeight: 700, color: g.color, width: 86, flexShrink: 0 }}>
                       {g.label}
                     </span>
                     {items.map((m) => (
                       <button
-                        key={m.key}
+                        key={m.code}
                         type="button"
-                        className={`chip${pick === m.key ? ' on' : ''}`}
-                        onClick={() => setPick(m.key)}
+                        className={`chip${pick === m.code ? ' on' : ''}`}
+                        onClick={() => setPick(m.code)}
                       >
                         <span
                           style={{
@@ -364,11 +459,25 @@ function Content() {
                       <div className="rr-row" key={ri}>
                         <span className="rr-rowno">{ri + 1}</span>
                         {rowSeats.slice(0, half).map((s) => (
-                          <PatrolSeat key={s.seatId} seat={s} mark={markOf(s.seatId)} onTap={tapSeat} />
+                          <PatrolSeat
+                            key={s.seatId}
+                            seat={s}
+                            mark={markOf(s.enrollmentId)}
+                            label={labelOf}
+                            color={colorOf}
+                            onTap={tap}
+                          />
                         ))}
                         <span className="rr-aisle" />
                         {rowSeats.slice(half).map((s) => (
-                          <PatrolSeat key={s.seatId} seat={s} mark={markOf(s.seatId)} onTap={tapSeat} />
+                          <PatrolSeat
+                            key={s.seatId}
+                            seat={s}
+                            mark={markOf(s.enrollmentId)}
+                            label={labelOf}
+                            color={colorOf}
+                            onTap={tap}
+                          />
                         ))}
                       </div>
                     ))}
@@ -377,12 +486,16 @@ function Content() {
               )}
 
               <div className="rr-legend" style={{ marginTop: 12 }}>
-                {MARK_GROUPS.map((g) => (
-                  <span key={g.key}>
-                    <span className="sw" style={{ background: g.color }} />
-                    {g.label} — {MARKS.filter((m) => m.key !== 'none' && m.group === g.key).map((m) => m.label).join(' · ')}
-                  </span>
-                ))}
+                {MARK_GROUPS.map((g) => {
+                  const items = defs.filter((d) => groupOf(d.code) === g.key)
+                  if (items.length === 0) return null
+                  return (
+                    <span key={g.key}>
+                      <span className="sw" style={{ background: g.color }} />
+                      {g.label} — {items.map((m) => m.label).join(' · ')}
+                    </span>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -406,29 +519,36 @@ function Content() {
   )
 }
 
-/** 좌석 한 칸. 누르면 고른 상태가 바로 찍힌다 */
-function PatrolSeat({ seat, mark, onTap }: { seat: Seat; mark: MarkKey; onTap: (id: number) => void }) {
-  const meta = MARKS.find((m) => m.key === mark)
-  const color = colorOf(mark)
+/** 좌석 한 칸. 누르면 고른 상태가 바로 기록된다 */
+function PatrolSeat({
+  seat,
+  mark,
+  label,
+  color,
+  onTap,
+}: {
+  seat: Seat
+  mark: string | null
+  label: (code: string) => string
+  color: (code: string) => string
+  onTap: (enrollmentId: number | null) => void
+}) {
   const empty = seat.enrollmentId === null
+  const c = mark ? color(mark) : null
   return (
     <button
       type="button"
       className="rr-seat"
-      onClick={() => onTap(seat.seatId)}
+      onClick={() => onTap(seat.enrollmentId)}
       disabled={empty}
       title={empty ? '배정된 학생이 없습니다' : `${seat.seatCd} · ${seat.studentName ?? ''}`}
-      style={
-        mark === 'none'
-          ? undefined
-          : { borderColor: color, boxShadow: `inset 0 0 0 2px ${color}` }
-      }
+      style={c ? { borderColor: c, boxShadow: `inset 0 0 0 2px ${c}` } : undefined}
     >
       <span className="sc">{seat.seatCd}</span>
       <span className="sn">{empty ? '공석' : (seat.studentName ?? '-')}</span>
-      {mark !== 'none' && (
-        <span className="sno" style={{ color, fontWeight: 800 }}>
-          {meta?.label}
+      {mark && (
+        <span className="sno" style={{ color: c ?? undefined, fontWeight: 800 }}>
+          {label(mark)}
         </span>
       )}
     </button>
