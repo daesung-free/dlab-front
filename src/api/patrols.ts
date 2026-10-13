@@ -125,3 +125,44 @@ export function savePatrol(body: {
 }): Promise<PatrolRecord[]> {
   return request<PatrolRecord[]>('/api/v1/admin/patrols', { method: 'POST', body })
 }
+
+/* ── 순찰 전용 좌석 조회 (2026-10-13) ────────────────────────────────────────
+ *
+ * ★ **좌석 화면(`/seats/*`)을 그대로 쓰지 않는다.** 그쪽은 담임에게 닫혀 있고, 열면
+ *   독서실 좌석배치·좌석 이탈·배정 관리까지 함께 열린다. 그래서 순찰 권한으로 되는
+ *   **전용 조회**를 따로 둔다 — 서버가 `patrol` 권한 아래에 만들었다.
+ *
+ * ★ **좌석 화면보다 적게 온다.** 배정 상태 · 좌석이탈(여부·시각·사유) · 반 · 키오스크
+ *   번호가 빠져 있다 — 그건 **배정 관리에 쓰는 값**이다. 순찰에 필요한 것은
+ *   「지금 누가 어디 앉아 있나」뿐이다.
+ *
+ * ★ 이렇게 나눠 두면 **나중에 좌석 화면 권한을 바꿔도 순찰이 따라 흔들리지 않는다.**
+ */
+
+export interface PatrolArea {
+  id: number
+  areaNm: string
+  /** 관을 빼면 **본관 A 와 별관 A 가 화면에서 구분되지 않는다** */
+  buildingName: string | null
+  sortOrder: number | null
+}
+
+export interface PatrolSeat {
+  seatId: number
+  seatCd: string
+  xPos: number | null
+  yPos: number | null
+  /** 비어 있으면 공석이다 */
+  enrollmentId: number | null
+  studentNo: string | null
+  studentName: string | null
+  masked?: boolean
+}
+
+export function listPatrolAreas(academyId: number): Promise<PatrolArea[]> {
+  return request<PatrolArea[]>('/api/v1/admin/patrols/areas', { query: { academyId } })
+}
+
+export function listPatrolSeats(studyAreaId: number): Promise<PatrolSeat[]> {
+  return request<PatrolSeat[]>('/api/v1/admin/patrols/seats', { query: { studyAreaId } })
+}
