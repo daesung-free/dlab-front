@@ -566,9 +566,12 @@ function Content() {
     if (id === undefined || text === '') return
     setMemo((c) => ({ ...c, busy: true, err: null }))
     try {
-      const saved = await addStudentMemo(id, text)
-      /* 맨 위에 쌓는다 — 최근 것을 먼저 읽는다 */
-      setMemo((c) => ({ ...c, items: [saved, ...(c.items ?? [])], draft: '', busy: false }))
+      await addStudentMemo(id, text)
+      /* ★ 저장 응답으로 쌓지 않고 **다시 읽는다.** POST 응답은 `writerName` 이 비어 있어
+         (목록 조회에는 들어 있다) 방금 쓴 메모가 **「시스템」으로 보인다** — 내가 쓴 것이
+         남이 쓴 것처럼 보이는 셈이다. 다시 읽으면 작성자가 제대로 붙는다 */
+      const fresh = await listStudentMemos(id)
+      setMemo((c) => ({ ...c, items: fresh, draft: '', busy: false }))
     } catch (e) {
       setMemo((c) => ({ ...c, busy: false, err: e instanceof ApiError ? e.message : '메모를 저장하지 못했습니다.' }))
     }
