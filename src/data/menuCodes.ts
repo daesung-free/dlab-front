@@ -34,6 +34,8 @@ export const SCREEN_MENU_CODES: Record<string, string[]> = {
   'regular-schedule': ['schedule'],
   approval: ['approval'],
   'seat-move': ['seat'],
+  /* 순찰은 좌석을 보고 찍는 일이라 좌석 권한을 따른다. 서버에 전용 코드가 생기면 바꾼다 */
+  patrol: ['seat'],
   'admin-assign': ['seat'],
 
   /* 학습 */
