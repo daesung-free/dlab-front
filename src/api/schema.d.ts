@@ -224,6 +224,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/surveys/{surveyId}/questions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 문항 교체
+         * @description 문항 교체.
+         *
+         *      <p>★★ <b>제출이 하나라도 있으면 400 이다.</b> 고치면 이미 동의한 학생의 동의 내용이
+         *      소급해서 바뀐다 — 그때는 복제해서 새로 만든다(오류 문구가 안내한다).
+         */
+        put: operations["replaceQuestions"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/students/{enrollmentId}/homeroom-override": {
         parameters: {
             query?: never;
@@ -2121,6 +2144,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/public/door/{acadCd}/code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 번호 요청
+         * @description 번호 요청.
+         *
+         *      <p>⚠️ <b>시도 횟수에 제한이 있다.</b> 무인증 경로라 제한이 없으면 번호를 바꿔 가며
+         *      두드려 도어락 번호를 뽑아낼 수 있다. 막힌 요청도 거절과 같은 응답으로 내린다 —
+         *      <b>제한에 걸린 사실을 알려주면 우회 간격을 역산할 수 있다.</b>
+         */
+        post: operations["request"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/kiosk/seat-leaves": {
         parameters: {
             query?: never;
@@ -2207,6 +2254,31 @@ export interface paths {
          *      응답이 교체된다. 꺼져 있으면 한 번만 낼 수 있다. 제출하면 임시저장은 지워진다.
          */
         post: operations["submit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/app/surveys/{surveyId}/agree": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 동의 체크 (장학 동의서 — 2026-10-13 회신 5-2-1)
+         * @description 동의 체크 (장학 동의서 — 2026-10-13 회신 5-2-1).
+         *
+         *      <p>★ <b>제출과 다른 축이다.</b> 동의만 하고 제출을 안 누르는 경우가 실제로 있어,
+         *      「동의했는데 안 냈다」와 「아직 안 봤다」를 담당자가 가려야 한다.
+         *
+         *      <p>서명은 <b>체크만</b>이다 — 손서명은 받지 않는 것으로 확정됐다.
+         */
+        post: operations["agree"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2319,7 +2391,7 @@ export interface paths {
          * 동의·철회.
          * @description 동의·철회. 같은 값으로 다시 눌러도 이력은 남는다.
          */
-        post: operations["agree"];
+        post: operations["agree_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2943,6 +3015,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/surveys/{surveyId}/targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 대상자 발송
+         * @description 대상자 발송.
+         *
+         *      <p>장학 동의서는 대상이 <b>범위가 아니라 사람</b>이다 — 직원이 장학을 부여한 학생에게만
+         *      간다. <b>이미 대상자면 건너뛴다</b>(두 번 눌러도 행이 두 개가 되지 않는다).
+         */
+        post: operations["assignTargets"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/surveys/{surveyId}/duplicate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 양식 복제 (장학 동의서 — 2026-10-13 회신 5-1)
+         * @description 양식 복제 (장학 동의서 — 2026-10-13 회신 5-1).
+         *
+         *      <p>문항을 그대로 옮기고 <b>제목만 새로 받는다.</b>
+         *      ⚠️ <b>대상자·응답은 복사하지 않는다</b> — 복사하면 남이 동의한 기록이 새 양식에 붙는다.
+         */
+        post: operations["duplicate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/students": {
         parameters: {
             query?: never;
@@ -3053,6 +3171,36 @@ export interface paths {
          *      "미납이 남았다"를 안다 — 로그로만 남기면 화면을 닫는 순간 아무도 모른다.
          */
         post: operations["changeStatus_1"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/students/{enrollmentId}/memos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 메모 목록
+         * @description 메모 목록. <b>최근 것이 위</b>다.
+         *
+         *      <p>★ 작성자 이름을 함께 내린다 — 이 화면을 지점 관리자도 보는데 그 계정에는 계정 목록
+         *      조회 권한이 없을 수 있어, 화면이 id 로 이름을 맞추게 하면 영원히 「-」가 된다.
+         */
+        get: operations["memos"];
+        put?: never;
+        /**
+         * 메모 추가
+         * @description 메모 추가.
+         *
+         *      <p>★ <b>덮어쓰지 않고 쌓는다.</b> 칸 하나로 두면 담당자가 여럿일 때 서로 덮어쓰고
+         *      누가 언제 썼는지가 사라진다.
+         */
+        post: operations["addMemo"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3937,6 +4085,38 @@ export interface paths {
          *      같은 승인이 두 번 잡히면 그 학생은 두 번 낸 것으로 남는다.
          */
         post: operations["recordTerminal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/patrols": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 그날 그 회차 기록
+         * @description 그날 그 회차 기록.
+         *
+         *      <p>날짜를 비우면 <b>오늘</b>, 회차를 비우면 <b>그날 전부</b>다 — 순찰은 당일 업무라
+         *      화면이 날짜를 안 보내는 것이 기본 흐름이다.
+         */
+        get: operations["records"];
+        put?: never;
+        /**
+         * 순찰 기록 저장
+         * @description 순찰 기록 저장.
+         *
+         *      <p>★ <b>한 번에 여러 건을 받는다.</b> 순찰은 좌석을 연달아 누르는 업무라, 한 건씩
+         *      보내면 네트워크가 느린 태블릿에서 <b>누른 것이 빠진 채 넘어간다.</b>
+         *
+         *      <p>★ <b>같은 회차를 다시 찍으면 덮어쓴다</b> — 순찰을 다시 돌 수 있다.
+         */
+        post: operations["record"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5618,9 +5798,9 @@ export interface paths {
          * 메모.
          * @description 메모. <b>지점 메모는 그 지점만, 본사는 전체</b>를 본다.
          */
-        get: operations["memos"];
+        get: operations["memos_1"];
         put?: never;
-        post: operations["addMemo"];
+        post: operations["addMemo_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5887,6 +6067,32 @@ export interface paths {
          * @description 카드 교체·분실 재발급.
          */
         patch: operations["changeCard_1"];
+        trace?: never;
+    };
+    "/api/v1/admin/staff-attendance/records/{attendanceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * 기록 보정
+         * @description 기록 보정.
+         *
+         *      <p>★ <b>이유가 필수다.</b> 요구사항의 「누가·언제·무엇을·왜」 중 「왜」가 없으면
+         *      나머지 셋이 쓸모없어진다 — 고친 값은 원본보다 신뢰도가 낮은데 그 사실이 안 남는다.
+         *
+         *      <p>★ <b>근무일을 넘기는 수정은 거절한다.</b> 오전 출근 확인이 근무일로 세기 때문에,
+         *      시각만 다른 날로 옮기면 그 행이 어느 날에도 안 잡힌다.
+         */
+        patch: operations["edit"];
         trace?: never;
     };
     "/api/v1/admin/seats/{seatId}/usable": {
@@ -8126,6 +8332,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/staff-attendance/records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 출근 기록 조회
+         * @description 출근 기록 조회.
+         *
+         *      <p>응답에 <b><code>canEdit</code> 이 함께 온다</b> — 화면이 수정 버튼 노출을 그걸로 정하고,
+         *      서버도 같은 값으로 막는다. 둘이 어긋나면 눌러도 403 이 나는 버튼이 남는다.
+         */
+        get: operations["records_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/staff-attendance/records/{attendanceId}/edits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 그 기록의 수정 이력.
+         * @description 그 기록의 수정 이력.
+         */
+        get: operations["edits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/staff-attendance/edits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 지점·기간 수정 이력 — 「이력 보기」 화면.
+         * @description 지점·기간 수정 이력 — 「이력 보기」 화면.
+         */
+        get: operations["editHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/staff-attendance/checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 검사 내역
+         * @description 검사 내역.
+         *
+         *      <p>지점 범위는 계정이 정한다 — <b>전 지점 권한자는 전 지점</b>을 한 번에 본다
+         *      (본사가 아침에 한눈에 보는 화면이다). 지점 관리자는 자기 지점만 나온다.
+         */
+        get: operations["search_2"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/seats/layout": {
         parameters: {
             query?: never;
@@ -8410,6 +8702,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/patrols/marks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 상태 값 목록 — 화면 팔레트가 쓴다.
+         * @description 상태 값 목록 — 화면 팔레트가 쓴다. 문구를 화면에 중복 정의하지 않게 서버가 내린다.
+         */
+        get: operations["marks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/notification-templates/in-review": {
         parameters: {
             query?: never;
@@ -8443,7 +8755,7 @@ export interface paths {
          *
          *      <p>기본이 <b>최근 7일</b>이다 — 기간을 안 주면 전 기간을 훑게 되어 화면이 안 뜬다.
          */
-        get: operations["search_2"];
+        get: operations["search_3"];
         put?: never;
         post?: never;
         delete?: never;
@@ -8743,7 +9055,7 @@ export interface paths {
          * 신청·해제 이력.
          * @description 신청·해제 이력. 조건을 비우면 그 조건은 빠진다.
          */
-        get: operations["search_3"];
+        get: operations["search_4"];
         put?: never;
         post?: never;
         delete?: never;
@@ -8806,6 +9118,46 @@ export interface paths {
          *      <p>비공개 파일은 열 때마다 불러야 한다 — 발급된 주소는 몇 분 뒤 만료된다.
          */
         get: operations["url"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/emergency-access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 요청 내역.
+         * @description 요청 내역. 지점을 비우면 전 지점(전 지점 권한자만).
+         */
+        get: operations["list_23"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/emergency-access/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 거절 사유 목록 — 화면 필터가 쓴다.
+         * @description 거절 사유 목록 — 화면 필터가 쓴다. 문구를 화면에 중복 정의하지 않게 서버가 내린다.
+         */
+        get: operations["results_2"];
         put?: never;
         post?: never;
         delete?: never;
@@ -8910,7 +9262,7 @@ export interface paths {
          * 전 지점.
          * @description 전 지점. 설정이 없는 지점도 빈 행으로 나온다 — 화면이 9개를 다 그린다.
          */
-        get: operations["list_23"];
+        get: operations["list_24"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9053,7 +9405,7 @@ export interface paths {
          *      <p><b>지점을 모르는 로그도 함께 보인다.</b> 전 지점 공통 마스터를 누가 고쳤는지도
          *      기록되어야 하는데, 지점 필터에 걸려 빠지면 그 기록이 어디에도 안 남는다.
          */
-        get: operations["search_4"];
+        get: operations["search_5"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9201,7 +9553,7 @@ export interface paths {
          * 신청유형 3종을 전부 내린다.
          * @description 신청유형 3종을 전부 내린다. 안 정한 유형은 <code>configured=false</code>로 나온다.
          */
-        get: operations["list_24"];
+        get: operations["list_25"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9221,7 +9573,7 @@ export interface paths {
          * 앱 설정 목록(최소 지원 버전·점검 모드).
          * @description 앱 설정 목록(최소 지원 버전·점검 모드). 앱이 부팅할 때 첫 번째로 읽는 값이다.
          */
-        get: operations["list_25"];
+        get: operations["list_26"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9308,7 +9660,7 @@ export interface paths {
          * 그해 전체 실적 — 학생을 고르지 않고 지점 전체를 본다.
          * @description 그해 전체 실적 — 학생을 고르지 않고 지점 전체를 본다. 학번순.
          */
-        get: operations["search_5"];
+        get: operations["search_6"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9377,7 +9729,7 @@ export interface paths {
          * 목록.
          * @description 목록. 상태·이름·연락처로 좁힌다.
          */
-        get: operations["list_26"];
+        get: operations["list_27"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9462,7 +9814,7 @@ export interface paths {
          *
          *      <p>지점 관리자에게는 <b>자기 지점만</b> 보인다.
          */
-        get: operations["list_27"];
+        get: operations["list_28"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9631,6 +9983,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/students/memos/{memoId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * 메모 삭제
+         * @description 메모 삭제.
+         *
+         *      <p>★ <b>soft delete 다.</b> 「그때 무슨 메모가 있었나」에 답해야 하고, 상담·징계
+         *      근거로 쓰인 메모가 조용히 사라지면 안 된다.
+         */
+        delete: operations["deleteMemo"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/staff-cards/{enrollmentId}": {
         parameters: {
             query?: never;
@@ -9728,6 +10103,32 @@ export interface paths {
          *      <p>soft delete다 — 물리 삭제하면 "누가 왜 취소했나"를 추적할 수 없다.
          */
         delete: operations["revoke_1"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/patrols/rounds/{round}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * 그 회차를 비운다 — 잘못 찍은 회차를 통째로 지운다
+         * @description 그 회차를 비운다 — 잘못 찍은 회차를 통째로 지운다.
+         *
+         *      <p>★★ <b>「빈 목록을 저장하면 비운다」로 만들지 않았다.</b> 그러면 <b>화면 버그 하나가
+         *      회차를 조용히 날린다</b> — 목록을 만드는 코드가 빈 배열을 보내는 실수는 흔하고, 그때
+         *      사감이 한 시간 돌며 찍은 것이 사라진다. <b>지우는 것은 지우겠다고 말해야</b> 한다.
+         *
+         *      <p>soft delete 다 — 「그 회차에 무엇이 있었나」를 나중에 확인할 수 있어야 한다.
+         */
+        delete: operations["clearRound"];
         options?: never;
         head?: never;
         patch?: never;
@@ -10022,7 +10423,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete: operations["deleteMemo"];
+        delete: operations["deleteMemo_1"];
         options?: never;
         head?: never;
         patch?: never;
@@ -10447,7 +10848,7 @@ export interface components {
             /** Format: int64 */
             id?: number;
             /** @enum {string} */
-            surveyType?: "GENERAL" | "GRADE_INPUT";
+            surveyType?: "GENERAL" | "GRADE_INPUT" | "SCHOLARSHIP_CONSENT";
             /** @enum {string} */
             scope?: "ALL" | "BRANCH" | "CLASS";
             /** Format: int64 */
@@ -10490,6 +10891,35 @@ export interface components {
             data?: components["schemas"]["AdminSurveySummary"];
             meta?: components["schemas"]["PageMeta"];
             error?: components["schemas"]["ErrorBody"];
+        };
+        AdminSurveyQuestion: {
+            /** @enum {string} */
+            type: "SINGLE_CHOICE" | "MULTI_CHOICE" | "TEXT" | "NUMBER";
+            title: string;
+            required?: boolean;
+            minValue?: number;
+            maxValue?: number;
+            options?: string[];
+            /**
+             * Format: int32
+             * @description 조건부 문항 — 이 문항은 <b>앞쪽 단일 선택 문항</b>(1부터 센 순서)에서
+             *                                 <code>showIfOptionIndex</code> 번째 선택지를 골랐을 때만 보인다.
+             *                                 가채점의 "응시/미응시" 가 이걸 쓴다. 숨은 문항은 필수여도 묻지 않고 보낸 답은 버린다
+             */
+            showIfQuestionIndex?: number;
+            /** Format: int32 */
+            showIfOptionIndex?: number;
+            /** @description 합산 문항 — 더할 숫자 문항 순서(1부터). 값은 서버가 채운다("공통 + 선택 = 총점") */
+            sumOfIndexes?: number[];
+        };
+        /**
+         * @description 문항 교체 (장학 동의서 — 2026-10-13 회신 5-1).
+         *
+         *      <p>★ <b>제출이 하나라도 있으면 거절된다.</b> 고치면 이미 동의한 학생의 동의 내용이
+         *      소급해서 바뀐다 — 그때는 복제해서 새로 만든다.
+         */
+        Questions: {
+            questions: components["schemas"]["AdminSurveyQuestion"][];
         };
         HomeroomOverride: {
             /** Format: int64 */
@@ -12141,6 +12571,33 @@ export interface components {
             /** @description 현재 확인된 값은 <code>kiosk</code> 뿐이다 */
             service?: string;
         };
+        PublicDoorCodeRequest: {
+            /** @description 학생 본인 휴대폰 번호. 하이픈이 섞여 와도 된다 */
+            phone: string;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponsePublicDoorCodeResponse: {
+            success?: boolean;
+            data?: components["schemas"]["PublicDoorCodeResponse"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        PublicDoorCodeResponse: {
+            provided?: boolean;
+            /** @description 제공한 번호. <b>거절이면 <code>null</code></b> */
+            code?: string;
+            /** @description 거절 문구. 제공되면 <code>null</code> — <b>이유는 담지 않는다</b> */
+            message?: string;
+        };
         /** @description 좌석 이탈·복귀 일괄 전송. */
         Ingest: {
             /**
@@ -13085,7 +13542,7 @@ export interface components {
          */
         AdminSurveyCreate: {
             /** @enum {string} */
-            surveyType: "GENERAL" | "GRADE_INPUT";
+            surveyType: "GENERAL" | "GRADE_INPUT" | "SCHOLARSHIP_CONSENT";
             /** @enum {string} */
             scope: "ALL" | "BRANCH" | "CLASS";
             /** Format: int64 */
@@ -13102,25 +13559,35 @@ export interface components {
             questions: components["schemas"]["AdminSurveyQuestion"][];
             allowEdit?: boolean;
         };
-        AdminSurveyQuestion: {
-            /** @enum {string} */
-            type: "SINGLE_CHOICE" | "MULTI_CHOICE" | "TEXT" | "NUMBER";
-            title: string;
-            required?: boolean;
-            minValue?: number;
-            maxValue?: number;
-            options?: string[];
+        TargetRequest: {
+            enrollmentIds: number[];
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseSentCount: {
+            success?: boolean;
+            data?: components["schemas"]["SentCount"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        SentCount: {
             /**
              * Format: int32
-             * @description 조건부 문항 — 이 문항은 <b>앞쪽 단일 선택 문항</b>(1부터 센 순서)에서
-             *                                 <code>showIfOptionIndex</code> 번째 선택지를 골랐을 때만 보인다.
-             *                                 가채점의 "응시/미응시" 가 이걸 쓴다. 숨은 문항은 필수여도 묻지 않고 보낸 답은 버린다
+             * @description 이번에 새로 발송된 수. 이미 대상자였던 학생은 세지 않는다
              */
-            showIfQuestionIndex?: number;
-            /** Format: int32 */
-            showIfOptionIndex?: number;
-            /** @description 합산 문항 — 더할 숫자 문항 순서(1부터). 값은 서버가 채운다("공통 + 선택 = 총점") */
-            sumOfIndexes?: number[];
+            sent?: number;
+        };
+        SurveyTitle: {
+            /** @description 복제본 제목. 같은 제목이 둘이면 담당자가 어느 것을 보냈는지 모른다 */
+            title: string;
         };
         /**
          * @description 신규 접수 등록.
@@ -13273,6 +13740,8 @@ export interface components {
             homeroomOverride?: components["schemas"]["HomeroomOverrideView"];
             appAccount?: components["schemas"]["AccountView"];
             guardianAccounts?: components["schemas"]["AccountView"][];
+            /** Format: int64 */
+            memoCount?: number;
             /** @description 개인정보가 가려졌는지. 화면이 "원본 보기" 안내를 띄우는 근거다 */
             masked?: boolean;
         };
@@ -13331,6 +13800,36 @@ export interface components {
              *                       <b>사람이 이어서 처리해야 하는 것</b>이라 화면이 눈에 띄게 표시한다
              */
             followUps?: components["schemas"]["FollowUpNote"][];
+        };
+        StudentMemoRequest: {
+            content: string;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseStudentMemoView: {
+            success?: boolean;
+            data?: components["schemas"]["StudentMemoView"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        StudentMemoView: {
+            /** Format: int64 */
+            id?: number;
+            content?: string;
+            /** Format: int64 */
+            writerId?: number;
+            /** @description 작성자 이름. <b>비어 있으면 사람이 아니다</b>(배치·시스템) */
+            writerName?: string;
+            /** Format: date-time */
+            createdAt?: string;
         };
         /** @description 검색조건 저장. <code>conditions</code>는 화면이 만든 JSON 문자열 그대로 — 서버가 파싱하지 않는다. */
         SaveSearch: {
@@ -14326,6 +14825,68 @@ export interface components {
              */
             approvedAt?: string;
         };
+        MarkRequest: {
+            /** Format: int64 */
+            enrollmentId: number;
+            /** @description 찍은 시점의 좌석번호. 학생 목록 탭에서 찍으면 비어 있어도 된다 */
+            seatCd?: string;
+            /** @enum {string} */
+            mark: "NONE" | "SLEEP" | "OUTING" | "EARLY_LEAVE" | "CLASSROOM" | "TOILET" | "COMMON" | "SUBJECT_ROOM" | "QNA" | "CONSULT";
+        };
+        PatrolRequest: {
+            /** Format: int64 */
+            academyId?: number;
+            /**
+             * Format: date
+             * @description 비우면 오늘
+             */
+            date?: string;
+            /**
+             * Format: int32
+             * @description 1~5. <b>회차를 합치지 않는다</b> — 같은 학생이 회차마다 다를 수 있다
+             */
+            round: number;
+            marks: components["schemas"]["MarkRequest"][];
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseListPatrolRow: {
+            success?: boolean;
+            data?: components["schemas"]["PatrolRow"][];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        PatrolRow: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: date */
+            date?: string;
+            /** Format: int32 */
+            round?: number;
+            /** Format: int64 */
+            enrollmentId?: number;
+            studentNo?: string;
+            studentName?: string;
+            seatCd?: string;
+            /** @enum {string} */
+            mark?: "NONE" | "SLEEP" | "OUTING" | "EARLY_LEAVE" | "CLASSROOM" | "TOILET" | "COMMON" | "SUBJECT_ROOM" | "QNA" | "CONSULT";
+            markLabel?: string;
+            /**
+             * @description 자리를 비운 상태인가. <b>「없다」와 「졸고 있다」는 다르다</b> —
+             *                    졸음은 자리에 있는 것이다
+             */
+            away?: boolean;
+            /** @description 이름이 가려졌는지 — 화면이 「이름이 잘못 저장됐다」로 오인하지 않게 */
+            masked?: boolean;
+        };
         NotificationTemplateCreate: {
             /** @enum {string} */
             event: "MISSING_ATTENDANCE" | "APPROVAL_REQUEST_CREATED" | "APPROVAL_APPROVED_BY_PARENT" | "APPROVAL_APPROVED_AFTER_TIMEOUT" | "APPROVAL_APPROVED_BEFORE_TIMEOUT" | "APPROVAL_REMINDER" | "APPROVAL_HANDED_OVER" | "APPROVAL_APPROVED_BY_STAFF_PRIMARY" | "APPROVAL_APPROVED_BY_ADMIN" | "APPROVAL_REJECTED" | "CONSULT_RESERVED" | "CONSULT_CANCELED";
@@ -15169,9 +15730,16 @@ export interface components {
             appliedAt?: string;
             /**
              * Format: int64
-             * @description 바꾼 계정. 배치·시스템이면 <code>0</code> 이다
+             * @description 바꾼 계정 id. 배치·시스템이면 <code>0</code> 이다
              */
             changedBy?: number;
+            /**
+             * @description 바꾼 사람 이름. <b>시스템이거나 계정이 지워졌으면 비어 있다</b> —
+             *                           화면은 그때 「시스템」이나 「-」로 그리면 된다.
+             *                           이름을 함께 내리는 이유는 <b>이력 화면을 지점 관리자도 보는데
+             *                           그 계정에는 계정 목록 조회 권한이 없을 수 있어서</b>다
+             */
+            changedByName?: string;
         };
         WriteRequest: {
             /** Format: int64 */
@@ -15949,6 +16517,7 @@ export interface components {
             /** Format: int64 */
             enrollmentId?: number;
             studentNo?: string;
+            admissionDate?: string;
             /** Format: date-time */
             createdAt?: string;
         };
@@ -16143,6 +16712,50 @@ export interface components {
         };
         CardRequest: {
             rfidNo?: string;
+        };
+        EditRequest: {
+            /** @enum {string} */
+            eventType: "IN" | "OUT";
+            /**
+             * Format: date-time
+             * @description 보정할 시각. <b>근무일과 같은 날이어야 한다</b>
+             */
+            recordedAt: string;
+            /** @description 고친 이유. <b>비울 수 없다</b> */
+            reason: string;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseRecordRow: {
+            success?: boolean;
+            data?: components["schemas"]["RecordRow"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        RecordRow: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            academyId?: number;
+            /** Format: int64 */
+            enrollmentId?: number;
+            staffName?: string;
+            /** Format: date */
+            workDate?: string;
+            /** @enum {string} */
+            eventType?: "IN" | "OUT";
+            /** Format: date-time */
+            recordedAt?: string;
+            /** @description 한 번이라도 고쳐진 기록인가. 화면이 「보정됨」을 표시한다 */
+            edited?: boolean;
         };
         /** @description 좌석 수정. <code>seatCd</code>는 대상이 아니다(키오스크가 이 코드로 좌석을 찾는다). */
         SeatUpdate: {
@@ -16541,7 +17154,7 @@ export interface components {
             /** Format: int64 */
             id?: number;
             /** @enum {string} */
-            surveyType?: "GENERAL" | "GRADE_INPUT";
+            surveyType?: "GENERAL" | "GRADE_INPUT" | "SCHOLARSHIP_CONSENT";
             title?: string;
             description?: string;
             anonymous?: boolean;
@@ -18155,16 +18768,28 @@ export interface components {
             error?: components["schemas"]["ErrorBody"];
         };
         /**
-         * @description 제출자.
+         * @description 대상자 한 줄.
          *
-         *      <p>익명 설문에서도 <b>제출 여부</b>는 알 수 있다 — 미제출자 독려에 필요하다.
-         *      알 수 없는 건 "무엇을 냈는가"다.
+         *      <p>★ <b>이제 미제출 행도 나온다</b>(장학 동의서에서만). 범위로 돌리는 일반 설문은
+         *      대상자를 미리 만들지 않으므로 <b>지금까지와 같이 제출자만</b> 나온다.
+         *
+         *      <p>⚠️ <b>제출자 수를 세려면 <code>submittedAt != null</code> 로 세야 한다</b> —
+         *      행 수로 세면 미제출 대상자까지 포함된다.
          */
         Participant: {
             /** Format: int64 */
             enrollmentId?: number;
             studentNo?: string;
             studentName?: string;
+            /**
+             * @description 「발송 / 열람 / 동의 / 제출」. 화면이 이 값으로 네 칸을 그린다
+             * @enum {string}
+             */
+            state?: "SENT" | "VIEWED" | "AGREED" | "SUBMITTED";
+            /** Format: date-time */
+            viewedAt?: string;
+            /** Format: date-time */
+            agreedAt?: string;
             /** Format: date-time */
             submittedAt?: string;
         };
@@ -18220,6 +18845,22 @@ export interface components {
             changedAt?: string;
             /** Format: int64 */
             changedBy?: number;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseListStudentMemoView: {
+            success?: boolean;
+            data?: components["schemas"]["StudentMemoView"][];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -18649,6 +19290,122 @@ export interface components {
             eventType?: string;
             /** Format: date-time */
             recordedAt?: string;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseRecordPage: {
+            success?: boolean;
+            data?: components["schemas"]["RecordPage"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        RecordPage: {
+            /**
+             * @description 이 계정이 고칠 수 있나. 화면이 버튼 노출에 쓴다 —
+             *                     <b>서버도 같은 값으로 막는다</b>
+             */
+            canEdit?: boolean;
+            records?: components["schemas"]["RecordRow"][];
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseListEditRow: {
+            success?: boolean;
+            data?: components["schemas"]["EditRow"][];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        EditRow: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            attendanceId?: number;
+            staffName?: string;
+            /** Format: date */
+            workDate?: string;
+            /** @enum {string} */
+            beforeEventType?: "IN" | "OUT";
+            /** Format: date-time */
+            beforeRecordedAt?: string;
+            /** @enum {string} */
+            afterEventType?: "IN" | "OUT";
+            /** Format: date-time */
+            afterRecordedAt?: string;
+            /** @description 고친 이유. 필수로 받으므로 비어 있지 않다 */
+            reason?: string;
+            /**
+             * Format: int64
+             * @description 고친 계정 id. 배치·시스템이면 <code>0</code> 이다
+             */
+            editedBy?: number;
+            /**
+             * @description 고친 사람 이름. <b>비어 있으면 사람이 아니다</b>(배치·시스템) —
+             *                          화면은 그걸로 「시스템」을 구분한다
+             */
+            editedByName?: string;
+            /** Format: date-time */
+            editedAt?: string;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseListCheckView: {
+            success?: boolean;
+            data?: components["schemas"]["CheckView"][];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        CheckView: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            academyId?: number;
+            academyName?: string;
+            /** Format: date */
+            checkDate?: string;
+            /** Format: date-time */
+            checkedAt?: string;
+            /**
+             * Format: int32
+             * @description 그 시각까지 들어온 출근 건수. <b>0이면 미확인</b>이다
+             */
+            inCount?: number;
+            /** @description 알림 대상이었는가(= <code>inCount == 0</code>) */
+            alertNeeded?: boolean;
+            /**
+             * @description 실제로 보냈는가. ⚠️ <b>알리고 연동 전에는 늘 <code>false</code></b>다 —
+             *                            화면은 그때 「미연동」으로 그려야 「발송 실패」와 섞이지 않는다
+             */
+            alertSent?: boolean;
+            /**
+             * Format: int32
+             * @description 보낼 대상 계정 수. ★ <b><code>0</code>이면 권한을 켜 둔 계정이 없다는
+             *                            뜻</b>이고 그건 설정 문제다 — 화면이 드러내야 한다
+             */
+            recipientCount?: number;
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -19283,6 +20040,9 @@ export interface components {
              * @enum {string}
              */
             enrollmentStatus?: "ENROLLED" | "LEAVE" | "WITHDRAWN" | "EXPELLED" | "GRADUATED";
+            /** Format: int32 */
+            cumulativePoint?: number;
+            seatCd?: string;
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -19345,6 +20105,34 @@ export interface components {
             data?: components["schemas"]["PaymentRequestResponse"][];
             meta?: components["schemas"]["PageMeta"];
             error?: components["schemas"]["ErrorBody"];
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseListMarkView: {
+            success?: boolean;
+            data?: components["schemas"]["MarkView"][];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        MarkView: {
+            code?: string;
+            label?: string;
+            away?: boolean;
+            /**
+             * @description 사감이 할 일 기준 묶음 — 화면이 색을 가르는 데 쓴다.
+             *                   ★ <b>화면이 코드로 묶지 않게 서버가 내린다</b> — 화면에서 묶으면 상태가
+             *                   늘 때마다 화면을 고쳐야 하고, 잊으면 새 상태가 아무 묶음에도 안 들어간다
+             * @enum {string}
+             */
+            group?: "OK" | "WARN" | "INSIDE" | "BRIEF" | "OUTSIDE";
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -20098,6 +20886,64 @@ export interface components {
          *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
          *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
          */
+        ApiResponseListDoorRequestRow: {
+            success?: boolean;
+            data?: components["schemas"]["DoorRequestRow"][];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        DoorRequestRow: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            academyId?: number;
+            academyName?: string;
+            /** Format: date-time */
+            requestedAt?: string;
+            /** @description <b>거절 건에서는 빈다</b> — 못 찾았으니 이름도 없다 */
+            studentName?: string;
+            studentNo?: string;
+            /** @description 입력한 번호(마스킹). 이름이 빌 때 화면이 이 칸으로 대신 보여준다 */
+            phoneMasked?: string;
+            /** @enum {string} */
+            result?: "PROVIDED" | "NOT_FOUND" | "DUPLICATE_PHONE" | "NOT_ENROLLED" | "OUTSIDE_WINDOW" | "NO_CODE_REGISTERED" | "RATE_LIMITED";
+            resultLabel?: string;
+            /** @description 지점이 조치해야 하는 건가 — 화면이 색을 달리해 묶는다 */
+            needsBranchAction?: boolean;
+            /** @description <b>거절 건에만</b> 온다 — 아래 설명 참고 */
+            requesterIp?: string;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseListDoorRequestResultView: {
+            success?: boolean;
+            data?: components["schemas"]["DoorRequestResultView"][];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        DoorRequestResultView: {
+            code?: string;
+            label?: string;
+            needsBranchAction?: boolean;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
         ApiResponseListDoorCodeView: {
             success?: boolean;
             data?: components["schemas"]["DoorCodeView"][];
@@ -20178,6 +21024,10 @@ export interface components {
              *                            <code>false</code>로 내리면 "작성 안 함"으로 읽혀 없는 사실을 만든다
              */
             profileWritten?: boolean;
+            /** Format: date */
+            admissionDate?: string;
+            /** Format: int64 */
+            daysSinceAdmission?: number;
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -20468,6 +21318,46 @@ export interface components {
             /** @description 개인정보가 마스킹됐는지. 화면이 모르면 "번호가 잘못 저장됐다"는 오인 문의가 생긴다 */
             masked?: boolean;
         };
+        /**
+         * @description 하루 안의 외출·조퇴 한 건 (2026-10-13 디랩 피드백 5-5).
+         *
+         *      <p>⚠️ 앱 응답의 <code>AttendanceResponse.AttendanceEvent</code> 와 <b>다른 것</b>이다 —
+         *      그쪽은 태깅 <b>한 건</b>을 그대로 내리고, 이것은 외출과 복귀를 <b>짝지은 구간</b>이다.
+         *      이름이 비슷해 섞기 쉬우니 주의할 것.
+         *
+         *      <p>요구는 <b>「외출·조퇴를 등원과 하원 사이에, 사유와 함께」</b>다. 출결 행에는
+         *      등원·하원 시각만 있어서 그 사이에 무엇이 있었는지 보이지 않았다.
+         *
+         *      <h2>★ 한 칸으로는 안 된다</h2>
+         *      하루에 외출·복귀가 <b>여러 번</b> 있을 수 있다. 그래서 행에 <b>구간 목록</b>으로 싣는다.
+         *
+         *      <h2>★★ 「안 돌아왔다」와 「복귀를 안 찍었다」는 다른 사건이다</h2>
+         *      둘 다 복귀 기록이 없지만 <b>담당자가 할 일이 다르다</b> — 전자는 지금 밖에 있으니 찾아야
+         *      하고, 후자는 기록을 고쳐야 한다. <code>returnedAt</code> 이 <code>null</code> 인 것만으로는
+         *      구분되지 않아 {@link ReturnState ReturnState} 로 가른다(좌석 이탈의 <code>NO_RETURN_RECORD</code> 와 같은 판단).
+         */
+        AttendanceInterval: {
+            /** @enum {string} */
+            type?: "CHECK_IN" | "CHECK_OUT" | "LATE" | "OUTING" | "EXCUSED_OUTING" | "EARLY_LEAVE" | "RETURN";
+            /**
+             * Format: date-time
+             * @description 발생 시각. <b>ISO 인스턴트</b>다 — <code>&quot;13:20&quot;</code> 같은 시각 문자열로
+             *                        두면 같은 행의 등원·하원과 형식이 섞이고, <b>자정을 넘긴 외출</b>
+             *                        (23:50 외출 → 00:10 복귀)을 표현할 수 없다
+             */
+            at?: string;
+            /**
+             * Format: date-time
+             * @description 복귀 시각. 돌아오지 않았거나 조퇴면 <code>null</code>
+             */
+            returnedAt?: string;
+            /** @enum {string} */
+            returnState?: "RETURNED" | "PENDING" | "NO_RETURN_RECORD" | "NOT_EXPECTED";
+            /** @description 사유 승인된 외출인가 — <code>N</code>(사유외출)과 <code>D</code>(그냥 외출)를 가른다 */
+            excused?: boolean;
+            /** @description 사유 문구. 사유신청이 있을 때만 있다 */
+            reason?: string;
+        };
         AttendanceRowResponse: {
             /**
              * Format: date
@@ -20490,6 +21380,7 @@ export interface components {
             studyTime?: string;
             guardianPhone?: string;
             unexcusedLate?: boolean;
+            events?: components["schemas"]["AttendanceInterval"][];
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -21126,6 +22017,26 @@ export interface components {
              */
             unlinkedChildren?: number;
         };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseClearedCount: {
+            success?: boolean;
+            data?: components["schemas"]["ClearedCount"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        ClearedCount: {
+            /** Format: int32 */
+            cleared?: number;
+        };
     };
     responses: never;
     parameters: never;
@@ -21452,6 +22363,32 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseVoid"];
+                };
+            };
+        };
+    };
+    replaceQuestions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                surveyId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Questions"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseAdminSurveySummary"];
                 };
             };
         };
@@ -24232,6 +25169,33 @@ export interface operations {
             };
         };
     };
+    request: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 출입문 QR 이 담은 지점코드 */
+                acadCd: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicDoorCodeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePublicDoorCodeResponse"];
+                };
+            };
+        };
+    };
     ingest: {
         parameters: {
             query?: never;
@@ -24334,6 +25298,30 @@ export interface operations {
             };
         };
     };
+    agree: {
+        parameters: {
+            query?: {
+                studentId?: number;
+            };
+            header?: never;
+            path: {
+                surveyId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseVoid"];
+                };
+            };
+        };
+    };
     signupStudent: {
         parameters: {
             query?: never;
@@ -24430,7 +25418,7 @@ export interface operations {
             };
         };
     };
-    agree: {
+    agree_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -25242,6 +26230,58 @@ export interface operations {
             };
         };
     };
+    assignTargets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                surveyId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TargetRequest"];
+            };
+        };
+        responses: {
+            /** @description 이번에 새로 발송된 수 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseSentCount"];
+                };
+            };
+        };
+    };
+    duplicate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                surveyId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SurveyTitle"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseAdminSurveySummary"];
+                };
+            };
+        };
+    };
     search: {
         parameters: {
             query: {
@@ -25253,6 +26293,7 @@ export interface operations {
                 status?: "ENROLLED" | "LEAVE" | "WITHDRAWN" | "EXPELLED" | "GRADUATED";
                 classId?: number;
                 teacherId?: number;
+                seatCd?: string;
                 schoolName?: string;
                 admittedFrom?: string;
                 admittedTo?: string;
@@ -25353,6 +26394,54 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseStatusChangeResponse"];
+                };
+            };
+        };
+    };
+    memos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enrollmentId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListStudentMemoView"];
+                };
+            };
+        };
+    };
+    addMemo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enrollmentId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudentMemoRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseStudentMemoView"];
                 };
             };
         };
@@ -26636,6 +27725,55 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponsePaymentRequestResponse"];
+                };
+            };
+        };
+    };
+    records: {
+        parameters: {
+            query?: {
+                academyId?: number;
+                date?: string;
+                round?: number;
+                studyAreaId?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListPatrolRow"];
+                };
+            };
+        };
+    };
+    record: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatrolRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListPatrolRow"];
                 };
             };
         };
@@ -29113,7 +30251,7 @@ export interface operations {
             };
         };
     };
-    memos: {
+    memos_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -29135,7 +30273,7 @@ export interface operations {
             };
         };
     };
-    addMemo: {
+    addMemo_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -29535,6 +30673,32 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseStaffRow"];
+                };
+            };
+        };
+    };
+    edit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attendanceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EditRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseRecordRow"];
                 };
             };
         };
@@ -32005,6 +33169,7 @@ export interface operations {
                 status?: "ENROLLED" | "LEAVE" | "WITHDRAWN" | "EXPELLED" | "GRADUATED";
                 classId?: number;
                 teacherId?: number;
+                seatCd?: string;
                 schoolName?: string;
                 admittedFrom?: string;
                 admittedTo?: string;
@@ -32254,6 +33419,101 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseListAttendanceRow"];
+                };
+            };
+        };
+    };
+    records_1: {
+        parameters: {
+            query: {
+                academyId?: number;
+                enrollmentId?: number;
+                from: string;
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseRecordPage"];
+                };
+            };
+        };
+    };
+    edits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attendanceId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListEditRow"];
+                };
+            };
+        };
+    };
+    editHistory: {
+        parameters: {
+            query: {
+                academyId?: number;
+                from: string;
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListEditRow"];
+                };
+            };
+        };
+    };
+    search_2: {
+        parameters: {
+            query?: {
+                /** @description 비우면 최근 2주 */
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListCheckView"];
                 };
             };
         };
@@ -32599,6 +33859,26 @@ export interface operations {
             };
         };
     };
+    marks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListMarkView"];
+                };
+            };
+        };
+    };
     inReview: {
         parameters: {
             query?: never;
@@ -32619,7 +33899,7 @@ export interface operations {
             };
         };
     };
-    search_2: {
+    search_3: {
         parameters: {
             query: {
                 academyId?: number;
@@ -32940,7 +34220,7 @@ export interface operations {
             };
         };
     };
-    search_3: {
+    search_4: {
         parameters: {
             query?: {
                 academyId?: number;
@@ -33029,6 +34309,50 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseFileUrl"];
+                };
+            };
+        };
+    };
+    list_23: {
+        parameters: {
+            query: {
+                academyId?: number;
+                from: string;
+                to: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListDoorRequestRow"];
+                };
+            };
+        };
+    };
+    results_2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListDoorRequestResultView"];
                 };
             };
         };
@@ -33122,7 +34446,7 @@ export interface operations {
             };
         };
     };
-    list_23: {
+    list_24: {
         parameters: {
             query?: never;
             header?: never;
@@ -33248,7 +34572,7 @@ export interface operations {
             };
         };
     };
-    search_4: {
+    search_5: {
         parameters: {
             query: {
                 /** @description 비우면 내 지점. 전 지점 권한자가 비우면 전 지점이다 */
@@ -33450,7 +34774,7 @@ export interface operations {
             };
         };
     };
-    list_24: {
+    list_25: {
         parameters: {
             query: {
                 academyId?: number;
@@ -33473,7 +34797,7 @@ export interface operations {
             };
         };
     };
-    list_25: {
+    list_26: {
         parameters: {
             query?: never;
             header?: never;
@@ -33562,7 +34886,7 @@ export interface operations {
             };
         };
     };
-    search_5: {
+    search_6: {
         parameters: {
             query: {
                 /** @description 비우면 내 지점. 전 지점 권한자는 지정해야 한다 */
@@ -33641,7 +34965,7 @@ export interface operations {
             };
         };
     };
-    list_26: {
+    list_27: {
         parameters: {
             query: {
                 year: number;
@@ -33735,7 +35059,7 @@ export interface operations {
             };
         };
     };
-    list_27: {
+    list_28: {
         parameters: {
             query?: {
                 /** @description 비활성 지점 포함. 기본은 활성만 — 셀렉트에 죽은 지점이 뜨면 안 된다 */
@@ -33937,6 +35261,28 @@ export interface operations {
             };
         };
     };
+    deleteMemo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                memoId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseVoid"];
+                };
+            };
+        };
+    };
     retire: {
         parameters: {
             query?: never;
@@ -34043,6 +35389,31 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseVoid"];
+                };
+            };
+        };
+    };
+    clearRound: {
+        parameters: {
+            query?: {
+                academyId?: number;
+                date?: string;
+            };
+            header?: never;
+            path: {
+                round: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 지운 건수 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseClearedCount"];
                 };
             };
         };
@@ -34334,7 +35705,7 @@ export interface operations {
             };
         };
     };
-    deleteMemo: {
+    deleteMemo_1: {
         parameters: {
             query?: never;
             header?: never;

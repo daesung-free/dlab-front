@@ -19,6 +19,7 @@ import { useAuth } from '../../auth/AuthContext'
 import { listTeachers, type TeacherRow } from '../../api/accounts'
 import { ApiError } from '../../api/client'
 import { formatPhone } from '../../lib/mask'
+import { listStudentMemos, addStudentMemo, deleteStudentMemo, type StudentMemo } from '../../api/studentMemos'
 import { issueAppTemporaryPassword, unlockAppAccount } from '../../api/accounts'
 import {
   grantScholarship,
@@ -387,6 +388,17 @@ function Content() {
    *   손대지 않은 칸까지 건드리게 된다.
    * ★ 재원 상태는 여기서 안 바꾼다. 사유를 받고 이력을 남기는 '상태 변경' 이 따로 있다.
    */
+  /* 학생 메모. **상담 일지와 다르다** — 그쪽은 면담 한 건이 양식과 함께 남고, 이쪽은
+     그때그때 적어 두는 것이다. 섞으면 상담 통계가 틀린다 */
+  const [memo, setMemo] = useState<{
+    items: StudentMemo[] | null
+    draft: string
+    busy: boolean
+    err: string | null
+    /** 지우기 전에 한 번 묻는다 — 되돌릴 수 없다 */
+    asking: StudentMemo | null
+  }>({ items: null, draft: '', busy: false, err: null, asking: null })
+
   const [infoEdit, setInfoEdit] = useState<{
     row: Student
     loaded: Student | null
@@ -541,6 +553,30 @@ function Content() {
     }
   }
 
+  async function submitMemo() {
+    const id = infoEdit?.row.enrollmentId
+    const text = memo.draft.trim()
+    if (id === undefined || text === '') return
+    setMemo((c) => ({ ...c, busy: true, err: null }))
+    try {
+      const saved = await addStudentMemo(id, text)
+      /* 맨 위에 쌓는다 — 최근 것을 먼저 읽는다 */
+      setMemo((c) => ({ ...c, items: [saved, ...(c.items ?? [])], draft: '', busy: false }))
+    } catch (e) {
+      setMemo((c) => ({ ...c, busy: false, err: e instanceof ApiError ? e.message : '메모를 저장하지 못했습니다.' }))
+    }
+  }
+
+  async function removeMemo(m: StudentMemo) {
+    setMemo((c) => ({ ...c, busy: true, err: null }))
+    try {
+      await deleteStudentMemo(m.id)
+      setMemo((c) => ({ ...c, items: (c.items ?? []).filter((x) => x.id !== m.id), busy: false, asking: null }))
+    } catch (e) {
+      setMemo((c) => ({ ...c, busy: false, err: e instanceof ApiError ? e.message : '메모를 지우지 못했습니다.' }))
+    }
+  }
+
   function openInfo(r: Student) {
     setInfoErr(null)
     setInfoDone(null)
@@ -550,6 +586,10 @@ function Content() {
       .then((items) => setScholar((c) => ({ ...c, items })))
       .catch(() => setScholar((c) => ({ ...c, items: [] })))
     setHr({ open: false, teachers: null, teacherId: '', reason: '', busy: false, err: null })
+    setMemo({ items: null, draft: '', busy: false, err: null, asking: null })
+    void listStudentMemos(r.enrollmentId)
+      .then((items) => setMemo((c) => ({ ...c, items })))
+      .catch(() => setMemo((c) => ({ ...c, items: [] })))
     setInfoEdit({ row: r, loaded: null, form: emptyInfo() })
     void getStudent(r.enrollmentId)
       .then((d) => setInfoEdit((cur) => (cur && cur.row.enrollmentId === r.enrollmentId ? { ...cur, loaded: d, form: infoOf(d) } : cur)))
@@ -1131,6 +1171,68 @@ function Content() {
                   {acct.err && <div className="hint" style={{ color: 'var(--red)' }}>{acct.err}</div>}
                 </div>
               </div>
+
+              {/* ★ 상담 일지와 다르다 — 그쪽은 면담 한 건이 양식과 함께 남고, 이쪽은 그때그때
+                     적어 두는 것이다. 섞어 쓰면 상담 통계가 틀린다.
+                  ★ **고치는 길은 두지 않는다.** 서버에 수정 경로가 없고, 메모는 「그때 그 사람이
+                     그렇게 적었다」가 값이라 고치면 그게 사라진다. */}
+              <div className="frow">
+                <label>메모</label>
+                <div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <input
+                      className="inp"
+                      value={memo.draft}
+                      maxLength={500}
+                      placeholder="예) 어머니 연락처 변경 요청 (10/13)"
+                      onChange={(e) => setMemo((c) => ({ ...c, draft: e.target.value }))}
+                    />
+                    <button
+                      type="button"
+                      className="btn"
+                      disabled={memo.busy || memo.draft.trim() === ''}
+                      onClick={() => void submitMemo()}
+                    >
+                      추가
+                    </button>
+                  </div>
+                  <div className="hint">적은 뒤에는 고칠 수 없습니다. 지우고 다시 적습니다.</div>
+
+                  {memo.items === null && <div className="hint">불러오는 중…</div>}
+                  {memo.items !== null && memo.items.length === 0 && <div className="hint">남긴 메모가 없습니다.</div>}
+                  {(memo.items ?? []).map((m) => (
+                    <div
+                      key={m.id}
+                      style={{
+                        display: 'flex',
+                        gap: 8,
+                        alignItems: 'baseline',
+                        padding: '6px 0',
+                        borderTop: '1px solid var(--line)',
+                      }}
+                    >
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13 }}>{m.content}</div>
+                        <div style={{ fontSize: 11.5, color: 'var(--muted)' }}>
+                          {/* ★ 작성자가 비면 사람이 아니다(배치·시스템). '-' 로 뭉개면 누가 썼는지
+                                 모르는 메모와 구분이 안 된다 */}
+                          {m.writerName?.trim() || '시스템'} · {m.createdAt?.slice(0, 16).replace('T', ' ')}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{ padding: '2px 8px', fontSize: 11.5 }}
+                        disabled={memo.busy}
+                        onClick={() => setMemo((c) => ({ ...c, asking: m }))}
+                      >
+                        삭제
+                      </button>
+                    </div>
+                  ))}
+                  {memo.err && <div className="hint" style={{ color: 'var(--red)' }}>{memo.err}</div>}
+                </div>
+              </div>
             </>
           )}
         </Modal>
@@ -1323,6 +1425,24 @@ function Content() {
               </table>
             </div>
           )}
+        </Modal>
+      )}
+
+      {/* ★ 되돌릴 수 없다 — 지우기 전에 **무엇이 사라지는지** 그대로 보여준다 */}
+      {memo.asking && (
+        <Modal
+          title="메모를 지웁니다"
+          confirmLabel="삭제"
+          danger
+          busy={memo.busy}
+          error={memo.err}
+          onConfirm={() => void removeMemo(memo.asking!)}
+          onClose={() => setMemo((c) => ({ ...c, asking: null, err: null }))}
+        >
+          <div className="note-box">
+            <div>{memo.asking.content}</div>
+          </div>
+          <div className="hint">되돌릴 수 없습니다.</div>
         </Modal>
       )}
     </>
