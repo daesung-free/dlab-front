@@ -223,6 +223,13 @@ function Content() {
                       {r.schoolName ?? '학교 미입력'}
                       <br />
                       {r.studentTel ?? r.parentTel ?? '연락처 미입력'} · 접수 {dateOnly(r.createdAt)}
+                      {/* ★ 만석일 때 누구를 먼저 받을지가 등원 희망일과 접수일로 갈린다(5-3) */}
+                      {formatYmd(r.admissionDate ?? null) && (
+                        <>
+                          <br />
+                          등원 희망 <b>{formatYmd(r.admissionDate ?? null)}</b>
+                        </>
+                      )}
                     </div>
                     {r.rsvCd && (
                       <div className="auto-note">

@@ -64,6 +64,16 @@ export interface ConsultStatusRow {
   overdueDays: number
   neverConsulted: boolean
   profileWritten: boolean | null
+  /** 등원일 (yyyy-MM-dd) */
+  admissionDate?: string | null
+  /**
+   * 등원 후 지난 날수. **서버가 센다** — 화면이 `new Date()` 로 세면 브라우저 시간대에
+   * 따라 경계에서 하루가 어긋난다(지점마다 시계가 다를 수 있다).
+   *
+   * ★ 초도 상담은 **등원 1주일 이내**가 기준이다(디랩 피드백 5-9) — 7일이 지났는데
+   *   `neverConsulted` 면 눈에 띄게 표시한다.
+   */
+  daysSinceAdmission?: number | null
 }
 
 export interface ConsultWrite {
