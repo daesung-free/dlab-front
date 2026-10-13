@@ -212,12 +212,14 @@ function EnrollForm() {
   }, [next.areaId])
 
   /** 등록된 학생을 다시 읽어 **반 배정으로 받은 학번**을 화면에 올린다 */
-  const reloadStudent = useCallback(async (enrollmentId: number) => {
+  const reloadStudent = useCallback(async (enrollmentId: number): Promise<Student | null> => {
     try {
       const fresh = await getStudent(enrollmentId)
       setResult((r) => (r?.kind === 'admitted' ? { kind: 'admitted', student: fresh } : r))
+      return fresh
     } catch {
       /* 다시 읽기에 실패해도 배정 자체는 됐다 — 조용히 넘긴다 */
+      return null
     }
   }, [])
 
@@ -226,9 +228,21 @@ function EnrollForm() {
     setNext((n) => ({ ...n, busy: 'class', err: null }))
     try {
       await assignStudentToClass(Number(next.classId), student.enrollmentId)
-      await reloadStudent(student.enrollmentId)
+      const fresh = await reloadStudent(student.enrollmentId)
       const name = classes.find((c) => String(c.id) === next.classId)?.name ?? '반'
-      setNext((n) => ({ ...n, busy: null, done: [...n.done, `${name} 배정 — 학번이 매겨졌습니다`] }))
+      /* ★ **된 일만 적는다.** 「학번이 매겨졌습니다」로 단정하면, 서버가 아직 안 매기는
+         동안 화면이 **없는 번호를 있다고 말하는** 셈이다 — 담당자는 학번이 생긴 줄 알고
+         넘어가고, 나중에 빈 칸을 보고 「등록이 잘못됐나」로 되돌아온다 */
+      setNext((n) => ({
+        ...n,
+        busy: null,
+        done: [
+          ...n.done,
+          fresh?.studentNo
+            ? `${name} 배정 — 학번 ${fresh.studentNo}`
+            : `${name} 배정 — 학번은 아직 매겨지지 않았습니다`,
+        ],
+      }))
     } catch (e) {
       setNext((n) => ({ ...n, busy: null, err: e instanceof ApiError ? e.message : '반 배정에 실패했습니다.' }))
     }
