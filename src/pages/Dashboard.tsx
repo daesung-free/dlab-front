@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAcademy } from '../auth/AcademyContext'
 import { useServerData } from '../components/common'
 import { getStatistics } from '../api/statistics'
+import { listReservations } from '../api/admissions'
 import { getDisplayName, getLoginId } from '../api/tokens'
 import { useAuth } from '../auth/AuthContext'
 import { hasMenuCode } from '../data/menuCodes'
@@ -109,6 +110,23 @@ export function Dashboard() {
      ★ 집계(`todo`)에서 받는다. 승인 목록(`/approvals/board`)을 따로 부르면 **담임은 403** 이라
         그 계정에서만 '-' 가 됐다. 집계는 담임도 자기 범위로 받는다. */
 
+  /* 디랩 피드백 5-1 — 지점 **전체 재원생 현황**. 집계가 재원 인원만 주므로
+     대기 인원은 입학예약에서 센다(아직 원생 전환 전인 건) */
+  const waitParams = useMemo(() => ({ year: new Date().getFullYear() }), [])
+  const reservations = useServerData({
+    fetcher: listReservations,
+    params: waitParams,
+    enabled: canStats,
+    errorMessage: '대기 인원을 불러오지 못했습니다.',
+  })
+  const waiting = useMemo(() => {
+    const rows = reservations.data ?? []
+    /* ★ 지점을 고른 상태면 그 지점만 센다 — 목록 API 가 지점을 안 받아 화면에서 거른다 */
+    const mine = academyId === null ? rows : rows.filter((r) => r.academyId === null || r.academyId === academyId)
+    /* ★ 전환이 끝났거나 취소·미등록인 건은 대기가 아니다 */
+    return mine.filter((r) => !r.converted && r.status !== 'CANCELED' && r.status !== 'NOT_REGISTERED').length
+  }, [reservations.data, academyId])
+
   const st = stats.data
   const by = st?.attendance.byStatus ?? {}
   /* ★ 집계 전과 0을 구분한다. attendanceRate 가 null 이면 아직 안 잡힌 날이라
@@ -199,6 +217,46 @@ export function Dashboard() {
         </div>
       )}
       {/* 집계 메뉴가 없는 계정에는 0 을 그리지 않는다 — 실제 0 과 구분이 안 된다 */}
+      {/* 디랩 피드백 5-1 — 지점 전체 재원생 현황. 출결 줄과 축이 다르다(그쪽은 오늘 하루다) */}
+      {(canStats || allowedMenus === null) && stats.errorCode !== 'FORBIDDEN' && (
+      <div className="att-strip">
+        <div className="att-cell lead">
+          <div className="l">
+            <Icon name="users" size={13} /> 현재 등록 인원
+          </div>
+          <div className="v">{enrolled}</div>
+          <div className="d">재원 상태</div>
+        </div>
+        <div className="att-cell">
+          <div className="l">
+            <Icon name="list-ordered" size={13} /> 대기 인원
+          </div>
+          <div className="v">{reservations.data === null ? '—' : waiting}</div>
+          <div className="d">
+            <Link to="/s/waitlist">입학 예약 →</Link>
+          </div>
+        </div>
+        <div className="att-cell">
+          <div className="l">
+            <Icon name="calendar-clock" size={13} /> 등원 예정
+          </div>
+          <div className="v">
+            <Unfilled reason="등원일이 미래인 학생 수를 집계가 주지 않는다" />
+          </div>
+          <div className="d">명</div>
+        </div>
+        <div className="att-cell">
+          <div className="l">
+            <Icon name="user-plus" size={13} /> 당일 신규생
+          </div>
+          <div className="v">
+            <Unfilled reason="오늘 등록된 학생 수를 집계가 주지 않는다" />
+          </div>
+          <div className="d">명</div>
+        </div>
+      </div>
+      )}
+
       {(canStats || allowedMenus === null) && stats.errorCode !== 'FORBIDDEN' && (
       <div className="att-strip">
         <div className="att-cell lead">
