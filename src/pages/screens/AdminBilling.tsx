@@ -1149,7 +1149,6 @@ export const adminBillingMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled data-soon title="준비 중입니다">기수 선택 ▾</button>
       <button className="btn" onClick={() => copySignal.bump()} title="작년 청구 기준을 올해로 옮깁니다. 같은 코드는 건너뜁니다">
         <Icon name="history" size={14} /> 전년도 기준 복사
       </button>

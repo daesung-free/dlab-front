@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { StudentList, type StudentRow } from '../../components/StudentList'
-import { MaskToggle, useMaskDefault } from '../../components/common'
+import { ExcelButton, MaskToggle, useMaskDefault, type Column } from '../../components/common'
 import { maskValue } from '../../lib/mask'
 import { StudentHeader } from '../../components/StudentHeader'
 import { Tabs } from '../../components/Tabs'
@@ -67,6 +67,31 @@ const DETAIL_TABS = [
 function today(): string {
   return todayStr()
 }
+
+/* 디랩 피드백 5-9 — 전체 학생 상담기록 내려받기.
+   요청 항목 그대로다: 등원일 · 반 · 이름 · 담임 · 최근 상담 · 상담 예정.
+   ★ 서버 내보내기가 없어 **화면이 들고 있는 목록**으로 만든다 — 그래서 **지금 걸린 조건
+     그대로** 나간다(반·담임·이름으로 좁혀 놓으면 그 범위만 받는다). 전체가 필요하면
+     조건을 비우고 누르면 된다. */
+const EXPORT_COLUMNS: Column<ConsultStatusRow>[] = [
+  { key: 'admissionDate', header: '등원일', value: (r) => r.admissionDate ?? '-' },
+  { key: 'className', header: '반', value: (r) => r.className ?? '반 미배정' },
+  { key: 'studentNo', header: '학번', value: (r) => r.studentNo ?? '-' },
+  { key: 'name', header: '이름', mask: 'name', value: (r) => r.name },
+  { key: 'homeroomTeacherName', header: '담임', value: (r) => r.homeroomTeacherName ?? '미지정' },
+  { key: 'lastConsultedAt', header: '최근 상담', value: (r) => r.lastConsultedAt ?? '없음' },
+  { key: 'nextDueDate', header: '상담 예정', value: (r) => r.nextDueDate ?? '-' },
+  {
+    key: 'overdue',
+    header: '비고',
+    value: (r) =>
+      r.neverConsulted
+        ? `초도 미상담 ${r.daysSinceAdmission ?? '-'}일 경과`
+        : r.overdueDays > 0
+          ? `예정일 ${r.overdueDays}일 경과`
+          : '',
+  },
+]
 
 /** 좌측 목록 행의 이름만 가린다 — meta(반·학번)는 개인 식별이 아니라 그대로 둔다 */
 function withMask(r: StudentRow, masked: boolean): StudentRow {
@@ -278,7 +303,18 @@ function Content() {
         <StudentList
           title="재원생"
           count={`${filtered.length}명`}
-          right={<MaskToggle masked={masked} onChange={setMasked} />}
+          right={
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <ExcelButton
+                filename={`상담현황_${todayStr()}`}
+                columns={EXPORT_COLUMNS}
+                rows={filtered}
+                masked={masked}
+                label="내려받기"
+              />
+              <MaskToggle masked={masked} onChange={setMasked} />
+            </div>
+          }
           filters={[...FILTERS]}
           filter={filter}
           onFilterChange={(f) => setFilter(f as Filter)}

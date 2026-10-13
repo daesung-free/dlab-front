@@ -1374,7 +1374,6 @@ export const basicSettingsMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled data-soon title="준비 중입니다">기수 선택 ▾</button>
       {/* 본문의 '전년도 복사' 와 같은 일이다 — 기초 데이터 전체를 한 번에 넘긴다 */}
       <button className="btn" onClick={() => copyAsk.bump()} title="과정·학과·반·교육과정 등 기초 데이터를 작년에서 올해로 한 번에 복사합니다">
         <Icon name="history" size={14} /> 전체 전년도 복사
