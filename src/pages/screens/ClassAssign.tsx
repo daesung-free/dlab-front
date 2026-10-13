@@ -4,6 +4,7 @@ import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
 import {
   assignHomeroom,
+  setExamClassNo,
   assignStudentsToClass,
   createClass,
   deleteClass,
@@ -76,10 +77,11 @@ function Content() {
   /* 반 관리(이름·정원·담임·삭제). 반 카드를 누르면 열린다 —
      **담임을 붙일 자리가 없어 사유 승인·상담·반 공지가 통째로 막혀 있었다**(2026-09-27 실테스트) */
   const [editing, setEditing] = useState<ClassGroup | null>(null)
-  const [form, setForm] = useState<{ name: string; capacity: string; teacherId: string }>({
+  const [form, setForm] = useState<{ name: string; capacity: string; teacherId: string; examNo: string }>({
     name: '',
     capacity: '',
     teacherId: '',
+    examNo: '',
   })
   const [teachers, setTeachers] = useState<TeacherRow[]>([])
   const [editBusy, setEditBusy] = useState(false)
@@ -134,6 +136,7 @@ function Content() {
       name: c.name,
       capacity: c.capacity === null ? '' : String(c.capacity),
       teacherId: c.homeroomTeacherId === null ? '' : String(c.homeroomTeacherId),
+      examNo: c.examClassNo == null ? '' : String(c.examClassNo),
     })
     setEditErr(null)
   }
@@ -148,6 +151,13 @@ function Content() {
    */
   async function saveEdit() {
     if (editing === null) return
+    /* ★ **10의 배수는 못 쓴다** — `10|01` 이 `1|001`(1반 1번)과 겹친다. 20·30도 같다.
+          서버도 막지만 여기서 먼저 걸러 이유를 말해 준다 */
+    const examNum = form.examNo.trim() === '' ? null : Number(form.examNo)
+    if (examNum !== null && (!Number.isInteger(examNum) || examNum < 1 || examNum % 10 === 0)) {
+      setEditErr('모의고사 반 번호는 1 이상이고 10의 배수가 아니어야 합니다 — 10·20·30은 1반·2반·3반과 번호가 겹칩니다.')
+      return
+    }
     setEditBusy(true)
     setEditErr(null)
     const done: string[] = []
@@ -163,6 +173,15 @@ function Content() {
         })
         done.push('반 정보를 고쳤습니다')
       }
+      /* ★ 수험번호는 **별도 호출**이다. 이름·정원과 한 본문에 두면 이름만 고치려다
+            수험번호 축을 건드린다 — 서버도 그래서 분리해 뒀다 */
+      const examNow = editing.examClassNo == null ? '' : String(editing.examClassNo)
+      if (form.examNo.trim() !== examNow) {
+        const next = form.examNo.trim() === '' ? null : Number(form.examNo)
+        await setExamClassNo(editing.id, next)
+        done.push(next === null ? '모의고사 반 번호를 지웠습니다' : `모의고사 반 번호를 ${next} 로 정했습니다`)
+      }
+
       const teacherNow = editing.homeroomTeacherId === null ? '' : String(editing.homeroomTeacherId)
       if (form.teacherId !== '' && form.teacherId !== teacherNow) {
         await assignHomeroom(editing.id, Number(form.teacherId))
@@ -316,6 +335,27 @@ function Content() {
               />
               {/* 비우면 '정원 없는 반' 이다 — 0 명이 아니다 */}
               <div className="hint">비워 두면 정원 없는 반이 됩니다.</div>
+            </div>
+          </div>
+          <div className="frow">
+            <label>모의고사 반 번호</label>
+            <div>
+              <input
+                className="inp"
+                type="number"
+                min={1}
+                placeholder="예: 1, 11 (비우면 채번 안 함)"
+                value={form.examNo}
+                onChange={(e) => setForm({ ...form, examNo: e.target.value })}
+              />
+              <div className="hint">
+                성적 파일의 수험번호를 만드는 번호입니다. <b>비워 두면 그 반 학생은 수험번호가 매겨지지
+                않아</b> 성적이 이름으로만 맞춰집니다. <b>10·20·30처럼 10의 배수는 쓸 수 없습니다</b> —
+                1반·2반·3반과 번호가 겹칩니다.
+              </div>
+              <div className="hint">
+                이미 번호를 받은 학생은 <b>바뀌지 않습니다.</b> 다음에 배정되는 학생부터 적용됩니다.
+              </div>
             </div>
           </div>
           <div className="frow">

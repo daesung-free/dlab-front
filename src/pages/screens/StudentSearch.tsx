@@ -169,7 +169,6 @@ function one(v: unknown): string | undefined {
 
 const INFO_KEYS = [
   'name',
-  'englishName',
   'phone',
   'birthDate',
   'gender',
@@ -183,7 +182,6 @@ type InfoKey = (typeof INFO_KEYS)[number]
 
 const INFO_FIELDS: { key: InfoKey; label: string; max?: number; placeholder?: string; hint?: string }[] = [
   { key: 'name', label: '이름', max: 30 },
-  { key: 'englishName', label: '영문명', max: 60, placeholder: 'Hong Gildong' },
   { key: 'phone', label: '연락처', max: 20, placeholder: '010-0000-0000' },
   { key: 'birthDate', label: '생년월일' },
   { key: 'gender', label: '성별' },
@@ -197,7 +195,6 @@ const INFO_FIELDS: { key: InfoKey; label: string; max?: number; placeholder?: st
 function emptyInfo(): Record<InfoKey, string> {
   return {
     name: '',
-    englishName: '',
     phone: '',
     birthDate: '',
     gender: '',
@@ -212,7 +209,6 @@ function emptyInfo(): Record<InfoKey, string> {
 function infoOf(s: Student): Record<InfoKey, string> {
   return {
     name: s.name ?? '',
-    englishName: s.englishName ?? '',
     phone: s.phone ?? '',
     birthDate: s.birthDate ?? '',
     gender: s.gender ?? '',
@@ -716,6 +712,14 @@ function Content() {
       await changeStudentStatus(row.enrollmentId, next, reason.trim())
       table.reload()
       setStatusEdit(null)
+      /* ★ 상태를 바꾸면 그 학생이 **목록에서 사라진다** — 이 화면 기본 조건이 「재원」이라서다.
+            디랩이 「재원생을 퇴원으로 바꾼 뒤 퇴원생 조회가 되지 않는다」고 적은 것이 이것이다
+            (조회 자체는 된다 — 조건을 안 바꾸면 안 보일 뿐이다). 어디로 갔는지 말해 준다. */
+      if (next !== 'ENROLLED') {
+        setInfoDone(
+          `${row.name} 학생을 ${STATUS_LABEL[next] ?? next} 으로 바꿨습니다. 이 목록은 「재원」만 보여주므로 위 상태를 「${STATUS_LABEL[next] ?? next}」 으로 바꾸면 보입니다.`,
+        )
+      }
     } catch (err) {
       /* 모달을 닫지 않는다 — 사유를 다시 쓰게 하면 안 된다 */
       setStatusErr(err instanceof ApiError ? err.message : '상태를 바꾸지 못했습니다.')

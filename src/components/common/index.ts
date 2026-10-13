@@ -22,6 +22,10 @@ export type { DateRangeValue } from './DateRange'
 
 export { ExcelButton, CopyButton, PrintButton, MaskToggle } from './ExcelButton'
 
+/* 마스킹 **기본값**은 역할에 따라 다르다 — 담임은 가린 채로, 관리자는 푼 채로 시작한다.
+   어느 쪽이든 화면에서 켜고 끌 수 있어야 한다(디랩 2026-10-13 회신). */
+export { useMaskDefault } from './useMaskDefault'
+
 /* 아직 API가 값을 주지 않는 셀. 컬럼을 지우는 대신 이걸 쓴다 */
 export { Unfilled } from './Unfilled'
 

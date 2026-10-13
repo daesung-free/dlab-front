@@ -685,11 +685,13 @@ function SeatBox({
       type="button"
       className={`rr-seat st-${seat.state}${selected === seat.seatId ? ' sel' : ''}`}
       onClick={() => onSelect(seat.seatId)}
-      title={`${seat.seatCd} · ${STATE_META[seat.state].label}${seat.studentName ? ` · ${seat.studentName}` : ''}`}
+      title={`${seat.seatCd} · ${STATE_META[seat.state].label}${seat.studentName ? ` · ${seat.studentName}${seat.studentNo ? ` (${seat.studentNo})` : ''}` : ''}`}
     >
       {seat.state === 'in' && <span className="live" />}
       <span className="sc">{seat.seatCd}</span>
       <span className="sn">{name}</span>
+      {/* ★ 배치도에서 학번이 보여야 성적·수납 화면과 눈으로 맞출 수 있다(디랩 5-6) */}
+      {seat.studentNo && <span className="sno">{seat.studentNo}</span>}
     </button>
   )
 }

@@ -66,7 +66,7 @@ import '../../styles/forms.css'
  *     두 번째 경로가 된다(api/studentSignups.ts 머리 주석).
  *
  * ★ 서버에 넣을 곳이 없는 폼 값 — docs/API_GAPS.md
- *   영문명 · 학부모 연락처 · 졸업연도 · 장학 · 좌석 · 사물함.
+ *   학부모 연락처 · 졸업연도 · 장학 · 좌석 · 사물함. (영문명은 2026-10-13 디랩 요청으로 뺐다)
  *   반 배정·좌석·사물함·장학은 각자 전용 API가 있으므로 해당 화면에서 처리한다. */
 
 const GRADES: GradeType[] = ['HIGH3', 'N_SU', 'HIGH2']
@@ -79,7 +79,6 @@ interface FormState {
   gender: string
   address: string
   schoolName: string
-  englishName: string
   graduationYear: string
   admissionDate: string
   year: string
@@ -94,7 +93,6 @@ const EMPTY: FormState = {
   gender: '',
   address: '',
   schoolName: '',
-  englishName: '',
   graduationYear: '',
   admissionDate: '',
   year: String(new Date().getFullYear()),
@@ -160,7 +158,6 @@ function EnrollForm() {
         gender: form.gender || undefined,
         schoolName: form.schoolName.trim() || undefined,
         address: form.address.trim() || undefined,
-        englishName: form.englishName.trim() || undefined,
         graduationYear: form.graduationYear ? Number(form.graduationYear) : undefined,
         admissionDate: form.admissionDate || undefined,
       })
@@ -245,13 +242,6 @@ function EnrollForm() {
                   value={form.name}
                   onChange={(e) => set('name', e.target.value)}
                   maxLength={20}
-                />
-                <input
-                  className="inp"
-                  placeholder="영문명 (예: Hong Gildong)"
-                  value={form.englishName}
-                  onChange={(e) => set('englishName', e.target.value)}
-                  maxLength={60}
                 />
               </div>
             </div>
