@@ -31,19 +31,40 @@ import './reading-room.css'
  *   합쳐 준다). 이쪽은 **사감이 눈으로 보고 찍는다** — 출처가 사람이라 축이 다르다.
  */
 
-/** 요구사항 29쪽의 상태 10종 그대로 */
-const MARKS = [
-  { key: 'none', label: '기본', color: 'var(--line)' },
-  { key: 'sleep', label: '졸음', color: 'var(--amber)' },
-  { key: 'out', label: '외출', color: 'var(--blue)' },
-  { key: 'early', label: '조퇴', color: 'var(--muted)' },
-  { key: 'class', label: '강의실', color: 'var(--mint-d)' },
-  { key: 'toilet', label: '화장실', color: 'var(--blue)' },
-  { key: 'common', label: '공용공간', color: 'var(--blue)' },
-  { key: 'subject', label: '교과실', color: 'var(--mint-d)' },
-  { key: 'qna', label: '질답', color: 'var(--purple, #6C5CE0)' },
-  { key: 'consult', label: '상담', color: 'var(--purple, #6C5CE0)' },
+/* 요구사항 29쪽의 상태 10종 그대로. **묶어서 같은 색을 준다** —
+ * 색이 흩어져 있으면 「강의실과 교과실이 같은 초록인데 떨어져 있어」처럼 읽힌다.
+ *
+ * ★ 묶는 기준은 **사감이 그 자리에서 할 일**이다.
+ *   · 주의     자리에 있는데 깨워야 한다
+ *   · 원내 사유 자리에 없지만 어디 있는지 알고, 돌아온다
+ *   · 잠시 비움 자리에 없고 곧 돌아온다 — 다음 회차에 확인하면 된다
+ *   · 원 밖     오늘 그 자리에 없다 — 찾을 일이 아니다
+ */
+const MARK_GROUPS = [
+  { key: 'warn', label: '주의', color: 'var(--amber)' },
+  { key: 'inside', label: '원내 · 사유 있음', color: 'var(--mint-d)' },
+  { key: 'brief', label: '잠시 비움', color: 'var(--blue)' },
+  { key: 'outside', label: '원 밖', color: 'var(--muted)' },
 ] as const
+
+const MARKS = [
+  { key: 'none', label: '기본', group: 'warn' },
+  { key: 'sleep', label: '졸음', group: 'warn' },
+  { key: 'class', label: '강의실', group: 'inside' },
+  { key: 'subject', label: '교과실', group: 'inside' },
+  { key: 'qna', label: '질답', group: 'inside' },
+  { key: 'consult', label: '상담', group: 'inside' },
+  { key: 'toilet', label: '화장실', group: 'brief' },
+  { key: 'common', label: '공용공간', group: 'brief' },
+  { key: 'out', label: '외출', group: 'outside' },
+  { key: 'early', label: '조퇴', group: 'outside' },
+] as const
+
+/** 상태 → 그 묶음의 색 */
+function colorOf(key: string): string {
+  const g = MARKS.find((m) => m.key === key)?.group
+  return MARK_GROUPS.find((x) => x.key === g)?.color ?? 'var(--line)'
+}
 
 type MarkKey = (typeof MARKS)[number]['key']
 
@@ -172,9 +193,9 @@ function Content() {
             className={`btn${r.mark === 'none' ? '' : ' pri'}`}
             style={{ padding: '3px 9px', fontSize: 11.5 }}
             onClick={() => tapSeat(r.seatId)}
-            title={`누르면 「${MARK_LABEL[pick]}」으로 찍습니다`}
+            title={`누르면 「${MARK_LABEL[pick]}」으로 기록합니다`}
           >
-            {r.mark === 'none' ? '찍기' : MARK_LABEL[r.mark]}
+            {r.mark === 'none' ? '기록' : MARK_LABEL[r.mark]}
           </button>
         ),
       },
@@ -189,7 +210,7 @@ function Content() {
 
       <div className="note-box">
         <div>
-          좌석을 눌러 상태를 찍습니다. <b>지금은 저장되지 않고 이 화면에서만</b> 유지됩니다 — 새로고침하면
+          좌석을 눌러 상태를 기록합니다. <b>지금은 저장되지 않고 이 화면에서만</b> 유지됩니다 — 새로고침하면
           사라집니다. 좌석 배치와 학생은 실제 값입니다.
         </div>
       </div>
@@ -211,10 +232,10 @@ function Content() {
         </div>
         <div className="stat">
           <div className="l">
-            <Icon name="check-check" size={13} /> 이번 회차 체크
+            <Icon name="check-check" size={13} /> 이번 회차 기록
           </div>
           <div className="v">{checked}</div>
-          <div className="d">찍은 좌석</div>
+          <div className="d">기록한 좌석</div>
         </div>
         <div className="stat">
           <div className="l">
@@ -280,30 +301,43 @@ function Content() {
 
           {/* ★ 팔레트에서 먼저 고르고 좌석을 누른다 — 좌석마다 모달을 열면 종이보다 느려진다 */}
           <div className="frow">
-            <label>찍을 상태</label>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {MARKS.filter((m) => m.key !== 'none').map((m) => (
-                <button
-                  key={m.key}
-                  type="button"
-                  className={`chip${pick === m.key ? ' on' : ''}`}
-                  onClick={() => setPick(m.key)}
-                >
-                  <span
-                    className="sw"
-                    style={{
-                      display: 'inline-block',
-                      width: 10,
-                      height: 10,
-                      borderRadius: 3,
-                      background: m.color,
-                      marginRight: 5,
-                      verticalAlign: -1,
-                    }}
-                  />
-                  {m.label}
-                </button>
-              ))}
+            <label>기록할 상태</label>
+            <div style={{ display: 'grid', gap: 6 }}>
+              {MARK_GROUPS.map((g) => {
+                const items = MARKS.filter((m) => m.key !== 'none' && m.group === g.key)
+                if (items.length === 0) return null
+                return (
+                  <div key={g.key} style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                    {/* 묶음 이름을 적어 색이 무엇을 뜻하는지 말한다 — 색만 같으면 "왜 같은 색이냐"가 된다 */}
+                    <span
+                      style={{ fontSize: 11, fontWeight: 700, color: g.color, width: 86, flexShrink: 0 }}
+                    >
+                      {g.label}
+                    </span>
+                    {items.map((m) => (
+                      <button
+                        key={m.key}
+                        type="button"
+                        className={`chip${pick === m.key ? ' on' : ''}`}
+                        onClick={() => setPick(m.key)}
+                      >
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            width: 10,
+                            height: 10,
+                            borderRadius: 3,
+                            background: g.color,
+                            marginRight: 5,
+                            verticalAlign: -1,
+                          }}
+                        />
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                )
+              })}
             </div>
           </div>
 
@@ -343,10 +377,10 @@ function Content() {
               )}
 
               <div className="rr-legend" style={{ marginTop: 12 }}>
-                {MARKS.filter((m) => m.key !== 'none').map((m) => (
-                  <span key={m.key}>
-                    <span className="sw" style={{ background: m.color }} />
-                    {m.label}
+                {MARK_GROUPS.map((g) => (
+                  <span key={g.key}>
+                    <span className="sw" style={{ background: g.color }} />
+                    {g.label} — {MARKS.filter((m) => m.key !== 'none' && m.group === g.key).map((m) => m.label).join(' · ')}
                   </span>
                 ))}
               </div>
@@ -375,6 +409,7 @@ function Content() {
 /** 좌석 한 칸. 누르면 고른 상태가 바로 찍힌다 */
 function PatrolSeat({ seat, mark, onTap }: { seat: Seat; mark: MarkKey; onTap: (id: number) => void }) {
   const meta = MARKS.find((m) => m.key === mark)
+  const color = colorOf(mark)
   const empty = seat.enrollmentId === null
   return (
     <button
@@ -386,13 +421,13 @@ function PatrolSeat({ seat, mark, onTap }: { seat: Seat; mark: MarkKey; onTap: (
       style={
         mark === 'none'
           ? undefined
-          : { borderColor: meta?.color, boxShadow: `inset 0 0 0 2px ${meta?.color ?? 'transparent'}` }
+          : { borderColor: color, boxShadow: `inset 0 0 0 2px ${color}` }
       }
     >
       <span className="sc">{seat.seatCd}</span>
       <span className="sn">{empty ? '공석' : (seat.studentName ?? '-')}</span>
       {mark !== 'none' && (
-        <span className="sno" style={{ color: meta?.color, fontWeight: 800 }}>
+        <span className="sno" style={{ color, fontWeight: 800 }}>
           {meta?.label}
         </span>
       )}
