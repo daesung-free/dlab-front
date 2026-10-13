@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { StudentList, type StudentRow } from '../../components/StudentList'
+import { MaskToggle, useMaskDefault } from '../../components/common'
+import { maskValue } from '../../lib/mask'
 import { StudentHeader } from '../../components/StudentHeader'
 import { AcademyExams } from '../../components/AcademyExams'
 import { Icon } from '../../components/Icon'
@@ -85,6 +87,11 @@ function numOrNull(v: string): number | null {
   return t === '' ? null : Number(t)
 }
 
+/** 좌측 목록 행의 이름만 가린다 — 반·계열은 개인 식별이 아니라 그대로 둔다 */
+function withMask(r: StudentRow, masked: boolean): StudentRow {
+  return masked ? { ...r, name: maskValue('name', r.name) } : r
+}
+
 function toRow(s: Student): StudentRow {
   return {
     id: String(s.enrollmentId),
@@ -97,6 +104,8 @@ function toRow(s: Student): StudentRow {
 }
 
 function Content() {
+  /* 담임은 가린 채로, 관리자는 푼 채로 시작한다. 어느 쪽이든 토글로 바꾼다(디랩 1013 회신) */
+  const [masked, setMasked] = useState(useMaskDefault())
   const { academyId, ready: academyReady } = useAcademy()
   const [students, setStudents] = useState<Student[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -290,8 +299,9 @@ function Content() {
         <StudentList
           title="재원생"
           count={`${students.length}명`}
+          right={<MaskToggle masked={masked} onChange={setMasked} />}
           filters={['전체']}
-          rows={students.map(toRow)}
+          rows={students.map((x) => withMask(toRow(x), masked))}
           selected={selectedId ?? undefined}
           onSelect={setSelectedId}
           loading={listLoading}
@@ -306,7 +316,7 @@ function Content() {
           )}
 
           <StudentHeader
-            name={selected?.name ?? '—'}
+            name={selected ? (masked ? maskValue('name', selected.name) : selected.name) : '—'}
             code={selected?.studentNo ?? '—'}
             sub={
               selected ? (

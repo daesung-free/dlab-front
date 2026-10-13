@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { StudentList, type StudentRow } from '../../components/StudentList'
+import { MaskToggle, useMaskDefault } from '../../components/common'
+import { maskValue } from '../../lib/mask'
 import { StudentHeader } from '../../components/StudentHeader'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
@@ -66,6 +68,11 @@ function today(): string {
   return todayStr()
 }
 
+/** 좌측 목록 행의 이름만 가린다 — meta(반·학번)는 개인 식별이 아니라 그대로 둔다 */
+function withMask(r: StudentRow, masked: boolean): StudentRow {
+  return masked ? { ...r, name: maskValue('name', r.name) } : r
+}
+
 /** 상담 현황 → 좌측 목록 행 */
 function toRow(s: ConsultStatusRow): StudentRow {
   const meta = [s.className ?? '반 미배정', s.studentNo ?? ''].filter(Boolean).join(' · ')
@@ -85,6 +92,8 @@ function toRow(s: ConsultStatusRow): StudentRow {
 }
 
 function Content() {
+  /* 담임은 가린 채로, 관리자는 푼 채로 시작한다. 어느 쪽이든 토글로 바꾼다(디랩 1013 회신) */
+  const [masked, setMasked] = useState(useMaskDefault())
   const { academyId } = useAcademy()
   const [tab, setTab] = useState('log')
   const [filter, setFilter] = useState<Filter>('전체')
@@ -246,10 +255,11 @@ function Content() {
         <StudentList
           title="재원생"
           count={`전체 ${status.length}명`}
+          right={<MaskToggle masked={masked} onChange={setMasked} />}
           filters={[...FILTERS]}
           filter={filter}
           onFilterChange={(f) => setFilter(f as Filter)}
-          rows={filtered.map(toRow)}
+          rows={filtered.map((r) => withMask(toRow(r), masked))}
           selected={selectedId ?? undefined}
           onSelect={setSelectedId}
           loading={listLoading}
@@ -264,7 +274,7 @@ function Content() {
           )}
 
           <StudentHeader
-            name={selected?.name ?? '—'}
+            name={selected ? (masked ? maskValue('name', selected.name) : selected.name) : '—'}
             code={selected?.studentNo ?? '—'}
             sub={
               selected ? (

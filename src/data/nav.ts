@@ -153,9 +153,11 @@ export const NAV: NavCat[] = [
       {
         name: '기초관리',
         items: [
-          { screenId: 'admin-basic', label: '과정 관리', tab: 'course_type', icon: 'award' },
-          { screenId: 'admin-basic', label: '학과 관리', tab: 'department', icon: 'graduation-cap' },
+          /* ★ 순서가 기초데이터와 같아야 한다 — 계열 안에 학과, 학과 안에 과정이다.
+                반대로 두면 위에서부터 채울 수 없다(디랩 피드백 1013, 5-12) */
           { screenId: 'admin-basic', label: '학과계열 관리', tab: 'track', icon: 'git-compare' },
+          { screenId: 'admin-basic', label: '학과 관리', tab: 'department', icon: 'graduation-cap' },
+          { screenId: 'admin-basic', label: '과정 관리', tab: 'course_type', icon: 'award' },
           { screenId: 'admin-basic', label: '그 외 기초 항목', tab: 'class_group', icon: 'sliders-horizontal' },
           { screenId: 'annual-events', label: '연간 행사 마스터', added: true, note: '학습계획 자동 반영' },
           {

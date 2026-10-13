@@ -80,6 +80,9 @@ import './payment.css'
  *   검색폼에 있던 '지점' 칸은 **뺐다** — 어디에도 안 쓰이는 칸이었고 값도 실재하지 않는
  *   지점(대치·평촌)이었다. 지점은 상단바에서 고른다. */
 
+/* ★ **현금은 선택지에서 뺐다**(디랩 피드백 1013, 5-10 — "현금을 받지 않습니다").
+     지난 기록에 현금 결제가 있으면 **표시는 그대로** 된다 — 라벨 맵은 건드리지 않는다.
+     새로 고를 수만 없게 하는 것이 목적이다. */
 type Method = '카드' | '가상계좌' | '현금'
 type Kind = '등록비' | '교습비' | '특강비' | '급식비'
 
@@ -135,7 +138,7 @@ const EMPTY_ISSUE: IssueDraft = {
 }
 
 const KINDS: Kind[] = ['등록비', '교습비', '특강비', '급식비']
-const METHODS: Method[] = ['카드', '가상계좌', '현금']
+const METHODS: Method[] = ['카드', '가상계좌']
 
 const FIELDS: Field[] = [
   { type: 'dateRange', name: 'period', label: '결제 기간', presets: true, span: 2 },

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import './student-list.css'
 
 export interface StudentRow {
@@ -35,6 +35,11 @@ interface Props {
   onFilterChange?: (filter: string) => void
   loading?: boolean
   emptyText?: string
+  /**
+   * 머리 오른쪽에 붙일 것(마스킹 토글 등). **옵션이다** — 안 주면 지금 모양 그대로다.
+   * 이름을 가리는 화면은 푸는 수단을 같은 자리에 둬야 한다(디랩 2026-10-13 회신).
+   */
+  right?: ReactNode
 }
 
 /** 상담·성적 시안이 공유하던 좌측 재원생 목록 패널 */
@@ -50,6 +55,7 @@ export function StudentList({
   onFilterChange,
   loading = false,
   emptyText = '학생이 없습니다.',
+  right,
 }: Props) {
   const [innerSelected, setInnerSelected] = useState(initialSelected ?? rows[0]?.id)
   const [innerFilter, setInnerFilter] = useState(filters[0])
@@ -73,6 +79,7 @@ export function StudentList({
       <div className="panel-h">
         <div className="t">{title}</div>
         <div className="c">{count}</div>
+        {right && <div style={{ marginLeft: 'auto' }}>{right}</div>}
       </div>
       <div className="filter-row">
         {filters.map((f) => (
