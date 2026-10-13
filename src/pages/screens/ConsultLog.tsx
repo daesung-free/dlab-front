@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { StudentList, type StudentRow } from '../../components/StudentList'
+import { ExcelButton, MaskToggle, useMaskDefault, type Column } from '../../components/common'
+import { maskValue } from '../../lib/mask'
 import { StudentHeader } from '../../components/StudentHeader'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
@@ -66,6 +68,36 @@ function today(): string {
   return todayStr()
 }
 
+/* 디랩 피드백 5-9 — 전체 학생 상담기록 내려받기.
+   요청 항목 그대로다: 등원일 · 반 · 이름 · 담임 · 최근 상담 · 상담 예정.
+   ★ 서버 내보내기가 없어 **화면이 들고 있는 목록**으로 만든다 — 그래서 **지금 걸린 조건
+     그대로** 나간다(반·담임·이름으로 좁혀 놓으면 그 범위만 받는다). 전체가 필요하면
+     조건을 비우고 누르면 된다. */
+const EXPORT_COLUMNS: Column<ConsultStatusRow>[] = [
+  { key: 'admissionDate', header: '등원일', value: (r) => r.admissionDate ?? '-' },
+  { key: 'className', header: '반', value: (r) => r.className ?? '반 미배정' },
+  { key: 'studentNo', header: '학번', value: (r) => r.studentNo ?? '-' },
+  { key: 'name', header: '이름', mask: 'name', value: (r) => r.name },
+  { key: 'homeroomTeacherName', header: '담임', value: (r) => r.homeroomTeacherName ?? '미지정' },
+  { key: 'lastConsultedAt', header: '최근 상담', value: (r) => r.lastConsultedAt ?? '없음' },
+  { key: 'nextDueDate', header: '상담 예정', value: (r) => r.nextDueDate ?? '-' },
+  {
+    key: 'overdue',
+    header: '비고',
+    value: (r) =>
+      r.neverConsulted
+        ? `초도 미상담 ${r.daysSinceAdmission ?? '-'}일 경과`
+        : r.overdueDays > 0
+          ? `예정일 ${r.overdueDays}일 경과`
+          : '',
+  },
+]
+
+/** 좌측 목록 행의 이름만 가린다 — meta(반·학번)는 개인 식별이 아니라 그대로 둔다 */
+function withMask(r: StudentRow, masked: boolean): StudentRow {
+  return masked ? { ...r, name: maskValue('name', r.name) } : r
+}
+
 /** 상담 현황 → 좌측 목록 행 */
 function toRow(s: ConsultStatusRow): StudentRow {
   const meta = [s.className ?? '반 미배정', s.studentNo ?? ''].filter(Boolean).join(' · ')
@@ -73,8 +105,12 @@ function toRow(s: ConsultStatusRow): StudentRow {
     id: String(s.enrollmentId),
     name: s.name,
     meta,
+    /* ★ 초도 상담은 등원 1주일 이내다. 7일이 지난 미상담은 **다른 말로** 띄운다 —
+          '미상담' 하나로 묶으면 어제 온 학생과 3주째 방치된 학생이 같아 보인다 */
     tag: s.neverConsulted
-      ? { label: '미상담', tone: 'risk' }
+      ? (s.daysSinceAdmission ?? 0) > 7
+        ? { label: `초도 ${s.daysSinceAdmission}일 경과`, tone: 'risk' }
+        : { label: '미상담', tone: 'na' }
       : s.lastConsultType
         ? { label: CONSULT_TYPE_LABEL[s.lastConsultType], tone: 'na' }
         : undefined,
@@ -85,6 +121,12 @@ function toRow(s: ConsultStatusRow): StudentRow {
 }
 
 function Content() {
+  /* 담임은 가린 채로, 관리자는 푼 채로 시작한다. 어느 쪽이든 토글로 바꾼다(디랩 1013 회신) */
+  const [masked, setMasked] = useState(useMaskDefault())
+  /* 디랩 피드백 5-9 — 반·이름·담임으로 좁혀 본다. 목록을 전량 들고 있어 화면에서 거른다 */
+  const [classFilter, setClassFilter] = useState('')
+  const [teacherFilter, setTeacherFilter] = useState('')
+  const [keyword, setKeyword] = useState('')
   const { academyId } = useAcademy()
   const [tab, setTab] = useState('log')
   const [filter, setFilter] = useState<Filter>('전체')
@@ -198,11 +240,26 @@ function Content() {
     )
   }
 
+  const classNames = useMemo(
+    () => [...new Set(status.map((s) => s.className).filter((c): c is string => !!c))].sort(),
+    [status],
+  )
+  const teacherNames = useMemo(
+    () => [...new Set(status.map((s) => s.homeroomTeacherName).filter((t): t is string => !!t))].sort(),
+    [status],
+  )
+
   const filtered = useMemo(() => {
-    if (filter === '상담 필요') return status.filter((s) => s.overdueDays > 0)
-    if (filter === '미상담') return status.filter((s) => s.neverConsulted)
-    return status
-  }, [status, filter])
+    const kw = keyword.trim()
+    return status.filter((s) => {
+      if (filter === '상담 필요' && s.overdueDays <= 0) return false
+      if (filter === '미상담' && !s.neverConsulted) return false
+      if (classFilter !== '' && s.className !== classFilter) return false
+      if (teacherFilter !== '' && s.homeroomTeacherName !== teacherFilter) return false
+      if (kw !== '' && !s.name.includes(kw)) return false
+      return true
+    })
+  }, [status, filter, classFilter, teacherFilter, keyword])
 
   const selected = status.find((s) => String(s.enrollmentId) === selectedId) ?? null
 
@@ -245,11 +302,50 @@ function Content() {
       <div className="layout">
         <StudentList
           title="재원생"
-          count={`전체 ${status.length}명`}
+          count={`${filtered.length}명`}
+          right={
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <ExcelButton
+                filename={`상담현황_${todayStr()}`}
+                columns={EXPORT_COLUMNS}
+                rows={filtered}
+                masked={masked}
+                label="내려받기"
+              />
+              <MaskToggle masked={masked} onChange={setMasked} />
+            </div>
+          }
           filters={[...FILTERS]}
           filter={filter}
           onFilterChange={(f) => setFilter(f as Filter)}
-          rows={filtered.map(toRow)}
+          belowFilters={
+            <>
+              <select className="sel" style={{ width: 118 }} value={classFilter} onChange={(e) => setClassFilter(e.target.value)}>
+                <option value="">반 전체</option>
+                {classNames.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+              <select className="sel" style={{ width: 118 }} value={teacherFilter} onChange={(e) => setTeacherFilter(e.target.value)}>
+                <option value="">담임 전체</option>
+                {teacherNames.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+              <input
+                className="inp"
+                style={{ flex: 1, minWidth: 80 }}
+                placeholder="이름"
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+              />
+            </>
+          }
+          rows={filtered.map((r) => withMask(toRow(r), masked))}
           selected={selectedId ?? undefined}
           onSelect={setSelectedId}
           loading={listLoading}
@@ -264,7 +360,7 @@ function Content() {
           )}
 
           <StudentHeader
-            name={selected?.name ?? '—'}
+            name={selected ? (masked ? maskValue('name', selected.name) : selected.name) : '—'}
             code={selected?.studentNo ?? '—'}
             sub={
               selected ? (

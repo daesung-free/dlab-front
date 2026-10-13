@@ -34,6 +34,8 @@ export const SCREEN_MENU_CODES: Record<string, string[]> = {
   'regular-schedule': ['schedule'],
   approval: ['approval'],
   'seat-move': ['seat'],
+  /* 순찰은 좌석을 보고 찍는 일이라 좌석 권한을 따른다. 서버에 전용 코드가 생기면 바꾼다 */
+  patrol: ['seat'],
   'admin-assign': ['seat'],
 
   /* 학습 */
@@ -52,6 +54,15 @@ export const SCREEN_MENU_CODES: Record<string, string[]> = {
   'admin-billing': ['tuition'],
   'payment-gate': ['payment-request'],
   'admin-scholarship': ['scholarship'],
+
+  /* 추가개발 — 긴급 출입 · 오전 출근 확인 (2026-10-12)
+   * ⚠ 서버 카탈로그에 코드가 아직 없다. 백엔드에 이 이름으로 요청해 뒀다 —
+   *   들어오기 전까지는 계정별 설정이 걸린 계정에서 이 네 화면이 안 보인다(빈 Set 은 통과).
+   *   `STAFF_ATTENDANCE_EDIT` 는 화면 접근이 아니라 **수정 권한**이라 여기 쓰지 않는다 */
+  'door-code': ['door-code'],
+  'emergency-access': ['emergency-access'],
+  'morning-check': ['staff-attendance'],
+  'staff-attendance': ['staff-attendance'],
 
   /* 급식 */
   meal: ['meal'],
@@ -149,6 +160,22 @@ export function screenOfMenuCode(code: string): string | null {
  * ★ 거르는 자리가 넷이라(좌측 메뉴 · 허브 · 상단 탭 · 주소 직접 진입) 판정을 한 곳에 둔다.
  *   한 곳만 걸면 나머지에 그대로 남는다 — 3-1 에서 겪은 그대로다.
  */
+/**
+ * 화면이 아니라 **권한 항목**(`actionOnly`)을 가졌는가.
+ *
+ * ★ 메뉴 코드와 같은 목록에 들어오지만 **열리는 화면이 없다** — 긴급 출입 알림 수신,
+ *   직원 출근 기록 수정처럼 "할 수 있는 일"이다. 그래서 `SCREEN_MENU_CODES` 를 타지 않는다.
+ * ★ `canSeeScreen` 과 같은 규칙을 쓴다 — 아직 못 읽었거나(null) 제한이 없으면(빈 Set)
+ *   막지 않는다. 막아버리면 응답이 늦은 순간 권한 있는 사람도 버튼을 못 본다.
+ */
+export function hasMenuPermission(code: string, allowed: Set<string> | null): boolean {
+  if (allowed === null || allowed.size === 0) return true
+  return allowed.has(code)
+}
+
+/** 직원 출근 기록을 고칠 수 있는 권한(추가개발 3-2) */
+export const STAFF_ATTENDANCE_EDIT = 'STAFF_ATTENDANCE_EDIT'
+
 export function canSeeScreenAs(screenId: string, allowed: Set<string> | null, isSuper: boolean): boolean {
   if (!canSeeScreen(screenId, allowed)) return false
   return isSuper || findScreen(screenId)?.superOnly !== true

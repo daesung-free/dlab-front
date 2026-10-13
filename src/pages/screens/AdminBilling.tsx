@@ -5,9 +5,11 @@ import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
 import { GRADE_LABEL } from '../../api/students'
+import type { GradeType } from '../../api/students'
 import {
   PAYMENT_METHOD_LABEL,
   createBillingStandard,
+  updateBillingStandard,
   deleteBillingStandard,
   listBillingStandards,
   copyBillingStandardsYear,
@@ -24,6 +26,8 @@ import {
   listTuitionMonths,
   listTuitionPrices,
   saveTuitionMonth,
+  saveTuitionPrice,
+  type SeatType,
   type TuitionMonth,
   type TuitionPrice,
 } from '../../api/tuition'
@@ -60,6 +64,7 @@ const MONTHS_IN_YEAR = Array.from({ length: 12 }, (_, i) => i + 1)
 function standardColumns(
   onToggle: (r: BillingStandard) => void,
   onDelete: (r: BillingStandard) => void,
+  onEdit: (r: BillingStandard) => void,
   busy: boolean,
 ): Column<BillingStandard>[] {
   return [
@@ -141,6 +146,20 @@ function standardColumns(
       /* ★ '사용 중지'와 삭제는 다른 일이다. 중지는 과거 청구를 그대로 두고 앞으로만 안 쓰는
            것이고, 삭제는 기준 자체를 없앤다. 잘못 만든 것을 치우려면 삭제가 필요하다 —
            없으면 중지된 껍데기가 목록에 계속 쌓인다. */
+      key: 'edit',
+      header: '',
+      width: '60px',
+      align: 'center',
+      value: () => '',
+      /* ★ 지금까지 **고칠 길이 없었다.** 금액·납기·결제수단 오타를 중지 + 재등록으로만
+            처리해야 했는데, 코드가 중복이라 재등록이 막히는 경우가 있었다 */
+      render: (r) => (
+        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled={busy} onClick={() => onEdit(r)}>
+          수정
+        </button>
+      ),
+    },
+    {
       key: 'del',
       header: '',
       width: '60px',
@@ -327,6 +346,16 @@ function Content() {
   const [busy, setBusy] = useState(false)
   /** 교습일수 입력 모달 */
   const [monthEdit, setMonthEdit] = useState<{ mo: number; days: string } | null>(null)
+  /* 단가 입력. 기존 행을 누르면 그 조합이, '단가 추가' 면 빈 값이 들어온다 —
+     같은 (연도·학년·좌석유형)은 서버가 금액만 갱신하므로 둘이 같은 저장 경로다 */
+  const [priceEdit, setPriceEdit] = useState<{
+    gradeType: GradeType
+    seatType: SeatType
+    tuitionFee: string
+    studyRoomFee: string
+    exists: boolean
+  } | null>(null)
+  const [priceErr, setPriceErr] = useState<string | null>(null)
   const [monthErr, setMonthErr] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   /*
@@ -342,6 +371,10 @@ function Content() {
 
   /* 청구 기준 등록. **코드·항목·금액 방식이 필수**라 이름만 받는 창으로는 못 만든다 */
   const [newStd, setNewStd] = useState<NewStandard | null>(null)
+  /* 수정 모드. null 이면 신규 등록이다 — 모달 하나를 둘 다 쓴다.
+     ★ 지금까지 **고칠 길이 아예 없어서** 금액·납기 오타를 중지 + 재등록으로만 처리했다.
+       코드가 중복이라 재등록이 막히는 경우가 있어 사실상 손을 못 댔다(디랩 피드백 1013) */
+  const [editingStdId, setEditingStdId] = useState<number | null>(null)
   const [newStdErr, setNewStdErr] = useState<string | null>(null)
   const [delStd, setDelStd] = useState<BillingStandard | null>(null)
 
@@ -380,11 +413,44 @@ function Content() {
    *   두 방식을 한 칸으로 합치면 단가표 기준인데 금액이 박혀 버린다.
    * ★ `code` 는 나중에 바꿀 수 없다(PUT 에 code 가 없다). 등록할 때만 정한다.
    */
+  /** 수정 모달 열기 — 등록 모달을 그대로 쓰되 코드·항목만 잠근다 */
+  function openStandardEdit(r: BillingStandard) {
+    setEditingStdId(r.id)
+    setNewStdErr(null)
+    setNewStd({
+      code: r.code,
+      itemType: r.itemType,
+      name: r.name,
+      amountSource: r.amountSource,
+      amount: r.amount == null ? '' : String(r.amount),
+      dueDesc: r.dueDesc ?? '',
+      paymentMethod: r.paymentMethod ?? '',
+      memo: r.memo ?? '',
+    })
+  }
+
   async function submitStandard() {
     if (!newStd) return
     setBusy(true)
     setNewStdErr(null)
     try {
+      if (editingStdId !== null) {
+        /* ★ `name`·`amountSource` 는 **한 칸만 고쳐도 함께 보내야 한다**(서버 필수).
+              코드·항목 구분은 못 바꾼다 — 그건 다른 기준을 새로 만드는 것이다 */
+        await updateBillingStandard(editingStdId, {
+          name: newStd.name.trim(),
+          amountSource: newStd.amountSource,
+          amount: newStd.amountSource === 'FIXED' ? Number(newStd.amount) || 0 : undefined,
+          dueDesc: newStd.dueDesc.trim() || undefined,
+          paymentMethod: newStd.paymentMethod || undefined,
+          memo: newStd.memo.trim() || undefined,
+        })
+        await load()
+        setNewStd(null)
+        setEditingStdId(null)
+        setNotice('청구 기준을 고쳤습니다.')
+        return
+      }
       await createBillingStandard({
         academyId: academyId ?? undefined,
         year,
@@ -475,6 +541,49 @@ function Content() {
     }
   }
 
+  /**
+   * 교습비 단가 저장.
+   *
+   * ★ **이게 비어 있으면 월 청구 발행이 404 로 거절된다**(`TUITION_PRICE_NOT_FOUND`).
+   *   수납현황의 청구 발행은 이미 실연동이라, 단가를 넣을 칸이 없으면 청구 업무가
+   *   시작 자체를 못 한다 — 같은 화면의 '월별 교습일수' 와 같은 모양으로 둔다.
+   * ★ 성공한 **뒤에** 닫는다. 먼저 닫으면 서버가 거부했을 때 입력값을 잃는다.
+   */
+  async function savePrice() {
+    if (priceEdit === null) return
+    if (academyId === null) {
+      setNotice('먼저 지점을 고르세요.')
+      return
+    }
+    const tuitionFee = Number(priceEdit.tuitionFee)
+    const studyRoomFee = Number(priceEdit.studyRoomFee)
+    if (!Number.isInteger(tuitionFee) || tuitionFee < 0 || !Number.isInteger(studyRoomFee) || studyRoomFee < 0) {
+      setPriceErr('금액은 0 이상 정수로 적어 주세요.')
+      return
+    }
+    setBusy(true)
+    setPriceErr(null)
+    try {
+      await saveTuitionPrice({
+        academyId,
+        year,
+        gradeType: priceEdit.gradeType,
+        seatType: priceEdit.seatType,
+        tuitionFee,
+        studyRoomFee,
+      })
+      setNotice(
+        `${GRADE_LABEL[priceEdit.gradeType] ?? priceEdit.gradeType} · ${SEAT_TYPE_LABEL[priceEdit.seatType]} 단가를 저장했습니다.`,
+      )
+      setPriceEdit(null)
+      await load()
+    } catch (err) {
+      setPriceErr(err instanceof ApiError ? err.message : '저장하지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function copyStandards() {
     // 헤더 버튼은 지점을 안 골라도 창을 연다 — 조용히 멈추면 '복사'가 안 먹는 것처럼 보인다
     if (academyId === null) {
@@ -552,18 +661,26 @@ function Content() {
 
       {newStd && (
         <Modal
-          title="청구 기준 등록"
-          sub={`${year}년 청구 항목을 하나 만듭니다. 코드는 나중에 바꿀 수 없습니다.`}
-          confirmLabel="등록"
+          title={editingStdId === null ? '청구 기준 등록' : '청구 기준 수정'}
+          sub={
+            editingStdId === null
+              ? `${year}년 청구 항목을 하나 만듭니다. 코드는 나중에 바꿀 수 없습니다.`
+              : '코드와 항목 구분은 바꿀 수 없습니다 — 그건 다른 기준을 새로 만드는 것입니다.'
+          }
+          confirmLabel={editingStdId === null ? '등록' : '저장'}
           busy={busy}
           error={newStdErr}
           confirmDisabled={
-            newStd.code.trim() === '' ||
+            (editingStdId === null && newStd.code.trim() === '') ||
             newStd.name.trim() === '' ||
             (newStd.amountSource === 'FIXED' && Number(newStd.amount) <= 0)
           }
           onConfirm={() => void submitStandard()}
-          onClose={() => setNewStd(null)}
+          onClose={() => {
+            setNewStd(null)
+            setEditingStdId(null)
+            setNewStdErr(null)
+          }}
         >
           <div className="frow">
             <label className="req">코드</label>
@@ -572,6 +689,7 @@ function Content() {
                 className="inp"
                 value={newStd.code}
                 placeholder="예: TUITION-2026"
+                disabled={editingStdId !== null}
                 onChange={(e) => setNewStd({ ...newStd, code: e.target.value })}
               />
               <div className="hint">등록 후에는 바꿀 수 없습니다. 영문·숫자·하이픈을 씁니다.</div>
@@ -583,6 +701,7 @@ function Content() {
             <select
               className="sel"
               value={newStd.itemType}
+              disabled={editingStdId !== null}
               onChange={(e) => setNewStd({ ...newStd, itemType: e.target.value as BillingItemType })}
             >
               {(Object.keys(ITEM_TYPE_LABEL) as BillingItemType[]).map((k) => (
@@ -669,6 +788,91 @@ function Content() {
               value={newStd.memo}
               onChange={(e) => setNewStd({ ...newStd, memo: e.target.value })}
             />
+          </div>
+        </Modal>
+      )}
+
+      {priceEdit && (
+        <Modal
+          title={priceEdit.exists ? '교습비 단가 수정' : '교습비 단가 추가'}
+          sub={`${year} 시즌 · ${GRADE_LABEL[priceEdit.gradeType] ?? priceEdit.gradeType} · ${SEAT_TYPE_LABEL[priceEdit.seatType]}`}
+          confirmLabel="저장"
+          busy={busy}
+          error={priceErr}
+          onConfirm={() => void savePrice()}
+          onClose={() => {
+            setPriceEdit(null)
+            setPriceErr(null)
+          }}
+        >
+          <div className="note-box">
+            <div>
+              여기 금액이 비어 있으면 <b>그 학년·좌석의 월 청구를 발행할 수 없습니다.</b> 할인은 수납현황에서
+              따로 붙습니다 — 여기는 정가입니다.
+            </div>
+          </div>
+          <div className="frow">
+            <label>학년</label>
+            <div>
+              <select
+                className="sel"
+                value={priceEdit.gradeType}
+                disabled={priceEdit.exists}
+                onChange={(e) => setPriceEdit({ ...priceEdit, gradeType: e.target.value as GradeType })}
+              >
+                {(['HIGH2', 'HIGH3', 'N_SU'] as GradeType[]).map((g) => (
+                  <option key={g} value={g}>
+                    {GRADE_LABEL[g]}
+                  </option>
+                ))}
+              </select>
+              {/* ★ 기존 행은 조합을 못 바꾼다 — 바꾸면 다른 조합을 덮어쓰게 된다 */}
+              {priceEdit.exists && <div className="hint">학년·좌석을 바꾸려면 그 조합을 따로 추가하세요.</div>}
+            </div>
+          </div>
+          <div className="frow">
+            <label>좌석 유형</label>
+            <div>
+              <select
+                className="sel"
+                value={priceEdit.seatType}
+                disabled={priceEdit.exists}
+                onChange={(e) => setPriceEdit({ ...priceEdit, seatType: e.target.value as SeatType })}
+              >
+                {(['GENERAL', 'SINGLE'] as SeatType[]).map((t) => (
+                  <option key={t} value={t}>
+                    {SEAT_TYPE_LABEL[t]}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="frow">
+            <label>교습비</label>
+            <div>
+              {/* ★ Modal 안 숫자 입력에 step 을 걸지 않는다 — 배수가 아니면 브라우저가
+                     제출을 막아 "저장이 안 먹는다" 로 보인다 */}
+              <input
+                className="inp"
+                type="number"
+                min={0}
+                value={priceEdit.tuitionFee}
+                onChange={(e) => setPriceEdit({ ...priceEdit, tuitionFee: e.target.value })}
+              />
+              <div className="hint">원 단위로 적습니다.</div>
+            </div>
+          </div>
+          <div className="frow">
+            <label>독서실비</label>
+            <div>
+              <input
+                className="inp"
+                type="number"
+                min={0}
+                value={priceEdit.studyRoomFee}
+                onChange={(e) => setPriceEdit({ ...priceEdit, studyRoomFee: e.target.value })}
+              />
+            </div>
           </div>
         </Modal>
       )}
@@ -761,7 +965,7 @@ function Content() {
           {tab === 'billing' ? (
             <>
               <DataTable
-                columns={standardColumns(toggleStandard, setDelStd, busy)}
+                columns={standardColumns(toggleStandard, setDelStd, openStandardEdit, busy)}
                 rows={standards}
                 rowKey={(r) => String(r.id)}
                 masked={false}
@@ -788,6 +992,16 @@ function Content() {
                 masked={false}
                 loading={loading}
                 pageSize={10}
+                /* ★ 행을 누르면 그 조합의 금액을 고친다 — 월별 교습일수와 같은 동작이다 */
+                onRowClick={(r) =>
+                  setPriceEdit({
+                    gradeType: r.gradeType,
+                    seatType: r.seatType,
+                    tuitionFee: String(r.tuitionFee ?? ''),
+                    studyRoomFee: String(r.studyRoomFee ?? ''),
+                    exists: true,
+                  })
+                }
                 countLabel={
                   <>
                     교습비 단가표 <b>{prices.length}</b>건 · 학년 × 좌석유형 — 위 &lsquo;단가표&rsquo; 행의 실제 금액
@@ -795,6 +1009,20 @@ function Content() {
                 }
                 toolbar={
                   <>
+                    <button
+                      className="btn pri"
+                      onClick={() =>
+                        setPriceEdit({
+                          gradeType: 'HIGH3',
+                          seatType: 'GENERAL',
+                          tuitionFee: '',
+                          studyRoomFee: '',
+                          exists: false,
+                        })
+                      }
+                    >
+                      단가 추가
+                    </button>
                     <ExcelButton filename={`청구기준_${year}`} columns={priceCols} rows={prices} masked={false} />
                     <select
                       className="sel"
@@ -921,7 +1149,6 @@ export const adminBillingMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled data-soon title="준비 중입니다">기수 선택 ▾</button>
       <button className="btn" onClick={() => copySignal.bump()} title="작년 청구 기준을 올해로 옮깁니다. 같은 코드는 건너뜁니다">
         <Icon name="history" size={14} /> 전년도 기준 복사
       </button>

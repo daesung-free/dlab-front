@@ -251,6 +251,8 @@ function Content() {
       { key: 'name', header: '이름', width: '84px', mask: 'name', value: (r) => r.name },
       // 56px 은 값이 없던 시절 폭이다 — 'N수 1반'이 두 줄로 깨진다
       { key: 'className', header: '반', width: '78px', align: 'center', value: (r) => r.className ?? '-' },
+      /* 디랩 피드백 5-7 — 좌석번호로 찾고 정렬한다. 비페이징이라 정렬은 화면이 한다 */
+      { key: 'seatCd', header: '좌석', width: '70px', align: 'center', sortable: true, value: (r) => r.seatCd ?? '-' },
       {
         key: 'category',
         header: '구분',
@@ -275,6 +277,22 @@ function Content() {
             {r.point > 0 ? `+${r.point}` : r.point}
           </b>
         ),
+      },
+      {
+        key: 'cumulativePoint',
+        header: '누적',
+        width: '76px',
+        align: 'right',
+        sortable: true,
+        /* ★ **제적 기준 40점이 누적이다.** 이 칸이 없으면 월 증감만 보여 학부모가
+              "3점밖에 안 됐는데" 로 읽는다(디랩 피드백 1013 확인18) */
+        value: (r) => r.cumulativePoint ?? '',
+        render: (r) =>
+          r.cumulativePoint == null ? (
+            '-'
+          ) : (
+            <b style={{ color: r.cumulativePoint <= -40 ? 'var(--red)' : 'var(--ink)' }}>{r.cumulativePoint}</b>
+          ),
       },
       { key: 'reason', header: '사유', value: (r) => r.reason ?? '-' },
       { key: 'grantedByName', header: '부여자', width: '90px', value: (r) => r.grantedByName ?? '-' },

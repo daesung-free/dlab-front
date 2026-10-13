@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { DataTable, Modal, type Column } from '../../components/common'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
+import { formatPhone } from '../../lib/mask'
 import { useAcademy } from '../../auth/AcademyContext'
 import {
   createMealVendor,
+  updateMealVendorContact,
   deleteMealVendor,
   getMealVendorAssignment,
   listMealVendors,
@@ -59,6 +61,14 @@ function Content() {
   const [newVendor, setNewVendor] = useState<{ name: string; contactName: string; contactPhone: string } | null>(null)
   /** 업체 내리기 확인 */
   const [dropping, setDropping] = useState<MealVendor | null>(null)
+  /* 연락처 수정. 지금까지 등록 때만 받고 고칠 길이 없었다 — **배정된 지점이 있으면
+     삭제도 막혀** 담당자가 바뀌면 손 쓸 방법이 아예 없었다(디랩 피드백 1013) */
+  const [editVendor, setEditVendor] = useState<{
+    id: number
+    name: string
+    contactName: string
+    contactPhone: string
+  } | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -344,7 +354,23 @@ function Content() {
                     <span className="mk supplement">{year}년 {used}곳</span>
                     <button
                       className="btn"
-                      style={{ marginLeft: 'auto', padding: '2px 7px', fontSize: 11, color: 'var(--red)' }}
+                      style={{ marginLeft: 'auto', padding: '2px 7px', fontSize: 11 }}
+                      disabled={busy !== null}
+                      title="담당자·연락처를 고칩니다"
+                      onClick={() =>
+                        setEditVendor({
+                          id: v.id,
+                          name: v.name,
+                          contactName: v.contactName ?? '',
+                          contactPhone: v.contactPhone ?? '',
+                        })
+                      }
+                    >
+                      연락처 수정
+                    </button>
+                    <button
+                      className="btn"
+                      style={{ padding: '2px 7px', fontSize: 11, color: 'var(--red)' }}
                       disabled={busy !== null || used > 0}
                       title={used > 0 ? '배정된 지점이 있어 내릴 수 없습니다' : '목록에서 내립니다'}
                       onClick={() => setDropping(v)}
@@ -415,6 +441,60 @@ function Content() {
                   ? `${year - 1}년에는 ${edit.row.lastYear.vendorName} ${won(edit.row.lastYear.unitPrice)} 이었습니다.`
                   : '이 지점은 전년도 기록이 없습니다.'}
               </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {editVendor && (
+        <Modal
+          title="담당자 · 연락처 수정"
+          sub={`${editVendor.name} — 업체명은 바꿀 수 없습니다.`}
+          confirmLabel="저장"
+          busy={busy === -3}
+          error={editErr}
+          onConfirm={() => {
+            setBusy(-3)
+            setEditErr(null)
+            void updateMealVendorContact(editVendor.id, {
+              contactName: editVendor.contactName.trim(),
+              contactPhone: editVendor.contactPhone.trim(),
+            })
+              .then(async () => {
+                setEditVendor(null)
+                setNotice(`${editVendor.name} 연락처를 고쳤습니다.`)
+                await load()
+              })
+              .catch((e) => setEditErr(e instanceof ApiError ? e.message : '고치지 못했습니다.'))
+              .finally(() => setBusy(null))
+          }}
+          onClose={() => {
+            setEditVendor(null)
+            setEditErr(null)
+          }}
+        >
+          <div className="frow">
+            <label>담당자</label>
+            <div>
+              <input
+                className="inp"
+                maxLength={20}
+                value={editVendor.contactName}
+                onChange={(e) => setEditVendor({ ...editVendor, contactName: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="frow">
+            <label>연락처</label>
+            <div>
+              <input
+                className="inp"
+                maxLength={20}
+                placeholder="010-0000-0000"
+                value={editVendor.contactPhone}
+                onChange={(e) => setEditVendor({ ...editVendor, contactPhone: formatPhone(e.target.value) })}
+              />
+              <div className="hint">비우고 저장하면 저장된 값이 지워집니다.</div>
             </div>
           </div>
         </Modal>

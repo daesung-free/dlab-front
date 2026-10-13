@@ -174,13 +174,16 @@ const SCREEN_CODES = new Set(Object.values(SCREEN_MENU_CODES).flat())
 /**
  * 계정별 메뉴 노출 설정.
  *
- * ★ 저장은 **통째로 교체**다(PUT). 빈 목록으로 저장하면 제한이 풀려 전부 보인다 —
- *   "아무것도 못 보게" 가 아니다. 그래서 해제 버튼을 따로 두고 문구로 갈라 놨다.
+ * ★ **「기본값 사용」과 「직접 지정」을 모드로 가른다.** 전에는 체크 수로 뜻이 갈려서,
+ *   「전체 해제」를 누르고 저장하면 제한이 풀려 **전부 열렸다** — 담당자 의도와 정반대다.
+ *   서버도 축을 갈라 `restricted` 를 필수로 받는다(2026-10-12). 체크 수는 뜻을 바꾸지 않는다.
+ * ★ 저장은 **통째로 교체**다(PUT).
  * ★ 부모를 체크해도 서버가 자식을 자동으로 넣어주지 않는다. 화면에서 같이 실어 보낸다.
  */
 function MenuModal({ row, onClose, onSaved }: { row: AccountRow; onClose: () => void; onSaved: (msg: string) => void }) {
   const [catalog, setCatalog] = useState<MenuNode[] | null>(null)
   const [picked, setPicked] = useState<Set<string>>(new Set())
+  /** false = 역할 기본값 사용, true = 이 계정만 직접 지정 */
   const [restricted, setRestricted] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -203,11 +206,15 @@ function MenuModal({ row, onClose, onSaved }: { row: AccountRow; onClose: () => 
   }, [row.accountId])
 
   const groups = useMemo(() => {
-    const all = catalog ?? []
+    const all = (catalog ?? []).filter((m) => !m.actionOnly)
     return all
       .filter((m) => m.parentCode === null)
       .map((top) => ({ top, children: all.filter((m) => m.parentCode === top.code) }))
   }, [catalog])
+
+  /* 화면이 없는 권한(알림 수신·출근 기록 수정). 메뉴와 섞으면 "눌러도 안 열리는 메뉴" 로
+     읽히므로 아래에 따로 묶는다. 사이드바에서 빼는 일은 서버가 한다 */
+  const actions = useMemo(() => (catalog ?? []).filter((m) => m.actionOnly), [catalog])
 
   /** 부모를 켜면 자식까지, 끄면 자식까지 — 각 코드가 독립이라 화면이 묶어준다 */
   function toggle(node: MenuNode, children: MenuNode[]) {
@@ -228,11 +235,17 @@ function MenuModal({ row, onClose, onSaved }: { row: AccountRow; onClose: () => 
     setPicked(next)
   }
 
-  async function save(codes: string[]) {
+  async function save(useOwn: boolean, codes: string[]) {
+    /* 서버도 400 으로 막지만, 눌러서 오류를 보기 전에 알려준다 —
+       "아무것도 못 보게" 는 계정 정지로 할 일이다 */
+    if (useOwn && codes.length === 0) {
+      setErr('메뉴를 하나 이상 고르세요. 아무것도 보여주지 않으려면 계정을 정지해 주세요.')
+      return false
+    }
     setSaving(true)
     setErr(null)
     try {
-      const res = await setAccountMenus(row.accountId, codes)
+      const res = await setAccountMenus(row.accountId, useOwn, useOwn ? codes : [])
       onSaved(
         res.restricted
           ? `${row.loginId} 에게 메뉴 ${res.menus.length}개만 보이도록 저장했습니다. 다음 로그인부터 적용됩니다.`
@@ -253,35 +266,67 @@ function MenuModal({ row, onClose, onSaved }: { row: AccountRow; onClose: () => 
       title={`${row.loginId} 에게 보여줄 메뉴`}
       sub={
         restricted
-          ? '이 계정에만 따로 정해 둔 상태입니다. 체크를 전부 풀고 저장하면 설정이 지워지고 권한 기본값으로 돌아갑니다.'
-          : '지금은 권한 기본값대로 보입니다(아래 체크된 것). 여기서 고치면 이 계정에만 적용됩니다 — 기본값보다 우선합니다.'
+          ? '이 계정에만 따로 정해 둔 상태입니다. 체크한 것만 보입니다 — 권한 기본값보다 우선합니다.'
+          : '지금은 권한 기본값대로 보입니다(아래 체크된 것). 바꾸려면 아래에서 「이 계정만 직접 지정」을 고르세요.'
       }
       confirmLabel="저장"
       busy={saving}
       error={err}
-      onConfirm={() => void save([...picked]).then((ok) => ok && onClose())}
+      onConfirm={() => void save(restricted, [...picked]).then((ok) => ok && onClose())}
       onClose={onClose}
     >
       {catalog === null ? (
         <div style={{ padding: 18, color: 'var(--muted)' }}>불러오는 중…</div>
       ) : (
         <>
+          {/* ★ 모드로 뜻을 정한다. 체크 수로 갈리면 "전부 해제" 가 "제한 없음" 이 되어
+                 정반대로 열린다 — 실제로 그랬다 */}
+          <div className="note-box" style={{ display: 'block', marginBottom: 10 }}>
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                <input
+                  type="radio"
+                  name="menu-mode"
+                  checked={!restricted}
+                  disabled={saving}
+                  onChange={() => setRestricted(false)}
+                />
+                권한 기본값 사용
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                <input
+                  type="radio"
+                  name="menu-mode"
+                  checked={restricted}
+                  disabled={saving}
+                  onChange={() => setRestricted(true)}
+                />
+                이 계정만 직접 지정
+              </label>
+            </div>
+            <div className="hint" style={{ marginTop: 6 }}>
+              {restricted
+                ? '아래에서 체크한 것만 보입니다. 하나 이상 골라야 합니다.'
+                : '이 계정의 구분(역할)에 따라 정해진 메뉴가 보입니다 — 아래 체크가 그 목록입니다.'}
+            </div>
+          </div>
+
           <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-            <button className="btn" type="button" disabled={saving} onClick={() => setPicked(new Set(catalog.map((m) => m.code)))}>
+            <button
+              className="btn"
+              type="button"
+              disabled={saving || !restricted}
+              onClick={() => setPicked(new Set(catalog.map((m) => m.code)))}
+            >
               전체 선택
-            </button>
-            <button className="btn" type="button" disabled={saving} onClick={() => setPicked(new Set())}>
-              전체 해제
             </button>
             <button
               className="btn"
               type="button"
-              style={{ marginLeft: 'auto' }}
               disabled={saving || !restricted}
-              title={restricted ? '이 계정의 개별 설정을 지우고 권한 기본값으로 되돌립니다' : '개별 설정이 없습니다'}
-              onClick={() => void save([]).then((ok) => ok && onClose())}
+              onClick={() => setPicked(new Set())}
             >
-              기본값으로
+              전체 해제
             </button>
           </div>
 
@@ -294,7 +339,12 @@ function MenuModal({ row, onClose, onSaved }: { row: AccountRow; onClose: () => 
                 style={{ padding: '9px 11px', display: 'block' }}
               >
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-                  <input type="checkbox" checked={picked.has(top.code)} onChange={() => toggle(top, children)} />
+                  <input
+                    type="checkbox"
+                    checked={picked.has(top.code)}
+                    disabled={saving || !restricted}
+                    onChange={() => toggle(top, children)}
+                  />
                   <b>{top.name}</b>
                   {!SCREEN_CODES.has(top.code) && <span className="mk">화면 없음</span>}
                 </label>
@@ -302,7 +352,12 @@ function MenuModal({ row, onClose, onSaved }: { row: AccountRow; onClose: () => 
                   <div style={{ display: 'grid', gap: 6, marginTop: 7, paddingLeft: 22 }}>
                     {children.map((c) => (
                       <label key={c.code} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
-                        <input type="checkbox" checked={picked.has(c.code)} onChange={() => toggleOne(c.code)} />
+                        <input
+                          type="checkbox"
+                          checked={picked.has(c.code)}
+                          disabled={saving || !restricted}
+                          onChange={() => toggleOne(c.code)}
+                        />
                         {c.name}
                         {!SCREEN_CODES.has(c.code) && <span className="mk">화면 없음</span>}
                       </label>
@@ -311,6 +366,27 @@ function MenuModal({ row, onClose, onSaved }: { row: AccountRow; onClose: () => 
                 )}
               </div>
             ))}
+
+            {actions.length > 0 && (
+              <div className="note-box" style={{ padding: '9px 11px', display: 'block' }}>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>
+                  권한 — 열리는 화면은 없고 할 수 있는 일만 늘어납니다
+                </div>
+                <div style={{ display: 'grid', gap: 6 }}>
+                  {actions.map((a) => (
+                    <label key={a.code} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
+                      <input
+                        type="checkbox"
+                        checked={picked.has(a.code)}
+                        disabled={saving || !restricted}
+                        onChange={() => toggleOne(a.code)}
+                      />
+                      {a.name}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="note-box" style={{ marginTop: 10 }}>

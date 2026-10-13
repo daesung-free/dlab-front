@@ -44,6 +44,11 @@
 
 /* ── 지표 스트립 ── */
 .stat-strip { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 0 0 18px; }
+/* 칸이 적은 화면(도어락: 마지막 교체 · 교체 횟수). 기본 5칸에 2개만 넣으면 칸이
+   좁아 날짜·시각이 줄바꿈된다 — 칸 수에 맞춰 폭을 준다 */
+.stat-strip.c2 { grid-template-columns: repeat(2, 1fr); }
+.stat-strip.c3 { grid-template-columns: repeat(3, 1fr); }
+.stat-strip.c4 { grid-template-columns: repeat(4, 1fr); }
 .stat-strip.c6 { grid-template-columns: repeat(6, 1fr); }
 /* 출결: 조회대상 + 상태 5종 + 사유 승인 */
 .stat-strip.c7 { grid-template-columns: repeat(7, 1fr); }

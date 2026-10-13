@@ -54,6 +54,15 @@ export interface PenaltyRow {
   /** 고정반. 미배정이면 null */
   className: string | null
   enrollmentStatus: EnrollmentStatus
+  /**
+   * 그 학생의 **누적** 합계. 조회 기간과 무관하다.
+   *
+   * ★ 제적 기준 40점이 **누적**이라 월 증감만 보이면 학부모가 오인한다(디랩 피드백 1013).
+   *   학생마다 단건 조회를 하면 200명이면 200번이라, 서버가 목록 행에 실어 준다.
+   */
+  cumulativePoint?: number | null
+  /** 좌석번호. 조회·정렬에 쓴다(디랩 피드백 5-7) */
+  seatCd?: string | null
 }
 
 /** 상단 합계. **조회 조건 기준**이라 필터를 걸면 같이 줄어든다 */

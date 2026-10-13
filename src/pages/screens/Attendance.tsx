@@ -25,6 +25,8 @@ import {
   TAGGING_EVENT_LABEL,
   addTagging,
   exportAttendance,
+  INTERVAL_TYPE_LABEL,
+  RETURN_STATE_LABEL,
   fetchAttendanceBoard,
   listAttendanceModifications,
   fixAttendanceStatus,
@@ -93,6 +95,17 @@ const fetchClasses = ({ year }: { year: number }) => listClasses(year)
 /** 'HH:mm:ss' → 'HH:mm'. 미태깅이면 '-' */
 function hhmm(v: string | null): string {
   return v === null ? '-' : v.slice(0, 5)
+}
+
+/**
+ * 외출·조퇴 구간의 시각. **등원·하원과 형식이 다르다** — 이쪽은 ISO 인스턴트고
+ * 등원·하원은 `'HH:mm:ss'` 문자열이다. 같은 함수로 자르면 `2026-` 이 찍힌다(실제로 그랬다).
+ */
+function evTime(iso: string | null): string {
+  if (!iso) return '-'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '-'
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
 function one(v: unknown): string | undefined {
@@ -233,6 +246,59 @@ function Content() {
       { key: 'seatCd', header: '좌석', width: '68px', align: 'center', value: (r) => r.seatCd ?? '-' },
       { key: 'checkInAt', header: '등원', width: '76px', align: 'center', sortable: true, value: (r) => hhmm(r.checkInAt) },
       { key: 'checkOutAt', header: '하원', width: '76px', align: 'center', value: (r) => hhmm(r.checkOutAt) },
+      {
+        /* ★ 디랩 요청대로 **등원과 하원 사이**에 둔다(피드백 5-5) — 시간 순서대로 읽힌다.
+              ★ 복귀 없음이 셋(지금 밖 / 기록 누락 / 조퇴)이라 `returnState` 로 가른다.
+                `returnedAt` 이 null 인 것만 보고 묶으면 **조퇴한 학생을 찾으러 간다.** */
+        key: 'events',
+        header: '외출 · 조퇴',
+        width: '210px',
+        value: (r) =>
+          (r.events ?? [])
+            .map((e) => `${INTERVAL_TYPE_LABEL[e.type] ?? e.type} ${evTime(e.at)}`)
+            .join(', '),
+        render: (r) => {
+          const evs = r.events ?? []
+          if (evs.length === 0) return '-'
+          return (
+            <div style={{ display: 'grid', gap: 3 }}>
+              {evs.map((e, i) => (
+                <div key={i} style={{ fontSize: 11.5, lineHeight: 1.45 }}>
+                  <span style={{ fontWeight: 700 }}>{INTERVAL_TYPE_LABEL[e.type] ?? e.type}</span>{' '}
+                  {evTime(e.at)}
+                  {e.returnedAt ? (
+                    <>~{evTime(e.returnedAt)}</>
+                  ) : (
+                    <span
+                      className={`mk ${
+                        e.returnState === 'PENDING'
+                          ? 'brandnew'
+                          : e.returnState === 'NO_RETURN_RECORD'
+                            ? 'supplement'
+                            : ''
+                      }`}
+                      style={{ marginLeft: 4 }}
+                      title={
+                        e.returnState === 'NO_RETURN_RECORD'
+                          ? '복귀 태깅이 빠졌습니다. 고쳐야 순공시간이 맞습니다'
+                          : e.returnState === 'PENDING'
+                            ? '아직 돌아오지 않았습니다'
+                            : undefined
+                      }
+                    >
+                      {RETURN_STATE_LABEL[e.returnState]}
+                    </span>
+                  )}
+                  {/* ★ 사유가 null 이면 **비운다.** 「사유 없음」이라고 쓰면 없는 사실을 만든다 —
+                         사유신청을 안 한 것이지 사유가 없다는 뜻이 아니다.
+                         ★ 조퇴에도 사유가 붙을 수 있어 타입으로 숨기지 않는다 */}
+                  {e.reason && <span style={{ color: 'var(--muted)' }}> · {e.reason}</span>}
+                </div>
+              ))}
+            </div>
+          )
+        },
+      },
       {
         key: 'status',
         header: '상태',

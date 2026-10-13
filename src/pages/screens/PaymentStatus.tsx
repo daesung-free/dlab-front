@@ -15,6 +15,14 @@ import {
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
+import {
+  PAY_METHOD_CODE_LABEL,
+  createPaymentRequest,
+  issueVbank,
+  recordTerminalPayment,
+  type PayMethodCode,
+  type PaymentRequestRow,
+} from '../../api/paymentRequests'
 import { useAcademy } from '../../auth/AcademyContext'
 import {
   BILLING_STATUS_LABEL,
@@ -80,6 +88,9 @@ import './payment.css'
  *   검색폼에 있던 '지점' 칸은 **뺐다** — 어디에도 안 쓰이는 칸이었고 값도 실재하지 않는
  *   지점(대치·평촌)이었다. 지점은 상단바에서 고른다. */
 
+/* ★ **현금은 선택지에서 뺐다**(디랩 피드백 1013, 5-10 — "현금을 받지 않습니다").
+     지난 기록에 현금 결제가 있으면 **표시는 그대로** 된다 — 라벨 맵은 건드리지 않는다.
+     새로 고를 수만 없게 하는 것이 목적이다. */
 type Method = '카드' | '가상계좌' | '현금'
 type Kind = '등록비' | '교습비' | '특강비' | '급식비'
 
@@ -135,7 +146,7 @@ const EMPTY_ISSUE: IssueDraft = {
 }
 
 const KINDS: Kind[] = ['등록비', '교습비', '특강비', '급식비']
-const METHODS: Method[] = ['카드', '가상계좌', '현금']
+const METHODS: Method[] = ['카드', '가상계좌']
 
 const FIELDS: Field[] = [
   { type: 'dateRange', name: 'period', label: '결제 기간', presets: true, span: 2 },
@@ -550,6 +561,20 @@ function Content() {
   const [issueOpen, setIssueOpen] = useState(false)
   const [issue, setIssue] = useState<IssueDraft>(EMPTY_ISSUE)
   const [pay, setPay] = useState<{ row: ReceiptRow; amount: string; method: PayMethod } | null>(null)
+  /* 결제 요청. 「받아야 할 돈」(청구)과 「어떻게 받는가」(결제)는 다른 축이라 모달을 나눈다.
+     ★ 결제만 모아 보는 화면은 못 만든다 — 목록 조회가 billingId 단위다(API_GAPS 42부) */
+  const [payReq, setPayReq] = useState<{
+    row: ReceiptRow
+    kind: 'link' | 'terminal' | 'vbank'
+    payMethod: PayMethodCode
+    sendSms: boolean
+    approvalNo: string
+    cardName: string
+    approvedAt: string
+    bankCode: string
+    days: string
+  } | null>(null)
+  const [payReqDone, setPayReqDone] = useState<PaymentRequestRow | null>(null)
   const [cancelRow, setCancelRow] = useState<ReceiptRow | null>(null)
   const [actBusy, setActBusy] = useState(false)
   const [actErr, setActErr] = useState<string | null>(null)
@@ -696,6 +721,49 @@ function Content() {
     }
   }
 
+  /**
+   * 결제 요청 3종.
+   *
+   * ★ 셋이 서로 다른 일이라 한 번에 하나만 보낸다.
+   *   · 링크 — 학부모가 열 주소를 만든다. 문자를 끄면 **그 주소를 화면이 알려줘야** 한다
+   *   · 단말기 — 이미 승인된 결제를 **기록**한다. 결제를 일으키지 않는다
+   *   · 가상계좌 — 계좌를 발급한다. 입금은 나중에 웹훅으로 들어온다
+   */
+  async function submitPayReq() {
+    if (!payReq) return
+    setActBusy(true)
+    setActErr(null)
+    try {
+      const id = payReq.row.billingId
+      let res: PaymentRequestRow
+      if (payReq.kind === 'link') {
+        res = await createPaymentRequest({ billingId: id, payMethod: payReq.payMethod, sendSms: payReq.sendSms })
+      } else if (payReq.kind === 'terminal') {
+        if (!payReq.approvalNo.trim() || !payReq.cardName.trim() || !payReq.approvedAt) {
+          setActErr('승인번호 · 카드사 · 승인 시각을 모두 적어 주세요. 정산 대사에 쓰는 값입니다.')
+          setActBusy(false)
+          return
+        }
+        res = await recordTerminalPayment({
+          billingId: id,
+          amount: payReq.row.unpaid,
+          approvalNo: payReq.approvalNo.trim(),
+          cardName: payReq.cardName.trim(),
+          approvedAt: new Date(payReq.approvedAt).toISOString(),
+        })
+      } else {
+        res = await issueVbank({ billingId: id, bankCode: payReq.bankCode, days: Number(payReq.days) || 3 })
+      }
+      setPayReq(null)
+      setPayReqDone(res)
+      await load()
+    } catch (err) {
+      setActErr(err instanceof ApiError ? err.message : '요청하지 못했습니다.')
+    } finally {
+      setActBusy(false)
+    }
+  }
+
   async function submitPay() {
     if (!pay) return
     setActBusy(true)
@@ -758,6 +826,28 @@ function Content() {
               }}
             >
               수납
+            </button>
+            <button
+              className="btn"
+              style={{ padding: '4px 9px', fontSize: 11.5 }}
+              disabled={r.unpaid <= 0}
+              title={r.unpaid <= 0 ? '이미 완납된 청구입니다' : '결제 링크·단말기 기록·가상계좌'}
+              onClick={() => {
+                setActErr(null)
+                setPayReq({
+                  row: r,
+                  kind: 'link',
+                  payMethod: 'CARD',
+                  sendSms: true,
+                  approvalNo: '',
+                  cardName: '',
+                  approvedAt: '',
+                  bankCode: '004',
+                  days: '3',
+                })
+              }}
+            >
+              결제
             </button>
             <button
               className="btn"
@@ -1432,6 +1522,196 @@ function Content() {
         </Modal>
       )}
 
+      {/* ── 결제 요청(링크 · 단말기 기록 · 가상계좌) ── */}
+      {payReq && (
+        <Modal
+          title="결제"
+          sub={`${payReq.row.studentName} · ${payReq.row.name} · 미납 ${wonOf(payReq.row.unpaid)}`}
+          confirmLabel={payReq.kind === 'terminal' ? '기록' : payReq.kind === 'vbank' ? '계좌 발급' : '링크 만들기'}
+          busy={actBusy}
+          error={actErr}
+          onConfirm={() => void submitPayReq()}
+          onClose={() => setPayReq(null)}
+        >
+          <div className="frow">
+            <label>무엇을</label>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {([
+                ['link', '결제 링크'],
+                ['terminal', '단말기 결제 기록'],
+                ['vbank', '가상계좌 발급'],
+              ] as const).map(([k, label]) => (
+                <button
+                  key={k}
+                  type="button"
+                  className={`chip${payReq.kind === k ? ' on' : ''}`}
+                  onClick={() => setPayReq({ ...payReq, kind: k })}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {payReq.kind === 'link' && (
+            <>
+              <div className="frow">
+                <label>결제 수단</label>
+                <div>
+                  <select
+                    className="sel"
+                    value={payReq.payMethod}
+                    onChange={(e) => setPayReq({ ...payReq, payMethod: e.target.value as PayMethodCode })}
+                  >
+                    {(Object.keys(PAY_METHOD_CODE_LABEL) as PayMethodCode[]).map((m) => (
+                      <option key={m} value={m}>
+                        {PAY_METHOD_CODE_LABEL[m]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="frow">
+                <label>문자 발송</label>
+                <div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                    <input
+                      type="checkbox"
+                      checked={payReq.sendSms}
+                      onChange={(e) => setPayReq({ ...payReq, sendSms: e.target.checked })}
+                    />
+                    학부모에게 결제 링크를 문자로 보냅니다
+                  </label>
+                  {/* ★ 끄면 링크만 만들어지고 아무도 모른다 — 그때는 화면이 주소를 알려준다 */}
+                  <div className="hint">
+                    끄면 만들어진 주소를 <b>이 화면에서 복사해 전달</b>해야 합니다.
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {payReq.kind === 'terminal' && (
+            <>
+              <div className="note-box">
+                <div>
+                  데스크 단말기에서 <b>이미 승인된 결제를 적는 것</b>입니다. 여기서 결제가 일어나지
+                  않습니다 — 영수증 값을 그대로 옮겨 주세요.
+                </div>
+              </div>
+              <div className="frow">
+                <label>승인번호</label>
+                <div>
+                  <input
+                    className="inp"
+                    value={payReq.approvalNo}
+                    onChange={(e) => setPayReq({ ...payReq, approvalNo: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="frow">
+                <label>카드사</label>
+                <div>
+                  <input
+                    className="inp"
+                    placeholder="예: 신한"
+                    value={payReq.cardName}
+                    onChange={(e) => setPayReq({ ...payReq, cardName: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="frow">
+                <label>승인 시각</label>
+                <div>
+                  <input
+                    className="inp"
+                    type="datetime-local"
+                    value={payReq.approvedAt}
+                    onChange={(e) => setPayReq({ ...payReq, approvedAt: e.target.value })}
+                  />
+                  <div className="hint">금액은 미납액 {wonOf(payReq.row.unpaid)} 로 기록됩니다.</div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {payReq.kind === 'vbank' && (
+            <>
+              <div className="frow">
+                <label>은행</label>
+                <div>
+                  <input
+                    className="inp"
+                    value={payReq.bankCode}
+                    onChange={(e) => setPayReq({ ...payReq, bankCode: e.target.value })}
+                  />
+                  <div className="hint">은행 코드입니다(예: 004 국민).</div>
+                </div>
+              </div>
+              <div className="frow">
+                <label>입금 기한</label>
+                <div>
+                  {/* ★ Modal 안 숫자 입력에 step 을 걸지 않는다 — 배수가 아니면 제출이 막힌다 */}
+                  <input
+                    className="inp"
+                    type="number"
+                    min={1}
+                    value={payReq.days}
+                    onChange={(e) => setPayReq({ ...payReq, days: e.target.value })}
+                  />
+                  <div className="hint">며칠 안에 입금해야 하는지입니다. 지나면 계좌가 만료됩니다.</div>
+                </div>
+              </div>
+            </>
+          )}
+        </Modal>
+      )}
+
+      {payReqDone && (
+        <Modal
+          title="만들었습니다"
+          confirmLabel="닫기"
+          hideCancel
+          onConfirm={() => setPayReqDone(null)}
+          onClose={() => setPayReqDone(null)}
+        >
+          {payReqDone.payUrl && (
+            <div className="frow ro">
+              <label>결제 주소</label>
+              <div>
+                <input className="inp" readOnly value={payReqDone.payUrl} onFocus={(e) => e.currentTarget.select()} />
+                <div className="hint">학부모에게 전달하세요. 문자를 켜 두었으면 이미 나갔습니다.</div>
+              </div>
+            </div>
+          )}
+          {payReqDone.vbankAccount && (
+            <>
+              <div className="frow ro">
+                <label>입금 계좌</label>
+                <div>
+                  {payReqDone.vbankBankName ?? ''} {payReqDone.vbankAccount}
+                </div>
+              </div>
+              <div className="frow ro">
+                <label>예금주</label>
+                <div>{payReqDone.vbankDepositor ?? '-'}</div>
+              </div>
+            </>
+          )}
+          {payReqDone.approvedAt && (
+            <div className="frow ro">
+              <label>승인</label>
+              <div>
+                {payReqDone.payDetail ?? ''} {payReqDone.tno ? `· ${payReqDone.tno}` : ''}
+              </div>
+            </div>
+          )}
+          {!payReqDone.payUrl && !payReqDone.vbankAccount && !payReqDone.approvedAt && (
+            <div className="hint">처리됐습니다.</div>
+          )}
+        </Modal>
+      )}
+
       {/* ── 수납 ── */}
       {pay && (
         <Modal
@@ -1641,7 +1921,6 @@ export const paymentMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" disabled data-soon title="준비 중입니다">기수 선택 ▾</button>
       <BranchStatsButton />
     </>
   ),

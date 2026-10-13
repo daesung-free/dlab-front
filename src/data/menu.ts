@@ -595,6 +595,61 @@ export const SCREENS: Screen[] = [
     /* 서버 app-config 가 SUPER_ADMIN 전용이다 — 지점 관리자에게 열면 전부 403 인 빈 화면이 된다 */
     superOnly: true,
   },
+
+  /* ─────────────── 추가개발 — 지점 긴급 출입 · 오전 출근 확인 ───────────────
+   * 요구사항정의서가 아니라 `DLAB_긴급출입_오전출근확인_개발요구사항_v2.pdf`(디랩 10/7)가
+   * 출처다. 그래서 `code` 를 F-추가-n 으로 둔다 — 전달 문서의 「관리자 웹」 항목 번호다.
+   * 9번(계정 권한 체크박스)은 기존 사용자 관리 화면에 들어가 별도 화면이 아니다. */
+  {
+    id: 'patrol',
+    code: 'F-추가-13',
+    groupId: 'attendance',
+    name: '순찰 관리',
+    icon: 'footprints',
+    kind: 'brandnew',
+    phase: 4,
+    summary: '사감이 태블릿으로 좌석을 눌러 상태를 찍는다. 회차 1~5. 지금은 종이에 적고 DSA 에 또 넣는다',
+  },
+  {
+    id: 'door-code',
+    code: 'F-추가-8',
+    groupId: 'admin',
+    name: '도어락 번호',
+    icon: 'key-round',
+    kind: 'brandnew',
+    phase: 4,
+    summary: '아침 7시 긴급 출입에 안내할 지점 도어락 번호 저장·교체. 한 번 쓴 번호는 재사용 불가',
+  },
+  {
+    id: 'emergency-access',
+    code: 'F-추가-10',
+    groupId: 'admin',
+    name: '긴급 출입 내역',
+    icon: 'door-open',
+    kind: 'brandnew',
+    phase: 4,
+    summary: '학생이 출입문 QR 로 번호를 요청한 기록. 시각·지점·학생·제공/거절',
+  },
+  {
+    id: 'morning-check',
+    code: 'F-추가-11',
+    groupId: 'admin',
+    name: '오전 출근 확인',
+    icon: 'alarm-clock',
+    kind: 'brandnew',
+    phase: 4,
+    summary: '매일 07:05 지점별 출근 기록 검사와 문자 발송 내역. 휴일에도 검사한다',
+  },
+  {
+    id: 'staff-attendance',
+    code: 'F-추가-12',
+    groupId: 'admin',
+    name: '직원 출근 기록',
+    icon: 'user-check',
+    kind: 'brandnew',
+    phase: 4,
+    summary: '키오스크 출근·퇴근 기록 수정과 수정 이력. 고치는 것은 별도 권한이 필요하다',
+  },
 ]
 
 /* ─────────────── 파생 헬퍼 ─────────────── */

@@ -122,7 +122,22 @@ export function retakeLabel(retakeCount: number | null): string {
   return ['재수', '삼수', '사수'][retakeCount - 1] ?? `${retakeCount + 1}수`
 }
 
-export const SORTABLE = ['studentNo', 'name', 'grade', 'track', 'enrollmentStatus', 'admissionDate'] as const
+/* ★ 2026-10-13 `className`·`seatCd` 추가 — 서버가 조인으로 전용 처리한다(화이트리스트가 아니다).
+     미배정은 **항상 뒤로** 간다: 내림차순에서 NULL 이 앞에 오면 반을 역순으로 볼 때
+     미배정 학생이 먼저 쌓여 목록이 쓸모없어진다.
+   ⚠️ 좌석번호는 **문자열 정렬**이다. `A02` 처럼 자리를 채운 번호라야 의도대로 되고,
+     `A2`·`A10` 이 섞이면 사전순이라 `A10` 이 앞에 온다 — 좌석 이름이 자유 입력이라
+     지점에 따라 섞일 수 있다(서버에 알려 둠). */
+export const SORTABLE = [
+  'studentNo',
+  'name',
+  'grade',
+  'track',
+  'enrollmentStatus',
+  'admissionDate',
+  'className',
+  'seatCd',
+] as const
 export type SortKey = (typeof SORTABLE)[number]
 
 export interface StudentSearchParams {
