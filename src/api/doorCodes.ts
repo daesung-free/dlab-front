@@ -36,9 +36,9 @@ export interface DoorCode {
   changedByName: string | null
 }
 
-export function getCurrentDoorCode(academyId: number): Promise<DoorCode | null> {
-  return request<DoorCode | null>('/api/v1/admin/door-codes/current', { query: { academyId } })
-}
+/* ★ `GET /door-codes/current` 는 **쓰지 않는다.** 이력 목록의 첫 행이 곧 지금 번호라
+     한 번 더 부르면 두 응답이 서로 다른 시점이 되어 「마지막 변경」과 표 첫 줄이 어긋난다
+     — 좌석 이탈에서 같은 이유로 `/seat-leaves/current` 를 뺐다(seatLeaves.ts 주석). */
 
 export function listDoorCodeHistory(academyId: number): Promise<DoorCode[]> {
   return request<DoorCode[]>('/api/v1/admin/door-codes/history', { query: { academyId } })

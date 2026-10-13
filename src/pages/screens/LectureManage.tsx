@@ -17,6 +17,7 @@ import {
   listLectures,
   changeLectureStatus,
   createLectureFull,
+  createLectureSession,
   deleteLecture,
   deleteLectureSession,
   setLectureVisible,
@@ -421,6 +422,11 @@ function Content() {
   const [deleteErr, setDeleteErr] = useState<string | null>(null)
   /** 회차 삭제. 출석부의 열이 하나 사라지는 것이라 먼저 묻는다 */
   const [deletingSession, setDeletingSession] = useState<LectureSession | null>(null)
+  /* 회차 추가. 개설 때 한 번에 만들지만 **보강·연장은 나중에 생긴다** — 지금까지는
+     지우는 것만 되고 더하는 길이 없어, 실수로 지운 회차도 되살릴 수 없었다 */
+  const [newSession, setNewSession] = useState<{ date: string; start: string; end: string; room: string } | null>(null)
+  const [sessionBusy, setSessionBusy] = useState(false)
+  const [sessionErr, setSessionErr] = useState<string | null>(null)
 
   /**
    * 특강 상세.
@@ -842,6 +848,36 @@ function Content() {
       setDeleteErr(err instanceof ApiError ? err.message : '회차를 삭제하지 못했습니다.')
     } finally {
       setDeleteBusy(false)
+    }
+  }
+
+  /**
+   * 회차 추가.
+   *
+   * ★ `sessionNo` 는 보내지 않는다 — 서버가 매긴다.
+   * ★ 시간·강의실은 선택이다. 비우면 안 보낸다(빈 문자열을 보내면 그대로 저장된다).
+   */
+  async function addSession() {
+    if (!newSession || lectureId === null) return
+    if (!newSession.date) {
+      setSessionErr('수업 날짜를 고르세요.')
+      return
+    }
+    setSessionBusy(true)
+    setSessionErr(null)
+    try {
+      await createLectureSession(lectureId, {
+        sessionDate: newSession.date,
+        startTime: newSession.start || undefined,
+        endTime: newSession.end || undefined,
+        room: newSession.room.trim() || undefined,
+      })
+      setSessionList(await listLectureSessions(lectureId))
+      setNewSession(null)
+    } catch (err) {
+      setSessionErr(err instanceof ApiError ? err.message : '회차를 추가하지 못했습니다.')
+    } finally {
+      setSessionBusy(false)
     }
   }
 
@@ -1413,6 +1449,22 @@ function Content() {
                           </button>
                         </th>
                       ))}
+                      {/* ★ 회차가 곧 이 표의 열이다 — 지우는 자리가 여기였으니 더하는 자리도 여기다 */}
+                      <th className="al-center" style={{ width: 54 }}>
+                        <button
+                          type="button"
+                          className="btn"
+                          style={{ padding: '2px 8px' }}
+                          disabled={selectedLecture === null}
+                          title={selectedLecture === null ? '특강을 먼저 고르세요' : '수업 회차를 추가합니다'}
+                          onClick={() => {
+                            setSessionErr(null)
+                            setNewSession({ date: '', start: '', end: '', room: '' })
+                          }}
+                        >
+                          + 회차
+                        </button>
+                      </th>
                       <th className="al-center" style={{ width: 80 }}>
                         출석률
                       </th>
@@ -1424,7 +1476,7 @@ function Content() {
                            비는 이유가 셋이라 무엇을 해야 하는지까지 갈라서 적는다. */}
                     {applied.length === 0 && (
                       <tr>
-                        <td colSpan={sessionList.length + 4} className="al-center" style={{ padding: '26px 12px' }}>
+                        <td colSpan={sessionList.length + 5} className="al-center" style={{ padding: '26px 12px' }}>
                           {selectedLecture === null ? (
                             <span style={{ color: 'var(--muted)' }}>위 목록에서 특강을 먼저 고르세요.</span>
                           ) : sessionList.length === 0 ? (
@@ -1742,6 +1794,68 @@ function Content() {
                 </div>
               </>
             )}
+          </div>
+        </Modal>
+      )}
+
+      {newSession && (
+        <Modal
+          title="수업 회차 추가"
+          sub={selectedLecture ? `${selectedLecture.name} — 회차를 하나 더 만듭니다.` : undefined}
+          confirmLabel="추가"
+          busy={sessionBusy}
+          error={sessionErr}
+          confirmDisabled={!newSession.date}
+          onConfirm={() => void addSession()}
+          onClose={() => {
+            setNewSession(null)
+            setSessionErr(null)
+          }}
+        >
+          <div className="note-box">
+            <div>
+              회차 번호는 <b>저장할 때 자동으로 매겨집니다.</b> 추가한 회차는 출석부에 칸으로 생깁니다.
+            </div>
+          </div>
+          <div className="frow">
+            <label>수업 날짜</label>
+            <div>
+              <input
+                className="inp"
+                type="date"
+                value={newSession.date}
+                onChange={(e) => setNewSession({ ...newSession, date: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="frow">
+            <label>시간</label>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input
+                className="inp"
+                type="time"
+                value={newSession.start}
+                onChange={(e) => setNewSession({ ...newSession, start: e.target.value })}
+              />
+              <span className="mk">~</span>
+              <input
+                className="inp"
+                type="time"
+                value={newSession.end}
+                onChange={(e) => setNewSession({ ...newSession, end: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="frow">
+            <label>강의실</label>
+            <div>
+              <input
+                className="inp"
+                placeholder="비워 두면 기존 강의실을 따릅니다"
+                value={newSession.room}
+                onChange={(e) => setNewSession({ ...newSession, room: e.target.value })}
+              />
+            </div>
           </div>
         </Modal>
       )}
