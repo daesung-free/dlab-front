@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DataTable, MaskToggle, todayStr, useMaskDefault, type Column } from '../../components/common'
+import { DataTable, MaskToggle, Modal, todayStr, useMaskDefault, type Column } from '../../components/common'
 import { Icon } from '../../components/Icon'
 import { Tabs } from '../../components/Tabs'
 import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
 import { getSeatLayout, listSeatAreas, type SeatArea, type SeatCell } from '../../api/facility'
-import { listPatrolMarks, listPatrols, savePatrol, type PatrolMarkDef } from '../../api/patrols'
+import {
+  clearPatrolRound,
+  listPatrolMarks,
+  listPatrols,
+  savePatrol,
+  type PatrolMarkDef,
+} from '../../api/patrols'
 import type { Mockup } from './types'
 import './reading-room.css'
 
@@ -45,23 +51,25 @@ import './reading-room.css'
  *   · 원 밖      오늘 그 자리에 없다 — 찾을 일이 아니다
  */
 const MARK_GROUPS = [
-  { key: 'warn', label: '주의', color: 'var(--amber)' },
-  { key: 'inside', label: '원내 · 사유 있음', color: 'var(--mint-d)' },
-  { key: 'brief', label: '잠시 비움', color: 'var(--blue)' },
-  { key: 'outside', label: '원 밖', color: 'var(--muted)' },
+  { key: 'OK', label: '정상', color: 'var(--mint)' },
+  { key: 'WARN', label: '주의', color: 'var(--amber)' },
+  { key: 'INSIDE', label: '원내 · 사유 있음', color: 'var(--mint-d)' },
+  { key: 'BRIEF', label: '잠시 비움', color: 'var(--blue)' },
+  { key: 'OUTSIDE', label: '원 밖', color: 'var(--muted)' },
 ] as const
 
 /** 서버 코드 → 묶음. 서버가 `group` 을 주면 **그쪽이 이긴다** */
 const CODE_GROUP: Record<string, string> = {
-  SLEEP: 'warn',
-  CLASSROOM: 'inside',
-  SUBJECT_ROOM: 'inside',
-  QNA: 'inside',
-  CONSULT: 'inside',
-  TOILET: 'brief',
-  COMMON: 'brief',
-  OUTING: 'outside',
-  EARLY_LEAVE: 'outside',
+  NONE: 'OK',
+  SLEEP: 'WARN',
+  CLASSROOM: 'INSIDE',
+  SUBJECT_ROOM: 'INSIDE',
+  QNA: 'INSIDE',
+  CONSULT: 'INSIDE',
+  TOILET: 'BRIEF',
+  COMMON: 'BRIEF',
+  OUTING: 'OUTSIDE',
+  EARLY_LEAVE: 'OUTSIDE',
 }
 
 /** 상태 목록을 못 받았을 때만 쓴다. 요구사항 29쪽의 9종(기본 제외) */
@@ -104,9 +112,11 @@ function Content() {
   const [marks, setMarks] = useState<Record<number, string>>({})
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [clearing, setClearing] = useState(false)
+  const [askClear, setAskClear] = useState(false)
 
   const groupOf = useCallback(
-    (code: string) => defs.find((d) => d.code === code)?.group ?? CODE_GROUP[code] ?? 'inside',
+    (code: string) => (defs.find((d) => d.code === code)?.group ?? CODE_GROUP[code] ?? 'INSIDE').toUpperCase(),
     [defs],
   )
   const colorOf = useCallback(
@@ -175,7 +185,7 @@ function Content() {
   const loadRound = useCallback(async () => {
     if (academyId === null) return
     try {
-      const rows = await listPatrols({ academyId, date, round })
+      const rows = await listPatrols({ academyId, date, round, studyAreaId: areaId ?? undefined })
       const next: Record<number, string> = {}
       for (const r of rows) next[r.enrollmentId] = r.mark
       setMarks(next)
@@ -186,7 +196,7 @@ function Content() {
       setMarks({})
       setDirty(false)
     }
-  }, [academyId, date, round])
+  }, [academyId, date, round, areaId])
 
   useEffect(() => {
     void loadRound()
@@ -241,6 +251,29 @@ function Content() {
       setError(err instanceof ApiError ? err.message : '저장하지 못했습니다.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  /**
+   * 그 회차를 비운다.
+   *
+   * ★ **빈 목록 저장으로 비우지 않는다.** 그러면 목록을 만드는 쪽의 실수 하나가 회차를
+   *   조용히 날린다 — 한 시간 돌며 찍은 것이 사라진다. 지우는 것은 지우겠다고 말해야 한다.
+   */
+  async function clearRound() {
+    if (academyId === null) return
+    setClearing(true)
+    setError(null)
+    try {
+      const { cleared } = await clearPatrolRound(round, { academyId, date })
+      setMarks({})
+      setDirty(false)
+      setAskClear(false)
+      setNote(`${round}회차 ${cleared}건을 비웠습니다. 다시 기록할 수 있습니다.`)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '비우지 못했습니다.')
+    } finally {
+      setClearing(false)
     }
   }
 
@@ -372,6 +405,15 @@ function Content() {
               ))}
             </select>
             <MaskToggle masked={masked} onChange={setMasked} />
+            {/* 비우기는 저장된 것이 있을 때만 의미가 있다 — 화면에만 있는 것은 회차를 옮기면 사라진다 */}
+            <button
+              className="btn"
+              disabled={clearing || checked === 0}
+              onClick={() => setAskClear(true)}
+              title={checked === 0 ? '이 회차에 기록이 없습니다' : undefined}
+            >
+              회차 비우기
+            </button>
             <button className="btn pri" disabled={saving || !dirty} onClick={() => void save()}>
               {saving ? '저장 중…' : '저장'}
             </button>
@@ -515,6 +557,24 @@ function Content() {
           )}
         </div>
       </div>
+
+      {askClear && (
+        <Modal
+          title={`${round}회차를 비웁니다`}
+          sub="이 회차에 저장된 기록이 지워집니다"
+          confirmLabel="비우기"
+          danger
+          busy={clearing}
+          onConfirm={() => void clearRound()}
+          onClose={() => setAskClear(false)}
+        >
+          <div className="note-box">
+            <div>
+              비운 뒤 <b>같은 회차를 다시 기록할 수 있습니다.</b> 다른 회차는 그대로 남습니다.
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }

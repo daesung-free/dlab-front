@@ -26,7 +26,14 @@ export interface PatrolMarkDef {
    *   상태가 늘면 조용히 어긋나므로 이 값을 쓴다.
    */
   away: boolean
-  /** 색을 묶는 키(WARN·INSIDE·BRIEF·OUTSIDE). 서버가 안 주면 화면이 코드로 묶는다 */
+  /**
+   * 색을 묶는 키 — `OK`·`WARN`·`INSIDE`·`BRIEF`·`OUTSIDE`.
+   *
+   * ★ **`OK`(기본)를 `INSIDE` 에 넣지 않는다.** 「자리에서 공부 중」과 「강의실에 있음」이
+   *   같은 색이 되면 안 된다 — 앞은 할 일이 없고 뒤는 확인이 필요하다.
+   * ★ 서버가 모든 상태에 묶음이 있는지 테스트로 막는다. 그래도 **화면은 못 받았을 때를
+   *   대비해 코드로도 묶는다** — 색 없는 칸이 생기면 무슨 상태인지 안 보인다.
+   */
   group?: string | null
 }
 
@@ -52,11 +59,21 @@ export interface PatrolQuery {
   date?: string
   /** 비우면 **그날 전부** — 1~5회차를 한 화면에 볼 때 비운다 */
   round?: number
+  /**
+   * 구역으로 거른다.
+   *
+   * ★ **기록에 남은 좌석으로 거른다**(현재 배정이 아니다). 현재 배정으로 거르면 그 사이
+   *   자리를 옮긴 학생이 빠지거나 끼어들어 **화면의 좌석표와 어긋난다** — 순찰 기록은
+   *   「그때 거기 있었다」는 뜻이다.
+   * ⚠️ 좌석이 지워졌으면 그 번호는 구역 목록에서 빠진다. 기록은 남아 있으니 **구역을
+   *   비우고 조회**하면 보인다.
+   */
+  studyAreaId?: number
 }
 
 export function listPatrols(q: PatrolQuery): Promise<PatrolRecord[]> {
   return request<PatrolRecord[]>('/api/v1/admin/patrols', {
-    query: { academyId: q.academyId, date: q.date, round: q.round },
+    query: { academyId: q.academyId, date: q.date, round: q.round, studyAreaId: q.studyAreaId },
   })
 }
 
@@ -72,6 +89,25 @@ export interface PatrolSaveMark {
  *
  * ★ **보낸 목록이 그 회차의 전부**다(덮어쓰기). 화면에서 지운 것은 빼고 보내면 된다.
  */
+/**
+ * 한 회차를 비운다.
+ *
+ * ★ **빈 목록을 저장하는 것은 비우는 뜻이 아니다.** 그렇게 만들면 화면 버그 하나가
+ *   회차를 조용히 날린다 — 목록을 만드는 코드가 빈 배열을 보내는 실수는 흔하고,
+ *   그때 **한 시간 돌며 찍은 것이 사라진다.** 지우는 것은 지우겠다고 말해야 한다.
+ *
+ * soft delete 라 「그 회차에 무엇이 있었나」는 남고, **비운 뒤 다시 찍는 것도 된다.**
+ */
+export function clearPatrolRound(
+  round: number,
+  q: { academyId: number; date: string },
+): Promise<{ cleared: number }> {
+  return request<{ cleared: number }>(`/api/v1/admin/patrols/rounds/${round}`, {
+    method: 'DELETE',
+    query: { academyId: q.academyId, date: q.date },
+  })
+}
+
 export function savePatrol(body: {
   academyId: number
   /** yyyy-MM-dd */
