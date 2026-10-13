@@ -5,6 +5,7 @@ import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
 import { GRADE_LABEL } from '../../api/students'
+import type { GradeType } from '../../api/students'
 import {
   PAYMENT_METHOD_LABEL,
   createBillingStandard,
@@ -24,6 +25,8 @@ import {
   listTuitionMonths,
   listTuitionPrices,
   saveTuitionMonth,
+  saveTuitionPrice,
+  type SeatType,
   type TuitionMonth,
   type TuitionPrice,
 } from '../../api/tuition'
@@ -327,6 +330,16 @@ function Content() {
   const [busy, setBusy] = useState(false)
   /** 교습일수 입력 모달 */
   const [monthEdit, setMonthEdit] = useState<{ mo: number; days: string } | null>(null)
+  /* 단가 입력. 기존 행을 누르면 그 조합이, '단가 추가' 면 빈 값이 들어온다 —
+     같은 (연도·학년·좌석유형)은 서버가 금액만 갱신하므로 둘이 같은 저장 경로다 */
+  const [priceEdit, setPriceEdit] = useState<{
+    gradeType: GradeType
+    seatType: SeatType
+    tuitionFee: string
+    studyRoomFee: string
+    exists: boolean
+  } | null>(null)
+  const [priceErr, setPriceErr] = useState<string | null>(null)
   const [monthErr, setMonthErr] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   /*
@@ -470,6 +483,49 @@ function Content() {
       await load()
     } catch (err) {
       setMonthErr(err instanceof ApiError ? err.message : '저장하지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /**
+   * 교습비 단가 저장.
+   *
+   * ★ **이게 비어 있으면 월 청구 발행이 404 로 거절된다**(`TUITION_PRICE_NOT_FOUND`).
+   *   수납현황의 청구 발행은 이미 실연동이라, 단가를 넣을 칸이 없으면 청구 업무가
+   *   시작 자체를 못 한다 — 같은 화면의 '월별 교습일수' 와 같은 모양으로 둔다.
+   * ★ 성공한 **뒤에** 닫는다. 먼저 닫으면 서버가 거부했을 때 입력값을 잃는다.
+   */
+  async function savePrice() {
+    if (priceEdit === null) return
+    if (academyId === null) {
+      setNotice('먼저 지점을 고르세요.')
+      return
+    }
+    const tuitionFee = Number(priceEdit.tuitionFee)
+    const studyRoomFee = Number(priceEdit.studyRoomFee)
+    if (!Number.isInteger(tuitionFee) || tuitionFee < 0 || !Number.isInteger(studyRoomFee) || studyRoomFee < 0) {
+      setPriceErr('금액은 0 이상 정수로 적어 주세요.')
+      return
+    }
+    setBusy(true)
+    setPriceErr(null)
+    try {
+      await saveTuitionPrice({
+        academyId,
+        year,
+        gradeType: priceEdit.gradeType,
+        seatType: priceEdit.seatType,
+        tuitionFee,
+        studyRoomFee,
+      })
+      setNotice(
+        `${GRADE_LABEL[priceEdit.gradeType] ?? priceEdit.gradeType} · ${SEAT_TYPE_LABEL[priceEdit.seatType]} 단가를 저장했습니다.`,
+      )
+      setPriceEdit(null)
+      await load()
+    } catch (err) {
+      setPriceErr(err instanceof ApiError ? err.message : '저장하지 못했습니다.')
     } finally {
       setBusy(false)
     }
@@ -673,6 +729,91 @@ function Content() {
         </Modal>
       )}
 
+      {priceEdit && (
+        <Modal
+          title={priceEdit.exists ? '교습비 단가 수정' : '교습비 단가 추가'}
+          sub={`${year} 시즌 · ${GRADE_LABEL[priceEdit.gradeType] ?? priceEdit.gradeType} · ${SEAT_TYPE_LABEL[priceEdit.seatType]}`}
+          confirmLabel="저장"
+          busy={busy}
+          error={priceErr}
+          onConfirm={() => void savePrice()}
+          onClose={() => {
+            setPriceEdit(null)
+            setPriceErr(null)
+          }}
+        >
+          <div className="note-box">
+            <div>
+              여기 금액이 비어 있으면 <b>그 학년·좌석의 월 청구를 발행할 수 없습니다.</b> 할인은 수납현황에서
+              따로 붙습니다 — 여기는 정가입니다.
+            </div>
+          </div>
+          <div className="frow">
+            <label>학년</label>
+            <div>
+              <select
+                className="sel"
+                value={priceEdit.gradeType}
+                disabled={priceEdit.exists}
+                onChange={(e) => setPriceEdit({ ...priceEdit, gradeType: e.target.value as GradeType })}
+              >
+                {(['HIGH2', 'HIGH3', 'N_SU'] as GradeType[]).map((g) => (
+                  <option key={g} value={g}>
+                    {GRADE_LABEL[g]}
+                  </option>
+                ))}
+              </select>
+              {/* ★ 기존 행은 조합을 못 바꾼다 — 바꾸면 다른 조합을 덮어쓰게 된다 */}
+              {priceEdit.exists && <div className="hint">학년·좌석을 바꾸려면 그 조합을 따로 추가하세요.</div>}
+            </div>
+          </div>
+          <div className="frow">
+            <label>좌석 유형</label>
+            <div>
+              <select
+                className="sel"
+                value={priceEdit.seatType}
+                disabled={priceEdit.exists}
+                onChange={(e) => setPriceEdit({ ...priceEdit, seatType: e.target.value as SeatType })}
+              >
+                {(['GENERAL', 'SINGLE'] as SeatType[]).map((t) => (
+                  <option key={t} value={t}>
+                    {SEAT_TYPE_LABEL[t]}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="frow">
+            <label>교습비</label>
+            <div>
+              {/* ★ Modal 안 숫자 입력에 step 을 걸지 않는다 — 배수가 아니면 브라우저가
+                     제출을 막아 "저장이 안 먹는다" 로 보인다 */}
+              <input
+                className="inp"
+                type="number"
+                min={0}
+                value={priceEdit.tuitionFee}
+                onChange={(e) => setPriceEdit({ ...priceEdit, tuitionFee: e.target.value })}
+              />
+              <div className="hint">원 단위로 적습니다.</div>
+            </div>
+          </div>
+          <div className="frow">
+            <label>독서실비</label>
+            <div>
+              <input
+                className="inp"
+                type="number"
+                min={0}
+                value={priceEdit.studyRoomFee}
+                onChange={(e) => setPriceEdit({ ...priceEdit, studyRoomFee: e.target.value })}
+              />
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {monthEdit && (
         <Modal
           title={`${year}년 ${monthEdit.mo}월 교습일수`}
@@ -788,6 +929,16 @@ function Content() {
                 masked={false}
                 loading={loading}
                 pageSize={10}
+                /* ★ 행을 누르면 그 조합의 금액을 고친다 — 월별 교습일수와 같은 동작이다 */
+                onRowClick={(r) =>
+                  setPriceEdit({
+                    gradeType: r.gradeType,
+                    seatType: r.seatType,
+                    tuitionFee: String(r.tuitionFee ?? ''),
+                    studyRoomFee: String(r.studyRoomFee ?? ''),
+                    exists: true,
+                  })
+                }
                 countLabel={
                   <>
                     교습비 단가표 <b>{prices.length}</b>건 · 학년 × 좌석유형 — 위 &lsquo;단가표&rsquo; 행의 실제 금액
@@ -795,6 +946,20 @@ function Content() {
                 }
                 toolbar={
                   <>
+                    <button
+                      className="btn pri"
+                      onClick={() =>
+                        setPriceEdit({
+                          gradeType: 'HIGH3',
+                          seatType: 'GENERAL',
+                          tuitionFee: '',
+                          studyRoomFee: '',
+                          exists: false,
+                        })
+                      }
+                    >
+                      단가 추가
+                    </button>
                     <ExcelButton filename={`청구기준_${year}`} columns={priceCols} rows={prices} masked={false} />
                     <select
                       className="sel"

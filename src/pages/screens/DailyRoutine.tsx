@@ -9,6 +9,7 @@ import {
   ROUTINE_STATUS_LABEL,
   copyRoutinesFromPreviousMonth,
   createRoutine,
+  deleteRoutine,
   getRoutineMatrix,
   listRoutineResults,
   listRoutines,
@@ -61,6 +62,27 @@ function thisMonth(): string {
   return new Date().toISOString().slice(0, 7)
 }
 
+/* ★ 표를 함수로 만든다 — 삭제 버튼이 화면 상태(핸들러)를 써야 해서 모듈 상수로 둘 수 없다 */
+function routineColumns(onDelete: (r: Routine) => void): Column<Routine>[] {
+  return [
+    ...ROUTINE_COLUMNS,
+    {
+      key: 'act',
+      header: '',
+      width: '80px',
+      align: 'center',
+      value: () => '',
+      /* ★ 「전월 복사」는 멱등이 아니다 — 두 번 누르면 그만큼 더 생기는데 지울 길이
+            없었다. 복사 버튼이 상시 노출돼 있어 오조작이 그 달 표를 영구히 오염시킨다 */
+      render: (r) => (
+        <button className="btn" onClick={() => onDelete(r)}>
+          삭제
+        </button>
+      ),
+    },
+  ]
+}
+
 const ROUTINE_COLUMNS: Column<Routine>[] = [
   { key: 'name', header: '루틴명', sortable: true, value: (r) => r.name },
   { key: 'subject', header: '과목', width: '84px', align: 'center', sortable: true, value: (r) => r.subject ?? '-' },
@@ -100,6 +122,7 @@ function Content() {
   const [date, setDate] = useState(todayStr())
 
   const [routines, setRoutines] = useState<Routine[]>([])
+  const [delRoutine, setDelRoutine] = useState<Routine | null>(null)
   /** 루틴 추가. classId 를 안 보내면 지점 공통이 된다 — 화면에서 그 뜻을 적어준다 */
   const [newRoutine, setNewRoutine] = useState<{ name: string; subject: string; maxScore: string } | null>(null)
   const [routineBusy, setRoutineBusy] = useState(false)
@@ -140,6 +163,26 @@ function Content() {
     }
   }
 
+  /**
+   * 루틴 1건 삭제.
+   *
+   * ★ **되돌릴 수 없다.** 그 달 결과 입력에서 그 칸이 사라진다 — 이미 찍어 둔 결과가
+   *   있으면 서버가 막는다(그때는 서버 문구를 그대로 보여준다).
+   */
+  async function removeRoutine(r: Routine) {
+    setRoutineBusy(true)
+    setRoutineErr(null)
+    try {
+      await deleteRoutine(r.id)
+      setDelRoutine(null)
+      await load()
+    } catch (err) {
+      setRoutineErr(err instanceof ApiError ? err.message : '루틴을 지우지 못했습니다.')
+    } finally {
+      setRoutineBusy(false)
+    }
+  }
+
   /** 지난달 루틴을 이 달로 가져온다. 같은 루틴이 있어도 서버가 안 막으므로 중복이 쌓인다 */
   async function copyPrevMonth() {
     if (academyId === null) return
@@ -157,6 +200,8 @@ function Content() {
       setCopying(false)
     }
   }
+
+  const routineCols = useMemo(() => routineColumns(setDelRoutine), [])
 
   const load = useCallback(async () => {
     if (academyId === null) {
@@ -353,6 +398,29 @@ function Content() {
 
   return (
     <>
+      {delRoutine && (
+        <Modal
+          title="루틴 삭제"
+          sub={`${delRoutine.name} — ${month} 루틴에서 지웁니다.`}
+          confirmLabel="삭제"
+          danger
+          busy={routineBusy}
+          error={routineErr}
+          onConfirm={() => void removeRoutine(delRoutine)}
+          onClose={() => {
+            setDelRoutine(null)
+            setRoutineErr(null)
+          }}
+        >
+          <div className="note-box">
+            <div>
+              지우면 <b>그 달 결과 입력에서 이 칸이 사라집니다.</b> 이미 찍어 둔 결과가 있으면 지워지지
+              않습니다.
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {copyAsk && (
         <Modal
           title="전월 루틴 가져오기"
@@ -647,7 +715,7 @@ function Content() {
           ) : (
             <DataTable
               nowrap
-              columns={ROUTINE_COLUMNS}
+              columns={routineCols}
               rows={routines}
               rowKey={(r) => String(r.id)}
               masked={false}
