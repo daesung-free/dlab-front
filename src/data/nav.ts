@@ -55,6 +55,8 @@ export const NAV: NavCat[] = [
     icon: 'users',
     desc: '원생 등록·출결·학습·상담·수납까지 학생 한 명의 전 주기를 다루는 메뉴',
     sections: [
+      /* ★ 순서는 디랩 요청대로 **학원생 → 출결/자습/독서실 → DLab** 이다(피드백 1013, 5-2).
+             매일 쓰는 순서가 그것이라, 그 밖의 메뉴가 사이에 끼면 스크롤이 길어진다 */
       {
         name: '학원생',
         items: [
@@ -62,6 +64,27 @@ export const NAV: NavCat[] = [
           { screenId: 'student-enroll', label: '신규 접수 등록', added: true },
           { screenId: 'waitlist', label: '대기자 관리', added: true, note: '입학 예약자 → 원생 전환' },
           { screenId: 'profile-form', label: '신상기록부', added: true, note: '입학 필수 · 앱 학생 입력' },
+        ],
+      },
+      {
+        name: '출결/자습/독서실',
+        items: [
+          { screenId: 'attendance', label: '출결 관리', added: true, note: '키오스크 직접 연동' },
+          { screenId: 'student-absence', label: '사유 신청 관리', added: true },
+          { screenId: 'reading-room', label: '독서실 좌석배치표' },
+          { screenId: 'seat-move', label: '좌석 이탈 · 복귀', added: true, note: '키오스크 대체 앱 신청' },
+        ],
+      },
+      {
+        name: 'DLab',
+        items: [
+          { screenId: 'student-penalty', label: '상벌점 관리' },
+          { screenId: 'daily-routine', label: '데일리 루틴', added: true },
+          { screenId: 'learning-plan', label: '주 · 일 학습계획', added: true },
+          { screenId: 'score', label: '성적 관리', added: true, note: '더프리미엄 성적 연동' },
+          { screenId: 'consult', label: '상담 일지 · 리포트', added: true },
+          { screenId: 'daily-report', label: 'Daily Report', added: true, note: '앱 데이터 원천' },
+          { screenId: 'qna', label: '질의응답', added: true, note: '대면 운영 · 온라인은 기능만 준비' },
         ],
       },
       {
@@ -103,29 +126,8 @@ export const NAV: NavCat[] = [
         items: [{ screenId: 'survey', label: '설문관리' }],
       },
       {
-        name: '출결/자습/독서실',
-        items: [
-          { screenId: 'attendance', label: '출결 관리', added: true, note: '키오스크 직접 연동' },
-          { screenId: 'student-absence', label: '사유 신청 관리', added: true },
-          { screenId: 'reading-room', label: '독서실 좌석배치표' },
-          { screenId: 'seat-move', label: '좌석 이탈 · 복귀', added: true, note: '키오스크 대체 앱 신청' },
-        ],
-      },
-      {
         name: '특강관리',
         items: [{ screenId: 'lecture', label: '특강관리', note: '특강출석부 포함' }],
-      },
-      {
-        name: 'DLab',
-        items: [
-          { screenId: 'student-penalty', label: '상벌점 관리' },
-          { screenId: 'daily-routine', label: '데일리 루틴', added: true },
-          { screenId: 'learning-plan', label: '주 · 일 학습계획', added: true },
-          { screenId: 'score', label: '성적 관리', added: true, note: '더프리미엄 성적 연동' },
-          { screenId: 'consult', label: '상담 일지 · 리포트', added: true },
-          { screenId: 'daily-report', label: 'Daily Report', added: true, note: '앱 데이터 원천' },
-          { screenId: 'qna', label: '질의응답', added: true, note: '대면 운영 · 온라인은 기능만 준비' },
-        ],
       },
       {
         name: '수납현황',
