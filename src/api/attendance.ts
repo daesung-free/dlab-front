@@ -62,6 +62,53 @@ export interface AttendanceRow {
   guardianPhone: string | null
   /** 사유 없이 미등원 → 지각알림 + 사유 회신 요청이 자동 발송된 건 */
   unexcusedLate: boolean
+  /**
+   * 등원과 하원 **사이**에 일어난 외출·조퇴 구간(2026-10-13 추가).
+   *
+   * ★ **하루에 여러 번일 수 있다** — 한 칸으로는 못 담아 목록으로 온다. 서버가 시간순으로
+   *   정렬해 준다.
+   * ★ ⚠️ 생성된 타입 이름은 `AttendanceInterval` 이다 — 앱 응답의 `AttendanceEvent`(태깅 한 건)와
+   *   OpenAPI 스키마가 충돌해서다. **JSON 키는 `events` 그대로**다.
+   */
+  events?: AttendanceInterval[]
+}
+
+/** 외출·조퇴 한 구간 */
+export interface AttendanceInterval {
+  /** EXCUSED_OUTING · OUTING · EARLY_LEAVE … */
+  type: string
+  /** ISO 인스턴트. 등원·하원과 같은 형식이라 자정을 넘긴 외출도 표현된다 */
+  at: string
+  /** 복귀 시각. **없다고 다 같은 뜻이 아니다** — `returnState` 로 가른다 */
+  returnedAt: string | null
+  returnState: ReturnState
+  /** 사유신청에서 가져온다. 신청이 없으면 null — 「사유 없음」이 아니다 */
+  excused: boolean
+  reason: string | null
+}
+
+/**
+ * 복귀 상태.
+ *
+ * ★ **`returnedAt` 이 null 인 경우가 셋이라 그 값으로 가르면 안 된다.**
+ *   조퇴(`NOT_EXPECTED`)를 미복귀로 묶으면 **담당자가 조퇴한 학생을 찾으러 간다.**
+ */
+export type ReturnState = 'RETURNED' | 'PENDING' | 'NO_RETURN_RECORD' | 'NOT_EXPECTED'
+
+export const RETURN_STATE_LABEL: Record<ReturnState, string> = {
+  RETURNED: '복귀',
+  /** 지금 밖에 있다 — 급한 것은 소재 파악이다. 학생을 탓하는 표시가 아니다 */
+  PENDING: '지금 밖에 있음',
+  /** 복귀 태깅이 빠졌다 — 고쳐야 순공시간이 맞는다 */
+  NO_RETURN_RECORD: '복귀 기록 없음',
+  /** 조퇴라 복귀가 없는 것이 정상이다 */
+  NOT_EXPECTED: '조퇴',
+}
+
+export const INTERVAL_TYPE_LABEL: Record<string, string> = {
+  EXCUSED_OUTING: '사유 외출',
+  OUTING: '외출',
+  EARLY_LEAVE: '조퇴',
 }
 
 /**
