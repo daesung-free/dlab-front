@@ -11,6 +11,7 @@ import {
   listPatrols,
   savePatrol,
   type PatrolMarkDef,
+  type PatrolRecord,
 } from '../../api/patrols'
 import type { Mockup } from './types'
 import './reading-room.css'
@@ -110,13 +111,22 @@ function Content() {
   const [pick, setPick] = useState<string>('SLEEP')
   /** 학생 → 상태 코드. **좌석이 아니라 학생에 붙는다**(서버와 같은 축) */
   const [marks, setMarks] = useState<Record<number, string>>({})
+  /** 서버가 준 그 회차의 기록 원본. **구역 전체**일 때는 좌석이 없어 이걸로 목록을 만든다 */
+  const [records, setRecords] = useState<PatrolRecord[]>([])
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [clearing, setClearing] = useState(false)
   const [askClear, setAskClear] = useState(false)
 
   const groupOf = useCallback(
-    (code: string) => (defs.find((d) => d.code === code)?.group ?? CODE_GROUP[code] ?? 'INSIDE').toUpperCase(),
+    (code: string) => {
+      const fromServer = defs.find((d) => d.code === code)?.group
+      if (fromServer) return fromServer.toUpperCase()
+      /* ★ 폴백을 **말없이** 쓰지 않는다. 서버가 묶음을 바꾸면 화면 표만 옛날 값으로 남아
+         색이 조용히 갈라진다 — 「색이 왜 다르지」를 그때 추적할 수 있어야 한다 */
+      if (import.meta.env.DEV) console.warn(`[순찰] 서버가 '${code}' 의 묶음을 주지 않아 화면 기본값을 씁니다`)
+      return CODE_GROUP[code] ?? 'INSIDE'
+    },
     [defs],
   )
   const colorOf = useCallback(
@@ -144,7 +154,8 @@ function Content() {
     try {
       const list = await listSeatAreas(academyId)
       setAreas(list)
-      setAreaId((prev) => (list.some((a) => a.id === prev) ? prev : (list[0]?.id ?? null)))
+      /* 첫 구역을 자동으로 고른다 — 평소 순찰은 구역을 돌며 한다. `null` 은 「구역 전체」다 */
+      setAreaId((prev) => (prev !== null && list.some((a) => a.id === prev) ? prev : (list[0]?.id ?? null)))
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '좌석 구역을 불러오지 못했습니다.')
     }
@@ -189,11 +200,13 @@ function Content() {
       const next: Record<number, string> = {}
       for (const r of rows) next[r.enrollmentId] = r.mark
       setMarks(next)
+      setRecords(rows)
       setDirty(false)
     } catch (err) {
       /* 서버가 아직 없으면(404) 조용히 빈 채로 둔다 — 그래도 순찰은 돌 수 있어야 한다 */
       if (err instanceof ApiError && err.status !== 404) setError(err.message)
       setMarks({})
+      setRecords([])
       setDirty(false)
     }
   }, [academyId, date, round, areaId])
@@ -245,6 +258,7 @@ function Content() {
       const next: Record<number, string> = {}
       for (const r of rows) next[r.enrollmentId] = r.mark
       setMarks(next)
+      setRecords(rows)
       setDirty(false)
       setNote(`${round}회차 ${rows.length}건을 저장했습니다.`)
     } catch (err) {
@@ -267,6 +281,7 @@ function Content() {
     try {
       const { cleared } = await clearPatrolRound(round, { academyId, date })
       setMarks({})
+      setRecords([])
       setDirty(false)
       setAskClear(false)
       setNote(`${round}회차 ${cleared}건을 비웠습니다. 다시 기록할 수 있습니다.`)
@@ -291,15 +306,36 @@ function Content() {
      조용히 틀린다 — **졸음은 자리에 있는 것**이라 특히 섞이면 안 된다 */
   const awayCount = Object.values(marks).filter((m) => defs.find((d) => d.code === m)?.away).length
 
-  const listRows = useMemo(
-    () =>
-      seats
-        .filter((s) => s.enrollmentId !== null)
+  /* ★ 구역을 골랐으면 **좌석표 그대로**(아직 안 찍은 학생도 보여야 순찰이 된다).
+     구역 전체면 좌석이 없으므로 **서버 기록으로** 만든다 — 좌석 없이 찍힌 건을 보는 자리다 */
+  const listRows = useMemo(() => {
+    if (areaId === null) {
+      return records
+        .map((r) => ({
+          seatId: r.enrollmentId,
+          enrollmentId: r.enrollmentId,
+          seatCd: r.seatCd ?? '-',
+          studentNo: r.studentNo,
+          studentName: r.studentName,
+          className: null as string | null,
+          mark: r.mark as string | null,
+        }))
         .sort((a, b) => a.seatCd.localeCompare(b.seatCd))
-        .map((s) => ({ ...s, mark: markOf(s.enrollmentId) })),
+    }
+    return seats
+      .filter((s) => s.enrollmentId !== null)
+      .sort((a, b) => a.seatCd.localeCompare(b.seatCd))
+      .map((s) => ({
+        seatId: s.seatId,
+        enrollmentId: s.enrollmentId,
+        seatCd: s.seatCd,
+        studentNo: s.studentNo,
+        studentName: s.studentName,
+        className: s.className,
+        mark: markOf(s.enrollmentId),
+      }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [seats, marks],
-  )
+  }, [areaId, records, seats, marks])
 
   const listColumns: Column<(typeof listRows)[number]>[] = useMemo(
     () => [
@@ -362,8 +398,8 @@ function Content() {
           <div className="l">
             <Icon name="armchair" size={13} /> 배정 좌석
           </div>
-          <div className="v">{seated}</div>
-          <div className="d">이 구역</div>
+          <div className="v">{areaId === null ? '-' : seated}</div>
+          <div className="d">{areaId === null ? '구역을 고르면 보입니다' : '이 구역'}</div>
         </div>
         <div className="stat">
           <div className="l">
@@ -396,7 +432,9 @@ function Content() {
               value={areaId ?? ''}
               onChange={(e) => setAreaId(e.target.value === '' ? null : Number(e.target.value))}
             >
-              {areas.length === 0 && <option value="">등록된 구역이 없습니다</option>}
+              {/* ★ 전체는 확인용이 아니다. **학생 목록 탭에서 찍으면 좌석이 비는데**(설계상)
+                  그 기록은 어느 구역 조회에도 안 걸린다 — 그걸 보려면 전체여야 한다 */}
+              <option value="">구역 전체</option>
               {areas.map((a) => (
                 <option key={a.id} value={a.id}>
                   {/* 관을 빼면 본관 A 와 별관 A 가 화면에서 구분되지 않는다 */}
@@ -414,7 +452,14 @@ function Content() {
             >
               회차 비우기
             </button>
-            <button className="btn pri" disabled={saving || !dirty} onClick={() => void save()}>
+            {/* ★ 빈 목록은 보내지 않는다 — 서버가 400 으로 막는다(빈 배열을 '비움'으로 읽지
+                않기로 한 것과 같은 이유). 전부 지웠으면 **「회차 비우기」가 갈 길**이라고 말해 준다 */}
+            <button
+              className="btn pri"
+              disabled={saving || !dirty || checked === 0}
+              onClick={() => void save()}
+              title={dirty && checked === 0 ? '모두 지우려면 「회차 비우기」를 쓰세요' : undefined}
+            >
               {saving ? '저장 중…' : '저장'}
             </button>
           </div>
@@ -435,7 +480,10 @@ function Content() {
                 </button>
               ))}
               {/* ★ 회차를 옮기면 서버에서 다시 읽는다 — 저장 안 한 것은 그때 사라진다 */}
-              {dirty && <span className="mk brandnew">저장하지 않은 기록이 있습니다</span>}
+              {dirty && checked > 0 && <span className="mk brandnew">저장하지 않은 기록이 있습니다</span>}
+              {dirty && checked === 0 && (
+                <span className="mk brandnew">모두 지웠습니다 — 서버에서도 지우려면 「회차 비우기」</span>
+              )}
             </div>
           </div>
 
@@ -491,7 +539,11 @@ function Content() {
             <div style={{ paddingTop: 12 }}>
               {loading && <div style={{ color: 'var(--muted)', fontSize: 13 }}>불러오는 중…</div>}
               {!loading && seats.length === 0 && (
-                <div style={{ color: 'var(--muted)', fontSize: 13 }}>이 지점에 등록된 좌석 구역이 없습니다.</div>
+                <div style={{ color: 'var(--muted)', fontSize: 13 }}>
+                  {areaId === null
+                    ? '구역을 고르면 좌석표가 보입니다. 지금은 학생 목록 탭에서 기록할 수 있습니다.'
+                    : '이 지점에 등록된 좌석 구역이 없습니다.'}
+                </div>
               )}
               {!loading && seats.length > 0 && (
                 <div className="rr-stage">
