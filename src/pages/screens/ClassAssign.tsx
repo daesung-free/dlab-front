@@ -10,6 +10,8 @@ import {
   deleteClass,
   listClasses,
   releaseStudentFromClass,
+  listClassMembers,
+  type ClassMember,
   updateClass,
   type BulkAssignResult,
   type ClassGroup,
@@ -77,6 +79,11 @@ function Content() {
   /* 반 관리(이름·정원·담임·삭제). 반 카드를 누르면 열린다 —
      **담임을 붙일 자리가 없어 사유 승인·상담·반 공지가 통째로 막혀 있었다**(2026-09-27 실테스트) */
   const [editing, setEditing] = useState<ClassGroup | null>(null)
+  /* 반 명단. **이 화면 표는 미배정 학생만 보여준다** — 그런데 「배정 해제」가 있어서
+     뺄 학생을 고를 수가 없었다(디랩 피드백 1013, 5-2 계열). 여기서 보고 뺀다 */
+  const [members, setMembers] = useState<{ cls: ClassGroup; rows: ClassMember[] | null } | null>(null)
+  const [memberSel, setMemberSel] = useState<string[]>([])
+  const [memberErr, setMemberErr] = useState<string | null>(null)
   const [form, setForm] = useState<{ name: string; capacity: string; teacherId: string; examNo: string }>({
     name: '',
     capacity: '',
@@ -248,6 +255,53 @@ function Content() {
     }
   }
 
+  /** 반 명단을 연다. 목록이 길어 모달 안에서 고르고 바로 뺀다 */
+  async function openMembers(cls: ClassGroup) {
+    setMembers({ cls, rows: null })
+    setMemberSel([])
+    setMemberErr(null)
+    try {
+      setMembers({ cls, rows: await listClassMembers(cls.id) })
+    } catch (err) {
+      setMemberErr(err instanceof ApiError ? err.message : '명단을 불러오지 못했습니다.')
+      setMembers({ cls, rows: [] })
+    }
+  }
+
+  /**
+   * 명단에서 고른 학생을 그 반에서 뺀다.
+   *
+   * ★ **일괄 API 가 없다** — 한 명씩 부르므로 중간에 실패하면 일부만 빠진 채로 남는다.
+   *   몇 명이 됐고 누가 안 됐는지 그대로 알린다.
+   */
+  async function releaseFromMembers() {
+    if (!members || memberSel.length === 0) return
+    setBusy(true)
+    setMemberErr(null)
+    let ok = 0
+    const failed: string[] = []
+    for (const id of memberSel) {
+      try {
+        await releaseStudentFromClass(members.cls.id, Number(id))
+        ok += 1
+      } catch (err) {
+        const who = members.rows?.find((m) => String(m.enrollmentId) === id)?.studentName ?? id
+        failed.push(`${who}(${err instanceof ApiError ? err.message : '실패'})`)
+      }
+    }
+    setBusy(false)
+    await loadClasses()
+    table.reload()
+    if (failed.length > 0) {
+      setMemberErr(`${ok}명은 뺐고 ${failed.length}명이 안 됐습니다 — ${failed.join(' · ')}`)
+      await openMembers(members.cls)
+      return
+    }
+    const name = members.cls.name
+    setMembers(null)
+    setNote(`${name} 에서 ${ok}명을 뺐습니다.`)
+  }
+
   /** 선택한 학생을 그 반에서 뺀다. 대상 반이 정해져 있어야 한다 */
   async function release() {
     if (target === null || selected.length === 0) return
@@ -306,6 +360,44 @@ function Content() {
         <div className="note-box" role="status">
           <div>{note}</div>
         </div>
+      )}
+
+      {members && (
+        <Modal
+          wide
+          title={`${members.cls.name} 명단`}
+          sub={`${members.rows?.length ?? 0}명 — 고른 학생을 이 반에서 뺍니다.`}
+          confirmLabel={memberSel.length > 0 ? `${memberSel.length}명 빼기` : '닫기'}
+          danger={memberSel.length > 0}
+          busy={busy}
+          error={memberErr}
+          hideCancel
+          onConfirm={() => (memberSel.length > 0 ? void releaseFromMembers() : setMembers(null))}
+          onClose={() => setMembers(null)}
+        >
+          {members.rows === null ? (
+            <div className="hint">불러오는 중…</div>
+          ) : members.rows.length === 0 ? (
+            <div className="hint">이 반에 배정된 학생이 없습니다.</div>
+          ) : (
+            <DataTable
+              rows={members.rows}
+              rowKey={(r) => String(r.enrollmentId)}
+              /* ★ 체크박스는 selectable 만으로 안 켜진다 — selected·onSelectedChange 를 같이 준다 */
+              selectable
+              selected={memberSel}
+              onSelectedChange={setMemberSel}
+              masked={false}
+              pageSize={15}
+              columns={[
+                { key: 'studentNo', header: '학번', width: '110px', value: (r) => r.studentNo ?? '-' },
+                { key: 'studentName', header: '이름', width: '100px', value: (r) => r.studentName },
+                { key: 'seatCd', header: '좌석', width: '80px', align: 'center', value: (r) => r.seatCd ?? '-' },
+                { key: 'schoolName', header: '출신학교', value: (r) => r.schoolName ?? '-' },
+              ]}
+            />
+          )}
+        </Modal>
       )}
 
       {editing && (
@@ -460,6 +552,18 @@ function Content() {
               }`}
             >
               담임 {c.homeroomTeacherName ?? '미지정'}
+              {/* ★ 카드 전체가 '반 관리' 열기라 전파를 막는다 — 안 막으면 두 모달이 겹친다 */}
+              <button
+                className="btn"
+                style={{ marginLeft: 6, padding: '1px 6px', fontSize: 10 }}
+                title="이 반에 지금 누가 있는지 봅니다"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void openMembers(c)
+                }}
+              >
+                명단
+              </button>
               {/* 강의실은 기초 관리 > 반에서 지정한다(2026-09-21 추가) */}
               {c.roomName ? ` · ${c.roomName}` : ''}
             </div>

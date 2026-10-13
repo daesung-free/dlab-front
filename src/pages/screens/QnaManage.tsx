@@ -9,9 +9,11 @@ import {
   listQnaSlotsBetween,
   openQnaSlots,
   setQnaSlotClosed,
+  assignQnaSlot,
   type QnaReservation,
   type QnaSlot,
 } from '../../api/qna'
+import { listTeachers, type TeacherRow } from '../../api/accounts'
 import { maskName } from '../../lib/mask'
 import { createScreenSignal } from './screenSignal'
 import type { Mockup } from './types'
@@ -215,8 +217,62 @@ function Content() {
   const [busy, setBusy] = useState(false)
   /* 예약 칸을 누르면 바로 취소되던 것을 한 번 묻게 한다 — 이름을 확인하려고 누르는 경우가 많다 */
   const [cancelAsk, setCancelAsk] = useState<{ r: QnaReservation; slot: QnaSlot } | null>(null)
+  /* 담당·장소 지정. 타임 개설 모달이 "담당·상담실은 나중에 붙일 수 있습니다" 라고
+     안내해 놓고 **붙일 경로가 없었다** — 슬롯은 지울 수도 없어 미지정 슬롯이 영구히 남았다 */
+  const [assignDay, setAssignDay] = useState<{ date: string; teacherId: string; room: string } | null>(null)
+  const [assignErr, setAssignErr] = useState<string | null>(null)
+  const [teachers, setTeachers] = useState<TeacherRow[]>([])
 
   const dates = useMemo(() => weekDates(anchor), [anchor])
+
+  /* 담당 선택지. 반 배정과 같은 규칙이다 — **강사(kind=TEACHER)만** 나온다 */
+  useEffect(() => {
+    if (academyId === null) return
+    let alive = true
+    listTeachers(academyId)
+      .then((t) => alive && setTeachers(t))
+      .catch(() => alive && setTeachers([]))
+    return () => {
+      alive = false
+    }
+  }, [academyId])
+
+  /**
+   * 하루치 슬롯에 담당·장소를 한 번에 지정한다.
+   *
+   * ★ **일괄 API 가 없다.** 슬롯마다 한 번씩 부르므로 중간에 실패하면 **일부만 반영된
+   *   채로 남는다** — 몇 개가 됐고 몇 개가 안 됐는지 그대로 알린다. 안 알리면
+   *   담당자는 전부 된 줄 안다.
+   */
+  async function saveAssign() {
+    if (!assignDay) return
+    const slots = byDate.get(assignDay.date) ?? []
+    if (slots.length === 0) return
+    setBusy(true)
+    setAssignErr(null)
+    let ok = 0
+    const failed: string[] = []
+    for (const sl of slots) {
+      try {
+        await assignQnaSlot(sl.id, {
+          teacherId: assignDay.teacherId === '' ? undefined : Number(assignDay.teacherId),
+          room: assignDay.room.trim() || undefined,
+        })
+        ok += 1
+      } catch (err) {
+        failed.push(`${sl.startTime.slice(0, 5)} (${err instanceof ApiError ? err.message : '실패'})`)
+      }
+    }
+    setBusy(false)
+    if (failed.length > 0) {
+      setAssignErr(`${ok}개는 지정했고 ${failed.length}개가 안 됐습니다 — ${failed.join(' · ')}`)
+      await load()
+      return
+    }
+    setAssignDay(null)
+    setDone(`${assignDay.date.slice(5)} 타임 ${ok}개에 담당·장소를 지정했습니다.`)
+    await load()
+  }
 
   /** 주간 슬롯을 한 번에 가져와 날짜별로 나눈다 */
   const load = useCallback(async () => {
@@ -364,6 +420,61 @@ function Content() {
 
   return (
     <>
+      {assignDay && (
+        <Modal
+          title="담당 · 상담실 지정"
+          sub={`${assignDay.date} — 이 날 열린 타임 전체에 적용합니다.`}
+          confirmLabel="지정"
+          busy={busy}
+          error={assignErr}
+          onConfirm={() => void saveAssign()}
+          onClose={() => {
+            setAssignDay(null)
+            setAssignErr(null)
+          }}
+        >
+          <div className="note-box">
+            <div>
+              타임마다 따로 보내므로 <b>중간에 실패하면 일부만 지정됩니다</b> — 그때는 몇 개가 됐는지
+              알려 드립니다.
+            </div>
+          </div>
+          <div className="frow">
+            <label>담당</label>
+            <div>
+              <select
+                className="sel"
+                value={assignDay.teacherId}
+                onChange={(e) => setAssignDay({ ...assignDay, teacherId: e.target.value })}
+              >
+                <option value="">바꾸지 않음</option>
+                {teachers.map((t) => (
+                  <option key={t.id} value={String(t.id)}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+              <div className="hint">
+                {teachers.length === 0
+                  ? '이 지점에 등록된 선생님이 없습니다. 사용자 관리에서 구분을 「선생님」으로 등록하세요.'
+                  : '질의응답을 맡을 선생님입니다.'}
+              </div>
+            </div>
+          </div>
+          <div className="frow">
+            <label>상담실</label>
+            <div>
+              <input
+                className="inp"
+                placeholder="예: 상담실 A"
+                value={assignDay.room}
+                onChange={(e) => setAssignDay({ ...assignDay, room: e.target.value })}
+              />
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {cancelAsk && (
         <Modal
           title={`${cancelAsk.r.studentName} 학생의 예약을 취소할까요?`}
@@ -479,7 +590,28 @@ function Content() {
                             {d.slice(5)} ({DOW[new Date(`${d}T00:00:00`).getDay()]})
                             <span style={{ display: 'block', fontSize: 10, fontWeight: 500, color: 'var(--muted)' }}>
                               {day.length > 0 ? (
-                                `${day[0].teacherName ?? '담당 미지정'} · ${day[0].room ?? '장소 미지정'}`
+                                /* ★ 누르면 그날 타임 전체에 담당·장소를 지정한다. 화면이
+                                      "나중에 붙일 수 있습니다" 라고 안내만 하고 길이 없었다 */
+                                <button
+                                  className="btn"
+                                  style={{ padding: '2px 7px', fontSize: 10 }}
+                                  disabled={busy}
+                                  title="이 날 타임 전체에 담당·상담실을 지정합니다"
+                                  onClick={() => {
+                                    setAssignErr(null)
+                                    setAssignDay({
+                                      date: d,
+                                      /* ★ 슬롯 응답에 teacherId 가 없고 이름만 온다 —
+                                            이름으로 맞춰 미리 고른다(동명이인이면 첫 사람) */
+                                      teacherId: String(
+                                        teachers.find((t) => t.name === day[0].teacherName)?.id ?? '',
+                                      ),
+                                      room: day[0].room ?? '',
+                                    })
+                                  }}
+                                >
+                                  {day[0].teacherName ?? '담당 미지정'} · {day[0].room ?? '장소 미지정'}
+                                </button>
                               ) : (
                                 <button
                                   className="btn"
