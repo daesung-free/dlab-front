@@ -64,12 +64,46 @@ export const SURVEY_RUN_STATE_LABEL: Record<SurveyRunState, string> = {
   CLOSED: '마감',
 }
 
+/**
+ * 대상자 한 줄.
+ *
+ * ★ **장학 동의서만 미제출 행이 나온다.** 범위로 돌리는 일반 설문은 대상자를 미리 만들지
+ *   않아 **제출자만** 나온다 — 두 설문의 목록 길이가 뜻이 다르다.
+ *
+ * ⚠️ **제출자는 `submittedAt != null` 로 센다.** 행 수로 세면 **미제출 대상자까지 포함**된다.
+ */
 export interface SurveyParticipant {
   enrollmentId: number
   studentNo: string | null
   studentName: string
+  /** 「발송 / 열람 / 동의 / 제출」 */
+  state?: ParticipantState | null
+  viewedAt?: string | null
+  agreedAt?: string | null
   /** null이면 아직 응답 안 함 */
   submittedAt: string | null
+}
+
+export type ParticipantState = 'SENT' | 'VIEWED' | 'AGREED' | 'SUBMITTED'
+
+export const PARTICIPANT_STATE_LABEL: Record<ParticipantState, string> = {
+  SENT: '발송',
+  VIEWED: '열람',
+  AGREED: '동의',
+  SUBMITTED: '제출',
+}
+
+/**
+ * 대상자 발송 — 고른 학생을 이 설문의 대상자로 만든다.
+ *
+ * ★ **장학 동의서처럼 「누가 안 냈는지」를 봐야 하는 설문에 쓴다.** 범위로 돌리는 일반
+ *   설문은 대상자를 만들 필요가 없다 — 만들면 미제출 행이 생겨 목록의 뜻이 달라진다.
+ */
+export function assignSurveyTargets(surveyId: number, enrollmentIds: number[]): Promise<void> {
+  return request<void>(`/api/v1/admin/surveys/${surveyId}/targets`, {
+    method: 'POST',
+    body: { enrollmentIds },
+  })
 }
 
 export interface OptionCount {

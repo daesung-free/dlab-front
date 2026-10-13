@@ -22,7 +22,13 @@ import {
   type SurveyCreate,
   type SurveyResult,
   type SurveySummary,
+  PARTICIPANT_STATE_LABEL,
+  assignSurveyTargets,
+  listSurveyParticipants,
+  type ParticipantState,
+  type SurveyParticipant,
 } from '../../api/surveys'
+import { searchStudents, type Student } from '../../api/students'
 import { createScreenSignal } from './screenSignal'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
@@ -378,7 +384,12 @@ function Content() {
     )
   }
 
-  /* ── 실연동 ── */
+  /** 'yyyy-MM-ddTHH:mm:ss' → 'yyyy-MM-dd HH:mm'. 없으면 '-' (아직 그 단계가 아니다) */
+function stamp(v: string | null | undefined): string {
+  return v ? v.slice(0, 16).replace('T', ' ') : '-'
+}
+
+/* ── 실연동 ── */
   const { academyId } = useAcademy()
   const [surveys, setSurveys] = useState<SurveySummary[]>([])
   const [result, setResult] = useState<SurveyResult | null>(null)
@@ -410,6 +421,67 @@ function Content() {
     }
   }, [academyId])
   const [apiNotice, setApiNotice] = useState<string | null>(null)
+
+  /* ── 대상자 ──
+   * ★ **장학 동의서처럼 「누가 안 냈는지」를 봐야 하는 설문**에만 뜻이 있다. 범위로 돌리는
+   *   일반 설문은 대상자를 안 만들어 **제출자만** 나온다 — 목록 길이의 뜻이 다르다.
+   * ⚠️ **제출은 `submittedAt != null` 로 센다.** 행 수로 세면 미제출까지 포함된다. */
+  const [targetId, setTargetId] = useState<number | null>(null)
+  const [parts, setParts] = useState<SurveyParticipant[] | null>(null)
+  const [partsErr, setPartsErr] = useState<string | null>(null)
+  const [picking, setPicking] = useState<{
+    rows: Student[] | null
+    selected: string[]
+    busy: boolean
+    err: string | null
+  } | null>(null)
+
+  const loadParts = useCallback(async (id: number | null) => {
+    if (id === null) {
+      setParts(null)
+      return
+    }
+    setPartsErr(null)
+    try {
+      setParts(await listSurveyParticipants(id))
+    } catch (e) {
+      setPartsErr(e instanceof ApiError ? e.message : '대상자를 불러오지 못했습니다.')
+      setParts([])
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadParts(targetId)
+  }, [targetId, loadParts])
+
+  const partColumns: Column<SurveyParticipant>[] = useMemo(
+    () => [
+      { key: 'studentNo', header: '학번', width: '120px', value: (r) => r.studentNo ?? '-' },
+      { key: 'studentName', header: '이름', width: '110px', mask: 'name', value: (r) => r.studentName },
+      {
+        key: 'state',
+        header: '상태',
+        width: '90px',
+        align: 'center',
+        value: (r) => (r.state ? PARTICIPANT_STATE_LABEL[r.state] : '-'),
+      },
+      { key: 'viewedAt', header: '열람', width: '150px', value: (r) => stamp(r.viewedAt) },
+      { key: 'agreedAt', header: '동의', width: '150px', value: (r) => stamp(r.agreedAt) },
+      /* ★ 제출 여부가 이 표의 핵심이다 — 「안 낸 사람」을 찾으러 오는 화면이다 */
+      { key: 'submittedAt', header: '제출', width: '150px', value: (r) => stamp(r.submittedAt) },
+    ],
+    [],
+  )
+
+  const pickColumns: Column<Student>[] = useMemo(
+    () => [
+      { key: 'studentNo', header: '학번', width: '120px', value: (r) => r.studentNo ?? '-' },
+      { key: 'name', header: '이름', width: '110px', mask: 'name', value: (r) => r.name },
+      { key: 'grade', header: '학년', width: '80px', align: 'center', value: (r) => r.grade ?? '-' },
+      { key: 'className', header: '반', width: '110px', value: (r) => r.className ?? '-' },
+    ],
+    [],
+  )
 
   const loadSurveys = useCallback(async () => {
     setApiLoading(true)
@@ -1150,6 +1222,7 @@ function Content() {
             { key: 'list', label: '설문 목록', count: SURVEYS.length },
             { key: 'template', label: '템플릿', count: TEMPLATES.length },
             { key: 'result', label: '결과 집계' },
+            { key: 'target', label: '대상자' },
           ]}
           active={tab}
           onChange={setTab}
@@ -1340,8 +1413,139 @@ function Content() {
               </div>
             </div>
           )}
+
+          {tab === 'target' && (
+            <div className="card-sec" style={{ marginBottom: 0, boxShadow: 'none', border: '1px solid var(--line)' }}>
+              <div className="card-sec-h">
+                <div className="t">
+                  <span className="ico">
+                    <Icon name="user-check" size={15} />
+                  </span>
+                  대상자
+                </div>
+                <div className="r" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <select
+                    className="sel"
+                    style={{ width: 220 }}
+                    value={targetId ?? ''}
+                    onChange={(e) => setTargetId(e.target.value === '' ? null : Number(e.target.value))}
+                  >
+                    <option value="">설문을 고르세요</option>
+                    {surveys.map((sv) => (
+                      <option key={sv.id} value={sv.id}>
+                        {sv.title}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="btn"
+                    style={{ padding: '5px 11px', fontSize: 11.5 }}
+                    disabled={targetId === null || teacherOnly}
+                    title={teacherOnly ? '보기 전용입니다' : undefined}
+                    onClick={() => {
+                      setPicking({ rows: null, selected: [], busy: false, err: null })
+                      void searchStudents({ academyId: academyId ?? undefined, size: 200 })
+                        .then((r) => setPicking((c) => (c ? { ...c, rows: r.rows } : c)))
+                        .catch((e) =>
+                          setPicking((c) =>
+                            c ? { ...c, rows: [], err: e instanceof ApiError ? e.message : '학생을 불러오지 못했습니다.' } : c,
+                          ),
+                        )
+                    }}
+                  >
+                    <Icon name="user-plus" size={12} /> 대상자 지정
+                  </button>
+                </div>
+              </div>
+              <div className="card-sec-b">
+                {/* ★ 두 설문의 목록 뜻이 다르다. 안 적으면 「왜 미제출이 안 보이지」가 된다 */}
+                <div className="note-box">
+                  <div>
+                    대상자를 지정한 설문은 <b>안 낸 사람도 표에 나옵니다.</b> 지정하지 않은 설문은 낸 사람만
+                    나옵니다.
+                  </div>
+                </div>
+
+                {targetId !== null && parts !== null && (
+                  <div className="stat-strip c4" style={{ marginTop: 10, marginBottom: 10 }}>
+                    {(['SENT', 'VIEWED', 'AGREED', 'SUBMITTED'] as ParticipantState[]).map((st) => (
+                      <div className="stat" key={st}>
+                        <div className="l">{PARTICIPANT_STATE_LABEL[st]}</div>
+                        <div className="v">
+                          {/* ⚠️ 제출은 `submittedAt` 으로 센다 — 행 수로 세면 미제출까지 들어간다 */}
+                          {st === 'SUBMITTED'
+                            ? parts.filter((x) => x.submittedAt != null).length
+                            : parts.filter((x) => x.state === st).length}
+                        </div>
+                        <div className="d">명</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {partsErr && (
+                  <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+                    {partsErr}
+                  </div>
+                )}
+
+                <DataTable
+                  rows={parts ?? []}
+                  columns={partColumns}
+                  rowKey={(r) => String(r.enrollmentId)}
+                  loading={targetId !== null && parts === null}
+                  pageSize={20}
+                  emptyText={targetId === null ? '설문을 고르세요.' : '대상자가 없습니다.'}
+                />
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* 대상자 지정 — 고른 학생을 이 설문의 대상자로 만든다 */}
+      {picking && (
+        <Modal
+          title="대상자 지정"
+          sub="고른 학생에게 설문이 발송됩니다"
+          confirmLabel="발송"
+          wide
+          busy={picking.busy}
+          error={picking.err}
+          confirmDisabled={picking.selected.length === 0}
+          onConfirm={() => {
+            if (targetId === null) return
+            setPicking((c) => (c ? { ...c, busy: true, err: null } : c))
+            void assignSurveyTargets(targetId, picking.selected.map(Number))
+              .then(async () => {
+                setPicking(null)
+                setApiNotice(`${picking.selected.length}명을 대상자로 지정했습니다.`)
+                await loadParts(targetId)
+              })
+              .catch((e) =>
+                setPicking((c) =>
+                  c ? { ...c, busy: false, err: e instanceof ApiError ? e.message : '지정하지 못했습니다.' } : c,
+                ),
+              )
+          }}
+          onClose={() => setPicking(null)}
+        >
+          <div className="hint" style={{ marginBottom: 6 }}>
+            {picking.selected.length}명 선택
+          </div>
+          <DataTable
+            rows={picking.rows ?? []}
+            columns={pickColumns}
+            rowKey={(r) => String(r.enrollmentId)}
+            loading={picking.rows === null}
+            selectable
+            selected={picking.selected}
+            onSelectedChange={(v) => setPicking((c) => (c ? { ...c, selected: v } : c))}
+            pageSize={10}
+            emptyText="학생이 없습니다."
+          />
+        </Modal>
+      )}
     </>
   )
 }
