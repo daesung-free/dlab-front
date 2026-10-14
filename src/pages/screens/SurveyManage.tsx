@@ -429,9 +429,13 @@ function stamp(v: string | null | undefined): string {
   const [targetId, setTargetId] = useState<number | null>(null)
   const [parts, setParts] = useState<SurveyParticipant[] | null>(null)
   const [partsErr, setPartsErr] = useState<string | null>(null)
+  /* ★ 요구사항 1-5 는 **「지점 → 반 → 학생 개별」** 3단계다. 지점은 상단에서 고르고
+     학생은 체크로 고르는데, **가운데(반)가 빠져 있었다** — 그 지점 학생 200명을 통째로
+     띄우면 **고를 수가 없다**(반이 섞여 있어 누가 누군지 모른다) */
   const [picking, setPicking] = useState<{
     rows: Student[] | null
     selected: string[]
+    classFilter: string
     busy: boolean
     err: string | null
   } | null>(null)
@@ -472,6 +476,17 @@ function stamp(v: string | null | undefined): string {
     ],
     [],
   )
+
+  /** 모달 안 반 목록 — 불러온 학생에서 뽑는다(반이 없는 학생은 「미배정」으로 묶는다) */
+  const pickClassNames = useMemo(
+    () => [...new Set((picking?.rows ?? []).map((r) => r.className ?? '미배정'))].sort(),
+    [picking?.rows],
+  )
+  const pickRows = useMemo(() => {
+    const all = picking?.rows ?? []
+    const f = picking?.classFilter ?? ''
+    return f === '' ? all : all.filter((r) => (r.className ?? '미배정') === f)
+  }, [picking?.rows, picking?.classFilter])
 
   const pickColumns: Column<Student>[] = useMemo(
     () => [
@@ -1443,7 +1458,7 @@ function stamp(v: string | null | undefined): string {
                     disabled={targetId === null || teacherOnly}
                     title={teacherOnly ? '보기 전용입니다' : undefined}
                     onClick={() => {
-                      setPicking({ rows: null, selected: [], busy: false, err: null })
+                      setPicking({ rows: null, selected: [], classFilter: '', busy: false, err: null })
                       void searchStudents({ academyId: academyId ?? undefined, size: 200 })
                         .then((r) => setPicking((c) => (c ? { ...c, rows: r.rows } : c)))
                         .catch((e) =>
@@ -1530,11 +1545,29 @@ function stamp(v: string | null | undefined): string {
           }}
           onClose={() => setPicking(null)}
         >
-          <div className="hint" style={{ marginBottom: 6 }}>
-            {picking.selected.length}명 선택
+          {/* ★ 반으로 먼저 좁힌다. **고른 사람은 반을 바꿔도 그대로 남는다** — 반을 옮겨 가며
+                 여러 반에서 고를 수 있어야 한다(필터는 보이는 것만 거른다) */}
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8 }}>
+            <select
+              className="sel"
+              style={{ width: 160 }}
+              value={picking.classFilter}
+              onChange={(e) => setPicking((c) => (c ? { ...c, classFilter: e.target.value } : c))}
+            >
+              <option value="">반 전체</option>
+              {pickClassNames.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+            <span className="hint" style={{ margin: 0 }}>
+              {picking.selected.length}명 선택
+              {picking.classFilter !== '' && ' · 고른 사람은 반을 바꿔도 남습니다'}
+            </span>
           </div>
           <DataTable
-            rows={picking.rows ?? []}
+            rows={pickRows}
             columns={pickColumns}
             rowKey={(r) => String(r.enrollmentId)}
             loading={picking.rows === null}
