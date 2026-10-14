@@ -402,10 +402,13 @@ function EnrollForm() {
                     onChange={(e) => setNext((n) => ({ ...n, classId: e.target.value }))}
                   >
                     <option value="">반을 고르세요</option>
+                    {/* ★ **시험용 반 번호가 없는 반은 고를 수 없다.** 학번을 만들 앞자리가 없어
+                           서버가 400 으로 막는다 — 고를 수 있게 두면 **눌러 보고서야** 안다 */}
                     {classes.map((c) => (
-                      <option key={c.id} value={String(c.id)}>
+                      <option key={c.id} value={String(c.id)} disabled={c.examClassNo == null}>
                         {c.name}
                         {c.capacity != null ? ` (${c.memberCount ?? 0}/${c.capacity})` : ''}
+                        {c.examClassNo == null ? ' — 반 번호 없음' : ''}
                       </option>
                     ))}
                   </select>
@@ -417,6 +420,11 @@ function EnrollForm() {
                     {next.busy === 'class' ? '배정 중…' : '배정'}
                   </button>
                 </div>
+                {classes.some((c) => c.examClassNo == null) && (
+                  <div className="hint" style={{ color: 'var(--amber)' }}>
+                    시험용 반 번호가 없는 반은 고를 수 없습니다 — 반 배정 화면에서 번호를 먼저 넣어 주세요.
+                  </div>
+                )}
                 <div className="hint">
                   <b>학번은 반을 배정할 때 매겨집니다.</b> 지금 학번:{' '}
                   <b>{studentNoText(result.student.studentNo)}</b>

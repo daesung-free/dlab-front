@@ -140,6 +140,18 @@ export function createClass(body: {
   classType: ClassType
   homeroomTeacherId?: number
   capacity?: number
+  /**
+   * 시험용 반 번호 — **학번의 앞자리**다(학번 = 반 번호 + 순번).
+   *
+   * ★ **비우면 그 반에는 학생을 배정할 수 없다.** 서버가 400 으로 막는다 — 전에는
+   *   200 이면서 학번만 조용히 안 붙어서 「채번이 고장났다」로 보였다.
+   * ★ 학번은 **키패드 출결·식사체크가 쓰는 4자리**라(0803 답변서), 번호 없는 학생은
+   *   키패드를 못 쓴다. 나중에 붙이려면 그 반 순번을 통째로 다시 정리해야 한다.
+   *
+   * ⚠️ **1~99 중 10의 배수는 쓸 수 없다.** 10반 1번(`10|01`)이 1반 1번(`1|001`)과
+   *   **같은 학번**이 되기 때문이다. 지점·연도 안에서 **유일**해야 한다.
+   */
+  examClassNo?: number
 }): Promise<ClassGroup> {
   return request<ClassGroup>('/api/v1/admin/classes', { method: 'POST', body })
 }
