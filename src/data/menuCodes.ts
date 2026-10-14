@@ -180,7 +180,15 @@ export function hasMenuPermission(code: string, allowed: Set<string> | null): bo
 /** 직원 출근 기록을 고칠 수 있는 권한(추가개발 3-2) */
 export const STAFF_ATTENDANCE_EDIT = 'STAFF_ATTENDANCE_EDIT'
 
-export function canSeeScreenAs(screenId: string, allowed: Set<string> | null, isSuper: boolean): boolean {
+export function canSeeScreenAs(
+  screenId: string,
+  allowed: Set<string> | null,
+  isSuper: boolean,
+  teacherOnly = false,
+): boolean {
   if (!canSeeScreen(screenId, allowed)) return false
-  return isSuper || findScreen(screenId)?.superOnly !== true
+  const s = findScreen(screenId)
+  /* ★ 서버 메뉴 코드 하나가 두 화면을 끌 때 쓴다 — 코드로는 못 가른다(menu.ts 의 주석 참고) */
+  if (teacherOnly && s?.hideFromTeacher === true) return false
+  return isSuper || s?.superOnly !== true
 }
