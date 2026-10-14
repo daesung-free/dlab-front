@@ -12,7 +12,7 @@ import { PasswordModal } from '../auth/PasswordModal'
 
 export function TopNav() {
   const { academies, academyId, setAcademyId, selectable } = useAcademy()
-  const { principal, me, logout, canSeeAdmin, allowedMenus } = useAuth()
+  const { principal, me, logout, canSeeAdmin, allowedMenus, teacherOnly } = useAuth()
   const isSuper = (me?.roles ?? principal?.roles ?? []).some((r) => r === 'SUPER_ADMIN')
 
   /* 로그인한 계정을 그대로 보여준다.
@@ -40,7 +40,7 @@ export function TopNav() {
   /* 판단은 AuthContext 가 한다 — 라우트에서도 같은 값을 써야 하기 때문이다 */
   /* ★ 계정별 메뉴 노출까지 반영한다. 대분류 안이 통째로 비면 **탭도 감춘다** —
         남겨두면 눌렀을 때 제목만 있는 빈 화면이 나온다 */
-  const canItem = (item: NavItem): boolean => canSeeScreenAs(item.screenId, allowedMenus, isSuper)
+  const canItem = (item: NavItem): boolean => canSeeScreenAs(item.screenId, allowedMenus, isSuper, teacherOnly)
   const visibleNav = (canSeeAdmin ? NAV : NAV.filter((c) => c.id !== 'admin')).filter(
     (c) => navItemCount(c, canItem) > 0,
   )

@@ -17,7 +17,7 @@ export function ScreenPage() {
   const { screenId } = useParams()
   const [params] = useSearchParams()
   const { academyId, selectable } = useAcademy()
-  const { canSeeAdmin, allowedMenus, principal, me } = useAuth()
+  const { canSeeAdmin, allowedMenus, principal, me, teacherOnly } = useAuth()
   const isSuper = (me?.roles ?? principal?.roles ?? []).some((r) => r === 'SUPER_ADMIN')
   const s = screenId ? findScreen(screenId) : undefined
   if (!s) return <Navigate to="/" replace />
@@ -35,7 +35,7 @@ export function ScreenPage() {
      기다려도 튕기지 않는다 — 읽기 실패하면 빈 Set 이 와서 어차피 풀린다 */
   const checking = allowedMenus === null
   const blocked =
-    !checking && ((s.groupId === 'admin' && !canSeeAdmin) || !canSeeScreenAs(s.id, allowedMenus, isSuper))
+    !checking && ((s.groupId === 'admin' && !canSeeAdmin) || !canSeeScreenAs(s.id, allowedMenus, isSuper, teacherOnly))
 
   const mockup = MOCKUPS[s.id]
   if (!mockup) return <Navigate to="/" replace />
