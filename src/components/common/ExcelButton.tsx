@@ -105,13 +105,32 @@ export function PrintButton({ label = '인쇄' }: { label?: string }) {
 }
 
 /** 마스킹 ON/OFF 토글. 실제 해제 권한은 BE RBAC이 최종 결정한다 */
-export function MaskToggle({ masked, onChange }: { masked: boolean; onChange: (v: boolean) => void }) {
+export function MaskToggle({
+  masked,
+  onChange,
+  disabled = false,
+  disabledReason,
+}: {
+  masked: boolean
+  onChange: (v: boolean) => void
+  /**
+   * 풀 수 없는 상태. **서버가 이미 가려서 보낸 화면**에 쓴다.
+   *
+   * ★ 안 막으면 **눌러도 아무 일이 없는 버튼**이 된다 — 사용자는 「마스킹 해제가 고장났다」로
+   *   읽는다. 실제로는 서버가 원본을 안 준 것이라 화면이 할 수 있는 일이 없다.
+   * ★ 옵션이다 — 안 주면 지금 모양 그대로다(36개 화면이 쓴다).
+   */
+  disabled?: boolean
+  /** 왜 못 푸는지. 사용자 말로 쓴다 */
+  disabledReason?: string
+}) {
   return (
     <button
       type="button"
       className={`mask-toggle${masked ? ' on' : ''}`}
       onClick={() => onChange(!masked)}
-      title="개인정보 가리기 — 해제할 수 있는지는 계정 권한에 따라 다릅니다"
+      disabled={disabled}
+      title={disabled ? (disabledReason ?? '이 화면에서는 해제할 수 없습니다') : '개인정보 가리기 — 해제할 수 있는지는 계정 권한에 따라 다릅니다'}
     >
       <Icon name={masked ? 'shield-check' : 'shield-off'} size={14} />
       마스킹{' '}

@@ -34,8 +34,9 @@ export const SCREEN_MENU_CODES: Record<string, string[]> = {
   'regular-schedule': ['schedule'],
   approval: ['approval'],
   'seat-move': ['seat'],
-  /* 순찰은 좌석을 보고 찍는 일이라 좌석 권한을 따른다. 서버에 전용 코드가 생기면 바꾼다 */
-  patrol: ['seat'],
+  /* ★ 전용 코드다. **`seat` 로 때우지 않았다** — 그러면 독서실 좌석배치·좌석 이탈·배정 관리까지
+     담임에게 함께 열린다. 서버가 `path_prefix` 도 채워서 **메뉴를 끈 계정은 API 도 막힌다** */
+  patrol: ['patrol'],
   'admin-assign': ['seat'],
 
   /* 학습 */

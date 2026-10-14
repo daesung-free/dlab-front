@@ -19,6 +19,7 @@ import { useAuth } from '../../auth/AuthContext'
 import { listTeachers, type TeacherRow } from '../../api/accounts'
 import { ApiError } from '../../api/client'
 import { formatPhone } from '../../lib/mask'
+import { listStudentMemos, addStudentMemo, deleteStudentMemo, type StudentMemo } from '../../api/studentMemos'
 import { issueAppTemporaryPassword, unlockAppAccount } from '../../api/accounts'
 import {
   grantScholarship,
@@ -57,6 +58,7 @@ import {
   type BulkAssignResult,
   type ClassGroup,
 } from '../../api/classes'
+import { studentNoText } from '../../lib/studentNo'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
 
@@ -110,7 +112,7 @@ const sortableKey = (key: string): boolean => (SORTABLE as readonly string[]).in
 
 const COLUMNS: Column<Student>[] = [
   /* 학번·이름은 가로로 밀어도 붙어 있는다 — 뒤 칸을 보다가 누구 줄인지 잃지 않게 */
-  { key: 'studentNo', header: '학번', width: '104px', sticky: true, sortable: sortableKey('studentNo'), value: (r) => r.studentNo ?? '-' },
+  { key: 'studentNo', header: '학번', width: '104px', sticky: true, sortable: sortableKey('studentNo'), value: (r) => studentNoText(r.studentNo) },
   {
     key: 'name',
     header: '이름',
@@ -387,6 +389,17 @@ function Content() {
    *   손대지 않은 칸까지 건드리게 된다.
    * ★ 재원 상태는 여기서 안 바꾼다. 사유를 받고 이력을 남기는 '상태 변경' 이 따로 있다.
    */
+  /* 학생 메모. **상담 일지와 다르다** — 그쪽은 면담 한 건이 양식과 함께 남고, 이쪽은
+     그때그때 적어 두는 것이다. 섞으면 상담 통계가 틀린다 */
+  const [memo, setMemo] = useState<{
+    items: StudentMemo[] | null
+    draft: string
+    busy: boolean
+    err: string | null
+    /** 지우기 전에 한 번 묻는다 — 되돌릴 수 없다 */
+    asking: StudentMemo | null
+  }>({ items: null, draft: '', busy: false, err: null, asking: null })
+
   const [infoEdit, setInfoEdit] = useState<{
     row: Student
     loaded: Student | null
@@ -402,7 +415,18 @@ function Content() {
    * ★ 지금 상태는 상세의 `homeroomOverride` 로 안다. 지정·해제 뒤에는 상세를 다시 읽는다.
    * ★ 지점관리자·본사만 — 서버도 막지만 직원에게 누르면 거절되는 버튼을 보여줄 이유가 없다.
    */
-  const { canSeeAdmin: canManageHomeroom } = useAuth()
+  const { canSeeAdmin: canManageHomeroom, teacherOnly, readOnly, principal } = useAuth()
+  /* ★ 장학은 **담임·조회 전용에게 없는 정보**다(할인율·금액). 서버가 403 으로 막는데,
+     그걸 모르고 부르면 **학생 상세를 열 때마다 4xx** 가 쌓인다 — 점검 리포트에 그대로 올라온다.
+     ★ 「권한 없음」을 띄우지 않고 **칸을 통째로 숨긴다.** 빈 칸이 보이면 「장학이 없는 학생」으로
+     읽혀서, 없는 것과 못 보는 것이 구분되지 않는다 */
+  const canSeeScholarship = !teacherOnly && !readOnly
+  /* ★ 메모 삭제는 **작성자 본인과 관리자만** 한다. 메모는 「그때 그 사람이 그렇게 적었다」가
+     값이라(수정 경로를 안 만든 것과 같은 이유) **남의 기록을 담임이 지우면 그 값이 무너진다.**
+     관리자는 남긴다 — 부적절한 내용을 치울 사람이 필요하다.
+     서버도 같은 제한을 건다. 화면이 먼저 감춰야 **눌러 보고 403 으로 아는 일**이 없다 */
+  const canDeleteMemo = (m: StudentMemo) =>
+    !teacherOnly || (m.writerId != null && String(m.writerId) === principal?.accountId)
   const [hr, setHr] = useState<{
     open: boolean
     teachers: TeacherRow[] | null
@@ -506,6 +530,10 @@ function Content() {
 
   /* 부여 드롭다운 — **사용 중인 장학만** 온다. 지점·연도가 바뀌면 다시 읽는다 */
   useEffect(() => {
+    if (!canSeeScholarship) {
+      setScholarMasters([])
+      return
+    }
     let alive = true
     listSelectableScholarships(new Date().getFullYear(), academyId ?? undefined)
       .then((v) => alive && setScholarMasters(v))
@@ -513,7 +541,7 @@ function Content() {
     return () => {
       alive = false
     }
-  }, [academyId])
+  }, [academyId, canSeeScholarship])
 
   async function addScholarship(enrollmentId: number) {
     if (scholar.pick === '') return
@@ -541,15 +569,45 @@ function Content() {
     }
   }
 
+  async function submitMemo() {
+    const id = infoEdit?.row.enrollmentId
+    const text = memo.draft.trim()
+    if (id === undefined || text === '') return
+    setMemo((c) => ({ ...c, busy: true, err: null }))
+    try {
+      const saved = await addStudentMemo(id, text)
+      /* 맨 위에 쌓는다 — 최근 것을 먼저 읽는다 */
+      setMemo((c) => ({ ...c, items: [saved, ...(c.items ?? [])], draft: '', busy: false }))
+    } catch (e) {
+      setMemo((c) => ({ ...c, busy: false, err: e instanceof ApiError ? e.message : '메모를 저장하지 못했습니다.' }))
+    }
+  }
+
+  async function removeMemo(m: StudentMemo) {
+    setMemo((c) => ({ ...c, busy: true, err: null }))
+    try {
+      await deleteStudentMemo(m.id)
+      setMemo((c) => ({ ...c, items: (c.items ?? []).filter((x) => x.id !== m.id), busy: false, asking: null }))
+    } catch (e) {
+      setMemo((c) => ({ ...c, busy: false, err: e instanceof ApiError ? e.message : '메모를 지우지 못했습니다.' }))
+    }
+  }
+
   function openInfo(r: Student) {
     setInfoErr(null)
     setInfoDone(null)
     setAcct({ busyId: null, msg: null, err: null })
     setScholar({ items: [], pick: '', busy: false, err: null })
-    void listStudentScholarships(r.enrollmentId)
-      .then((items) => setScholar((c) => ({ ...c, items })))
-      .catch(() => setScholar((c) => ({ ...c, items: [] })))
+    if (canSeeScholarship) {
+      void listStudentScholarships(r.enrollmentId)
+        .then((items) => setScholar((c) => ({ ...c, items })))
+        .catch(() => setScholar((c) => ({ ...c, items: [] })))
+    }
     setHr({ open: false, teachers: null, teacherId: '', reason: '', busy: false, err: null })
+    setMemo({ items: null, draft: '', busy: false, err: null, asking: null })
+    void listStudentMemos(r.enrollmentId)
+      .then((items) => setMemo((c) => ({ ...c, items })))
+      .catch(() => setMemo((c) => ({ ...c, items: [] })))
     setInfoEdit({ row: r, loaded: null, form: emptyInfo() })
     void getStudent(r.enrollmentId)
       .then((d) => setInfoEdit((cur) => (cur && cur.row.enrollmentId === r.enrollmentId ? { ...cur, loaded: d, form: infoOf(d) } : cur)))
@@ -747,7 +805,7 @@ function Content() {
       {statusEdit && (
         <Modal
           title="재원 상태 변경"
-          sub={`${statusEdit.row.name}(${statusEdit.row.studentNo ?? '-'}) 의 상태를 바꿉니다.`}
+          sub={`${statusEdit.row.name}(${studentNoText(statusEdit.row.studentNo)}) 의 상태를 바꿉니다.`}
           confirmLabel="변경"
           busy={changing !== null}
           error={statusErr}
@@ -849,7 +907,7 @@ function Content() {
       {reEnroll && (
         <Modal
           title="재등록"
-          sub={`${reEnroll.row.name}(${reEnroll.row.studentNo ?? '-'}) 을(를) 새 기수로 다시 등록합니다.`}
+          sub={`${reEnroll.row.name}(${studentNoText(reEnroll.row.studentNo)}) 을(를) 새 기수로 다시 등록합니다.`}
           confirmLabel="재등록"
           danger
           busy={reBusy}
@@ -866,7 +924,7 @@ function Content() {
             <div>
               <div className="tt">학번이 새로 매겨집니다</div>
               <div className="tx">
-                지금 학번 <b>{reEnroll.row.studentNo ?? '-'}</b> 은 퇴원 이력으로 남고, 새 학번을 받습니다.
+                지금 학번 <b>{studentNoText(reEnroll.row.studentNo)}</b> 은 퇴원 이력으로 남고, 새 학번을 받습니다.
                 되돌릴 수 없습니다.
               </div>
             </div>
@@ -1048,7 +1106,10 @@ function Content() {
               </div>
 
               {/* ★ 장학 '종류' 와 다르다 — 여기는 **이 학생에게 실제로 부여된 것**이다.
-                     코드로 잇기 때문에 마스터에 없는 값은 서버가 막는다 */}
+                     코드로 잇기 때문에 마스터에 없는 값은 서버가 막는다
+                  ★ 담임·조회 전용에게는 **칸째로 안 보인다**(서버가 403). 빈 칸을 두면
+                     「장학이 없는 학생」으로 읽혀 없는 것과 못 보는 것이 섞인다 */}
+              {canSeeScholarship && (
               <div className="frow">
                 <label>장학</label>
                 <div>
@@ -1099,6 +1160,7 @@ function Content() {
                   {scholar.err && <div className="hint" style={{ color: 'var(--red)' }}>{scholar.err}</div>}
                 </div>
               </div>
+              )}
 
               {/* ★ 앱 계정. **학생이 비밀번호를 5회 틀리면 잠기고 저절로 안 풀린다** —
                      풀어 줄 자리가 없어서 그 학생은 앱을 못 썼다(2026-09-27 실테스트).
@@ -1129,6 +1191,70 @@ function Content() {
                   ))}
                   {acct.msg && <div className="hint" style={{ color: 'var(--mint-d)' }}>{acct.msg}</div>}
                   {acct.err && <div className="hint" style={{ color: 'var(--red)' }}>{acct.err}</div>}
+                </div>
+              </div>
+
+              {/* ★ 상담 일지와 다르다 — 그쪽은 면담 한 건이 양식과 함께 남고, 이쪽은 그때그때
+                     적어 두는 것이다. 섞어 쓰면 상담 통계가 틀린다.
+                  ★ **고치는 길은 두지 않는다.** 서버에 수정 경로가 없고, 메모는 「그때 그 사람이
+                     그렇게 적었다」가 값이라 고치면 그게 사라진다. */}
+              <div className="frow">
+                <label>메모</label>
+                <div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <input
+                      className="inp"
+                      value={memo.draft}
+                      maxLength={500}
+                      placeholder="예) 어머니 연락처 변경 요청 (10/13)"
+                      onChange={(e) => setMemo((c) => ({ ...c, draft: e.target.value }))}
+                    />
+                    <button
+                      type="button"
+                      className="btn"
+                      disabled={memo.busy || memo.draft.trim() === ''}
+                      onClick={() => void submitMemo()}
+                    >
+                      추가
+                    </button>
+                  </div>
+                  <div className="hint">적은 뒤에는 고칠 수 없습니다. 지우고 다시 적습니다.</div>
+
+                  {memo.items === null && <div className="hint">불러오는 중…</div>}
+                  {memo.items !== null && memo.items.length === 0 && <div className="hint">남긴 메모가 없습니다.</div>}
+                  {(memo.items ?? []).map((m) => (
+                    <div
+                      key={m.id}
+                      style={{
+                        display: 'flex',
+                        gap: 8,
+                        alignItems: 'baseline',
+                        padding: '6px 0',
+                        borderTop: '1px solid var(--line)',
+                      }}
+                    >
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13 }}>{m.content}</div>
+                        <div style={{ fontSize: 11.5, color: 'var(--muted)' }}>
+                          {/* ★ 작성자가 비면 사람이 아니다(배치·시스템). '-' 로 뭉개면 누가 썼는지
+                                 모르는 메모와 구분이 안 된다 */}
+                          {m.writerName?.trim() || '시스템'} · {m.createdAt?.slice(0, 16).replace('T', ' ')}
+                        </div>
+                      </div>
+                      {canDeleteMemo(m) && (
+                        <button
+                          type="button"
+                          className="btn"
+                          style={{ padding: '2px 8px', fontSize: 11.5 }}
+                          disabled={memo.busy}
+                          onClick={() => setMemo((c) => ({ ...c, asking: m }))}
+                        >
+                          삭제
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {memo.err && <div className="hint" style={{ color: 'var(--red)' }}>{memo.err}</div>}
                 </div>
               </div>
             </>
@@ -1323,6 +1449,24 @@ function Content() {
               </table>
             </div>
           )}
+        </Modal>
+      )}
+
+      {/* ★ 되돌릴 수 없다 — 지우기 전에 **무엇이 사라지는지** 그대로 보여준다 */}
+      {memo.asking && (
+        <Modal
+          title="메모를 지웁니다"
+          confirmLabel="삭제"
+          danger
+          busy={memo.busy}
+          error={memo.err}
+          onConfirm={() => void removeMemo(memo.asking!)}
+          onClose={() => setMemo((c) => ({ ...c, asking: null, err: null }))}
+        >
+          <div className="note-box">
+            <div>{memo.asking.content}</div>
+          </div>
+          <div className="hint">되돌릴 수 없습니다.</div>
         </Modal>
       )}
     </>

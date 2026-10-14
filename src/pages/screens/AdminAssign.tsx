@@ -14,6 +14,7 @@ import {
   type SeatArea,
 } from '../../api/facility'
 import { SORTABLE, TRACK_LABEL, searchStudents, type Student } from '../../api/students'
+import { studentNoText } from '../../lib/studentNo'
 import type { Mockup } from './types'
 import './assign.css'
 
@@ -48,7 +49,7 @@ const PAGE_SIZE = 20
 const sortableKey = (key: string): boolean => (SORTABLE as readonly string[]).includes(key)
 
 const COLUMNS: Column<Student>[] = [
-  { key: 'studentNo', header: '학번', width: '100px', sortable: sortableKey('studentNo'), value: (r) => r.studentNo ?? '-' },
+  { key: 'studentNo', header: '학번', width: '100px', sortable: sortableKey('studentNo'), value: (r) => studentNoText(r.studentNo) },
   { key: 'name', header: '이름', width: '84px', sortable: sortableKey('name'), mask: 'name', value: (r) => r.name },
   { key: 'track', header: '계열', width: '64px', align: 'center', sortable: sortableKey('track'), value: (r) => (r.track ? TRACK_LABEL[r.track] : '-') },
   { key: 'className', header: '반', width: '56px', align: 'center', value: (r) => r.className ?? '-' },

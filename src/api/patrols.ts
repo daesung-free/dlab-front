@@ -85,9 +85,17 @@ export interface PatrolSaveMark {
 }
 
 /**
- * 한 회차를 통째로 저장한다.
+ * 그 회차의 기록을 저장한다.
  *
- * ★ **보낸 목록이 그 회차의 전부**다(덮어쓰기). 화면에서 지운 것은 빼고 보내면 된다.
+ * ★ **학생 단위 덮어쓰기다. 회차를 통째로 갈아끼우는 게 아니다**(2026-10-13 실호출로 확인).
+ *   안 보낸 학생의 기록은 **그대로 남는다** — 그래서 **빼고 보내는 것으로는 지워지지 않는다.**
+ *   지우려면 `clearPatrolRound` 로 회차를 비우고 다시 찍어야 한다.
+ *
+ * ★ 덕분에 **앱과 웹이 같은 회차를 나눠 찍어도 서로를 지우지 않는다** — 순찰은 앱에도
+ *   같은 화면이 있다. 다만 **같은 학생을 둘이 찍으면 나중 것이 이긴다.**
+ *
+ * ★ 응답은 **보낸 것만** 돌려준다(회차 전체가 아니다). 화면을 응답으로 덮으면 다른 사람이
+ *   찍은 것이 사라져 보이므로, 저장 뒤에는 **다시 조회**하는 쪽이 맞다.
  */
 /**
  * 한 회차를 비운다.
@@ -116,4 +124,45 @@ export function savePatrol(body: {
   marks: PatrolSaveMark[]
 }): Promise<PatrolRecord[]> {
   return request<PatrolRecord[]>('/api/v1/admin/patrols', { method: 'POST', body })
+}
+
+/* ── 순찰 전용 좌석 조회 (2026-10-13) ────────────────────────────────────────
+ *
+ * ★ **좌석 화면(`/seats/*`)을 그대로 쓰지 않는다.** 그쪽은 담임에게 닫혀 있고, 열면
+ *   독서실 좌석배치·좌석 이탈·배정 관리까지 함께 열린다. 그래서 순찰 권한으로 되는
+ *   **전용 조회**를 따로 둔다 — 서버가 `patrol` 권한 아래에 만들었다.
+ *
+ * ★ **좌석 화면보다 적게 온다.** 배정 상태 · 좌석이탈(여부·시각·사유) · 반 · 키오스크
+ *   번호가 빠져 있다 — 그건 **배정 관리에 쓰는 값**이다. 순찰에 필요한 것은
+ *   「지금 누가 어디 앉아 있나」뿐이다.
+ *
+ * ★ 이렇게 나눠 두면 **나중에 좌석 화면 권한을 바꿔도 순찰이 따라 흔들리지 않는다.**
+ */
+
+export interface PatrolArea {
+  id: number
+  areaNm: string
+  /** 관을 빼면 **본관 A 와 별관 A 가 화면에서 구분되지 않는다** */
+  buildingName: string | null
+  sortOrder: number | null
+}
+
+export interface PatrolSeat {
+  seatId: number
+  seatCd: string
+  xPos: number | null
+  yPos: number | null
+  /** 비어 있으면 공석이다 */
+  enrollmentId: number | null
+  studentNo: string | null
+  studentName: string | null
+  masked?: boolean
+}
+
+export function listPatrolAreas(academyId: number): Promise<PatrolArea[]> {
+  return request<PatrolArea[]>('/api/v1/admin/patrols/areas', { query: { academyId } })
+}
+
+export function listPatrolSeats(studyAreaId: number): Promise<PatrolSeat[]> {
+  return request<PatrolSeat[]>('/api/v1/admin/patrols/seats', { query: { studyAreaId } })
 }

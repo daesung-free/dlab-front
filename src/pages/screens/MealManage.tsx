@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DataTable, ExcelButton, MaskToggle, Modal, NotAllowed, Unfilled, type Column } from '../../components/common'
+import {
+  DataTable,
+  ExcelButton,
+  MaskToggle,
+  Modal,
+  NotAllowed,
+  Unfilled,
+  todayStr,
+  type Column,
+} from '../../components/common'
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
@@ -17,15 +26,28 @@ import {
   listMealOrderWindows,
   setMealOrderWindow,
   cancelMealOrderItem,
+  getMealDailyRoster,
+  type MealDailyRoster,
+  type MealRosterRow,
   type MealClosure,
   type MealDay,
   type MealOrder,
   type MealPolicy,
 } from '../../api/meals'
+import { studentNoText } from '../../lib/studentNo'
 import { MOCK_STUDENTS } from './mockStudents'
 import type { Mockup } from './types'
 import { createScreenSignal } from './screenSignal'
 import './meal.css'
+
+/** 일자별 명단 컬럼. **좌석번호까지 낸다** — 배식대에서 자리로 찾는다 */
+const ROSTER_COLUMNS: Column<MealRosterRow>[] = [
+  { key: 'studentNo', header: '학번', width: '110px', value: (r) => studentNoText(r.studentNo) },
+  { key: 'studentName', header: '이름', width: '90px', mask: 'name', value: (r) => r.studentName ?? '-' },
+  /* ★ 미배정이면 null 이다 — '-' 로 두면 「반이 없는 학생」임이 드러난다 */
+  { key: 'className', header: '반', width: '100px', align: 'center', value: (r) => r.className ?? '미배정' },
+  { key: 'seatCd', header: '좌석', width: '90px', align: 'center', value: (r) => r.seatCd ?? '미배정' },
+]
 
 /* F-4.5 급식 관리 — 신규개발-요구사항신규 (디멤버 급식신청 대체)
  *
@@ -297,6 +319,59 @@ function thisMonth(): string {
 function Content() {
   const { academyId } = useAcademy()
   const [tab, setTab] = useState('cal')
+
+  /* ── 일자별 명단 (피드백 5-4) ──
+   * ★ **배식대가 보는 것은 숫자가 아니라 명단**이다. 달력은 인원 수까지만 알려준다.
+   * ★ **「신청 vs 배식 대조」는 만들지 않는다** — 배식 태깅이 키오스크에서 우리 쪽으로
+   *   오는 경로가 없어 「실제로 먹은 사람」 칸을 채울 값이 없다. **빈 칸은 「안 먹었다」로
+   *   읽혀** 신청자를 결식 처리하게 된다. */
+  const [rosterDate, setRosterDate] = useState(() => todayStr())
+  const [roster, setRoster] = useState<MealDailyRoster | null>(null)
+  const [rosterLoading, setRosterLoading] = useState(false)
+  const [rosterErr, setRosterErr] = useState<string | null>(null)
+  const [cancelRow, setCancelRow] = useState<{ row: MealRosterRow; meal: '중식' | '석식' } | null>(null)
+  const [rosterCancelBusy, setRosterCancelBusy] = useState(false)
+
+  /** 명단 컬럼 + 취소 버튼. **명단에서 바로 취소**할 수 있게 `orderItemId` 가 함께 온다 */
+  const rosterColumns = useCallback(
+    (meal: '중식' | '석식'): Column<MealRosterRow>[] => [
+      ...ROSTER_COLUMNS,
+      {
+        key: 'act',
+        header: '',
+        width: '76px',
+        align: 'center',
+        value: () => '',
+        render: (r) => (
+          <button
+            className="btn"
+            style={{ padding: '3px 9px', fontSize: 11.5 }}
+            onClick={() => setCancelRow({ row: r, meal })}
+          >
+            취소
+          </button>
+        ),
+      },
+    ],
+    [],
+  )
+
+  const loadRoster = useCallback(async () => {
+    setRosterLoading(true)
+    setRosterErr(null)
+    try {
+      setRoster(await getMealDailyRoster({ academyId: academyId ?? undefined, date: rosterDate }))
+    } catch (e) {
+      setRosterErr(e instanceof ApiError ? e.message : '명단을 불러오지 못했습니다.')
+      setRoster(null)
+    } finally {
+      setRosterLoading(false)
+    }
+  }, [academyId, rosterDate])
+
+  useEffect(() => {
+    if (tab === 'roster') void loadRoster()
+  }, [tab, loadRoster])
   const [masked, setMasked] = useState(true)
   const [reason, setReason] = useState(CLOSURE_REASONS[0])
   const [deadlineDays, setDeadlineDays] = useState(3)
@@ -715,6 +790,7 @@ function Content() {
         <Tabs
           items={[
             { key: 'cal', label: '월별 신청 현황' },
+            { key: 'roster', label: '일자별 명단' },
             { key: 'schedule', label: '급식 일정 관리', count: closedCount },
             { key: 'check', label: '배식 체크', count: TAG_LOGS.length },
             { key: 'orders', label: '결제 · 취소 내역', count: orders.length },
@@ -725,6 +801,68 @@ function Content() {
         />
 
         {/* ═══ 월별 신청 현황 ═══ */}
+        {tab === 'roster' && (
+          <div style={{ padding: 14 }}>
+            {/* ★ 대조 화면을 만들지 않은 이유를 적어 둔다 — 안 적으면 「왜 먹은 사람이 없냐」가 된다 */}
+            <div className="note-box">
+              <div>
+                그날 <b>신청한 사람</b>의 명단입니다. 실제로 받아 갔는지는 키오스크에서 넘어오는 값이 없어
+                표시하지 않습니다.
+              </div>
+            </div>
+
+            <div className="frow" style={{ marginTop: 10 }}>
+              <label>날짜</label>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <input
+                  className="inp"
+                  type="date"
+                  style={{ width: 170 }}
+                  value={rosterDate}
+                  onChange={(e) => setRosterDate(e.target.value)}
+                />
+                <MaskToggle masked={masked} onChange={setMasked} />
+              </div>
+            </div>
+
+            {rosterErr && (
+              <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+                {rosterErr}
+              </div>
+            )}
+
+            {([
+              { key: '중식' as const, rows: roster?.lunch ?? [], count: roster?.lunchCount ?? 0 },
+              { key: '석식' as const, rows: roster?.dinner ?? [], count: roster?.dinnerCount ?? 0 },
+            ]).map((g) => (
+              <div key={g.key} style={{ marginTop: 14 }}>
+                <DataTable
+                  columns={rosterColumns(g.key)}
+                  rows={g.rows}
+                  rowKey={(r) => String(r.orderItemId)}
+                  masked={masked}
+                  loading={rosterLoading}
+                  pageSize={20}
+                  emptyText={`${g.key} 신청자가 없습니다.`}
+                  countLabel={
+                    <>
+                      {g.key} <b>{g.count}</b>명
+                    </>
+                  }
+                  toolbar={
+                    <ExcelButton
+                      filename={`급식명단_${rosterDate}_${g.key}`}
+                      columns={ROSTER_COLUMNS}
+                      rows={g.rows}
+                      masked={masked}
+                    />
+                  }
+                />
+              </div>
+            ))}
+          </div>
+        )}
+
         {tab === 'cal' && (
           <div className="card-sec-b">
             <div className="cal">
@@ -1264,6 +1402,37 @@ function Content() {
           </div>
         )}
       </div>
+
+      {/* ★ 취소하면 **되살릴 수 없다** — 다시 신청해야 한다. 그래서 누구의 어느 끼니인지
+             그대로 보여주고 확인받는다 */}
+      {cancelRow && (
+        <Modal
+          title="급식 신청을 취소합니다"
+          sub={`${rosterDate} ${cancelRow.meal}`}
+          confirmLabel="취소하기"
+          danger
+          busy={rosterCancelBusy}
+          onConfirm={() => {
+            setRosterCancelBusy(true)
+            void cancelMealOrderItem(cancelRow.row.orderItemId)
+              .then(async () => {
+                setCancelRow(null)
+                await loadRoster()
+              })
+              .catch((e) => setRosterErr(e instanceof ApiError ? e.message : '취소하지 못했습니다.'))
+              .finally(() => setRosterCancelBusy(false))
+          }}
+          onClose={() => setCancelRow(null)}
+        >
+          <div className="note-box">
+            <div>
+              {masked ? '***' : (cancelRow.row.studentName ?? '-')} ({studentNoText(cancelRow.row.studentNo)}) ·{' '}
+              {cancelRow.row.className ?? '미배정'}
+            </div>
+          </div>
+          <div className="hint">되살릴 수 없습니다. 다시 신청해야 합니다.</div>
+        </Modal>
+      )}
     </div>
   )
 }

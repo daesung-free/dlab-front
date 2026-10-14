@@ -279,8 +279,15 @@ export function clearHomeroomOverride(enrollmentId: number): Promise<HomeroomOve
 }
 
 /** 저장하면 부여될 다음 학번. 미리보기용이고 예약은 아니다 */
-export function getNextStudentNo(academyId: number, year: number): Promise<string> {
-  return request<string>('/api/v1/admin/students/next-student-no', { query: { academyId, year } })
+/**
+ * 그 반에 다음으로 매겨질 학번.
+ *
+ * ★ **`classId` 가 필수다**(2026-10-13 채번 변경). 학번이 **반별 4자리**로 바뀌어
+ *   「지점·연도의 다음 번호」라는 것이 없어졌다 — 반을 골라야 번호를 알 수 있다.
+ * ★ **미리 잡아두는 번호가 아니다.** 다른 사람이 먼저 배정하면 밀린다.
+ */
+export function getNextStudentNo(academyId: number, year: number, classId: number): Promise<string> {
+  return request<string>('/api/v1/admin/students/next-student-no', { query: { academyId, year, classId } })
 }
 
 /**

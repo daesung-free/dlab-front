@@ -241,3 +241,40 @@ export function saveMealVendorAssignment(body: {
 }): Promise<MealVendorAssignment> {
   return request<MealVendorAssignment>('/api/v1/admin/meal-vendors/assignment', { method: 'PUT', body })
 }
+
+/* ── 일자별 신청 명단 (피드백 5-4) ──────────────────────────────────────────
+ *
+ * ★ **배식대에서 필요한 것은 숫자가 아니라 명단이다.** 월별 달력은 칸의 인원 수까지만
+ *   알려주고, `/orders` 는 월 단위라 그날만 추리려면 주문마다 항목을 펼쳐 봐야 한다.
+ *
+ * ★ **「신청 vs 배식 대조」는 만들지 않는다.** 배식 태깅이 **키오스크에서 우리 쪽으로
+ *   들어오는 경로가 없다** — 「실제로 먹은 사람」 칸을 채울 값이 없고, **빈 칸은 「안 먹었다」로
+ *   읽힌다.** 그 상태로 내보내면 신청자를 결식 처리하게 된다.
+ */
+
+export interface MealRosterRow {
+  /** 끼니 항목 id — **명단에서 바로 취소**할 수 있게 함께 온다(`deleteMealOrderItem`) */
+  orderItemId: number
+  enrollmentId: number
+  studentNo: string | null
+  studentName: string | null
+  /** 반. **미배정이면 null** */
+  className: string | null
+  /** 좌석번호. **미배정이면 null** */
+  seatCd: string | null
+}
+
+export interface MealDailyRoster {
+  date: string
+  lunchCount: number
+  dinnerCount: number
+  lunch: MealRosterRow[]
+  dinner: MealRosterRow[]
+  /** 이름이 가려졌는지. **모르면 화면이 또 가려 이름이 사라진다** */
+  masked?: boolean
+}
+
+/** 그날 누가 먹는가. `date` 는 **필수**(yyyy-MM-dd) */
+export function getMealDailyRoster(params: { academyId?: number; date: string }): Promise<MealDailyRoster> {
+  return request<MealDailyRoster>('/api/v1/admin/meals/daily', { query: { ...params } })
+}

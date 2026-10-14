@@ -25,6 +25,11 @@ import {
   listPendingSignups,
   type PendingSignup,
 } from '../../api/studentSignups'
+import { studentNoText } from '../../lib/studentNo'
+import { listClasses, assignStudentToClass, type ClassGroup } from '../../api/classes'
+import { getStudent } from '../../api/students'
+import { listSeatAreas, getSeatLayout, assignSeat, type SeatArea, type SeatCell } from '../../api/facility'
+import { listSelectableScholarships, grantScholarship, type ScholarshipMaster } from '../../api/masters'
 import type { Mockup } from './types'
 import { importFieldLabel } from '../../lib/importFields'
 import '../../styles/forms.css'
@@ -121,27 +126,151 @@ function EnrollForm() {
   const [result, setResult] = useState<Result | null>(null)
   const [nextNo, setNextNo] = useState<string | null>(null)
 
-  const refreshNextNo = useCallback(async () => {
-    if (academyId === null) {
-      setNextNo(null)
-      return
-    }
-    try {
-      setNextNo(await getNextStudentNo(academyId, Number(form.year)))
-    } catch {
-      // 미리보기가 없어도 등록은 된다 — 실패는 조용히 넘긴다
-      setNextNo(null)
-    }
-  }, [academyId, form.year])
-
-  useEffect(() => {
-    void refreshNextNo()
-  }, [refreshNextNo])
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm((f) => ({ ...f, [k]: v }))
 
   const academyName = academies.find((a) => a.id === academyId)?.acadNm ?? null
   const canSave = academyId !== null && form.name.trim().length > 0 && !saving
+
+  /* ── 등록 다음 단계 (피드백 1-2) ──
+   *
+   * > 「입학확정(등록) → 반 배정 시 번호 자동배정 → 좌석 선택(배정) → 장학여부 체크 위
+   *    프로세스가 **한 화면에서 한번에** 이뤄질 수 있도록」(4쪽)
+   *
+   * ★ **등록과 한 번에 보내지 않는다.** 반·좌석·장학은 **각각 다른 서버 호출**이고, 묶어서
+   *   보낼 경로가 없다. 그래서 등록을 먼저 끝내고 **이어서 하도록** 둔다 — 한 번에 되는 척하면
+   *   중간에 실패했을 때 **무엇이 됐는지 모른 채** 담당자가 다시 등록해 중복이 생긴다.
+   *
+   * ★ **단계마다 성공·실패를 따로 적는다.** 「저장 실패」로 뭉뚱그리면 안 된다.
+   *
+   * ★ **학번은 반 배정 때 매겨진다**(2026-10-13 채번 변경). 그래서 반 배정이 단순한
+   *   분류가 아니라 **학번을 받는 단계**다 — 화면도 그렇게 말한다.
+   */
+  const [classes, setClasses] = useState<ClassGroup[]>([])
+  const [areas, setAreas] = useState<SeatArea[]>([])
+  const [scholarMasters, setScholarMasters] = useState<ScholarshipMaster[]>([])
+  const [seats, setSeats] = useState<SeatCell[]>([])
+  const [next, setNext] = useState<{
+    classId: string
+    areaId: string
+    seatId: string
+    scholarship: string
+    busy: null | 'class' | 'seat' | 'scholar'
+    done: string[]
+    err: string | null
+  }>({ classId: '', areaId: '', seatId: '', scholarship: '', busy: null, done: [], err: null })
+
+  /* ★ **반을 골라야 다음 학번을 알 수 있다**(2026-10-13 채번 변경 — 반별 4자리).
+     「지점·연도의 다음 번호」라는 것이 없어졌다 */
+  const refreshNextNo = useCallback(async () => {
+    if (academyId === null || next.classId === '') {
+      setNextNo(null)
+      return
+    }
+    try {
+      setNextNo(await getNextStudentNo(academyId, Number(form.year), Number(next.classId)))
+    } catch {
+      setNextNo(null)
+    }
+  }, [academyId, form.year, next.classId])
+
+  useEffect(() => {
+    void refreshNextNo()
+  }, [refreshNextNo])
+
+  useEffect(() => {
+    if (academyId === null) return
+    let alive = true
+    void Promise.all([
+      listClasses(new Date().getFullYear(), academyId).catch(() => [] as ClassGroup[]),
+      listSeatAreas(academyId).catch(() => [] as SeatArea[]),
+      listSelectableScholarships(new Date().getFullYear(), academyId).catch(() => [] as ScholarshipMaster[]),
+    ]).then(([cs, as_, sc]) => {
+      if (!alive) return
+      setClasses(cs.filter((c) => c.academyId === academyId))
+      setAreas(as_)
+      setScholarMasters(sc)
+    })
+    return () => {
+      alive = false
+    }
+  }, [academyId])
+
+  /* 좌석은 구역을 골라야 보인다 — 한 지점에 수백 칸이라 전부 띄우면 고를 수가 없다 */
+  useEffect(() => {
+    if (next.areaId === '') {
+      setSeats([])
+      return
+    }
+    let alive = true
+    getSeatLayout(Number(next.areaId), true)
+      .then((v) => alive && setSeats(v))
+      .catch(() => alive && setSeats([]))
+    return () => {
+      alive = false
+    }
+  }, [next.areaId])
+
+  /** 등록된 학생을 다시 읽어 **반 배정으로 받은 학번**을 화면에 올린다 */
+  const reloadStudent = useCallback(async (enrollmentId: number): Promise<Student | null> => {
+    try {
+      const fresh = await getStudent(enrollmentId)
+      setResult((r) => (r?.kind === 'admitted' ? { kind: 'admitted', student: fresh } : r))
+      return fresh
+    } catch {
+      /* 다시 읽기에 실패해도 배정 자체는 됐다 — 조용히 넘긴다 */
+      return null
+    }
+  }, [])
+
+  async function runAssignClass(student: Student) {
+    if (next.classId === '') return
+    setNext((n) => ({ ...n, busy: 'class', err: null }))
+    try {
+      await assignStudentToClass(Number(next.classId), student.enrollmentId)
+      const fresh = await reloadStudent(student.enrollmentId)
+      const name = classes.find((c) => String(c.id) === next.classId)?.name ?? '반'
+      /* ★ **된 일만 적는다.** 「학번이 매겨졌습니다」로 단정하면, 서버가 아직 안 매기는
+         동안 화면이 **없는 번호를 있다고 말하는** 셈이다 — 담당자는 학번이 생긴 줄 알고
+         넘어가고, 나중에 빈 칸을 보고 「등록이 잘못됐나」로 되돌아온다 */
+      setNext((n) => ({
+        ...n,
+        busy: null,
+        done: [
+          ...n.done,
+          fresh?.studentNo
+            ? `${name} 배정 — 학번 ${fresh.studentNo}`
+            : `${name} 배정 — 학번은 아직 매겨지지 않았습니다`,
+        ],
+      }))
+    } catch (e) {
+      setNext((n) => ({ ...n, busy: null, err: e instanceof ApiError ? e.message : '반 배정에 실패했습니다.' }))
+    }
+  }
+
+  async function runAssignSeat(student: Student) {
+    if (next.seatId === '') return
+    setNext((n) => ({ ...n, busy: 'seat', err: null }))
+    try {
+      await assignSeat(Number(next.seatId), student.enrollmentId)
+      const cd = seats.find((x) => String(x.seatId) === next.seatId)?.seatCd ?? '좌석'
+      setNext((n) => ({ ...n, busy: null, done: [...n.done, `좌석 ${cd} 배정`] }))
+    } catch (e) {
+      setNext((n) => ({ ...n, busy: null, err: e instanceof ApiError ? e.message : '좌석 배정에 실패했습니다.' }))
+    }
+  }
+
+  async function runGrant(student: Student) {
+    if (next.scholarship === '') return
+    setNext((n) => ({ ...n, busy: 'scholar', err: null }))
+    try {
+      await grantScholarship(student.enrollmentId, next.scholarship)
+      const nm = scholarMasters.find((m) => m.code === next.scholarship)?.name ?? '장학'
+      setNext((n) => ({ ...n, busy: null, done: [...n.done, `${nm} 부여`] }))
+    } catch (e) {
+      setNext((n) => ({ ...n, busy: null, err: e instanceof ApiError ? e.message : '장학을 주지 못했습니다.' }))
+    }
+  }
 
   async function save() {
     if (academyId === null || form.name.trim() === '') return
@@ -163,6 +292,8 @@ function EnrollForm() {
         admissionDate: form.admissionDate || undefined,
       })
       setResult({ kind: 'admitted', student })
+      /* 다음 학생을 등록하기 전까지 이어서 할 일을 연다 */
+      setNext({ classId: '', areaId: '', seatId: '', scholarship: '', busy: null, done: [], err: null })
       setForm(EMPTY)
       clearDraft('enroll')
       setTempMsg(null)
@@ -181,11 +312,13 @@ function EnrollForm() {
           <Icon name="graduation-cap" size={17} />
         </div>
         <div>
-          <div className="tt">학번 자동 채번 — 저장 시 확정</div>
+          {/* ★ 2026-10-13 채번이 바뀌었다 — **접수만으로는 학번이 안 나온다.** 전 문구는
+                 「저장할 때 확정」이라고 적고 있어, 그대로 두면 등록 직후 「학번이 왜 없냐」가 된다 */}
+          <div className="tt">학번은 반을 배정할 때 매겨집니다</div>
           <div className="tx">
-            학번은 <b>저장할 때 확정</b>됩니다. {nextNo ? <>다음 학번은 <b>{nextNo}</b>입니다 — </> : null}
-            <b>미리 잡아두는 번호는 아니라서</b> 다른 사람이 먼저 저장하면 밀립니다.
-            번호는 <b>지점별·연도별로 따로</b> 매겨지므로 다른 지점에 같은 학번이 있을 수 있습니다 —
+            접수만으로는 학번이 나오지 않습니다. 아래에서 등록을 끝낸 뒤 <b>반을 배정하면</b> 그때
+            번호를 받습니다 — <b>반이 바뀌면 학번도 바뀝니다.</b>
+            번호는 <b>지점 안에서만 유일</b>하므로 다른 지점에 같은 학번이 있을 수 있습니다 —
             학생을 특정할 때는 학번만으로 판단하지 마세요.
           </div>
         </div>
@@ -219,6 +352,169 @@ function EnrollForm() {
                 <div className="tx">{result.message}</div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ★ 등록 다음 단계 — 반 배정 · 좌석 · 장학을 **여기서 이어서** 한다(피드백 1-2).
+             각각 다른 서버 호출이라 한 번에 보낼 수 없다. 그래서 **단계마다 결과를 따로** 적는다 —
+             「저장 실패」로 뭉뚱그리면 담당자가 다시 등록해 중복 데이터가 생긴다 */}
+      {result?.kind === 'admitted' && (
+        <div className="card-sec" style={{ marginBottom: 14 }}>
+          <div className="card-sec-h">
+            <div className="t">
+              <span className="ico">
+                <Icon name="list-checks" size={15} />
+              </span>
+              이어서 할 일 — {result.student.name}
+            </div>
+            <div className="r">
+              <button className="btn" onClick={() => setResult(null)}>
+                다음 학생 등록
+              </button>
+            </div>
+          </div>
+          <div className="card-sec-b">
+            {next.done.length > 0 && (
+              <div className="note-box" role="status">
+                <div>
+                  {next.done.map((d, i) => (
+                    <div key={i}>✓ {d}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {next.err && (
+              <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+                {next.err}
+              </div>
+            )}
+
+            {/* ★ 반 배정이 **학번을 받는 단계**다 — 단순한 분류가 아니라고 화면이 말해야 한다 */}
+            <div className="frow">
+              <label>반 배정</label>
+              <div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <select
+                    className="sel"
+                    style={{ flex: 1 }}
+                    value={next.classId}
+                    onChange={(e) => setNext((n) => ({ ...n, classId: e.target.value }))}
+                  >
+                    <option value="">반을 고르세요</option>
+                    {/* ★ **시험용 반 번호가 없는 반은 고를 수 없다.** 학번을 만들 앞자리가 없어
+                           서버가 400 으로 막는다 — 고를 수 있게 두면 **눌러 보고서야** 안다 */}
+                    {classes.map((c) => (
+                      <option key={c.id} value={String(c.id)} disabled={c.examClassNo == null}>
+                        {c.name}
+                        {c.capacity != null ? ` (${c.memberCount ?? 0}/${c.capacity})` : ''}
+                        {c.examClassNo == null ? ' — 반 번호 없음' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="btn pri"
+                    disabled={next.busy !== null || next.classId === ''}
+                    onClick={() => void runAssignClass(result.student)}
+                  >
+                    {next.busy === 'class' ? '배정 중…' : '배정'}
+                  </button>
+                </div>
+                {classes.some((c) => c.examClassNo == null) && (
+                  <div className="hint" style={{ color: 'var(--amber)' }}>
+                    시험용 반 번호가 없는 반은 고를 수 없습니다 — 반 배정 화면에서 번호를 먼저 넣어 주세요.
+                  </div>
+                )}
+                <div className="hint">
+                  <b>학번은 반을 배정할 때 매겨집니다.</b> 지금 학번:{' '}
+                  <b>{studentNoText(result.student.studentNo)}</b>
+                  {/* ★ 반을 골라야 번호를 알 수 있다. **미리 잡아두는 번호가 아니라서** 다른
+                         사람이 먼저 배정하면 밀린다 */}
+                  {nextNo && next.classId !== '' && (
+                    <>
+                      {' '}
+                      · 이 반에서 받을 번호: <b>{nextNo}</b>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="frow">
+              <label>좌석 배정</label>
+              <div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <select
+                    className="sel"
+                    style={{ width: 150 }}
+                    value={next.areaId}
+                    onChange={(e) => setNext((n) => ({ ...n, areaId: e.target.value, seatId: '' }))}
+                  >
+                    <option value="">구역</option>
+                    {areas.map((a) => (
+                      <option key={a.id} value={String(a.id)}>
+                        {a.buildingName} {a.areaNm}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="sel"
+                    style={{ flex: 1 }}
+                    value={next.seatId}
+                    onChange={(e) => setNext((n) => ({ ...n, seatId: e.target.value }))}
+                  >
+                    <option value="">{next.areaId === '' ? '구역을 먼저 고르세요' : '빈 좌석을 고르세요'}</option>
+                    {/* ★ **빈 좌석만** 낸다 — 찬 자리를 고르면 서버가 거절한다 */}
+                    {seats
+                      .filter((x) => x.enrollmentId === null)
+                      .map((x) => (
+                        <option key={x.seatId} value={String(x.seatId)}>
+                          {x.seatCd}
+                        </option>
+                      ))}
+                  </select>
+                  <button
+                    className="btn"
+                    disabled={next.busy !== null || next.seatId === ''}
+                    onClick={() => void runAssignSeat(result.student)}
+                  >
+                    {next.busy === 'seat' ? '배정 중…' : '배정'}
+                  </button>
+                </div>
+                <div className="hint">나중에 독서실 좌석배치표에서도 바꿀 수 있습니다.</div>
+              </div>
+            </div>
+
+            <div className="frow">
+              <label>장학</label>
+              <div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <select
+                    className="sel"
+                    style={{ flex: 1 }}
+                    value={next.scholarship}
+                    onChange={(e) => setNext((n) => ({ ...n, scholarship: e.target.value }))}
+                  >
+                    <option value="">해당 없음</option>
+                    {scholarMasters.map((m) => (
+                      <option key={m.code} value={m.code}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="btn"
+                    disabled={next.busy !== null || next.scholarship === ''}
+                    onClick={() => void runGrant(result.student)}
+                  >
+                    {next.busy === 'scholar' ? '부여 중…' : '부여'}
+                  </button>
+                </div>
+                {scholarMasters.length === 0 && (
+                  <div className="hint">등록된 장학 종류가 없습니다. 기초 관리 → 장학 종류에서 먼저 만드세요.</div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -313,7 +609,9 @@ function EnrollForm() {
               학적 · 배정
             </div>
             <div className="r">
-              <span className="mk supplement">{nextNo ? `다음 학번 ${nextNo}` : '학번은 저장 시 부여'}</span>
+              {/* ★ 등록 시점에는 반을 모르니 **번호를 말하지 않는다.** 전에는 「다음 학번 2026-0015」를
+                     띄웠는데, 이제 그 번호가 나오지 않아 **틀린 약속**이 된다 */}
+              <span className="mk supplement">학번은 반 배정 때</span>
             </div>
           </div>
           <div className="card-sec-b">
@@ -380,9 +678,11 @@ function EnrollForm() {
                 <div className="chk">
                   <Icon name="arrow-right" size={12} />
                 </div>
+                {/* ★ 전에는 「저장 후 다른 화면에서 배정하세요」였다 — 이제 **이 화면에서 바로**
+                       하므로 틀린 안내다. 다른 화면으로 보내면 담당자가 거기서 다시 학생을 찾는다 */}
                 <div>
-                  등록 요청에는 배정 값이 없습니다. 저장 후 <b>고정반 관리</b>·<b>배정 관리</b> 화면에서
-                  배정하세요.
+                  반·좌석·장학은 <b>등록을 끝낸 뒤 이 화면 위쪽에서</b> 바로 배정합니다. 학번은 그때
+                  매겨집니다.
                 </div>
               </div>
             </div>
@@ -516,7 +816,7 @@ function SignupApproval() {
         width: '110px',
         /* 승인 전에는 학번이 없을 수 있다. 서버가 안 주는 게 아니라 아직 안 매겨진 것이라
            Unfilled 가 아니라 '-' 다(CLAUDE.md 4) */
-        value: (r) => r.studentNo ?? '-',
+        value: (r) => studentNoText(r.studentNo),
       },
       { key: 'name', header: '이름', width: '100px', mask: 'name', value: (r) => r.name },
       { key: 'phone', header: '연락처', width: '130px', mask: 'phone', value: (r) => r.phone ?? '-' },
@@ -633,7 +933,7 @@ function SignupApproval() {
                 }}
               >
                 <b style={{ fontSize: 13 }}>{masked ? `${r.name[0]}*${r.name.slice(2)}` : r.name}</b>
-                <span style={{ fontSize: 12, color: 'var(--muted)' }}>{r.studentNo ?? '-'}</span>
+                <span style={{ fontSize: 12, color: 'var(--muted)' }}>{studentNoText(r.studentNo)}</span>
                 <span className="mk supplement" style={{ marginLeft: 4 }}>
                   {ONBOARDING_LABEL[r.onboardingStatus] ?? r.onboardingStatus}
                 </span>
