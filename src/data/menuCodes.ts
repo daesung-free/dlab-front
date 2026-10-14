@@ -30,7 +30,10 @@ export const SCREEN_MENU_CODES: Record<string, string[]> = {
 
   /* 출결 */
   attendance: ['attendance'],
-  'reading-room': ['attendance', 'seat'],
+  /* ★ `seat` 만으로 연다. 전에는 `attendance` 로도 열렸는데, **담임은 `attendance` 가 있고
+     `seat` 가 없어** 화면만 열리고 좌석 조회가 403 이었다(2026-10-14 운영 점검).
+     「열리는데 비어 있는 화면」이 가장 나쁘다 — 고장으로 읽힌다 */
+  'reading-room': ['seat'],
   'regular-schedule': ['schedule'],
   approval: ['approval'],
   'seat-move': ['seat'],

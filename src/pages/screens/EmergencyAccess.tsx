@@ -61,9 +61,13 @@ function Content() {
     const d = query.date as { from?: string; to?: string } | undefined
     return { from: d?.from || addDaysStr(todayStr(), -14), to: d?.to || todayStr(), academyId }
   }, [query, academyId])
+  /* ★ **지점을 고르기 전에는 부르지 않는다.** 전 지점 권한 계정이 `academyId` 없이 부르면
+     서버가 400 을 준다 — 화면을 열 때마다 4xx 가 쌓이고, 사용자에게는 **빈 화면에 오류 배너**만
+     보인다. 지점을 고르면 그때 읽는다(CLAUDE.md 4 — `enabled: false` 로 막는다) */
   const list = useServerData({
     fetcher: listEmergencyAccess,
     params,
+    enabled: academyId !== null,
     errorMessage: '요청 내역을 불러오지 못했습니다.',
   })
 
@@ -185,7 +189,9 @@ function Content() {
         masked={masked}
         loading={list.loading}
         pageSize={20}
-        emptyText="그 기간에 요청이 없습니다."
+        /* ★ 지점을 고르기 전에는 **아직 안 읽은 것**이지 「요청이 없는」 것이 아니다 —
+           그렇게 쓰면 담당자가 그날 요청이 없었다고 읽는다 */
+        emptyText={academyId === null ? '지점을 먼저 고르세요.' : '그 기간에 요청이 없습니다.'}
       />
     </>
   )
