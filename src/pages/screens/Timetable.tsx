@@ -4,6 +4,7 @@ import { Icon } from '../../components/Icon'
 import { Tabs } from '../../components/Tabs'
 import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
+import { useAuth } from '../../auth/AuthContext'
 import { listClasses, type ClassGroup } from '../../api/classes'
 import { listPeriods, type Period as MasterPeriod } from '../../api/schoolMasters'
 import { listRooms, type Room } from '../../api/masters'
@@ -166,6 +167,10 @@ const keyOf = (day: DayOfWeek, periodId: number) => `${day}:${periodId}`
 
 function Content() {
   const { academyId } = useAcademy()
+  /* ★ 담임은 **보기만** 한다 — 칸을 눌러도 편집 모달을 열지 않는다. 열어 두면
+     고쳐 놓고 저장이 안 되는(버튼이 없는) 막다른 길이 된다 */
+  const { teacherOnly, readOnly } = useAuth()
+  const canEdit = !teacherOnly && !readOnly
   const year = new Date().getFullYear()
   const [tab, setTab] = useState('grid')
   const [sel, setSel] = useState<string[]>([])
@@ -587,13 +592,19 @@ function Content() {
                                       <button
                                         type="button"
                                         className={`cell ${has ? (dr.roomId !== '' ? 'move' : 'fix') : 'self'}`}
-                                        style={{ width: '100%', textAlign: 'left', cursor: 'pointer' }}
-                                        onClick={() => setEditing({ day: d, period: p, form: { ...dr } })}
+                                        onClick={() => canEdit && setEditing({ day: d, period: p, form: { ...dr } })}
                                         title={
                                           has
                                             ? `${dr.subject || '과목 없음'} · ${room}${tch ? ` · ${tch}` : ''}`
-                                            : '눌러서 편성합니다'
+                                            : canEdit
+                                              ? '눌러서 편성합니다'
+                                              : '보기 전용입니다'
                                         }
+                                        style={{
+                                          width: '100%',
+                                          textAlign: 'left',
+                                          cursor: canEdit ? 'pointer' : 'default',
+                                        }}
                                       >
                                         <span className="sj">{has ? dr.subject || '(과목 없음)' : ''}</span>
                                         <span className="mt">
@@ -828,8 +839,17 @@ function Content() {
   )
 }
 
-/** 헤더 액션 — 본문과 부모가 달라 신호로 잇는다 */
+/**
+ * 헤더 액션 — 본문과 부모가 달라 신호로 잇는다.
+ *
+ * ★ **담임에게는 안 낸다.** 서버가 편성 저장·전년도 복사를 막는다(2026-10-14) —
+ *   **자기 반을 보는 것과 지점 시간표를 짜는 것은 다른 일**이라서다. 버튼을 두면
+ *   눌러 보고 403 으로 알게 되고, 그건 고장으로 읽힌다.
+ * ★ 조회 전용도 같다 — 쓰기가 전부 막힌 계정이다.
+ */
 function TimetableActions() {
+  const { teacherOnly, readOnly } = useAuth()
+  if (teacherOnly || readOnly) return null
   return (
     <>
       <button className="btn" onClick={() => copySignal.bump()}>
