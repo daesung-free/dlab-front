@@ -78,6 +78,15 @@ export interface Screen {
    *   눌러도 아무것도 못 하는 칸이 된다.
    */
   superOnly?: boolean
+  /**
+   * 담임(TEACHER 만 가진 계정)에게 **숨기는** 화면인가.
+   *
+   * ★ 서버 메뉴 코드 하나가 **두 화면을 끌 때** 필요하다. 승인은 「대기 목록을 처리하는 것」과
+   *   「누가 승인자인지 정하는 것」이 다른 일인데 코드가 `approval` 하나다 — 정책 화면까지
+   *   열리면 **담임이 자기가 승인자로 걸린 항목의 타임아웃·에스컬레이션을 자기가 바꾼다.**
+   * ★ `superOnly` 와 다르다. 그건 본사 전용이고 이건 **지점 관리자까지는 되는** 화면이다.
+   */
+  hideFromTeacher?: boolean
 }
 
 export const GROUPS: Group[] = [
@@ -469,6 +478,10 @@ export const SCREENS: Screen[] = [
     kind: 'brandnew',
     phase: 3,
     summary: '학생 신청(사유·정기일정·방화벽) → 항목별 승인 주체(학부모/선생님/자동)에 따라 자동 라우팅',
+    /* ★ 이 화면은 **승인 정책**(누가 승인자인가·타임아웃)이다. 서버가 `/approval-items` 를
+       본사·지점관리자로 막는데 메뉴 코드(`approval`)는 담임에게도 있어, 화면만 열리고 403 이었다.
+       담임이 쓰는 「승인 **처리**」는 사유 승인 쪽이라 이걸 숨겨도 업무가 막히지 않는다 */
+    hideFromTeacher: true,
   },
   {
     id: 'daily-report',

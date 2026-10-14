@@ -356,7 +356,7 @@ function DashboardSide() {
  * 클라이언트 메뉴표(대분류 > 중분류 > 기능) 3단 구조를 그대로 편다.
  */
 function CatSide({ catId, here }: { catId: string; here: string }) {
-  const { allowedMenus, principal, me } = useAuth()
+  const { allowedMenus, principal, me, teacherOnly } = useAuth()
   const isSuper = (me?.roles ?? principal?.roles ?? []).some((r) => r === 'SUPER_ADMIN')
   const cat = findNavCat(catId)
   if (!cat) return null
@@ -374,7 +374,7 @@ function CatSide({ catId, here }: { catId: string; here: string }) {
       {/* ★ 계정별 메뉴 노출. 섹션이 통째로 비면 제목만 남으므로 **섹션도 함께 감춘다** —
              빈 제목만 떠 있으면 "여기 뭐가 있었는데 사라졌나" 가 된다 */}
       {cat.sections.map((sec) => {
-        const items = sec.items.filter((i) => canSeeScreenAs(i.screenId, allowedMenus, isSuper))
+        const items = sec.items.filter((i) => canSeeScreenAs(i.screenId, allowedMenus, isSuper, teacherOnly))
         if (items.length === 0) return null
         return (
           <div className="nav-sec" key={sec.name}>
@@ -391,7 +391,7 @@ function CatSide({ catId, here }: { catId: string; here: string }) {
       {/* ★ '중분류'·'기획 신규 도메인'은 우리끼리 쓰는 말이다(CLAUDE.md 1-1). 행정 선생님이
              읽고 할 일이 달라지지 않는다 — 화면 개수만 남긴다. */}
       <div className="side-foot">
-        <b style={{ color: 'var(--ink-2)' }}>{cat.name}</b> · 화면 {navItemCount(cat, (i) => canSeeScreenAs(i.screenId, allowedMenus, isSuper))}개
+        <b style={{ color: 'var(--ink-2)' }}>{cat.name}</b> · 화면 {navItemCount(cat, (i) => canSeeScreenAs(i.screenId, allowedMenus, isSuper, teacherOnly))}개
       </div>
     </>
   )

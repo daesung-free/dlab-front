@@ -15,7 +15,7 @@ import './home.css'
  */
 export function GroupPage() {
   const { groupId } = useParams()
-  const { canSeeAdmin, allowedMenus, principal, me } = useAuth()
+  const { canSeeAdmin, allowedMenus, principal, me, teacherOnly } = useAuth()
   const isSuper = (me?.roles ?? principal?.roles ?? []).some((r) => r === 'SUPER_ADMIN')
   const cat = groupId ? findNavCat(groupId) : undefined
   if (!cat) return <Navigate to="/" replace />
@@ -26,7 +26,7 @@ export function GroupPage() {
   /* ★ 계정별 메뉴 노출. 좌측 메뉴만 거르면 **이 허브에는 다 남는다** — 감춘 화면의 카드가
        그대로 보이고, 눌러야 대시보드로 되튕긴다(ScreenPage). 같은 기준으로 여기서도 거른다 */
   const sections = cat.sections
-    .map((sec) => ({ ...sec, items: sec.items.filter((i) => canSeeScreenAs(i.screenId, allowedMenus, isSuper)) }))
+    .map((sec) => ({ ...sec, items: sec.items.filter((i) => canSeeScreenAs(i.screenId, allowedMenus, isSuper, teacherOnly)) }))
     .filter((sec) => sec.items.length > 0)
   if (sections.length === 0) return <Navigate to="/" replace />
 
@@ -39,7 +39,7 @@ export function GroupPage() {
         sub={cat.desc}
         actions={
           /* '중분류'는 우리끼리 쓰는 말이다(CLAUDE.md 1-1) — 화면 개수만 남긴다 */
-          <span className="sc-ref">화면 {navItemCount(cat, (i) => canSeeScreenAs(i.screenId, allowedMenus, isSuper))}개</span>
+          <span className="sc-ref">화면 {navItemCount(cat, (i) => canSeeScreenAs(i.screenId, allowedMenus, isSuper, teacherOnly))}개</span>
         }
       />
 
