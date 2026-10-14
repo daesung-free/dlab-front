@@ -61,122 +61,8 @@ const CHANNEL_META: Record<Channel, { label: string; desc: string; cls: string; 
   FCM: { label: 'FCM 푸시', desc: '학생 앱 설치자 대상 · 자유 문안 가능', cls: 'supplement', icon: 'smartphone' },
 }
 
-/* ── 템플릿 마스터 ── */
 
-type ReviewStatus = '승인' | '심사대기' | '반려' | '해당없음'
 
-interface Template {
-  id: string
-  /** 발송 API가 참조하는 코드 — 운영 중 이름이 바뀌어도 이 값은 고정 */
-  code: string
-  name: string
-  channel: Channel
-  /** 자동발송 트리거. 없으면 수동 발송 전용 */
-  trigger?: string
-  status: ReviewStatus
-  body: string
-  vars: string[]
-  updatedAt: string
-  updatedBy: string
-}
-
-const TEMPLATES: Template[] = [
-  {
-    id: 't1',
-    code: 'ALT_ARRIVE',
-    name: '등원 확인',
-    channel: 'ALIMTALK',
-    trigger: 'ATTENDANCE_ON_TIME',
-    status: '승인',
-    body: '[DLab] {학생명} 학생이 {시각}에 등원했습니다.',
-    vars: ['학생명', '시각'],
-    updatedAt: '2026-04-18',
-    updatedBy: '본사',
-  },
-  {
-    id: 't2',
-    code: 'ALT_LATE',
-    name: '지각 안내',
-    channel: 'ALIMTALK',
-    trigger: 'ATTENDANCE_LATE',
-    status: '승인',
-    body: '[DLab] {학생명} 학생이 {시각}에 지각 등원했습니다. 사유가 있으시면 회신 부탁드립니다.',
-    vars: ['학생명', '시각'],
-    updatedAt: '2026-04-18',
-    updatedBy: '본사',
-  },
-  {
-    id: 't3',
-    code: 'ALT_ABSENT',
-    name: '결석 안내',
-    channel: 'ALIMTALK',
-    trigger: 'ATTENDANCE_ABSENT',
-    status: '심사대기',
-    body: '[DLab] {학생명} 학생이 금일 미등원 상태입니다. 확인 부탁드립니다.',
-    vars: ['학생명'],
-    updatedAt: '2026-05-20',
-    updatedBy: '본사',
-  },
-  {
-    id: 't4',
-    code: 'ALT_WAITLIST',
-    name: '대기자 순번 안내',
-    channel: 'ALIMTALK',
-    trigger: 'WAITLIST_TURN',
-    status: '심사대기',
-    body: '[DLab] {학생명} 학생 등록이 가능합니다. {일자} {시각}까지 방문해 주세요.',
-    vars: ['학생명', '일자', '시각'],
-    updatedAt: '2026-05-22',
-    updatedBy: '담임 A',
-  },
-  {
-    id: 't5',
-    code: 'ALT_MEAL_DEADLINE',
-    name: '급식 신청 마감 안내',
-    channel: 'ALIMTALK',
-    trigger: 'MEAL_DEADLINE',
-    status: '반려',
-    body: '[DLab] {일자} 급식 신청이 마감됩니다. 앱에서 신청해 주세요.',
-    vars: ['일자'],
-    updatedAt: '2026-05-24',
-    updatedBy: '행정팀',
-  },
-  {
-    id: 't6',
-    code: 'PUSH_SCORE',
-    name: '성적 리포트 등록',
-    channel: 'FCM',
-    trigger: 'SCORE_PUBLISHED',
-    status: '해당없음',
-    body: '{회차} 성적 리포트가 등록되었습니다. 앱에서 확인하세요.',
-    vars: ['회차'],
-    updatedAt: '2026-05-11',
-    updatedBy: '담임 C',
-  },
-  {
-    id: 't7',
-    code: 'PUSH_PLAN',
-    name: '학습계획 미작성 알림',
-    channel: 'FCM',
-    trigger: 'PLAN_MISSING',
-    status: '해당없음',
-    body: '{반} 주간 학습계획이 아직 작성되지 않았습니다.',
-    vars: ['반'],
-    updatedAt: '2026-05-11',
-    updatedBy: '담임 C',
-  },
-  {
-    id: 't8',
-    code: 'PUSH_FREE',
-    name: '직접 입력 (자유 문안)',
-    channel: 'FCM',
-    status: '해당없음',
-    body: '',
-    vars: ['학생명', '반', '일자', '시각'],
-    updatedAt: '2026-05-02',
-    updatedBy: '본사',
-  },
-]
 
 const SAMPLE: Record<string, string> = {
   학생명: '학생 F',
@@ -421,7 +307,6 @@ function Content() {
 
   /* 발송 탭 */
   const [scope, setScope] = useState('CLASS')
-  const [template, setTemplate] = useState<Template>(TEMPLATES[1])
   const [reserve, setReserve] = useState(false)
 
   /* 템플릿 관리 탭 — 여기만 실연동이다 */
@@ -498,10 +383,16 @@ function Content() {
   }
 
   const target = SCOPES.find((s) => s.key === scope)!
-  const channel = template.channel
 
-  /* 알림톡은 승인된 템플릿만 나간다 — 심사가 안 끝났으면 발송 버튼을 막는다 */
-  const blocked = channel === 'ALIMTALK' && template.status !== '승인'
+  /* ★ 드롭다운이 서버 템플릿이 됐으므로 **아래 미리보기도 그 값을 따라가야 한다.**
+     따로 두면 「고른 것과 보이는 내용이 다른」 화면이 된다 */
+  const sendPick = rows.find((r) => r.id === pickedId) ?? null
+  /* 서버 채널(KAKAO_ALIMTALK·FCM_PUSH) → 화면 채널 */
+  const channel: Channel = sendPick?.channel === 'FCM_PUSH' ? 'FCM' : 'ALIMTALK'
+
+  /* ★ **「지금 실제로 나가는가」는 서버가 `sendable` 하나로 내려준다** — 활성·문구확정·심사
+     세 축이 모두 통과해야 true 다. 화면이 축을 따로 보면 「왜 알림이 안 가지」를 못 짚는다 */
+  const blocked = sendPick ? !sendPick.sendable : true
 
   // 통계는 실제 템플릿 기준이다. 발송 탭이 목업이어도 이 숫자는 서버 값이어야 한다
   const counts = useMemo(
@@ -750,7 +641,7 @@ function Content() {
                 </div>
               </div>
 
-              {template.trigger && (
+              {sendPick && (
                 <div className="frow">
                   <label>자동발송</label>
                   <div className="link-box">
@@ -758,7 +649,7 @@ function Content() {
                       <Icon name="zap" size={12} />
                     </div>
                     <div>
-                      <code style={{ fontSize: 11 }}>{template.trigger}</code> 이벤트에 연동된{' '}
+                      <code style={{ fontSize: 11 }}>{EVENT_LABEL[sendPick.event] ?? sendPick.event}</code> 이벤트에 연동된{' '}
                       <b>자동발송 템플릿</b>입니다. 수동 발송 시에도 같은 문안이 나가며, 문구 수정은{' '}
                       <b>템플릿 관리</b> 탭에서 합니다.
                     </div>
@@ -771,15 +662,17 @@ function Content() {
                 <div>
                   <textarea
                     className="ta"
-                    value={template.body}
-                    readOnly={channel === 'ALIMTALK'}
-                    placeholder="발송할 내용을 입력하세요."
-                    onChange={(e) => setTemplate({ ...template, body: e.target.value })}
+                    value={sendPick?.bodyTemplate ?? ''}
+                    /* ★ **여기서 못 고친다.** 문구는 「템플릿 관리」 탭에서 고치고 재심사를 받는다 —
+                       여기서 고치게 두면 **승인된 문안과 다른 글이 나가는** 것처럼 보인다 */
+                    readOnly
+                    placeholder="템플릿을 고르면 내용이 보입니다."
+                    onChange={() => {}}
                   />
-                  {channel === 'ALIMTALK' && (
+                  {true && (
                     <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 6 }}>
-                      알림톡은 <b>승인된 문안만</b> 발송됩니다. 여기서는 수정할 수 없고 템플릿 관리에서 고친 뒤 재심사를
-                      받아야 합니다.
+                      문구는 <b>「템플릿 관리」 탭</b>에서 고칩니다. 알림톡은 <b>승인된 문안만</b> 나가므로
+                      고친 뒤 재심사를 받아야 합니다.
                     </div>
                   )}
                 </div>
@@ -811,7 +704,7 @@ function Content() {
                   <button className="btn" disabled data-soon title="준비 중입니다">테스트 발송</button>
                   {blocked && (
                     <span style={{ fontSize: 11.5, color: 'var(--red)', fontWeight: 700 }}>
-                      심사 {template.status} 상태라 실발송할 수 없습니다
+                      {sendPick ? '아직 발송할 수 있는 상태가 아닙니다' : '템플릿을 먼저 고르세요'}
                     </span>
                   )}
                 </div>
@@ -846,7 +739,9 @@ function Content() {
                   </span>
                 </div>
                 <div style={{ fontSize: 12.5, lineHeight: 1.65, color: 'var(--ink)', whiteSpace: 'pre-wrap' }}>
-                  {preview(template.body) || <span style={{ color: 'var(--muted)' }}>내용을 입력하세요.</span>}
+                  {preview(sendPick?.bodyTemplate ?? '') || (
+                    <span style={{ color: 'var(--muted)' }}>템플릿을 고르면 내용이 보입니다.</span>
+                  )}
                 </div>
               </div>
 
