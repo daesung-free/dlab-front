@@ -5,6 +5,7 @@ import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
 import { useAuth } from '../../auth/AuthContext'
+import { studentNoText } from '../../lib/studentNo'
 import { listClasses, type ClassGroup } from '../../api/classes'
 import { searchStudents, type Student } from '../../api/students'
 import {
@@ -14,7 +15,7 @@ import {
   postNoticeToAll,
   postNoticeToBranch,
   postNoticeToClass,
-  postNoticeToStudent,
+  postNoticeToStudents,
   patchNotice,
   type Notice as ApiNotice,
 } from '../../api/notices'
@@ -184,15 +185,19 @@ function Content() {
   const [composing, setComposing] = useState(false)
   /* ★ 담임은 공지가 매트릭스상 '없음' 인데 메뉴에 들어 있어 **삭제까지 눌렸다**
        (2026-09-28 테스트 회신). 서버가 조일 때까지 화면에서 먼저 막는다 */
-  const { teacherOnly } = useAuth()
+  const { teacherOnly, principal } = useAuth()
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   // 전체 발송은 본사만 가능하다 — 서버가 경로 단위로 권한을 건다
   /* ★ 반·개인 공지는 **담임 업무의 기본**인데 화면이 지점·전체만 보내고 있었다.
        호출 함수는 있었는데 부르는 자리가 없었다(2026-09-27 실테스트 P2) */
-  const [scope, setScope] = useState<'ALL' | 'BRANCH' | 'CLASS' | 'INDIVIDUAL'>('BRANCH')
+  /* ★ 작성에서는 **`SELECTED`(여러 명)만** 쓴다. 옛 `INDIVIDUAL`(한 명)은 **이미 보낸 공지**가
+     있어 목록 표시용으로만 남는다 — 새로 그 길로 보내면 **사람 수만큼 공지가 생긴다** */
+  const [scope, setScope] = useState<'ALL' | 'BRANCH' | 'CLASS' | 'SELECTED'>('BRANCH')
   const [classId, setClassId] = useState('')
-  const [enrollmentId, setEnrollmentId] = useState('')
+  /** 고른 학생들. **공지는 한 건**이고 대상자만 여럿이다 */
+  const [picked, setPicked] = useState<string[]>([])
+  const [pickClass, setPickClass] = useState('')
   const [studentQuery, setStudentQuery] = useState('')
   const [classes, setClasses] = useState<ClassGroup[]>([])
   const [students, setStudents] = useState<Student[]>([])
@@ -208,6 +213,29 @@ function Content() {
       return at !== null && new Date(at) >= monday
     }).length
   }, [notices])
+
+  /* ★ **담임은 자기 반만** 고를 수 있다. 서버가 남의 반을 섞으면 **전체를 거절**하므로
+     (하나만 자기 반이어도 안 된다) 애초에 안 보여준다 — 고르고 나서 거절당하면 왜인지 모른다.
+     ⚠️ **지금은 닿지 않는 길이다** — 담임은 공지 작성 버튼 자체가 없다(0928 회신, 매트릭스상
+     담임 공지 작성 '없음'). 그 결정이 바뀌면 이 필터가 바로 받는다. 지워 두면 그때
+     **남의 반을 섞어 전체가 거절되는** 것부터 다시 겪는다 */
+  const pickableClasses = useMemo(
+    () =>
+      teacherOnly
+        ? classes.filter((c) => c.homeroomTeacherId != null && String(c.homeroomTeacherId) === principal?.accountId)
+        : classes,
+    [classes, teacherOnly, principal?.accountId],
+  )
+
+  const pickableStudents = useMemo(() => {
+    const names = new Set(pickableClasses.map((c) => c.name))
+    const q = studentQuery.trim()
+    return students
+      .filter((st) => !teacherOnly || (st.className != null && names.has(st.className)))
+      .filter((st) => pickClass === '' || st.className === classes.find((c) => String(c.id) === pickClass)?.name)
+      .filter((st) => q === '' || st.name.includes(q) || (st.studentNo ?? '').includes(q))
+      .slice(0, 200)
+  }, [students, pickableClasses, pickClass, studentQuery, teacherOnly, classes])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -263,12 +291,13 @@ function Content() {
     try {
       if (scope === 'ALL') await postNoticeToAll(title.trim(), content.trim())
       else if (scope === 'CLASS') await postNoticeToClass(Number(classId), title.trim(), content.trim())
-      else if (scope === 'INDIVIDUAL') await postNoticeToStudent(Number(enrollmentId), title.trim(), content.trim())
+      else if (scope === 'SELECTED') await postNoticeToStudents(picked.map(Number), title.trim(), content.trim())
       else if (academyId !== null) await postNoticeToBranch(academyId, title.trim(), content.trim())
       setTitle('')
       setContent('')
       setClassId('')
-      setEnrollmentId('')
+      setPicked([])
+      setPickClass('')
       setComposing(false)
       await load()
     } catch (err) {
@@ -406,13 +435,13 @@ function Content() {
                       <select
                         className="sel"
                         value={scope}
-                        onChange={(e) => setScope(e.target.value as 'ALL' | 'BRANCH' | 'CLASS' | 'INDIVIDUAL')}
+                        onChange={(e) => setScope(e.target.value as 'ALL' | 'BRANCH' | 'CLASS' | 'SELECTED')}
                       >
                         {/* 전체 발송은 본사만 — 지점이 하나만 보이는 계정에는 뜨지 않는다 */}
                         {academies.length > 1 && <option value="ALL">전체 (본사)</option>}
                         <option value="BRANCH">지점</option>
                         <option value="CLASS">반</option>
-                        <option value="INDIVIDUAL">학생 한 명</option>
+                        <option value="SELECTED">학생 선택 (여러 명)</option>
                       </select>
                     </div>
 
@@ -434,37 +463,89 @@ function Content() {
                       </div>
                     )}
 
-                    {scope === 'INDIVIDUAL' && (
+                    {/* ★ **공지는 한 건**이고 대상자만 여럿이다. 사람 수만큼 보내면 목록에 같은 글이
+                           N개 뜨고, 오타 하나를 N번 고쳐야 하며, 「읽음 몇 명」이 N개로 쪼개진다 */}
+                    {scope === 'SELECTED' && (
                       <div className="frow">
                         <label className="req">학생</label>
                         <div>
-                          <input
-                            className="inp"
-                            placeholder="이름 · 학번으로 찾기"
-                            value={studentQuery}
-                            onChange={(e) => setStudentQuery(e.target.value)}
-                          />
-                          <select
-                            className="sel"
-                            style={{ marginTop: 6 }}
-                            value={enrollmentId}
-                            onChange={(e) => setEnrollmentId(e.target.value)}
-                          >
-                            <option value="">선택하세요</option>
-                            {students
-                              .filter((st) => {
-                                const q = studentQuery.trim()
-                                return q === '' || st.name.includes(q) || (st.studentNo ?? '').includes(q)
-                              })
-                              .slice(0, 200)
-                              .map((st) => (
-                                <option key={st.enrollmentId} value={String(st.enrollmentId)}>
-                                  {st.studentNo ?? '-'} · {st.name}
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <select
+                              className="sel"
+                              style={{ width: 150 }}
+                              value={pickClass}
+                              onChange={(e) => setPickClass(e.target.value)}
+                            >
+                              <option value="">반 전체</option>
+                              {pickableClasses.map((c) => (
+                                <option key={c.id} value={String(c.id)}>
+                                  {c.name}
                                 </option>
                               ))}
-                          </select>
-                          {/* 개인 공지는 그 학생과 학부모에게만 간다 — 반 전체로 새지 않는다 */}
-                          <div className="hint">고른 학생과 그 학부모에게만 갑니다.</div>
+                            </select>
+                            <input
+                              className="inp"
+                              style={{ flex: 1 }}
+                              placeholder="이름 · 학번으로 찾기"
+                              value={studentQuery}
+                              onChange={(e) => setStudentQuery(e.target.value)}
+                            />
+                          </div>
+
+                          <div
+                            style={{
+                              marginTop: 6,
+                              maxHeight: 190,
+                              overflow: 'auto',
+                              border: '1px solid var(--line)',
+                              borderRadius: 9,
+                            }}
+                          >
+                            {pickableStudents.length === 0 && (
+                              <div style={{ padding: 10, fontSize: 12.5, color: 'var(--muted)' }}>
+                                {teacherOnly ? '맡은 반에 학생이 없습니다.' : '학생이 없습니다.'}
+                              </div>
+                            )}
+                            {pickableStudents.map((st) => {
+                              const id = String(st.enrollmentId)
+                              const on = picked.includes(id)
+                              return (
+                                <label
+                                  key={id}
+                                  style={{
+                                    display: 'flex',
+                                    gap: 8,
+                                    alignItems: 'center',
+                                    padding: '5px 10px',
+                                    fontSize: 12.5,
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={on}
+                                    onChange={() =>
+                                      setPicked((v) => (on ? v.filter((x) => x !== id) : [...v, id]))
+                                    }
+                                  />
+                                  <span style={{ width: 92 }}>{studentNoText(st.studentNo)}</span>
+                                  <span style={{ fontWeight: 600 }}>{st.name}</span>
+                                  <span style={{ color: 'var(--muted)', marginLeft: 'auto' }}>
+                                    {st.className ?? '미배정'}
+                                  </span>
+                                </label>
+                              )
+                            })}
+                          </div>
+
+                          <div className="hint">
+                            <b>{picked.length}명 선택</b> · 고른 학생과 그 학부모에게만 갑니다.
+                            {/* ★ 반을 바꿔도 고른 사람은 남는다 — 여러 반에서 골라 한 번에 보내야 한다 */}
+                            {pickClass !== '' && ' 반을 바꿔도 고른 사람은 남습니다.'}
+                          </div>
+                          {/* ⚠️ 담임이 남의 반 학생을 **하나라도** 섞으면 서버가 **전체를 거절**한다.
+                                 그래서 애초에 자기 반만 보여준다 — 고르고 나서 거절당하면 왜인지 모른다 */}
+                          {teacherOnly && <div className="hint">맡은 반 학생만 고를 수 있습니다.</div>}
                         </div>
                       </div>
                     )}
@@ -488,7 +569,8 @@ function Content() {
                           !content.trim() ||
                           (scope === 'BRANCH' && academyId === null) ||
                           (scope === 'CLASS' && classId === '') ||
-                          (scope === 'INDIVIDUAL' && enrollmentId === '')
+                          /* ★ 대상이 비면 서버가 거절한다 — 먼저 막는다 */
+                          (scope === 'SELECTED' && picked.length === 0)
                         }
                         onClick={() => void send()}
                       >
