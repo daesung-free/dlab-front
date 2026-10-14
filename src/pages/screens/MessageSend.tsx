@@ -659,10 +659,13 @@ function Content() {
             <Icon name="triangle-alert" size={17} />
           </div>
           <div>
-            <div className="tt">아래 내용은 예시입니다 — 실제로 발송되거나 기록되지 않습니다</div>
+            <div className="tt">이 탭에서는 아직 실제로 발송되지 않습니다</div>
             <div className="tx">
-              지금 연결된 것은 <b>템플릿 관리</b>뿐입니다. 알림은 등원·승인·상담 같은 사건이 일어날 때
-              <b> 자동으로</b> 나가고, 사람이 직접 골라 보내는 기능과 발송 기록은 아직 준비되지 않았습니다.
+              알림은 등원·승인·상담 같은 사건이 일어날 때 <b>자동으로</b> 나갑니다. 사람이 직접 골라
+              보내는 기능은 준비 중입니다 — <b>문자 발송 업체 연결이 끝나야</b> 실제로 나갑니다.
+              {/* ★ 발송 이력은 **실연동됐다** — 「기록되지 않는다」고 적어 두면 진짜 기록을 예시로 읽는다 */}
+              <br />
+              템플릿은 <b>「템플릿 관리」 탭의 실제 값</b>이고, <b>「발송 이력」도 실제 기록</b>입니다.
             </div>
           </div>
         </div>
@@ -708,20 +711,31 @@ function Content() {
                 </div>
               </div>
 
+              {/* ★ 전에는 **화면에 박아 둔 예시 8개**를 띄우고 있었다. 디랩이 그걸 실제 기능으로
+                     읽고 「초안 6개 말고 더 있는 것 같다」고 문의했다 — **없는 것을 있는 것처럼**
+                     보여준 셈이다. 서버 템플릿(「템플릿 관리」 탭과 같은 값)으로 바꾼다 */}
               <div className="frow">
                 <label className="req">템플릿</label>
-                <select
-                  className="sel"
-                  value={template.id}
-                  onChange={(e) => setTemplate(TEMPLATES.find((t) => t.id === e.target.value)!)}
-                >
-                  {TEMPLATES.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} · {CHANNEL_META[t.channel].label}
-                      {t.trigger ? ' (자동발송)' : ''}
-                    </option>
-                  ))}
-                </select>
+                <div>
+                  <select
+                    className="sel"
+                    value={pickedId ?? ''}
+                    onChange={(e) => setPickedId(e.target.value === '' ? null : Number(e.target.value))}
+                  >
+                    <option value="">템플릿을 고르세요</option>
+                    {rows.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {EVENT_LABEL[t.event] ?? t.event} · {CHANNEL_LABEL[t.channel] ?? t.channel}
+                        {/* ★ 「지금 실제로 나가는가」는 활성·문구확정·심사 세 축이 다 통과해야 한다 —
+                               서버가 `sendable` 하나로 내려주므로 그걸 그대로 쓴다 */}
+                        {t.sendable ? '' : ' — 발송 불가'}
+                      </option>
+                    ))}
+                  </select>
+                  {rows.length === 0 && !loading && (
+                    <div className="hint">등록된 템플릿이 없습니다. 「템플릿 관리」 탭에서 먼저 만드세요.</div>
+                  )}
+                </div>
               </div>
 
               <div className="frow">
