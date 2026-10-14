@@ -8,13 +8,15 @@ import { request } from './client'
  *
  * ★ `pinned`(상단 고정)와 `banner`(배너 노출)는 별개 축이다. 발송 후 수정으로 켠다. */
 
-export type NoticeScope = 'ALL' | 'BRANCH' | 'CLASS' | 'INDIVIDUAL'
+export type NoticeScope = 'ALL' | 'BRANCH' | 'CLASS' | 'INDIVIDUAL' | 'SELECTED'
 
 export const NOTICE_SCOPE_LABEL: Record<NoticeScope, string> = {
   ALL: '전체',
   BRANCH: '지점',
   CLASS: '반',
+  /** ★ 옛 방식(한 명짜리 공지). **새로 만들 때는 쓰지 않는다** — `SELECTED` 로 간다 */
   INDIVIDUAL: '개별',
+  SELECTED: '학생 선택',
 }
 
 export interface Notice {
@@ -58,10 +60,40 @@ export function postNoticeToClass(classId: number, title: string, content: strin
   return request<Notice>(`/api/v1/admin/notices/classes/${classId}`, { method: 'POST', body: { title, content } })
 }
 
+/**
+ * 학생 한 명(옛 방식).
+ *
+ * ★ **새로 쓰지 않는다.** 여러 명에게 보내려고 이걸 사람 수만큼 부르면 **공지가 N건**
+ *   만들어진다 — 목록에 같은 글이 N개 뜨고, 오타 하나를 N번 고쳐야 하며, 「읽음 몇 명」이
+ *   N개로 쪼개진다. `postNoticeToStudents` 를 쓴다.
+ */
 export function postNoticeToStudent(enrollmentId: number, title: string, content: string): Promise<Notice> {
   return request<Notice>(`/api/v1/admin/notices/students/${enrollmentId}`, {
     method: 'POST',
     body: { title, content },
+  })
+}
+
+/**
+ * 고른 학생들에게 — **공지는 한 건**이고 대상자만 여럿이다(요구사항 1-5).
+ *
+ * ★ 같은 학생을 두 번 넣어도 **한 번만** 들어간다 — 체크박스 중복을 걱정하지 않아도 된다.
+ *
+ * ⚠️ **서버가 거절하는 경우 셋.** 화면에서 먼저 거르는 쪽이 친절하다 — 고르고 나서
+ *   거절당하면 **왜인지 모른다.**
+ *   · **담임이 남의 반 학생을 섞으면 전체가 거절된다** — 하나만 자기 반이어도 안 된다.
+ *     학생마다 보기 때문이다(한 번만 검사하면 자기 반 하나를 끼워 전교생에게 보내는 길이 열린다)
+ *   · **여러 지점을 섞으면** 안 된다 — 공지는 지점 하나에 속한다
+ *   · **대상이 비면** 안 된다
+ */
+export function postNoticeToStudents(
+  enrollmentIds: number[],
+  title: string,
+  content: string,
+): Promise<Notice> {
+  return request<Notice>('/api/v1/admin/notices/students', {
+    method: 'POST',
+    body: { enrollmentIds, title, content },
   })
 }
 
