@@ -6,6 +6,8 @@ import { ApiError } from '../../api/client'
 import { clearDraft, loadDraft, saveDraft } from '../../lib/draft'
 import { formatPhone } from '../../lib/mask'
 import { useAcademy } from '../../auth/AcademyContext'
+import { useAuth } from '../../auth/AuthContext'
+import { hasMenuCode } from '../../data/menuCodes'
 import {
   GRADE_LABEL,
   TRACK_LABEL,
@@ -146,6 +148,11 @@ function EnrollForm() {
    * ★ **학번은 반 배정 때 매겨진다**(2026-10-13 채번 변경). 그래서 반 배정이 단순한
    *   분류가 아니라 **학번을 받는 단계**다 — 화면도 그렇게 말한다.
    */
+  /* ★ **좌석을 볼 수 없는 계정이 있다**(담임에게는 `seat` 가 없다). 그대로 부르면 신규 등록
+     화면을 열 때마다 403 이 쌓이고, 좌석 칸은 **빈 채로 남아** 고장으로 읽힌다 */
+  const { allowedMenus } = useAuth()
+  const canSeat = hasMenuCode('seat', allowedMenus)
+
   const [classes, setClasses] = useState<ClassGroup[]>([])
   const [areas, setAreas] = useState<SeatArea[]>([])
   const [scholarMasters, setScholarMasters] = useState<ScholarshipMaster[]>([])
@@ -183,7 +190,7 @@ function EnrollForm() {
     let alive = true
     void Promise.all([
       listClasses(new Date().getFullYear(), academyId).catch(() => [] as ClassGroup[]),
-      listSeatAreas(academyId).catch(() => [] as SeatArea[]),
+      canSeat ? listSeatAreas(academyId).catch(() => [] as SeatArea[]) : Promise.resolve([] as SeatArea[]),
       listSelectableScholarships(new Date().getFullYear(), academyId).catch(() => [] as ScholarshipMaster[]),
     ]).then(([cs, as_, sc]) => {
       if (!alive) return
@@ -194,7 +201,7 @@ function EnrollForm() {
     return () => {
       alive = false
     }
-  }, [academyId])
+  }, [academyId, canSeat])
 
   /* 좌석은 구역을 골라야 보인다 — 한 지점에 수백 칸이라 전부 띄우면 고를 수가 없다 */
   useEffect(() => {
@@ -440,6 +447,9 @@ function EnrollForm() {
               </div>
             </div>
 
+            {/* ★ 좌석 권한이 없으면 **칸째로 숨긴다.** 빈 드롭다운만 두면 「좌석이 없는 지점」으로
+                   읽히고, 누르면 아무 일도 안 난다 — 좌석은 데스크가 배정하는 값이다 */}
+            {canSeat && (
             <div className="frow">
               <label>좌석 배정</label>
               <div>
@@ -484,6 +494,7 @@ function EnrollForm() {
                 <div className="hint">나중에 독서실 좌석배치표에서도 바꿀 수 있습니다.</div>
               </div>
             </div>
+            )}
 
             <div className="frow">
               <label>장학</label>
