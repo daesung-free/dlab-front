@@ -1,0 +1,49 @@
+/* 설문 관리 — 수정 모달의 문항 편집(1016 피드백 1-1)
+ *
+ * ★ 문항은 **제출이 들어오기 전까지** 바꿀 수 있다. 전에는 화면이 「못 바꾼다」고
+ *   틀리게 안내하고 있었다.
+ */
+
+.q-edit {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 8px;
+  background: #fff;
+  display: grid;
+  gap: 7px;
+}
+
+.q-edit-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* 번호 — 문항이 길어지면 몇 번째인지가 안 보인다 */
+.q-edit-h > b {
+  flex: 0 0 auto;
+  width: 20px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.q-edit-h .sel {
+  flex: 0 0 auto;
+  width: 136px;
+}
+
+.q-req {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+/* 삭제 버튼을 오른쪽 끝으로 — 글자 길이에 따라 위치가 흔들리면 잘못 누른다 */
+.q-edit-h > button:last-child {
+  margin-left: auto;
+}

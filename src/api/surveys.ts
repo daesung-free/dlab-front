@@ -182,6 +182,38 @@ export function updateSurvey(
   return request<SurveySummary>(`/api/v1/admin/surveys/${surveyId}`, { method: 'PUT', body })
 }
 
+/**
+ * 문항 교체.
+ *
+ * ★ **제출이 하나라도 있으면 400 이다.** 고치면 이미 낸 학생의 답이 **다른 질문의 답으로
+ *   바뀌기** 때문이다. 서버가 「몇 명이 제출했는지 + 복제해서 새로 만들라」까지 문구로
+ *   돌려주므로 **그 문구를 그대로 띄운다.**
+ * ★ 교체다 — 보낸 목록이 **그대로 새 문항이 된다.** 덧붙이기가 아니다.
+ */
+export function replaceSurveyQuestions(
+  surveyId: number,
+  questions: SurveyQuestionCreate[],
+): Promise<SurveySummary> {
+  return request<SurveySummary>(`/api/v1/admin/surveys/${surveyId}/questions`, {
+    method: 'PUT',
+    body: { questions },
+  })
+}
+
+/**
+ * 양식 복제. 문항을 그대로 옮기고 **제목만 새로 받는다.**
+ *
+ * ★ **대상자·응답은 안 따라온다** — 따라오면 남이 동의한 기록이 새 양식에 붙는다.
+ *   복제한 뒤 대상자를 다시 골라야 한다.
+ * ★ 제출이 있어 문항을 못 고칠 때 **이쪽으로 돌린다.**
+ */
+export function duplicateSurvey(surveyId: number, title: string): Promise<SurveySummary> {
+  return request<SurveySummary>(`/api/v1/admin/surveys/${surveyId}/duplicate`, {
+    method: 'POST',
+    body: { title },
+  })
+}
+
 /** 설문 삭제. 응답이 있으면 서버가 막는다 — 그때는 조기 마감을 쓴다 */
 export function deleteSurvey(surveyId: number): Promise<void> {
   return request<void>(`/api/v1/admin/surveys/${surveyId}`, { method: 'DELETE' })
