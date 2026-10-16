@@ -82,6 +82,22 @@ export interface ReceiptRow {
    *   청구 금액이 곧 단일 항목이라 펼칠 것이 없다.
    */
   items?: BillingItem[]
+  /* ── 대상 기간 · 장학명(2026-10-16 추가 — 1016 피드백 2-5 · 2-6) ──
+   *
+   * ★★ **`wholeMonth` 로 「대상월」 표기를 가른다.** 월 전체면 `2026-11`, 일할이면
+   *   `2026-11 (11/15~11/30)` 이다. **전부 괄호가 붙으면 중도입학 건이 눈에 안 띈다.**
+   * ★ **일할인데 시작일을 모르면 `serviceFrom` 이 `null` 이고 `wholeMonth` 가 `true`** 로
+   *   온다 — 그러면 화면이 **자연히 괄호를 안 붙인다.** `remainingDays` 로 말일에서
+   *   역산하면 안 된다. 그 값은 **교습일수 기준**(설·추석 제외)이라 달력과 어긋난다.
+   */
+  serviceFrom?: string | null
+  serviceTo?: string | null
+  wholeMonth?: boolean
+  /**
+   * 장학명. **발행 시점 스냅샷**이다 — 나중에 장학이 취소돼도 과거 청구의 근거가 남는다.
+   * 수기 할인이면 `null`.
+   */
+  discountSource?: string | null
 }
 
 export interface ReceiptSummary {

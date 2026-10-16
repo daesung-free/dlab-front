@@ -61,7 +61,9 @@ import {
   issueAdmissionBilling,
   issueMonthlyBilling,
   issueMonthlyBillingsBulk,
+  previewTuitionBilling,
   type BulkBillingResult,
+  type TuitionBreakdown,
   type FeeTableRow,
   type SeatType,
 } from '../../api/tuition'
@@ -192,6 +194,8 @@ const STATUS_TONE: Record<string, string> = {
 }
 
 const wonOf = (n: number) => `${n.toLocaleString()}원`
+/** `2026-11-15` → `11/15`. 대상월이 바로 앞에 있어 연도를 두 번 쓰지 않는다 */
+const mdOf = (d: string) => d.slice(5).replace('-', '/')
 
 /** 목업의 항목 이름 → 서버 billingType. 등록비는 서버에 대응 값이 없어 기타로 간다 */
 const METHOD_TO_CODE: Record<Method, PayMethod> = { 카드: 'CARD', 가상계좌: 'VBANK', 현금: 'CASH' }
@@ -242,7 +246,38 @@ const COLUMNS: Column<ReceiptRow>[] = [
   },
   { key: 'studentNo', header: '학번', width: '100px', value: (r) => r.studentNo ?? '-' },
   { key: 'studentName', header: '이름', width: '84px', mask: 'name', value: (r) => r.studentName },
-  { key: 'serviceMonth', header: '대상월', width: '84px', align: 'center', value: (r) => r.serviceMonth ?? '-' },
+  {
+    /* ★★ **일할 청구만 기간을 괄호로 붙인다**(1016 피드백 2-6).
+         > 「대상월보다 대상기간(10/15~10/31)으로 설정한 날짜가 확인되는 것이 용이」
+       ★ **전부 괄호가 붙으면 중도입학 건이 눈에 안 띈다** — 그게 골라내야 할 것이다.
+       ★ 시작일을 모르면 서버가 `wholeMonth: true` 로 내려준다. **역산하지 않는다** —
+         `remainingDays` 는 교습일수 기준(설·추석 제외)이라 달력과 어긋난다 */
+    key: 'serviceMonth',
+    header: '대상월',
+    width: '150px',
+    align: 'center',
+    value: (r) =>
+      r.serviceMonth === null
+        ? '-'
+        : r.wholeMonth === false && r.serviceFrom && r.serviceTo
+          ? `${r.serviceMonth} (${mdOf(r.serviceFrom)}~${mdOf(r.serviceTo)})`
+          : r.serviceMonth,
+  },
+  {
+    /* 1016 피드백 2-5 — 「장학명(수능, 평가원 등), 할인율 항목의 표기 필요」
+       ★ **발행 시점 스냅샷**이라, 나중에 장학이 취소돼도 과거 청구의 근거가 남는다 */
+    key: 'discountSource',
+    header: '장학',
+    width: '104px',
+    align: 'center',
+    value: (r) => r.discountSource ?? '-',
+    render: (r) =>
+      r.discountSource ? (
+        <span className="mk verified">{r.discountSource}</span>
+      ) : (
+        <span style={{ color: 'var(--muted)' }}>-</span>
+      ),
+  },
   {
     key: 'billingType',
     header: '항목',
@@ -485,6 +520,78 @@ const DISCOUNT_COLUMNS: Column<Discount>[] = [
     ),
   },
 ]
+
+/**
+ * 일할 계산 근거 (1016 피드백 2-4).
+ *
+ * ★★ **월 전체면 나눗셈 식을 쓰지 않는다.** 월 전체는 **정액**이라 단가 × 일수와 값이
+ *   다르다(660,000 vs 22,758×29 = 659,982 — **18원이 어긋난다**). 그 식을 적으면 결과가
+ *   청구액과 달라 **데스크가 「계산이 틀렸다」로 읽는다.** 서버도 월 전체에서는 단가를
+ *   `null` 로 내려 화면이 못 쓰게 해 뒀다.
+ * ★ **절사 규칙을 적는다.** 디랩이 실제 정산과 대조하려면 「원 단위 버림」이 보여야 한다.
+ */
+function BreakdownBox({ b }: { b: TuitionBreakdown }) {
+  const line = (label: string, expr: string, amount: number) => (
+    <tr>
+      <td>{label}</td>
+      <td style={{ color: 'var(--muted)', fontSize: 11.5 }}>{expr}</td>
+      <td style={{ textAlign: 'right' }}>{wonOf(amount)}</td>
+    </tr>
+  )
+  return (
+    <div className="frow">
+      <label>계산 근거</label>
+      <div>
+        <table className="mini-tbl">
+          <tbody>
+            {b.wholeMonth
+              ? /* 월 전체 — 정액이다. 나눗셈을 적지 않는다 */
+                [
+                  line('교습비', '월 정액', b.suppliedTuition),
+                  line('독서실비', '월 정액', b.suppliedStudyRoom),
+                ]
+              : [
+                  line(
+                    '교습비',
+                    `${b.monthlyTuition.toLocaleString()} ÷ ${b.teachingDays}일 × ${b.remainingDays}일`,
+                    b.suppliedTuition,
+                  ),
+                  line(
+                    '독서실비',
+                    `${b.monthlyStudyRoom.toLocaleString()} ÷ ${b.teachingDays}일 × ${b.remainingDays}일`,
+                    b.suppliedStudyRoom,
+                  ),
+                ]}
+            <tr>
+              <td colSpan={2}>소계</td>
+              <td style={{ textAlign: 'right' }}>{wonOf(b.suppliedTotal)}</td>
+            </tr>
+            {b.discountAmount > 0 && (
+              <tr>
+                <td colSpan={2}>할인 {b.discountRate}%</td>
+                <td style={{ textAlign: 'right', color: 'var(--red)' }}>-{wonOf(b.discountAmount)}</td>
+              </tr>
+            )}
+            <tr>
+              <td colSpan={2}>
+                <b>청구액</b>
+              </td>
+              <td style={{ textAlign: 'right' }}>
+                <b>{wonOf(b.billedAmount)}</b>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div className="hint">
+          {b.rounding === 'FLOOR' ? '원 단위 버림으로 계산합니다.' : `절사 규칙: ${b.rounding}`}
+          {!b.wholeMonth && b.remainingDays !== null && (
+            <> 교습일수는 서버 제안 {b.remainingDays}일입니다 — 고칠 수 있습니다.</>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function Content() {
   const [query, setQuery] = useState<SearchValues>({})
@@ -873,6 +980,50 @@ function Content() {
     const want = issue.discountRate.trim() === '' ? 0 : Number(issue.discountRate)
     return fee.find((r) => r.discountRate === want) ?? null
   }, [fee, issue.discountRate])
+
+  /* ── 일할 근거(1016 피드백 2-4) ────────────────────────────
+   * > 「일할계산의 **과정과 값이 함께** 출력되도록 해주시면 좋을 것 같습니다」
+   *
+   * ★ **등록을 누르기 전에** 봐야 뜻이 있다. 등록 뒤에 보여주면 틀린 것을 되돌려야 한다.
+   * ★★ **월 전체면 나눗셈 식을 쓰지 않는다.** 월 전체는 **정액**이라 단가 × 일수와
+   *   값이 다르다(660,000 vs 22,758×29 = 659,982 — **18원이 어긋난다**).
+   *   그 식을 적으면 결과가 청구액과 달라 **데스크가 「계산이 틀렸다」로 읽는다.**
+   *   서버도 월 전체에서는 단가를 `null` 로 내려 화면이 못 쓰게 해 뒀다. */
+  const [breakdown, setBreakdown] = useState<TuitionBreakdown | null>(null)
+
+  useEffect(() => {
+    const id = Number(issue.enrollmentId)
+    if (!issueOpen || issue.mode === 'etc' || !id) {
+      setBreakdown(null)
+      return
+    }
+    let cancelled = false
+    previewTuitionBilling({
+      enrollmentId: id,
+      month: issue.mode === 'monthly' ? issue.month : issue.admissionDate.slice(0, 7),
+      seatType: issue.seatType,
+      discountRate: issue.discountRate.trim() === '' ? undefined : Number(issue.discountRate),
+      remainingDays:
+        issue.mode === 'admission' && issue.remainingDays.trim() !== ''
+          ? Number(issue.remainingDays)
+          : undefined,
+    })
+      .then((b) => !cancelled && setBreakdown(b))
+      /* 단가가 없는 달이면 404 다 — 근거를 못 보여줄 뿐 등록은 서버가 판단한다 */
+      .catch(() => !cancelled && setBreakdown(null))
+    return () => {
+      cancelled = true
+    }
+  }, [
+    issueOpen,
+    issue.mode,
+    issue.enrollmentId,
+    issue.month,
+    issue.admissionDate,
+    issue.seatType,
+    issue.discountRate,
+    issue.remainingDays,
+  ])
 
   async function submitIssue() {
     setActBusy(true)
@@ -1872,6 +2023,10 @@ function Content() {
                   )}
                 </div>
               </div>
+
+              {/* ★ **서버가 어떻게 계산했는지**를 그대로 보여준다(1016 피드백 2-4).
+                  위 표는 단가표라 「얼마인가」만 말하고, 여기는 「왜 그 금액인가」를 말한다 */}
+              {breakdown && <BreakdownBox b={breakdown} />}
             </>
           ) : issue.mode === 'admission' ? (
             <>
