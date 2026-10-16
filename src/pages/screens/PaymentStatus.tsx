@@ -59,6 +59,9 @@ import {
   getRemainingDays,
   issueAdmissionBilling,
   issueMonthlyBilling,
+  issueMonthlyBillingsBulk,
+  listScholarships,
+  type BulkBillingResult,
   type FeeTableRow,
   type SeatType,
 } from '../../api/tuition'
@@ -567,6 +570,101 @@ function Content() {
   const clientFiltered = filtered.length !== rows.length
 
   const unpaid = useMemo(() => filtered.filter((r) => r.unpaid > 0), [filtered])
+
+  /* ── 일괄 청구(1016 피드백 2-1) ────────────────────────────
+   * > 「매월 수백명의 학생을 설정하기에는 매우 번거로울 것 같습니다」
+   *
+   * ★ **누구에게 나가는지 보고 누른다.** 검색 조건을 보내 서버가 추리는 방식이면
+   *   데스크가 **대상을 보지 못한 채** 수백 건이 발행된다 — 되돌릴 수 없는 일이다.
+   * ★ **할인율은 학생마다 다르다.** 장학값을 끌어와 채워 두고 행마다 고칠 수 있게 둔다. */
+  const [bulk, setBulk] = useState<{
+    month: string
+    dueDate: string
+    seatType: SeatType
+    rows: { enrollmentId: number; name: string; studentNo: string | null; className: string | null; rate: string; source: string | null }[] | null
+    picked: string[]
+    busy: boolean
+    err: string | null
+    result: BulkBillingResult | null
+  } | null>(null)
+
+  const openBulk = useCallback(() => {
+    const m = thisMonth()
+    const [y, mm] = m.split('-').map(Number)
+    setBulk({
+      month: m,
+      /* 납기일을 비우면 통합 매출장에서 기간으로 좁힐 때 안 보인다 — 말일로 채운다 */
+      dueDate: `${m}-${String(new Date(y, mm, 0).getDate()).padStart(2, '0')}`,
+      seatType: 'GENERAL',
+      rows: null,
+      picked: [],
+      busy: false,
+      err: null,
+      result: null,
+    })
+    void (async () => {
+      try {
+        const res = await searchStudents({ academyId: academyId ?? undefined, status: 'ENROLLED', size: 500 })
+        /* ★ 장학을 학생마다 읽는다. 500명이면 500번이라 **동시에 던지되** 실패는
+           무시한다 — 장학이 없는 학생이 대부분이고, 못 읽었다고 청구를 막을 일은 아니다 */
+        const rows = await Promise.all(
+          res.rows.map(async (r) => {
+            let rate = ''
+            let source: string | null = null
+            try {
+              const sch = (await listScholarships(r.enrollmentId)).find((x) => x.discountRate !== null)
+              if (sch) {
+                rate = String(sch.discountRate)
+                source = sch.scholarshipType
+              }
+            } catch {
+              /* 장학을 못 읽어도 청구는 할 수 있다 — 기본값 0으로 둔다 */
+            }
+            return {
+              enrollmentId: r.enrollmentId,
+              name: r.name,
+              studentNo: r.studentNo,
+              className: r.className,
+              rate,
+              source,
+            }
+          }),
+        )
+        setBulk((v) => (v ? { ...v, rows } : v))
+      } catch (e) {
+        setBulk((v) =>
+          v ? { ...v, rows: [], err: e instanceof ApiError ? e.message : '학생을 불러오지 못했습니다.' } : v,
+        )
+      }
+    })()
+  }, [academyId])
+
+  async function runBulk() {
+    if (bulk === null || bulk.picked.length === 0) return
+    setBulk({ ...bulk, busy: true, err: null })
+    try {
+      const targets = (bulk.rows ?? [])
+        .filter((r) => bulk.picked.includes(String(r.enrollmentId)))
+        .map((r) => ({
+          enrollmentId: r.enrollmentId,
+          seatType: bulk.seatType,
+          discountRate: r.rate.trim() === '' ? undefined : Number(r.rate),
+          /* 발행 시점 장학명을 박아 둔다 — 나중에 장학이 취소돼도 근거가 남는다 */
+          discountSource: r.source ?? undefined,
+        }))
+      const result = await issueMonthlyBillingsBulk({
+        month: bulk.month,
+        dueDate: bulk.dueDate || undefined,
+        targets,
+      })
+      setBulk((v) => (v ? { ...v, busy: false, result, picked: [] } : v))
+      void load()
+    } catch (err) {
+      setBulk((v) =>
+        v ? { ...v, busy: false, err: err instanceof ApiError ? err.message : '청구를 발행하지 못했습니다.' } : v,
+      )
+    }
+  }
 
   /* ── 청구 등록 · 수납 · 취소 ── */
 
@@ -1329,6 +1427,10 @@ function Content() {
                   >
                     <Icon name="plus" size={14} /> 청구 등록
                   </button>
+                  {/* ★ 매월 수백 명을 한 명씩 등록하던 것(1016 피드백 2-1) */}
+                  <button className="btn" disabled={academyId === null} onClick={openBulk}>
+                    <Icon name="users" size={14} /> 교습비 일괄 청구
+                  </button>
                   <MaskToggle masked={masked} onChange={setMasked} />
                   {/* 서버 엑셀(2026-09-25). 결제수단을 둘 이상 고른 경우만 화면이 거르므로,
                       그때는 파일이 화면보다 넓어진다 — 그 경우에만 화면 값으로 만든다 */}
@@ -1383,6 +1485,219 @@ function Content() {
           )}
         </div>
       </div>
+
+      {bulk && (
+        <Modal
+          wide
+          title="교습비 일괄 청구"
+          sub="체크한 학생에게만 발행합니다."
+          confirmLabel={bulk.result ? '닫기' : `${bulk.picked.length}명 발행`}
+          busy={bulk.busy}
+          confirmDisabled={!bulk.result && bulk.picked.length === 0}
+          error={bulk.err}
+          onConfirm={() => (bulk.result ? setBulk(null) : void runBulk())}
+          onClose={() => setBulk(null)}
+        >
+          {bulk.result ? (
+            <>
+              <div className="note-box">
+                <div>
+                  <b>{bulk.result.issuedCount}건</b>을 발행했습니다.
+                </div>
+              </div>
+              {/* ★ **빠진 사람을 사유별로 가른다.** 「이미 청구가 있습니다」는 그냥 두면
+                  되지만 **「가격이 등록되지 않았습니다」는 손을 쓰지 않으면 그 학생
+                  교습비가 안 나간다.** 발행 건수만 보면 그게 안 보인다 */}
+              {bulk.result.failed.length > 0 &&
+                (() => {
+                  const already = bulk.result!.failed.filter((f) => f.reason.includes('이미'))
+                  const needFix = bulk.result!.failed.filter((f) => !f.reason.includes('이미'))
+                  const nameOf = (id: number) =>
+                    (bulk.rows ?? []).find((r) => r.enrollmentId === id)
+                  return (
+                    <>
+                      {needFix.length > 0 && (
+                        <div style={{ marginTop: 14 }}>
+                          <b style={{ fontSize: 12.5, color: 'var(--red)' }}>
+                            청구되지 않은 {needFix.length}명 — 확인이 필요합니다
+                          </b>
+                          <div className="hint" style={{ marginBottom: 6 }}>
+                            그냥 두면 이 학생들의 교습비는 청구되지 않습니다.
+                          </div>
+                          <table className="mini-tbl">
+                            <thead>
+                              <tr>
+                                <th>학번</th>
+                                <th>이름</th>
+                                <th>사유</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {needFix.map((f) => {
+                                const r = nameOf(f.enrollmentId)
+                                return (
+                                  <tr key={f.enrollmentId}>
+                                    <td>{r?.studentNo ?? '-'}</td>
+                                    <td>{r?.name ?? `등록 ${f.enrollmentId}`}</td>
+                                    <td>{f.reason}</td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                      {already.length > 0 && (
+                        <div className="hint" style={{ marginTop: 12 }}>
+                          이미 청구가 있는 <b>{already.length}명</b>은 건너뛰었습니다. 그대로 두면 됩니다.
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
+            </>
+          ) : (
+            <>
+              <div className="frow">
+                <label className="req">대상월</label>
+                <input
+                  className="inp"
+                  type="month"
+                  value={bulk.month}
+                  onChange={(e) => setBulk({ ...bulk, month: e.target.value })}
+                />
+              </div>
+              <div className="frow">
+                <label>납기일</label>
+                <div>
+                  <input
+                    className="inp"
+                    type="date"
+                    value={bulk.dueDate}
+                    onChange={(e) => setBulk({ ...bulk, dueDate: e.target.value })}
+                  />
+                  {/* 비우면 통합 매출장에서 기간으로 좁힐 때 안 보인다 */}
+                  <div className="hint">비우면 기간으로 찾을 때 이 청구가 안 보입니다.</div>
+                </div>
+              </div>
+              <div className="frow">
+                <label className="req">좌석</label>
+                <select
+                  className="sel"
+                  value={bulk.seatType}
+                  onChange={(e) => setBulk({ ...bulk, seatType: e.target.value as SeatType })}
+                >
+                  {(Object.keys(SEAT_TYPE_LABEL) as SeatType[]).map((k) => (
+                    <option key={k} value={k}>
+                      {SEAT_TYPE_LABEL[k]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="frow">
+                <label className="req">대상 학생</label>
+                <div>
+                  {bulk.rows === null ? (
+                    <div className="hint">불러오는 중…</div>
+                  ) : bulk.rows.length === 0 ? (
+                    <div className="hint">재원 중인 학생이 없습니다.</div>
+                  ) : (
+                    <>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                        <button
+                          type="button"
+                          className="lnk"
+                          onClick={() =>
+                            setBulk({
+                              ...bulk,
+                              picked:
+                                bulk.picked.length === bulk.rows!.length
+                                  ? []
+                                  : bulk.rows!.map((r) => String(r.enrollmentId)),
+                            })
+                          }
+                        >
+                          {bulk.picked.length === bulk.rows.length ? '모두 해제' : '모두 선택'}
+                        </button>
+                        <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>
+                          {bulk.picked.length} / {bulk.rows.length}명
+                        </span>
+                      </div>
+                      <div className="pick-list" style={{ maxHeight: 300 }}>
+                        <table className="mini-tbl">
+                          <thead>
+                            <tr>
+                              <th />
+                              <th>학번</th>
+                              <th>이름</th>
+                              <th>반</th>
+                              <th>장학</th>
+                              <th style={{ textAlign: 'right' }}>할인율</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {bulk.rows.map((r) => {
+                              const key = String(r.enrollmentId)
+                              const on = bulk.picked.includes(key)
+                              return (
+                                <tr key={key}>
+                                  <td>
+                                    <input
+                                      type="checkbox"
+                                      checked={on}
+                                      onChange={(e) =>
+                                        setBulk({
+                                          ...bulk,
+                                          picked: e.target.checked
+                                            ? [...bulk.picked, key]
+                                            : bulk.picked.filter((x) => x !== key),
+                                        })
+                                      }
+                                    />
+                                  </td>
+                                  <td>{r.studentNo ?? '-'}</td>
+                                  <td>{r.name}</td>
+                                  <td>{r.className ?? '-'}</td>
+                                  <td>{r.source ?? '-'}</td>
+                                  <td style={{ textAlign: 'right' }}>
+                                    {/* ★ 장학값을 채워 두고 **행마다 고칠 수 있게** 둔다.
+                                        `step` 을 안 건다 — Modal 이 form 이라 배수가 아니면 저장이 막힌다 */}
+                                    <input
+                                      className="inp"
+                                      type="number"
+                                      min={0}
+                                      max={100}
+                                      style={{ width: 72, textAlign: 'right' }}
+                                      value={r.rate}
+                                      placeholder="0"
+                                      onChange={(e) =>
+                                        setBulk({
+                                          ...bulk,
+                                          rows: bulk.rows!.map((x) =>
+                                            x.enrollmentId === r.enrollmentId ? { ...x, rate: e.target.value } : x,
+                                          ),
+                                        })
+                                      }
+                                    />
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="hint">
+                        할인율은 학생의 장학으로 채워 두었습니다. 행마다 고칠 수 있습니다.
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </Modal>
+      )}
 
       {/* ── 청구 등록 ── */}
       {issueOpen && (

@@ -196,3 +196,105 @@ export function issueAdmissionBilling(body: {
 export function getRemainingDays(params: { academyId: number; admissionDate: string }): Promise<number> {
   return request<number>('/api/v1/admin/tuition/billings/remaining-days', { query: { ...params } })
 }
+
+/* ── 일괄 청구 · 일할 근거 (1016 피드백 2-1 · 2-4) ────────────
+ *
+ * ★ **대상은 화면이 체크한 것만 보낸다.** 검색 조건을 보내 서버가 추리는 방식은
+ *   **데스크가 누구에게 나갈지 보지 못한 채** 수백 건이 발행된다 — 되돌릴 수 없는 일이다.
+ */
+
+export interface BulkBillingTarget {
+  enrollmentId: number
+  seatType: SeatType
+  /** 할인 **율**(%) */
+  discountRate?: number
+  /** 발행 시점에 박아 둘 장학명. 나중에 장학이 취소돼도 근거가 남는다 */
+  discountSource?: string
+  /** 비우면 월 정액. 중도 입·퇴원이면 실제 다니는 교습일수 */
+  remainingDays?: number
+  /** 일할이면 교습 시작일. ★ 안 보내면 서버가 **추측하지 않고 비워 둔다** */
+  serviceFrom?: string
+}
+
+export interface BulkBillingFailed {
+  enrollmentId: number
+  /** 서버가 사유를 문장으로 준다. **사유마다 조치가 달라** 화면이 갈라서 보여준다 */
+  reason: string
+}
+
+export interface BulkBillingResult {
+  issuedCount: number
+  issued: IssuedBilling[]
+  failed: BulkBillingFailed[]
+}
+
+/**
+ * 월 교습비 **일괄** 발행.
+ *
+ * ★ **한 건이 막혀도 나머지는 발행된다.** 전부-아니면-전무면 수백 명 중 한 명이
+ *   중복이라는 이유로 전체가 막힌다.
+ * ★ ⚠️ **`failed` 를 반드시 보여준다.** 발행 건수만 보면 빠진 사람이 안 보이는데,
+ *   「이미 청구가 있습니다」는 그냥 두면 되지만 **「가격이 등록되지 않았습니다」는
+ *   손을 쓰지 않으면 그 학생 교습비가 안 나간다.**
+ */
+export function issueMonthlyBillingsBulk(body: {
+  month: string
+  dueDate?: string
+  targets: BulkBillingTarget[]
+}): Promise<BulkBillingResult> {
+  return request<BulkBillingResult>('/api/v1/admin/tuition/billings/monthly/bulk', {
+    method: 'POST',
+    body,
+  })
+}
+
+/**
+ * 일할 계산 근거.
+ *
+ * ★★ **`wholeMonth` 로 식을 가른다.** 월 전체는 **정액**이라 단가 × 일수와 값이 다르다
+ *   (660,000 vs 22,758×29 = 659,982). **월 전체에 나눗셈 식을 적으면 그 결과가 청구액과
+ *   달라 데스크가 「계산이 틀렸다」로 읽는다.** 그래서 서버도 월 전체면 단가를 안 내린다.
+ * ★ `rounding` 은 절사 규칙이다 — `FLOOR` 면 **「원 단위 버림」**. 문구로 적어야 디랩이
+ *   실제 정산과 대조할 수 있다.
+ */
+export interface TuitionBreakdown {
+  monthlyTuition: number
+  monthlyStudyRoom: number
+  teachingDays: number
+  /** 월 전체면 `null` */
+  remainingDays: number | null
+  /** 월 전체면 `null` — 단가를 내리지 않는다 */
+  dailyTuition: number | null
+  dailyStudyRoom: number | null
+  suppliedTuition: number
+  suppliedStudyRoom: number
+  suppliedTotal: number
+  discountRate: number
+  discountAmount: number
+  billedAmount: number
+  /** `FLOOR` = 원 단위 버림 */
+  rounding: string
+  wholeMonth: boolean
+}
+
+/** 등록 전 미리보기. **데스크가 등록을 누르기 전에** 봐야 뜻이 있다 */
+export function previewTuitionBilling(params: {
+  enrollmentId: number
+  month: string
+  seatType: SeatType
+  discountRate?: number
+  remainingDays?: number
+}): Promise<TuitionBreakdown> {
+  return request<TuitionBreakdown>('/api/v1/admin/tuition/billings/preview', { query: { ...params } })
+}
+
+/** 학생의 장학. 청구 등록 때 할인율 기본값을 여기서 끌어온다 */
+export interface Scholarship {
+  id: number
+  scholarshipType: string | null
+  discountRate: number | null
+}
+
+export function listScholarships(enrollmentId: number): Promise<Scholarship[]> {
+  return request<Scholarship[]>('/api/v1/admin/master/scholarships', { query: { enrollmentId } })
+}

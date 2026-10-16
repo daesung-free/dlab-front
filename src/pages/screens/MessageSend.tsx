@@ -24,7 +24,6 @@ import { searchStudents, type Student } from '../../api/students'
 import { listClasses, type ClassGroup } from '../../api/classes'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
-import './message-send.css'
 
 /* F-4.4 알림 발송 — 신규개발-요구사항보완
  *
