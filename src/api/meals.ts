@@ -66,11 +66,26 @@ export interface MealOrder {
   /** 결제 라이프사이클. 결제가 붙기 전까지 전부 PENDING 이다 */
   status: MealOrderStatus
   activeCount: number
-  amount: number
+  /**
+   * 주문 합계.
+   *
+   * ★ **`null` 이면 「0원」이 아니라 「금액을 모른다」**다 — 끼니 하나라도 **단가가 등록되지
+   *   않은** 경우다(2026-10-16 서버 수정). 0 으로 그리면 데스크가 **무료로 읽고**, 정작
+   *   손써야 할 단가 미등록이 **청구 발행을 누를 때까지 안 보인다.**
+   */
+  amount: number | null
   billedAmount: number
   refundableAmount: number
   paymentMethods: string[]
   billingId: number | null
+  /**
+   * 붙어 있는 청구의 상태(2026-10-16 추가).
+   *
+   * ★ **`CANCELLED` 면 「취소됨 · 재발행 가능」이다.** `billingId` 는 **이력이라 취소돼도
+   *   남는데**, 상태를 안 보면 화면이 「이미 발행됨」으로 읽어 **왜 또 발행되는지** 모른다.
+   *   반대로 `billingId` 를 숨기면 데스크가 「취소한 적이 없다」로 읽는다.
+   */
+  billingStatus?: string | null
   items: MealOrderItem[]
   createdAt: string | null
 }
@@ -277,4 +292,60 @@ export interface MealDailyRoster {
 /** 그날 누가 먹는가. `date` 는 **필수**(yyyy-MM-dd) */
 export function getMealDailyRoster(params: { academyId?: number; date: string }): Promise<MealDailyRoster> {
   return request<MealDailyRoster>('/api/v1/admin/meals/daily', { query: { ...params } })
+}
+
+/* ── 급식비 청구 발행 (1016 피드백 1-3) ──────────────────────
+ *
+ * ★ 이게 없어서 **급식비가 통합 매출장에 들어오지 않았다.** 서버에 로직은 다 있었는데
+ *   컨트롤러에 안 붙어 있었다(2026-10-16 열림).
+ * ★ **두 번 눌러도 안전하다** — 이미 발행된 주문은 `skipped` 로 떨어진다.
+ */
+
+export interface MealBillingIssued {
+  billingId: number
+  name: string
+  amount: number
+  dueDate: string | null
+}
+
+export interface MealBillingSkipped {
+  orderId: number
+  studentNo: string | null
+  studentName: string
+  /** 서버가 사유를 문장으로 준다. **사유마다 조치가 달라** 화면이 갈라서 보여준다 */
+  reason: string
+}
+
+export interface MealBillingResult {
+  issuedCount: number
+  issued: MealBillingIssued[]
+  skipped: MealBillingSkipped[]
+}
+
+/**
+ * 한 달치 일괄 발행.
+ *
+ * ★ **한 건이 실패해도 나머지는 발행된다.** 전부-아니면-전무로 만들면 수백 명 중 한 명이
+ *   중복이라는 이유로 전체가 막힌다.
+ * ★ ⚠️ **`skipped` 를 반드시 화면에 보여준다.** 발행 건수만 보면 빠진 사람이 안 보이는데,
+ *   「단가가 등록되지 않아」로 빠진 학생은 **그냥 두면 급식비가 영영 청구되지 않는다.**
+ * @param month `yyyy-MM`
+ */
+export function issueMealBillingsMonthly(
+  academyId: number,
+  month: string,
+  dueDate?: string,
+): Promise<MealBillingResult> {
+  return request<MealBillingResult>('/api/v1/admin/meals/billings/monthly', {
+    method: 'POST',
+    query: { academyId, month, dueDate },
+  })
+}
+
+/** 주문 한 건. 이미 발행된 주문이면 400 이다 */
+export function issueMealBilling(orderId: number, dueDate?: string): Promise<MealBillingIssued> {
+  return request<MealBillingIssued>(`/api/v1/admin/meals/orders/${orderId}/billing`, {
+    method: 'POST',
+    query: { dueDate },
+  })
 }

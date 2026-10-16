@@ -290,6 +290,23 @@ export function deleteSeatMaster(seatId: number): Promise<void> {
   return request<void>(`/api/v1/admin/seats/masters/${seatId}`, { method: 'DELETE' })
 }
 
+/**
+ * 좌석 일괄 삭제. **`seatIds` 를 비우면 그 구역 전체**(= 초기화)다.
+ *
+ * ★ **단건을 N번 부르지 않는다.** 92석짜리 구역이면 92번이고, 중간에 하나 실패하면
+ *   **절반만 지워진 배치도**가 남는다 — 무엇이 남았는지 사람이 찾을 수 없다.
+ * ★ **배정된 좌석이 하나라도 섞이면 아무것도 지우지 않는다**(409). 서버가 걸린 좌석번호를
+ *   **전부 모아서** 메시지에 싣는다 — 하나씩 알려주면 92석 중 하나를 찾아야 한다.
+ *   그 문구를 화면에 그대로 띄운다.
+ * @returns 지운 건수
+ */
+export function deleteSeatMasters(studyAreaId: number, seatIds: number[] = []): Promise<number> {
+  return request<number>('/api/v1/admin/seats/masters', {
+    method: 'DELETE',
+    query: { studyAreaId, seatIds: seatIds.length > 0 ? seatIds.join(',') : undefined },
+  })
+}
+
 export function getSeatLayout(studyAreaId: number, unmask = false): Promise<SeatCell[]> {
   return request<SeatCell[]>('/api/v1/admin/seats/layout', { query: { studyAreaId, unmask: unmask || undefined } })
 }

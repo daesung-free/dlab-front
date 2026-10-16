@@ -35,9 +35,11 @@ import {
   type PaymentRequestRow,
 } from '../../api/paymentRequests'
 import { useAcademy } from '../../auth/AcademyContext'
+import { useAuth } from '../../auth/AuthContext'
 import {
   BILLING_STATUS_LABEL,
   paymentLabel,
+  BILLING_ITEM_LABEL,
   BILLING_TYPE_LABEL,
   PAY_METHOD_LABEL,
   createBilling,
@@ -58,11 +60,17 @@ import {
   getRemainingDays,
   issueAdmissionBilling,
   issueMonthlyBilling,
+  issueMonthlyBillingsBulk,
+  previewTuitionBilling,
+  type BulkBillingResult,
+  type TuitionBreakdown,
   type FeeTableRow,
   type SeatType,
 } from '../../api/tuition'
+import { listScholarshipMasters, listStudentScholarships } from '../../api/masters'
 import { GRADE_LABEL, searchStudents, type Student } from '../../api/students'
 import type { Mockup } from './types'
+import '../../styles/forms.css'
 import './payment.css'
 
 /* F-4.8 수납현황 — /api/v1/admin/receipt-status
@@ -186,6 +194,8 @@ const STATUS_TONE: Record<string, string> = {
 }
 
 const wonOf = (n: number) => `${n.toLocaleString()}원`
+/** `2026-11-15` → `11/15`. 대상월이 바로 앞에 있어 연도를 두 번 쓰지 않는다 */
+const mdOf = (d: string) => d.slice(5).replace('-', '/')
 
 /** 목업의 항목 이름 → 서버 billingType. 등록비는 서버에 대응 값이 없어 기타로 간다 */
 const METHOD_TO_CODE: Record<Method, PayMethod> = { 카드: 'CARD', 가상계좌: 'VBANK', 현금: 'CASH' }
@@ -236,7 +246,38 @@ const COLUMNS: Column<ReceiptRow>[] = [
   },
   { key: 'studentNo', header: '학번', width: '100px', value: (r) => r.studentNo ?? '-' },
   { key: 'studentName', header: '이름', width: '84px', mask: 'name', value: (r) => r.studentName },
-  { key: 'serviceMonth', header: '대상월', width: '84px', align: 'center', value: (r) => r.serviceMonth ?? '-' },
+  {
+    /* ★★ **일할 청구만 기간을 괄호로 붙인다**(1016 피드백 2-6).
+         > 「대상월보다 대상기간(10/15~10/31)으로 설정한 날짜가 확인되는 것이 용이」
+       ★ **전부 괄호가 붙으면 중도입학 건이 눈에 안 띈다** — 그게 골라내야 할 것이다.
+       ★ 시작일을 모르면 서버가 `wholeMonth: true` 로 내려준다. **역산하지 않는다** —
+         `remainingDays` 는 교습일수 기준(설·추석 제외)이라 달력과 어긋난다 */
+    key: 'serviceMonth',
+    header: '대상월',
+    width: '150px',
+    align: 'center',
+    value: (r) =>
+      r.serviceMonth === null
+        ? '-'
+        : r.wholeMonth === false && r.serviceFrom && r.serviceTo
+          ? `${r.serviceMonth} (${mdOf(r.serviceFrom)}~${mdOf(r.serviceTo)})`
+          : r.serviceMonth,
+  },
+  {
+    /* 1016 피드백 2-5 — 「장학명(수능, 평가원 등), 할인율 항목의 표기 필요」
+       ★ **발행 시점 스냅샷**이라, 나중에 장학이 취소돼도 과거 청구의 근거가 남는다 */
+    key: 'discountSource',
+    header: '장학',
+    width: '104px',
+    align: 'center',
+    value: (r) => r.discountSource ?? '-',
+    render: (r) =>
+      r.discountSource ? (
+        <span className="mk verified">{r.discountSource}</span>
+      ) : (
+        <span style={{ color: 'var(--muted)' }}>-</span>
+      ),
+  },
   {
     key: 'billingType',
     header: '항목',
@@ -480,6 +521,84 @@ const DISCOUNT_COLUMNS: Column<Discount>[] = [
   },
 ]
 
+/**
+ * 일할 계산 근거 (1016 피드백 2-4).
+ *
+ * ★★ **월 전체면 나눗셈 식을 쓰지 않는다.** 월 전체는 **정액**이라 단가 × 일수와 값이
+ *   다르다(660,000 vs 22,758×29 = 659,982 — **18원이 어긋난다**). 그 식을 적으면 결과가
+ *   청구액과 달라 **데스크가 「계산이 틀렸다」로 읽는다.** 서버도 월 전체에서는 단가를
+ *   `null` 로 내려 화면이 못 쓰게 해 뒀다.
+ * ★ **절사 규칙을 적는다.** 디랩이 실제 정산과 대조하려면 「원 단위 버림」이 보여야 한다.
+ */
+function BreakdownBox({ b }: { b: TuitionBreakdown }) {
+  const line = (label: string, expr: string, amount: number) => (
+    <tr>
+      <td>{label}</td>
+      <td style={{ color: 'var(--muted)', fontSize: 11.5 }}>{expr}</td>
+      <td style={{ textAlign: 'right' }}>{wonOf(amount)}</td>
+    </tr>
+  )
+  return (
+    <div className="frow">
+      <label>계산 근거</label>
+      <div>
+        <table className="mini-tbl">
+          <tbody>
+            {/* ★★ **`wholeMonth` 하나만 믿지 않는다.** 그 칸이 빠져 `undefined` 로 오면
+                falsy 라 **월 전체 청구에 나눗셈 식이 붙는다** — 그 결과가 청구액과
+                18원 어긋나 데스크가 「계산이 틀렸다」로 읽는다. 실제로 서버에서 한 번
+                빠졌다(2026-10-16, 레코드 파생 메서드가 직렬화에서 누락).
+                ★ **단가가 있어야만** 나눗셈을 쓴다. 서버는 월 전체에서 단가를 `null` 로
+                  내리므로, 그 값이 곧 「나눗셈을 써도 되는가」의 답이다 */}
+            {b.wholeMonth !== false || b.dailyTuition === null || b.remainingDays === null
+              ? /* 월 전체 — 정액이다. 나눗셈을 적지 않는다 */
+                [
+                  line('교습비', '월 정액', b.suppliedTuition),
+                  line('독서실비', '월 정액', b.suppliedStudyRoom),
+                ]
+              : [
+                  line(
+                    '교습비',
+                    `${b.monthlyTuition.toLocaleString()} ÷ ${b.teachingDays}일 × ${b.remainingDays}일`,
+                    b.suppliedTuition,
+                  ),
+                  line(
+                    '독서실비',
+                    `${b.monthlyStudyRoom.toLocaleString()} ÷ ${b.teachingDays}일 × ${b.remainingDays}일`,
+                    b.suppliedStudyRoom,
+                  ),
+                ]}
+            <tr>
+              <td colSpan={2}>소계</td>
+              <td style={{ textAlign: 'right' }}>{wonOf(b.suppliedTotal)}</td>
+            </tr>
+            {b.discountAmount > 0 && (
+              <tr>
+                <td colSpan={2}>할인 {b.discountRate}%</td>
+                <td style={{ textAlign: 'right', color: 'var(--red)' }}>-{wonOf(b.discountAmount)}</td>
+              </tr>
+            )}
+            <tr>
+              <td colSpan={2}>
+                <b>청구액</b>
+              </td>
+              <td style={{ textAlign: 'right' }}>
+                <b>{wonOf(b.billedAmount)}</b>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div className="hint">
+          {b.rounding === 'FLOOR' ? '원 단위 버림으로 계산합니다.' : `절사 규칙: ${b.rounding}`}
+          {b.wholeMonth === false && b.remainingDays !== null && (
+            <> 교습일수는 서버 제안 {b.remainingDays}일입니다 — 고칠 수 있습니다.</>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function Content() {
   const [query, setQuery] = useState<SearchValues>({})
   const [masked, setMasked] = useState(true)
@@ -565,6 +684,118 @@ function Content() {
   const clientFiltered = filtered.length !== rows.length
 
   const unpaid = useMemo(() => filtered.filter((r) => r.unpaid > 0), [filtered])
+
+  /* ── 일괄 청구(1016 피드백 2-1) ────────────────────────────
+   * > 「매월 수백명의 학생을 설정하기에는 매우 번거로울 것 같습니다」
+   *
+   * ★ **누구에게 나가는지 보고 누른다.** 검색 조건을 보내 서버가 추리는 방식이면
+   *   데스크가 **대상을 보지 못한 채** 수백 건이 발행된다 — 되돌릴 수 없는 일이다.
+   * ★ **할인율은 학생마다 다르다.** 장학값을 끌어와 채워 두고 행마다 고칠 수 있게 둔다. */
+  const [bulk, setBulk] = useState<{
+    month: string
+    dueDate: string
+    seatType: SeatType
+    rows: { enrollmentId: number; name: string; studentNo: string | null; className: string | null; rate: string; source: string | null }[] | null
+    picked: string[]
+    busy: boolean
+    err: string | null
+    result: BulkBillingResult | null
+  } | null>(null)
+
+  const { teacherOnly, readOnly } = useAuth()
+  /* 장학은 담임·조회전용에게 막혀 있다 — 호출 자체를 안 한다 */
+  const canSeeScholarship = !teacherOnly && !readOnly
+
+  const openBulk = useCallback(() => {
+    const m = thisMonth()
+    const [y, mm] = m.split('-').map(Number)
+    setBulk({
+      month: m,
+      /* 납기일을 비우면 통합 매출장에서 기간으로 좁힐 때 안 보인다 — 말일로 채운다 */
+      dueDate: `${m}-${String(new Date(y, mm, 0).getDate()).padStart(2, '0')}`,
+      seatType: 'GENERAL',
+      rows: null,
+      picked: [],
+      busy: false,
+      err: null,
+      result: null,
+    })
+    void (async () => {
+      try {
+        /* ★ **장학은 코드로 저장된다**(`CSAT_100`). 그대로 보여주면 개발자용 글자가
+           화면에 뜨고, 그 코드가 **청구의 장학명으로도 박힌다** — 나중에 통합 매출장
+           「장학」 열에 `CSAT_100` 이 남는다. 마스터에서 이름을 찾아 쓴다.
+           ★ 마스터를 못 읽어도 멈추지 않는다 — 그때는 코드가 그대로 보이지만
+             청구는 되어야 한다 */
+        const [res, masters] = await Promise.all([
+          searchStudents({ academyId: academyId ?? undefined, status: 'ENROLLED', size: 500 }),
+          listScholarshipMasters(new Date().getFullYear(), academyId ?? undefined).catch(() => []),
+        ])
+        const nameOfCode = new Map(masters.map((m) => [m.code, m.name]))
+        /* ★ 장학을 학생마다 읽는다. 500명이면 500번이라 **동시에 던지되** 실패는
+           무시한다 — 장학이 없는 학생이 대부분이고, 못 읽었다고 청구를 막을 일은 아니다.
+           ★ **담임·조회전용은 아예 안 부른다.** 그 계정은 장학이 403 이라 500번이
+             전부 403 으로 떨어진다 — 점검 리포트가 403 으로 뒤덮인다.
+             데스크(STAFF)는 읽을 수 있다(2026-10-16 서버가 열었다). */
+        const rows = await Promise.all(
+          res.rows.map(async (r) => {
+            let rate = ''
+            let source: string | null = null
+            if (!canSeeScholarship) return { enrollmentId: r.enrollmentId, name: r.name, studentNo: r.studentNo, className: r.className, rate, source }
+            try {
+              const sch = (await listStudentScholarships(r.enrollmentId)).find((x) => x.discountRate !== null)
+              if (sch) {
+                rate = String(sch.discountRate)
+                source = nameOfCode.get(sch.scholarshipType) ?? sch.scholarshipType
+              }
+            } catch {
+              /* 장학을 못 읽어도 청구는 할 수 있다 — 기본값 0으로 둔다 */
+            }
+            return {
+              enrollmentId: r.enrollmentId,
+              name: r.name,
+              studentNo: r.studentNo,
+              className: r.className,
+              rate,
+              source,
+            }
+          }),
+        )
+        setBulk((v) => (v ? { ...v, rows } : v))
+      } catch (e) {
+        setBulk((v) =>
+          v ? { ...v, rows: [], err: e instanceof ApiError ? e.message : '학생을 불러오지 못했습니다.' } : v,
+        )
+      }
+    })()
+  }, [academyId, canSeeScholarship])
+
+  async function runBulk() {
+    if (bulk === null || bulk.picked.length === 0) return
+    setBulk({ ...bulk, busy: true, err: null })
+    try {
+      const targets = (bulk.rows ?? [])
+        .filter((r) => bulk.picked.includes(String(r.enrollmentId)))
+        .map((r) => ({
+          enrollmentId: r.enrollmentId,
+          seatType: bulk.seatType,
+          discountRate: r.rate.trim() === '' ? undefined : Number(r.rate),
+          /* 발행 시점 장학명을 박아 둔다 — 나중에 장학이 취소돼도 근거가 남는다 */
+          discountSource: r.source ?? undefined,
+        }))
+      const result = await issueMonthlyBillingsBulk({
+        month: bulk.month,
+        dueDate: bulk.dueDate || undefined,
+        targets,
+      })
+      setBulk((v) => (v ? { ...v, busy: false, result, picked: [] } : v))
+      void load()
+    } catch (err) {
+      setBulk((v) =>
+        v ? { ...v, busy: false, err: err instanceof ApiError ? err.message : '청구를 발행하지 못했습니다.' } : v,
+      )
+    }
+  }
 
   /* ── 청구 등록 · 수납 · 취소 ── */
 
@@ -765,6 +996,54 @@ function Content() {
     return fee.find((r) => r.discountRate === want) ?? null
   }, [fee, issue.discountRate])
 
+  /* ── 일할 근거(1016 피드백 2-4) ────────────────────────────
+   * > 「일할계산의 **과정과 값이 함께** 출력되도록 해주시면 좋을 것 같습니다」
+   *
+   * ★ **등록을 누르기 전에** 봐야 뜻이 있다. 등록 뒤에 보여주면 틀린 것을 되돌려야 한다.
+   * ★★ **월 전체면 나눗셈 식을 쓰지 않는다.** 월 전체는 **정액**이라 단가 × 일수와
+   *   값이 다르다(660,000 vs 22,758×29 = 659,982 — **18원이 어긋난다**).
+   *   그 식을 적으면 결과가 청구액과 달라 **데스크가 「계산이 틀렸다」로 읽는다.**
+   *   서버도 월 전체에서는 단가를 `null` 로 내려 화면이 못 쓰게 해 뒀다. */
+  const [breakdown, setBreakdown] = useState<TuitionBreakdown | null>(null)
+
+  useEffect(() => {
+    const id = Number(issue.enrollmentId)
+    /* ★ **대상월이 정해지기 전에는 부르지 않는다.** 입학 모드는 입학일을 고르기 전까지
+       `month` 가 빈 값이라 **400 이 난다** — 화면에는 아무 일도 안 일어나는데 점검
+       리포트에는 400 으로 올라간다(실제로 그랬다) */
+    const month = issue.mode === 'monthly' ? issue.month : issue.admissionDate.slice(0, 7)
+    if (!issueOpen || issue.mode === 'etc' || !id || month.length !== 7) {
+      setBreakdown(null)
+      return
+    }
+    let cancelled = false
+    previewTuitionBilling({
+      enrollmentId: id,
+      month,
+      seatType: issue.seatType,
+      discountRate: issue.discountRate.trim() === '' ? undefined : Number(issue.discountRate),
+      remainingDays:
+        issue.mode === 'admission' && issue.remainingDays.trim() !== ''
+          ? Number(issue.remainingDays)
+          : undefined,
+    })
+      .then((b) => !cancelled && setBreakdown(b))
+      /* 단가가 없는 달이면 404 다 — 근거를 못 보여줄 뿐 등록은 서버가 판단한다 */
+      .catch(() => !cancelled && setBreakdown(null))
+    return () => {
+      cancelled = true
+    }
+  }, [
+    issueOpen,
+    issue.mode,
+    issue.enrollmentId,
+    issue.month,
+    issue.admissionDate,
+    issue.seatType,
+    issue.discountRate,
+    issue.remainingDays,
+  ])
+
   async function submitIssue() {
     setActBusy(true)
     setActErr(null)
@@ -899,6 +1178,51 @@ function Content() {
       setActBusy(false)
     }
   }
+
+  /* ★ **청구를 이루는 항목을 펼쳐 보여준다**(1016 피드백 1-4).
+     > 「일괄 또는 일할결제 시 독서실비/교습비가 따로 보일 수 있도록」
+     ★ **할인이 항목마다 다르다.** 합계 한 줄만 보면 교습비에만 붙은 할인을
+       데스크가 **독서실비도 깎인 것으로** 읽는다.
+     ★ **정가(`suppliedAmount`)를 함께 보여준다.** 퇴원 환불 차감이 **정상가 기준**이라
+       그 값이 있어야 되짚을 수 있다.
+     ★ 항목이 없는 청구(급식·특강)는 `undefined` 를 돌려 **펼치기 단추도 안 그린다** —
+       나눌 것이 없는데 단추만 있으면 눌러도 아무 일이 없는 것처럼 보인다. */
+  const renderBillingItems = useCallback((r: ReceiptRow) => {
+    const items = r.items ?? []
+    if (items.length < 2) return undefined
+    return (
+      <table className="mini-tbl">
+        <thead>
+          <tr>
+            <th>항목</th>
+            <th style={{ textAlign: 'right' }}>정가</th>
+            <th style={{ textAlign: 'right' }}>할인</th>
+            <th style={{ textAlign: 'right' }}>청구액</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((it) => (
+            <tr key={it.id}>
+              <td>
+                {BILLING_ITEM_LABEL[it.itemType] ?? it.itemType}
+                {/* 서버가 알려준다 — 화면이 「독서실비는 할인 없음」을 코드로 들지 않는다 */}
+                {!it.discountable && (
+                  <span className="mk supplement" style={{ marginLeft: 6 }}>
+                    할인 없음
+                  </span>
+                )}
+              </td>
+              <td style={{ textAlign: 'right' }}>{wonOf(it.suppliedAmount)}</td>
+              <td style={{ textAlign: 'right', color: it.discountAmount > 0 ? 'var(--red)' : undefined }}>
+                {it.discountAmount > 0 ? `-${wonOf(it.discountAmount)}` : '-'}
+              </td>
+              <td style={{ textAlign: 'right', fontWeight: 700 }}>{wonOf(it.billedAmount)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )
+  }, [])
 
   /** 표 끝에 붙는 행 액션. 모듈 상수 COLUMNS 는 그대로 두고 여기서만 더한다 */
   const columnsWithAct: Column<ReceiptRow>[] = useMemo(
@@ -1258,6 +1582,7 @@ function Content() {
             <DataTable
               nowrap
               columns={columnsWithAct}
+              renderExpanded={renderBillingItems}
               rows={filtered}
               rowKey={(r) => String(r.billingId)}
               masked={masked}
@@ -1280,6 +1605,10 @@ function Content() {
                     }}
                   >
                     <Icon name="plus" size={14} /> 청구 등록
+                  </button>
+                  {/* ★ 매월 수백 명을 한 명씩 등록하던 것(1016 피드백 2-1) */}
+                  <button className="btn" disabled={academyId === null} onClick={openBulk}>
+                    <Icon name="users" size={14} /> 교습비 일괄 청구
                   </button>
                   <MaskToggle masked={masked} onChange={setMasked} />
                   {/* 서버 엑셀(2026-09-25). 결제수단을 둘 이상 고른 경우만 화면이 거르므로,
@@ -1335,6 +1664,219 @@ function Content() {
           )}
         </div>
       </div>
+
+      {bulk && (
+        <Modal
+          wide
+          title="교습비 일괄 청구"
+          sub="체크한 학생에게만 발행합니다."
+          confirmLabel={bulk.result ? '닫기' : `${bulk.picked.length}명 발행`}
+          busy={bulk.busy}
+          confirmDisabled={!bulk.result && bulk.picked.length === 0}
+          error={bulk.err}
+          onConfirm={() => (bulk.result ? setBulk(null) : void runBulk())}
+          onClose={() => setBulk(null)}
+        >
+          {bulk.result ? (
+            <>
+              <div className="note-box">
+                <div>
+                  <b>{bulk.result.issuedCount}건</b>을 발행했습니다.
+                </div>
+              </div>
+              {/* ★ **빠진 사람을 사유별로 가른다.** 「이미 청구가 있습니다」는 그냥 두면
+                  되지만 **「가격이 등록되지 않았습니다」는 손을 쓰지 않으면 그 학생
+                  교습비가 안 나간다.** 발행 건수만 보면 그게 안 보인다 */}
+              {bulk.result.failed.length > 0 &&
+                (() => {
+                  const already = bulk.result!.failed.filter((f) => f.reason.includes('이미'))
+                  const needFix = bulk.result!.failed.filter((f) => !f.reason.includes('이미'))
+                  const nameOf = (id: number) =>
+                    (bulk.rows ?? []).find((r) => r.enrollmentId === id)
+                  return (
+                    <>
+                      {needFix.length > 0 && (
+                        <div style={{ marginTop: 14 }}>
+                          <b style={{ fontSize: 12.5, color: 'var(--red)' }}>
+                            청구되지 않은 {needFix.length}명 — 확인이 필요합니다
+                          </b>
+                          <div className="hint" style={{ marginBottom: 6 }}>
+                            그냥 두면 이 학생들의 교습비는 청구되지 않습니다.
+                          </div>
+                          <table className="mini-tbl">
+                            <thead>
+                              <tr>
+                                <th>학번</th>
+                                <th>이름</th>
+                                <th>사유</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {needFix.map((f) => {
+                                const r = nameOf(f.enrollmentId)
+                                return (
+                                  <tr key={f.enrollmentId}>
+                                    <td>{r?.studentNo ?? '-'}</td>
+                                    <td>{r?.name ?? `등록 ${f.enrollmentId}`}</td>
+                                    <td>{f.reason}</td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                      {already.length > 0 && (
+                        <div className="hint" style={{ marginTop: 12 }}>
+                          이미 청구가 있는 <b>{already.length}명</b>은 건너뛰었습니다. 그대로 두면 됩니다.
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
+            </>
+          ) : (
+            <>
+              <div className="frow">
+                <label className="req">대상월</label>
+                <input
+                  className="inp"
+                  type="month"
+                  value={bulk.month}
+                  onChange={(e) => setBulk({ ...bulk, month: e.target.value })}
+                />
+              </div>
+              <div className="frow">
+                <label>납기일</label>
+                <div>
+                  <input
+                    className="inp"
+                    type="date"
+                    value={bulk.dueDate}
+                    onChange={(e) => setBulk({ ...bulk, dueDate: e.target.value })}
+                  />
+                  {/* 비우면 통합 매출장에서 기간으로 좁힐 때 안 보인다 */}
+                  <div className="hint">비우면 기간으로 찾을 때 이 청구가 안 보입니다.</div>
+                </div>
+              </div>
+              <div className="frow">
+                <label className="req">좌석</label>
+                <select
+                  className="sel"
+                  value={bulk.seatType}
+                  onChange={(e) => setBulk({ ...bulk, seatType: e.target.value as SeatType })}
+                >
+                  {(Object.keys(SEAT_TYPE_LABEL) as SeatType[]).map((k) => (
+                    <option key={k} value={k}>
+                      {SEAT_TYPE_LABEL[k]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="frow">
+                <label className="req">대상 학생</label>
+                <div>
+                  {bulk.rows === null ? (
+                    <div className="hint">불러오는 중…</div>
+                  ) : bulk.rows.length === 0 ? (
+                    <div className="hint">재원 중인 학생이 없습니다.</div>
+                  ) : (
+                    <>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                        <button
+                          type="button"
+                          className="lnk"
+                          onClick={() =>
+                            setBulk({
+                              ...bulk,
+                              picked:
+                                bulk.picked.length === bulk.rows!.length
+                                  ? []
+                                  : bulk.rows!.map((r) => String(r.enrollmentId)),
+                            })
+                          }
+                        >
+                          {bulk.picked.length === bulk.rows.length ? '모두 해제' : '모두 선택'}
+                        </button>
+                        <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>
+                          {bulk.picked.length} / {bulk.rows.length}명
+                        </span>
+                      </div>
+                      <div className="pick-list" style={{ maxHeight: 300 }}>
+                        <table className="mini-tbl">
+                          <thead>
+                            <tr>
+                              <th />
+                              <th>학번</th>
+                              <th>이름</th>
+                              <th>반</th>
+                              <th>장학</th>
+                              <th style={{ textAlign: 'right' }}>할인율</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {bulk.rows.map((r) => {
+                              const key = String(r.enrollmentId)
+                              const on = bulk.picked.includes(key)
+                              return (
+                                <tr key={key}>
+                                  <td>
+                                    <input
+                                      type="checkbox"
+                                      checked={on}
+                                      onChange={(e) =>
+                                        setBulk({
+                                          ...bulk,
+                                          picked: e.target.checked
+                                            ? [...bulk.picked, key]
+                                            : bulk.picked.filter((x) => x !== key),
+                                        })
+                                      }
+                                    />
+                                  </td>
+                                  <td>{r.studentNo ?? '-'}</td>
+                                  <td>{r.name}</td>
+                                  <td>{r.className ?? '-'}</td>
+                                  <td>{r.source ?? '-'}</td>
+                                  <td style={{ textAlign: 'right' }}>
+                                    {/* ★ 장학값을 채워 두고 **행마다 고칠 수 있게** 둔다.
+                                        `step` 을 안 건다 — Modal 이 form 이라 배수가 아니면 저장이 막힌다 */}
+                                    <input
+                                      className="inp"
+                                      type="number"
+                                      min={0}
+                                      max={100}
+                                      style={{ width: 72, textAlign: 'right' }}
+                                      value={r.rate}
+                                      placeholder="0"
+                                      onChange={(e) =>
+                                        setBulk({
+                                          ...bulk,
+                                          rows: bulk.rows!.map((x) =>
+                                            x.enrollmentId === r.enrollmentId ? { ...x, rate: e.target.value } : x,
+                                          ),
+                                        })
+                                      }
+                                    />
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="hint">
+                        할인율은 학생의 장학으로 채워 두었습니다. 행마다 고칠 수 있습니다.
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </Modal>
+      )}
 
       {/* ── 청구 등록 ── */}
       {issueOpen && (
@@ -1500,6 +2042,10 @@ function Content() {
                   )}
                 </div>
               </div>
+
+              {/* ★ **서버가 어떻게 계산했는지**를 그대로 보여준다(1016 피드백 2-4).
+                  위 표는 단가표라 「얼마인가」만 말하고, 여기는 「왜 그 금액인가」를 말한다 */}
+              {breakdown && <BreakdownBox b={breakdown} />}
             </>
           ) : issue.mode === 'admission' ? (
             <>
@@ -1567,6 +2113,10 @@ function Content() {
                   </div>
                 </div>
               </div>
+
+              {/* ★ 일할이 실제로 어떻게 계산됐는지(1016 피드백 2-4). **입학 청구가 바로
+                  일할이라** 여기가 그 근거를 가장 필요로 하는 자리다 */}
+              {breakdown && <BreakdownBox b={breakdown} />}
             </>
           ) : (
             <>

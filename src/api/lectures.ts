@@ -1,4 +1,5 @@
 import { request } from './client'
+import type { GradeType } from './students'
 
 /* 특강 (F-4.7) — /api/v1/admin/lectures
  *
@@ -103,6 +104,15 @@ export interface LectureApplicant {
   studentNo: string | null
   studentName: string
   className: string | null
+  /** 학년(2026-10-16 추가 — 1016 피드백 1-5) */
+  grade?: GradeType | null
+  /**
+   * 좌석번호(2026-10-16 추가).
+   *
+   * ★ **배정 전이면 `null` 이다.** 그런데 **좌석을 쓰지 않는 특강**도 있어서,
+   *   비어 있다는 것이 곧 문제라는 뜻이 아니다 — `<Unfilled/>` 가 아니라 `'-'` 로 둔다.
+   */
+  seatNo?: string | null
   phone: string | null
   status: ApplicationStatus
   /** ★ 취소돼도 false 다. 확정자 판정에 이것만 쓰지 않는다 — 위 ★ 참고 */
