@@ -747,11 +747,11 @@ function SeatTab({
                 <Icon name="info" size={17} />
               </div>
               <div>
-                <b>빈 칸을 누르면 그 자리에 좌석을 만듭니다.</b> 잘못 지운 자리를 되돌릴 때 쓰세요 — 지웠던 번호를
+                <b>빈 칸을 누르면 좌석을 만들고, 좌석을 누르면 지웁니다.</b> 잘못 지운 자리는 지웠던 번호를
                 그대로 넣으면 <b>그 좌석이 되살아나</b> 예전 배정 이력이 이어집니다.
               </div>
             </div>
-            <SeatSpotMap seats={seats} busy={busy} onPickSpot={onPickSpot} />
+            <SeatSpotMap seats={seats} busy={busy} onPickSpot={onPickSpot} onRemoveSeat={onDelete} />
           </>
         )}
         <DataTable
@@ -781,10 +781,13 @@ function SeatSpotMap({
   seats,
   busy,
   onPickSpot,
+  onRemoveSeat,
 }: {
   seats: SeatMaster[]
   busy: boolean
   onPickSpot: (xPos: number, yPos: number) => void
+  /** ★ **토글이다**(1016 피드백 B-3) — 「만들어진 좌석을 눌러서 지우는 기능도 있었으면」 */
+  onRemoveSeat: (seat: SeatMaster) => void
 }) {
   const maxX = Math.max(...seats.map((s) => s.xPos))
   const maxY = Math.max(...seats.map((s) => s.yPos))
@@ -797,9 +800,18 @@ function SeatSpotMap({
       const seat = byPos.get(`${x}:${y}`)
       cells.push(
         seat ? (
-          <div key={x} className="sgp-cell taken" title={seat.seatNm ?? seat.seatCd}>
+          /* ★ 좌석도 **누르면 지운다**(B-3). 전에는 표까지 내려가 그 줄을 찾아야 했다 —
+             배치도에서 보고 있는데 지우는 자리가 다른 곳에 있으면 눈이 두 번 움직인다 */
+          <button
+            key={x}
+            type="button"
+            className="sgp-cell taken"
+            disabled={busy}
+            onClick={() => onRemoveSeat(seat)}
+            title={`${seat.seatNm ?? seat.seatCd} — 누르면 지웁니다`}
+          >
             {seat.seatCd}
-          </div>
+          </button>
         ) : (
           <button
             key={x}

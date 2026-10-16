@@ -73,11 +73,24 @@
  * 여기 빈칸은 "만들 수 있는 칸"이라 반대 의미다.
  */
 
-/* 이미 있는 좌석. 버튼이 아니라서 커서도 바뀌지 않는다 */
+/* 이미 있는 좌석 — **눌러서 지운다**(1016 피드백 B-3). 지우는 칸이라는 게 보여야 해서
+   올리면 빨개진다. 빈 칸(만들기)과 반대 뜻이라 색을 나눈다 */
 .sgp-cell.taken {
-  cursor: default;
+  cursor: pointer;
   color: var(--ink-2);
   font-weight: 600;
+  font-family: inherit;
+}
+
+.sgp-cell.taken:hover:not(:disabled) {
+  border-color: var(--red);
+  background: var(--red-wash);
+  color: var(--red);
+}
+
+.sgp-cell.taken:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 /* 빈 자리 — 누를 수 있다는 게 보여야 한다 */
