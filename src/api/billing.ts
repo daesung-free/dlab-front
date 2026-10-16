@@ -148,6 +148,37 @@ export function recordPayment(billingId: number, amount: number, method: PayMeth
  *   없고 금액만 온다. 화면의 매출장은 여전히 `receipt-status` 를 본다 —
  *   여기는 "방금 만든 것이 제대로 들어갔나"를 확인하는 용도다.
  */
+/**
+ * 청구 한 건을 이루는 항목 — 교습비 · 독서실비처럼 **따로 받는 돈**이다.
+ *
+ * ★ **`suppliedAmount` 가 항목별 정가**다. 퇴원 환불 차감이 **정상가 기준**이라
+ *   (할인받았으면 차감이 납부액보다 클 수 있다) 이 값 없이는 합계에서 교습비 몫을
+ *   되짚을 수 없다.
+ * ★ **`discountable` 은 서버가 알려준다.** 독서실비는 `false` 다 — 규정상 할인이 없다.
+ *   화면이 그 규칙을 코드로 들고 있지 않아도 된다.
+ * ★ **항목이 없는 청구가 정상이다**(급식·특강처럼 나눌 것이 없는 청구) — `items: []`.
+ *   그때는 청구 금액이 곧 단일 항목이라 펼칠 것이 없다.
+ */
+export interface BillingItem {
+  id: number
+  itemType: string
+  /** 정가 */
+  suppliedAmount: number
+  discountAmount: number
+  /** 정가 - 할인 */
+  billedAmount: number
+  discountable: boolean
+}
+
+export const BILLING_ITEM_LABEL: Record<string, string> = {
+  TUITION: '교습비',
+  STUDY_ROOM: '독서실비',
+  REGISTRATION: '등록비',
+  LECTURE: '특강비',
+  MEAL: '급식비',
+  ETC: '기타',
+}
+
 export interface BillingRow {
   id: number
   studentNo: string | null
@@ -163,6 +194,8 @@ export interface BillingRow {
   unpaidAmount: number
   dueDate: string | null
   status: string
+  /** ★ **옵션이다.** 서버가 먼저 배포되지 않았으면 `undefined` 로 온다 — 없을 때를 견딘다 */
+  items?: BillingItem[]
 }
 
 /**
