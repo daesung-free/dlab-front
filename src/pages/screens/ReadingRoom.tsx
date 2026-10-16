@@ -134,6 +134,8 @@ function Content() {
   const [assignTo, setAssignTo] = useState<{
     seatId: number
     seatCd: string
+    /** 지금 그 자리에 앉은 사람. 있으면 **교체**다 */
+    occupant: { enrollmentId: number; name: string; seatId: number } | null
     rows: Student[] | null
     pick: string
     keyword: string
@@ -299,8 +301,20 @@ function Content() {
      ★ **좌석 없는 학생만** 띄운다(`unassignedSeat`). 이미 앉은 학생을 고르면 서버가 막는데,
        목록에 보여 놓고 고른 뒤에 막으면 **왜 안 되는지 모른다.**
      ★ 지점을 넘겨 부른다 — 안 넘기면 전 지점 학생이 섞여 **남의 지점 학생을 앉히게** 된다. */
-  async function openAssign(seatId: number, seatCd: string) {
-    setAssignTo({ seatId, seatCd, rows: null, pick: '', keyword: '', busy: false, err: null })
+  async function openAssign(
+    seatId: number,
+    seatCd: string,
+    occupant: { enrollmentId: number; name: string; seatId: number } | null = null,
+  ) {
+    setAssignTo({ seatId, seatCd, occupant, rows: null, pick: '', keyword: '', busy: false, err: null })
+    /* ★ **교체 상대는 서버를 또 부르지 않는다.** 이 구역 배치도에 이미 들어 있다 —
+       교체는 두 자리를 맞바꾸는 것이라 **상대도 자리가 있어야** 하고, 자리 있는 사람은
+       곧 이 배치도 위에 있다. 자리 없는 학생을 넣으면 원래 앉았던 사람만 자리를 잃는다
+       (그건 교체가 아니라 빼앗기다 — 서버도 그쪽은 막아 뒀다). */
+    if (occupant) {
+      setAssignTo((v) => (v && v.seatId === seatId ? { ...v, rows: [] } : v))
+      return
+    }
     try {
       const res = await searchStudents({ academyId: academyId ?? undefined, unassignedSeat: true, size: 200 })
       setAssignTo((v) => (v && v.seatId === seatId ? { ...v, rows: res.rows } : v))
@@ -313,11 +327,30 @@ function Content() {
     }
   }
 
+  /** 교체 상대 — 이 구역에서 자리를 가진 사람(자기 자신 빼고) */
+  const swapMates = useMemo(
+    () =>
+      assignTo?.occupant
+        ? seats.filter((s) => s.enrollmentId !== null && s.enrollmentId !== assignTo.occupant!.enrollmentId)
+        : [],
+    [seats, assignTo?.occupant],
+  )
+
   async function doAssign() {
     if (!assignTo || !assignTo.pick) return
     setAssignTo({ ...assignTo, busy: true, err: null })
     try {
-      await assignSeat(assignTo.seatId, Number(assignTo.pick))
+      if (assignTo.occupant) {
+        /* ★ **두 건을 한 요청에** 보낸다. 서버가 요청 안의 학생이 쓰던 자리를 먼저 반납하고
+           전부-아니면-전무로 처리하므로, 중간에 실패해도 **한쪽만 자리를 잃는 일이 없다.**
+           해제 → 배정으로 나눠 부르면 그 사고가 난다(2026-10-16 백엔드 확인). */
+        const mate = swapMates.find((m) => String(m.enrollmentId) === assignTo.pick)
+        if (!mate) throw new Error('고른 학생의 자리를 찾지 못했습니다.')
+        await assignSeatsBulk([
+          { seatId: assignTo.seatId, enrollmentId: mate.enrollmentId! },
+          { seatId: mate.seatId, enrollmentId: assignTo.occupant.enrollmentId },
+        ])
+      } else await assignSeat(assignTo.seatId, Number(assignTo.pick))
       setAssignTo(null)
       await loadLayout()
     } catch (err) {
@@ -601,16 +634,29 @@ function Content() {
                     {/* ★ 좌석을 골라 **여기서 바로** 앉힌다(C-1·C-2). 전에는 막아 두고
                         「배정 관리 화면에서 하라」고 했는데, **배치도를 보면서 고르는 것**이
                         이 화면의 일이다 — 자리를 보고 와서 다른 화면에서 번호로 찾게 했다 */}
+                    {/* ★ 빈 자리는 **배정**, 찬 자리는 **자리 바꾸기**다.
+                        교체는 `seats/bulk` 로 **두 건을 한 요청에** 보내 전부-아니면-전무로
+                        돈다 — 해제 뒤 배정으로 나누면 중간에 실패했을 때 **원래 학생만
+                        자리를 잃는다**(2026-10-16 백엔드 확인) */}
                     <button
                       className="btn pri"
-                      disabled={busy || sel.enrollmentId !== null}
-                      /* ★ **빈 자리에만** 배정한다. 찬 자리를 바꾸려면 해제 뒤 배정인데,
-                         그건 두 번 호출이라 **중간에 실패하면 원래 학생만 자리를 잃는다.**
-                         서버에 교체 경로가 생기면 그때 한 번에 한다 */
-                      title={sel.enrollmentId !== null ? '배정을 먼저 해제하세요' : undefined}
-                      onClick={() => void openAssign(sel.seatId, sel.seatCd)}
+                      disabled={busy}
+                      onClick={() =>
+                        void openAssign(
+                          sel.seatId,
+                          sel.seatCd,
+                          sel.enrollmentId !== null
+                            ? {
+                                enrollmentId: sel.enrollmentId,
+                                name: sel.studentName ?? '이 학생',
+                                seatId: sel.seatId,
+                              }
+                            : null,
+                        )
+                      }
                     >
-                      <Icon name="user-plus" size={14} /> 이 자리에 배정
+                      <Icon name={sel.enrollmentId === null ? 'user-plus' : 'repeat'} size={14} />{' '}
+                      {sel.enrollmentId === null ? '이 자리에 배정' : '자리 바꾸기'}
                     </button>
                     <button
                       className="btn"
@@ -699,16 +745,52 @@ function Content() {
 
       {assignTo && (
         <Modal
-          title={`${assignTo.seatCd} 좌석에 배정`}
-          sub="좌석이 없는 학생만 나옵니다."
-          confirmLabel="배정"
+          title={
+            assignTo.occupant
+              ? `${assignTo.seatCd} — ${assignTo.occupant.name} 학생의 자리를 바꿉니다`
+              : `${assignTo.seatCd} 좌석에 배정`
+          }
+          sub={
+            assignTo.occupant
+              ? '고른 학생과 자리를 맞바꿉니다. 한쪽만 바뀌는 일은 없습니다.'
+              : '좌석이 없는 학생만 나옵니다.'
+          }
+          confirmLabel={assignTo.occupant ? '자리 바꾸기' : '배정'}
           busy={assignTo.busy}
           confirmDisabled={!assignTo.pick}
           error={assignTo.err}
           onConfirm={() => void doAssign()}
           onClose={() => setAssignTo(null)}
         >
-          {assignTo.rows === null ? (
+          {assignTo.occupant ? (
+            swapMates.length === 0 ? (
+              <div className="note-box">
+                <div>이 구역에 자리를 가진 다른 학생이 없습니다.</div>
+              </div>
+            ) : (
+              <div className="frow">
+                <label className="req">바꿀 상대</label>
+                <div>
+                  <select
+                    className="sel"
+                    value={assignTo.pick}
+                    onChange={(e) => setAssignTo({ ...assignTo, pick: e.target.value })}
+                  >
+                    <option value="">고르세요</option>
+                    {swapMates.map((m) => (
+                      <option key={m.seatId} value={String(m.enrollmentId)}>
+                        {m.seatCd} · {m.studentName ?? '배정됨'}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="hint">
+                    {/* 서버가 같은 구역만 내려주므로 상대도 이 구역 사람이다 */}
+                    같은 구역 안에서만 바꿀 수 있습니다.
+                  </div>
+                </div>
+              </div>
+            )
+          ) : assignTo.rows === null ? (
             <div className="hint">불러오는 중…</div>
           ) : assignTo.rows.length === 0 ? (
             <div className="note-box">
