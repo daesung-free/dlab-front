@@ -47,3 +47,20 @@
 .q-edit-h > button:last-child {
   margin-left: auto;
 }
+
+/* 조건부 노출·합산 — 화면에서 고칠 수는 없지만 **걸려 있다는 것은 보여야** 한다.
+   안 보이면 기준 문항을 지우고도 모르고, 그러면 숨어야 할 문항이 늘 보인다. */
+.q-cond {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+  background: var(--line-2);
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+
+.q-cond b {
+  color: var(--ink-2);
+}

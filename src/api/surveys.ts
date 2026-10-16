@@ -137,6 +137,11 @@ export interface SurveyQuestionCreate {
   maxValue?: number
   /** 선택형이면 필수 */
   options?: string[]
+  /* ★ 조건부·합산은 **고치지 않아도 그대로 돌려보내야 한다.** 빠뜨리면 교체하면서
+     조용히 풀린다 — 가채점의 「응시/미응시」가 이걸 쓴다(2026-10-16 백엔드 확인). */
+  showIfQuestionIndex?: number | null
+  showIfOptionIndex?: number | null
+  sumOfIndexes?: number[]
 }
 
 export interface SurveyCreate {
@@ -180,6 +185,34 @@ export function updateSurvey(
   body: { title: string; description?: string; opensAt: string; closesAt: string },
 ): Promise<SurveySummary> {
   return request<SurveySummary>(`/api/v1/admin/surveys/${surveyId}`, { method: 'PUT', body })
+}
+
+/**
+ * 문항 정의. **교체 요청과 칸이 같다** — 읽은 것을 그대로 되돌려 보내면 바뀌는 것이 없다.
+ *
+ * ★ **집계(`/results`)와 다른 경로다.** 집계의 `min`·`max` 는 **응답 통계**고 여기 `minValue`·
+ *   `maxValue` 는 **설정**이다 — 이름이 겹쳐 섞이면 안 돼 따로 둔다(2026-10-16 백엔드).
+ * ★ **번호는 「순서」(1부터)다. DB 의 `seq` 가 아니다.** 교체가 soft delete 라 두 번 교체하면
+ *   첫 문항의 `seq` 가 9가 된다 — 서버가 순서로 바꿔 내려주므로 **배열 인덱스 + 1** 로 쓴다.
+ */
+export interface SurveyQuestionDef {
+  questionId: number
+  type: QuestionType
+  title: string
+  required: boolean
+  minValue: number | null
+  maxValue: number | null
+  options: string[]
+  /** 조건부 노출 — 이 번호 문항에서 */
+  showIfQuestionIndex: number | null
+  /** 그 보기를 골랐을 때만 보인다 */
+  showIfOptionIndex: number | null
+  /** 합산 문항 — 더할 문항 번호들 */
+  sumOfIndexes: number[]
+}
+
+export function getSurveyQuestions(surveyId: number): Promise<SurveyQuestionDef[]> {
+  return request<SurveyQuestionDef[]>(`/api/v1/admin/surveys/${surveyId}/questions`)
 }
 
 /**

@@ -19,6 +19,7 @@ import {
   getSurveyResult,
   listSurveys,
   type QuestionType,
+  getSurveyQuestions,
   replaceSurveyQuestions,
   duplicateSurvey,
   type SurveyCreate,
@@ -260,6 +261,12 @@ interface EditQuestion {
   minValue: string
   maxValue: string
   options: string[]
+  /* ★ **화면에서 고치지 않지만 그대로 들고 다닌다.** 교체는 보낸 것이 전부라, 안 실어
+     보내면 **조건부 노출과 합산이 조용히 풀린다** — 가채점의 「응시/미응시」가 이걸
+     쓴다. 풀리면 **숨어야 할 문항이 전부 보인다**(2026-10-16 백엔드 확인). */
+  showIfQuestionIndex: number | null
+  showIfOptionIndex: number | null
+  sumOfIndexes: number[]
 }
 
 const EDIT_QTYPE: { type: QuestionType; label: string }[] = [
@@ -435,6 +442,8 @@ function stamp(v: string | null | undefined): string {
     /** `null` 이면 문항을 아직 안 건드린 것 — 그때는 **문항을 안 보낸다** */
     questions: EditQuestion[] | null
     loadingQ: boolean
+    /** ★ 모달 안에 띄운다. 밖에 띄우면 **모달에 가려 안 보여** 「눌러도 아무 일이 없다」가 된다 */
+    qErr: string | null
   } | null>(null)
   /** 제출이 있어 문항을 못 고칠 때 — 복제로 돌린다 */
   const [dup, setDup] = useState<{ row: SurveySummary; title: string; busy: boolean; err: string | null } | null>(null)
@@ -636,35 +645,61 @@ function stamp(v: string | null | undefined): string {
      사람에게도 호출이 하나 더 나간다 */
   async function loadQuestionsForEdit() {
     if (editing === null) return
-    setEditing({ ...editing, loadingQ: true })
+    setEditing({ ...editing, loadingQ: true, qErr: null })
     try {
-      const res = await getSurveyResult(editing.row.id)
+      /* ★ **집계(`/results`)가 아니라 문항 정의 경로로 읽는다.** 집계에는 필수 여부·숫자
+         범위·조건부·합산이 없어, 그걸로 읽어 교체하면 **다섯 가지가 조용히 풀린다.** */
+      const qs = await getSurveyQuestions(editing.row.id)
       setEditing((v) =>
         v && v.row.id === editing.row.id
           ? {
               ...v,
               loadingQ: false,
-              questions: res.questions.map((q, i) => ({
+              questions: qs.map((q, i) => ({
                 key: `q${q.questionId}-${i}`,
                 type: q.type,
                 title: q.title,
-                /* ⚠️ 서버가 **필수 여부와 숫자 범위를 안 돌려준다**(2026-10-16 확인).
-                   `min`·`max` 는 **응답 통계**지 설정이 아니다 — 이름이 같아 헷갈린다.
-                   그대로 쓰면 저장할 때 설정이 조용히 풀리므로 **빈 값에서 시작**하고
-                   화면이 다시 지정하라고 말한다. 서버가 실어 주면 여기서 채운다 */
-                required: false,
-                minValue: '',
-                maxValue: '',
-                options: (q.options ?? []).map((o) => o.label),
+                required: q.required,
+                minValue: q.minValue === null ? '' : String(q.minValue),
+                maxValue: q.maxValue === null ? '' : String(q.maxValue),
+                options: q.options ?? [],
+                showIfQuestionIndex: q.showIfQuestionIndex,
+                showIfOptionIndex: q.showIfOptionIndex,
+                sumOfIndexes: q.sumOfIndexes ?? [],
               })),
             }
           : v,
       )
     } catch (err) {
-      setEditing((v) => (v ? { ...v, loadingQ: false } : v))
-      setApiError(err instanceof ApiError ? err.message : '문항을 불러오지 못했습니다.')
+      setEditing((v) =>
+        v
+          ? {
+              ...v,
+              loadingQ: false,
+              /* ★ **서버가 아직 이 경로를 모르면**(화면이 먼저 배포된 경우) 404·405 가 온다.
+                 「Request method 'GET' is not supported」를 그대로 보여주면 담당자가 무엇을
+                 잘못했나 찾는다 — 우리 사정이다(CLAUDE.md 1-1) */
+              qErr:
+                err instanceof ApiError
+                  ? err.status === 404 || err.status === 405
+                    ? '문항 수정은 아직 준비 중입니다.'
+                    : err.message
+                  : '문항을 불러오지 못했습니다.',
+            }
+          : v,
+      )
     }
   }
+
+  /** 다른 문항이 답을 쓰고 있는 문항 번호들 — 지우면 조건·합산이 깨진다 */
+  const referenced = useMemo(() => {
+    const out = new Set<number>()
+    for (const q of editing?.questions ?? []) {
+      if (q.showIfQuestionIndex !== null) out.add(q.showIfQuestionIndex)
+      for (const n of q.sumOfIndexes) out.add(n)
+    }
+    return out
+  }, [editing?.questions])
 
   function patchQ(key: string, p: Partial<EditQuestion>) {
     setEditing((v) =>
@@ -695,6 +730,10 @@ function stamp(v: string | null | undefined): string {
               type: q.type,
               title: q.title.trim(),
               required: q.required,
+              /* 고치지 않아도 그대로 돌려보낸다 — 빠뜨리면 조건부·합산이 풀린다 */
+              showIfQuestionIndex: q.showIfQuestionIndex,
+              showIfOptionIndex: q.showIfOptionIndex,
+              sumOfIndexes: q.sumOfIndexes,
               ...(q.type === 'NUMBER'
                 ? {
                     minValue: q.minValue === '' ? undefined : Number(q.minValue),
@@ -849,6 +888,7 @@ function stamp(v: string | null | undefined): string {
                     closesAt: (r.closesAt ?? '').slice(0, 16),
                     questions: null,
                     loadingQ: false,
+                    qErr: null,
                   })
                 }
                 title="제목·기간을 고칩니다. 문항은 제출이 들어오기 전까지 바꿀 수 있습니다"
@@ -1260,6 +1300,7 @@ function stamp(v: string | null | undefined): string {
           confirmLabel="저장"
           busy={rowBusy}
           confirmDisabled={editing.title.trim() === ''}
+          error={editing.qErr}
           onConfirm={() => void saveEdit()}
           onClose={() => setEditing(null)}
         >
@@ -1303,7 +1344,7 @@ function stamp(v: string | null | undefined): string {
                   disabled={editing.loadingQ}
                   onClick={() => void loadQuestionsForEdit()}
                 >
-                  <Icon name="list" size={13} /> {editing.loadingQ ? '불러오는 중…' : '문항 고치기'}
+                  <Icon name="list-ordered" size={13} /> {editing.loadingQ ? '불러오는 중…' : '문항 고치기'}
                 </button>
               ) : (
                 <>
@@ -1312,10 +1353,6 @@ function stamp(v: string | null | undefined): string {
                       <b>응답이 하나라도 들어오면 문항을 바꿀 수 없습니다.</b> 이미 낸 사람의 답이 다른
                       질문의 답이 되기 때문입니다. 그때는 <b>복제해서 새로 만드세요</b>.
                     </div>
-                  </div>
-                  {/* ⚠️ 서버가 지금 값을 안 돌려줘서 비워 둔다. 사용자가 할 일이라 화면에 적는다 */}
-                  <div className="hint" style={{ marginBottom: 8 }}>
-                    필수 여부와 숫자 범위는 다시 지정해 주세요.
                   </div>
 
                   {editing.questions.map((q, i) => (
@@ -1345,6 +1382,15 @@ function stamp(v: string | null | undefined): string {
                           type="button"
                           className="btn"
                           style={{ padding: '4px 8px', color: 'var(--red)' }}
+                          /* ★ **다른 문항이 이 번호를 가리키면 못 지운다.** 지우면 조건이
+                             깨져 숨어야 할 문항이 늘 보이거나 합산이 틀린다. 번호는 순서라
+                             앞 문항을 지우면 뒤 번호가 통째로 밀리는 문제도 있다 */
+                          disabled={referenced.has(i + 1)}
+                          title={
+                            referenced.has(i + 1)
+                              ? '다른 문항이 이 문항의 답을 쓰고 있어 지울 수 없습니다'
+                              : undefined
+                          }
                           onClick={() =>
                             setEditing({
                               ...editing,
@@ -1362,6 +1408,26 @@ function stamp(v: string | null | undefined): string {
                         placeholder="질문을 입력하세요"
                         onChange={(e) => patchQ(q.key, { title: e.target.value })}
                       />
+                      {/* ★ 화면에서 고칠 수는 없지만 **걸려 있다는 것은 보여준다.**
+                          안 보이면 기준 문항을 지우고도 모른다 — 그러면 조건이 깨진다 */}
+                      {q.showIfQuestionIndex !== null && (
+                        <div className="q-cond">
+                          <Icon name="git-compare" size={12} />
+                          <span>
+                            <b>{q.showIfQuestionIndex}번</b> 문항에서{' '}
+                            <b>{q.showIfOptionIndex !== null ? `${q.showIfOptionIndex}번 보기` : '특정 보기'}</b>를
+                            고른 사람에게만 보입니다
+                          </span>
+                        </div>
+                      )}
+                      {q.sumOfIndexes.length > 0 && (
+                        <div className="q-cond">
+                          <Icon name="percent" size={12} />
+                          <span>
+                            <b>{q.sumOfIndexes.join(' · ')}번</b> 문항의 답을 더해 계산합니다
+                          </span>
+                        </div>
+                      )}
                       {(q.type === 'SINGLE_CHOICE' || q.type === 'MULTI_CHOICE') && (
                         <input
                           className="inp"
@@ -1409,6 +1475,10 @@ function stamp(v: string | null | undefined): string {
                               minValue: '',
                               maxValue: '',
                               options: [],
+                              /* 새 문항은 조건 없이 늘 보인다 */
+                              showIfQuestionIndex: null,
+                              showIfOptionIndex: null,
+                              sumOfIndexes: [],
                             },
                           ],
                         })
