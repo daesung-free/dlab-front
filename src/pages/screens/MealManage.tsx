@@ -133,8 +133,17 @@ const ORDER_COLUMNS: Column<MealOrder>[] = [
     width: '104px',
     align: 'right',
     sortable: true,
-    value: (r) => r.amount,
-    render: (r) => won(r.amount),
+    /* ★ **`null` 은 0원이 아니라 「금액을 모른다」**다 — 단가가 등록되지 않은 끼니가 있다.
+       0 으로 그리면 데스크가 **무료로 읽고**, 손써야 할 것이 청구 발행 때까지 안 보인다 */
+    value: (r) => r.amount ?? '',
+    render: (r) =>
+      r.amount === null ? (
+        <span style={{ color: 'var(--red)', fontWeight: 600 }} title="급식업체 단가를 먼저 등록해야 청구할 수 있습니다">
+          단가 미등록
+        </span>
+      ) : (
+        won(r.amount)
+      ),
   },
   {
     key: 'status',
@@ -382,6 +391,10 @@ function Content() {
    *   사유마다 **조치가 다르다** — 「이미 발행」은 그냥 두면 되지만 **「단가 미등록」은
    *   손을 쓰지 않으면 그 학생 급식비가 영영 청구되지 않는다.** */
   const [billBusy, setBillBusy] = useState(false)
+  /* ★ **납기일을 비우고 발행하면 통합 매출장에서 기간으로 좁힐 때 안 보인다**
+     (`dueDate IS NULL` 이라 기간 필터에 안 걸린다 — 2026-10-16 서버 확인).
+     기본값을 그 달 말일로 채워 둔다 — 비워 두는 쪽이 기본이면 매번 안 보이는 청구가 생긴다 */
+  const [billDue, setBillDue] = useState('')
   const [billResult, setBillResult] = useState<MealBillingResult | null>(null)
   const [billErr, setBillErr] = useState<string | null>(null)
 
@@ -390,7 +403,7 @@ function Content() {
     setBillBusy(true)
     setBillErr(null)
     try {
-      setBillResult(await issueMealBillingsMonthly(academyId, month))
+      setBillResult(await issueMealBillingsMonthly(academyId, month, billDue || undefined))
     } catch (err) {
       setBillErr(err instanceof ApiError ? err.message : '청구를 발행하지 못했습니다.')
     } finally {
@@ -409,6 +422,15 @@ function Content() {
   const [win, setWin] = useState<{ from: string; to: string }>({ from: '', to: '' })
   const [savedWin, setSavedWin] = useState<{ from: string; to: string }>({ from: '', to: '' })
   const [month, setMonth] = useState(thisMonth())
+
+  /* 달이 바뀌면 납기일을 그 달 말일로 다시 채운다 */
+  useEffect(() => {
+    const [y, m] = month.split('-').map(Number)
+    if (!y || !m) return
+    const last = new Date(y, m, 0).getDate()
+    setBillDue(`${month}-${String(last).padStart(2, '0')}`)
+  }, [month])
+
   /* 헤더 '기간 선택' — 이번 달·지난 달·다음 달을 한 번에. 본문 월 칸과 같은 값을 쓴다 */
   const monthVer = monthSignal.useVersion()
   useEffect(() => {
@@ -600,7 +622,10 @@ function Content() {
       pending: orders.filter((o) => o.status === 'PENDING' || o.status === 'ISSUED').length,
       canceled: orders.filter((o) => o.status === 'CANCELLED' || o.status === 'REFUNDED').length,
       expired: orders.filter((o) => o.status === 'EXPIRED').length,
-      revenue: paid.reduce((a, o) => a + o.amount, 0),
+      /* 금액을 모르는 주문은 **0으로 더하지 않는다** — 0으로 치면 합계가 조용히 모자란다.
+         몇 건이 빠졌는지는 아래 `unpriced` 로 함께 보여준다 */
+      revenue: paid.reduce((a, o) => a + (o.amount ?? 0), 0),
+      unpriced: orders.filter((o) => o.amount === null).length,
     }
   }, [orders])
 
@@ -693,7 +718,13 @@ function Content() {
           <div className="v" style={{ color: 'var(--green)' }}>
             {stats.paid}
           </div>
-          <div className="d up">{stats.revenue.toLocaleString()}원</div>
+          <div className="d up">
+            {stats.revenue.toLocaleString()}원
+            {/* ★ 금액을 모르는 주문은 안 더했다. **안 적으면 합계가 조용히 모자란다** */}
+            {stats.unpriced > 0 && (
+              <span style={{ color: 'var(--red)', marginLeft: 6 }}>· 단가 미등록 {stats.unpriced}건 제외</span>
+            )}
+          </div>
         </div>
         <div className="stat">
           <div className="l">
@@ -1364,6 +1395,16 @@ function Content() {
                 >
                   <Icon name="receipt" size={14} /> {billBusy ? '발행 중…' : `${month} 청구 발행`}
                 </button>
+                <label style={{ fontSize: 11.5, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  납기일
+                  <input
+                    className="inp"
+                    type="date"
+                    style={{ width: 150 }}
+                    value={billDue}
+                    onChange={(e) => setBillDue(e.target.value)}
+                  />
+                </label>
                 <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>
                   발행하면 수납현황 통합 매출장에 잡힙니다. 이미 발행된 주문은 건너뜁니다.
                 </span>

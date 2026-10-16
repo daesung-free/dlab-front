@@ -66,7 +66,14 @@ export interface MealOrder {
   /** 결제 라이프사이클. 결제가 붙기 전까지 전부 PENDING 이다 */
   status: MealOrderStatus
   activeCount: number
-  amount: number
+  /**
+   * 주문 합계.
+   *
+   * ★ **`null` 이면 「0원」이 아니라 「금액을 모른다」**다 — 끼니 하나라도 **단가가 등록되지
+   *   않은** 경우다(2026-10-16 서버 수정). 0 으로 그리면 데스크가 **무료로 읽고**, 정작
+   *   손써야 할 단가 미등록이 **청구 발행을 누를 때까지 안 보인다.**
+   */
+  amount: number | null
   billedAmount: number
   refundableAmount: number
   paymentMethods: string[]
