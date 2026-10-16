@@ -236,6 +236,9 @@ function Content() {
      나왔다 — 「오른쪽에 미배정 보드가 따로 있는데 반을 눌러도 미배정이 나온다」는 지적이다.
      `null` 이면 미배정, 숫자면 그 반이다 */
   const [viewClassId, setViewClassId] = useState<number | null>(null)
+  /* 불일치만 걸러 보기(A-1 「클릭하면 해당 학생 목록」). 서버 조건이 아니라 **받아 온 쪽에서**
+     거른다 — 그 반 학생 전부가 이미 손에 있다 */
+  const [onlyMismatch, setOnlyMismatch] = useState(false)
 
   /* ⚠️ `classId` 와 `unassignedClass` 를 **같이 보내면 400** 이다(students.ts 주석) —
      모순된 조건이라 서버가 거절한다. 하나만 보낸다 */
@@ -247,6 +250,17 @@ function Content() {
     [academyId, viewClassId],
   )
   const table = useServerTable({ fetcher: searchStudents, params, pageSize: PAGE_SIZE, sortable: SORTABLE, enabled: academyReady })
+
+  /* ★ **반-담임 불일치**(1016 피드백 A-1) — 반에 걸린 담임과 **학생에게 걸린 담임이 다른**
+     사람 수다. 「담임 따로 지정」을 한 학생이 곧 그 경우라, 목록의 `homeroomOverridden`
+     하나로 센다(서버 집계를 기다릴 필요가 없다).
+     ★ **지금 보고 있는 반에서만** 센다 — 전 지점을 세려면 반마다 읽어야 하고, 그건
+     반 수만큼 호출이다. */
+  const mismatch = useMemo(
+    () => table.rows.filter((r) => r.homeroomOverridden === true).length,
+    [table.rows],
+  )
+
 
   async function assign() {
     if (target === null || selected.length === 0) return
@@ -537,9 +551,17 @@ function Content() {
             /* ★ 카드를 누르면 **아래 명단이 그 반으로 바뀐다**(A-5). 반 수정은 「관리」 버튼으로
                  옮겼다 — 명단을 보려고 누를 때마다 수정 모달이 뜨면 일이 끊긴다 */
             title="누르면 아래에 이 반 학생이 보입니다"
-            onClick={() => setViewClassId(c.id)}
+            onClick={() => {
+              setViewClassId(c.id)
+              /* ★ 반을 옮기면 필터를 푼다 — 안 풀면 **다른 반에서 0건**을 보고
+                 「이 반은 비었나」로 읽는다 */
+              setOnlyMismatch(false)
+            }}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') setViewClassId(c.id)
+              if (e.key === 'Enter' || e.key === ' ') {
+                setViewClassId(c.id)
+                setOnlyMismatch(false)
+              }
             }}
           >
             <div className="l">
@@ -588,9 +610,15 @@ function Content() {
           tabIndex={0}
           style={{ cursor: 'pointer', outline: viewClassId === null ? '2px solid var(--mint)' : undefined }}
           title="누르면 아래에 미배정 학생이 보입니다"
-          onClick={() => setViewClassId(null)}
+          onClick={() => {
+            setViewClassId(null)
+            setOnlyMismatch(false)
+          }}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') setViewClassId(null)
+            if (e.key === 'Enter' || e.key === ' ') {
+              setViewClassId(null)
+              setOnlyMismatch(false)
+            }
           }}
         >
           <div className="l">
@@ -676,13 +704,28 @@ function Content() {
 
       <DataTable
         columns={COLUMNS}
-        rows={table.rows}
+        rows={onlyMismatch ? table.rows.filter((r) => r.homeroomOverridden === true) : table.rows}
         rowKey={(r) => String(r.enrollmentId)}
         selectable
         selected={selected}
         onSelectedChange={setSelected}
         loading={table.loading}
         serverPaging={table.serverPaging}
+        /* ★ **반-담임 불일치**를 표 위에 띄운다(A-1). 반에 걸린 담임과 학생에게 걸린 담임이
+             다른 사람이다 — 누르면 그 사람만 남는다.
+           ★ 0명이면 **아예 안 띄운다.** 늘 보이면 「0」을 확인하는 일이 생긴다 */
+        toolbar={
+          viewClassId !== null && mismatch > 0 ? (
+            <button
+              type="button"
+              className={`chip${onlyMismatch ? ' on' : ''}`}
+              onClick={() => setOnlyMismatch((v) => !v)}
+              title="반 담임이 아닌 다른 선생님이 맡은 학생입니다"
+            >
+              반-담임 불일치 {mismatch}명{onlyMismatch ? ' — 해제' : ''}
+            </button>
+          ) : undefined
+        }
         /* ★ 무엇을 보고 있는지 표에도 적는다 — 칸만 눌러 바뀌면 **어느 명단인지 모른다** */
         countLabel={
           viewClassId === null ? (
