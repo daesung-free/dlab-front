@@ -67,7 +67,7 @@ import {
   type FeeTableRow,
   type SeatType,
 } from '../../api/tuition'
-import { listStudentScholarships } from '../../api/masters'
+import { listScholarshipMasters, listStudentScholarships } from '../../api/masters'
 import { GRADE_LABEL, searchStudents, type Student } from '../../api/students'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
@@ -544,7 +544,13 @@ function BreakdownBox({ b }: { b: TuitionBreakdown }) {
       <div>
         <table className="mini-tbl">
           <tbody>
-            {b.wholeMonth
+            {/* ★★ **`wholeMonth` 하나만 믿지 않는다.** 그 칸이 빠져 `undefined` 로 오면
+                falsy 라 **월 전체 청구에 나눗셈 식이 붙는다** — 그 결과가 청구액과
+                18원 어긋나 데스크가 「계산이 틀렸다」로 읽는다. 실제로 서버에서 한 번
+                빠졌다(2026-10-16, 레코드 파생 메서드가 직렬화에서 누락).
+                ★ **단가가 있어야만** 나눗셈을 쓴다. 서버는 월 전체에서 단가를 `null` 로
+                  내리므로, 그 값이 곧 「나눗셈을 써도 되는가」의 답이다 */}
+            {b.wholeMonth !== false || b.dailyTuition === null || b.remainingDays === null
               ? /* 월 전체 — 정액이다. 나눗셈을 적지 않는다 */
                 [
                   line('교습비', '월 정액', b.suppliedTuition),
@@ -584,7 +590,7 @@ function BreakdownBox({ b }: { b: TuitionBreakdown }) {
         </table>
         <div className="hint">
           {b.rounding === 'FLOOR' ? '원 단위 버림으로 계산합니다.' : `절사 규칙: ${b.rounding}`}
-          {!b.wholeMonth && b.remainingDays !== null && (
+          {b.wholeMonth === false && b.remainingDays !== null && (
             <> 교습일수는 서버 제안 {b.remainingDays}일입니다 — 고칠 수 있습니다.</>
           )}
         </div>
@@ -716,7 +722,16 @@ function Content() {
     })
     void (async () => {
       try {
-        const res = await searchStudents({ academyId: academyId ?? undefined, status: 'ENROLLED', size: 500 })
+        /* ★ **장학은 코드로 저장된다**(`CSAT_100`). 그대로 보여주면 개발자용 글자가
+           화면에 뜨고, 그 코드가 **청구의 장학명으로도 박힌다** — 나중에 통합 매출장
+           「장학」 열에 `CSAT_100` 이 남는다. 마스터에서 이름을 찾아 쓴다.
+           ★ 마스터를 못 읽어도 멈추지 않는다 — 그때는 코드가 그대로 보이지만
+             청구는 되어야 한다 */
+        const [res, masters] = await Promise.all([
+          searchStudents({ academyId: academyId ?? undefined, status: 'ENROLLED', size: 500 }),
+          listScholarshipMasters(new Date().getFullYear(), academyId ?? undefined).catch(() => []),
+        ])
+        const nameOfCode = new Map(masters.map((m) => [m.code, m.name]))
         /* ★ 장학을 학생마다 읽는다. 500명이면 500번이라 **동시에 던지되** 실패는
            무시한다 — 장학이 없는 학생이 대부분이고, 못 읽었다고 청구를 막을 일은 아니다.
            ★ **담임·조회전용은 아예 안 부른다.** 그 계정은 장학이 403 이라 500번이
@@ -731,7 +746,7 @@ function Content() {
               const sch = (await listStudentScholarships(r.enrollmentId)).find((x) => x.discountRate !== null)
               if (sch) {
                 rate = String(sch.discountRate)
-                source = sch.scholarshipType
+                source = nameOfCode.get(sch.scholarshipType) ?? sch.scholarshipType
               }
             } catch {
               /* 장학을 못 읽어도 청구는 할 수 있다 — 기본값 0으로 둔다 */
@@ -993,14 +1008,18 @@ function Content() {
 
   useEffect(() => {
     const id = Number(issue.enrollmentId)
-    if (!issueOpen || issue.mode === 'etc' || !id) {
+    /* ★ **대상월이 정해지기 전에는 부르지 않는다.** 입학 모드는 입학일을 고르기 전까지
+       `month` 가 빈 값이라 **400 이 난다** — 화면에는 아무 일도 안 일어나는데 점검
+       리포트에는 400 으로 올라간다(실제로 그랬다) */
+    const month = issue.mode === 'monthly' ? issue.month : issue.admissionDate.slice(0, 7)
+    if (!issueOpen || issue.mode === 'etc' || !id || month.length !== 7) {
       setBreakdown(null)
       return
     }
     let cancelled = false
     previewTuitionBilling({
       enrollmentId: id,
-      month: issue.mode === 'monthly' ? issue.month : issue.admissionDate.slice(0, 7),
+      month,
       seatType: issue.seatType,
       discountRate: issue.discountRate.trim() === '' ? undefined : Number(issue.discountRate),
       remainingDays:
@@ -2094,6 +2113,10 @@ function Content() {
                   </div>
                 </div>
               </div>
+
+              {/* ★ 일할이 실제로 어떻게 계산됐는지(1016 피드백 2-4). **입학 청구가 바로
+                  일할이라** 여기가 그 근거를 가장 필요로 하는 자리다 */}
+              {breakdown && <BreakdownBox b={breakdown} />}
             </>
           ) : (
             <>
