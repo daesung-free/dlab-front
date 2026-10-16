@@ -157,14 +157,25 @@ function Content() {
   }, [loadLayout])
 
   // 보고 있는 탭의 축으로 미배정을 거른다
+  /* ★ **`academyId` 를 반드시 넘긴다.** `/students` 는 안 넘겨도 400 이 아니라서
+     조용히 **전 지점이 섞여 온다**(CLAUDE.md 3-1). 그러면 본사 계정에서
+     **일산 학생을 분당 사물함에 앉히려다** 「다른 지점 사물함에는 배정할 수 없습니다」로
+     막힌다 — 목록에 보여 놓고 고른 뒤에 막는 꼴이라 왜 안 되는지 알 수가 없다.
+     실제로 그랬다(2026-10-16). 자동 채우기도 같은 목록을 쓰므로 함께 고쳐진다. */
   const params = useMemo(
     () =>
       kind === 'locker'
-        ? { status: 'ENROLLED' as const, unassignedLocker: true }
-        : { status: 'ENROLLED' as const, unassignedSeat: true },
-    [kind],
+        ? { academyId: academyId ?? undefined, status: 'ENROLLED' as const, unassignedLocker: true }
+        : { academyId: academyId ?? undefined, status: 'ENROLLED' as const, unassignedSeat: true },
+    [kind, academyId],
   )
-  const table = useServerTable({ fetcher: searchStudents, params, pageSize: PAGE_SIZE, sortable: SORTABLE })
+  const table = useServerTable({
+    fetcher: searchStudents,
+    params,
+    pageSize: PAGE_SIZE,
+    sortable: SORTABLE,
+    enabled: academyId !== null,
+  })
 
   const total = blocks.reduce((a, b) => a + b.cells.length, 0)
   const used = blocks.reduce((a, b) => a + b.cells.filter((c) => c.occupantEnrollmentId !== null).length, 0)
