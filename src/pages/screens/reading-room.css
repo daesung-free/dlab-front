@@ -20,7 +20,12 @@
 }
 
 .p-rr .rr-map { display: flex; flex-direction: column; gap: 7px; }
-.p-rr .rr-row { display: flex; gap: 6px; align-items: stretch; }
+/* ★ 행마다 열 수가 달라도 **칸 폭이 같아야** 블록 모양이 산다(1016 피드백 B-7).
+   전에는 .rr-seat 가 flex:1 이라 8열 행과 10열 행의 칸 폭이 달라져 **배치가 어긋나 보였다**.
+   이제 행은 고정폭 칸을 왼쪽부터 늘어놓는다 — 빈 좌표는 빈 칸으로 자리를 지킨다(B-5·B-6) */
+.p-rr .rr-row { display: flex; gap: 6px; align-items: stretch; justify-content: flex-start; }
+/* 좌석이 없는 좌표 — 통로·기둥이다. 자리만 차지하고 아무것도 그리지 않는다 */
+.p-rr .rr-gap { width: 62px; flex: 0 0 62px; }
 .p-rr .rr-rowno {
   width: 24px;
   flex-shrink: 0;
@@ -39,8 +44,9 @@
 }
 
 .p-rr .rr-seat {
-  flex: 1;
-  min-width: 62px;
+  /* ★ 고정폭이다. `flex: 1` 로 두면 행마다 폭이 달라져 블록이 무너진다(B-7) */
+  flex: 0 0 62px;
+  width: 62px;
   border: 1px solid var(--line);
   border-radius: 9px;
   background: #fff;
