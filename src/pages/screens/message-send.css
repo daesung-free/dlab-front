@@ -1,0 +1,51 @@
+/* 알림 발송 — 발송 대상 고르기(지점 → 반 → 학생)
+ *
+ * ★ 학생 목록은 **스크롤 상자**에 가둔다. 한 지점이 200명이면 폼이 통째로 밀려
+ *   아래 「발송」 버튼이 화면 밖으로 나간다 — 눌러야 할 것이 안 보인다.
+ */
+
+.pick-list {
+  max-height: 232px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 4px;
+}
+
+.pick-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.pick-row:hover {
+  background: var(--line-2);
+}
+
+/* 고른 줄 — 스크롤 상자라 **어디까지 골랐는지**가 한눈에 보여야 한다 */
+.pick-row.on {
+  background: var(--mint-wash);
+  color: var(--mint-d, var(--mint));
+  font-weight: 600;
+}
+
+.pick-row input {
+  flex: 0 0 auto;
+}
+
+/* 글자만 있는 버튼 — 「모두 해제」처럼 폼 안에 끼는 작은 동작 */
+.lnk {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--mint);
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+}
