@@ -74,6 +74,14 @@ export interface ReceiptRow {
   dueDate: string | null
   status: string
   payments: PaymentView[]
+  /**
+   * 청구를 이루는 항목(2026-10-16 추가 — 1016 피드백 1-4).
+   *
+   * ★ **옵션이다.** 화면이 서버보다 먼저 배포되면 `undefined` 로 온다.
+   * ★ **빈 배열이 정상인 청구가 있다**(급식·특강처럼 나눌 것이 없는 것) — 그때는
+   *   청구 금액이 곧 단일 항목이라 펼칠 것이 없다.
+   */
+  items?: BillingItem[]
 }
 
 export interface ReceiptSummary {

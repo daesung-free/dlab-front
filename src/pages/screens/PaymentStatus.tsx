@@ -38,6 +38,7 @@ import { useAcademy } from '../../auth/AcademyContext'
 import {
   BILLING_STATUS_LABEL,
   paymentLabel,
+  BILLING_ITEM_LABEL,
   BILLING_TYPE_LABEL,
   PAY_METHOD_LABEL,
   createBilling,
@@ -901,6 +902,51 @@ function Content() {
     }
   }
 
+  /* ★ **청구를 이루는 항목을 펼쳐 보여준다**(1016 피드백 1-4).
+     > 「일괄 또는 일할결제 시 독서실비/교습비가 따로 보일 수 있도록」
+     ★ **할인이 항목마다 다르다.** 합계 한 줄만 보면 교습비에만 붙은 할인을
+       데스크가 **독서실비도 깎인 것으로** 읽는다.
+     ★ **정가(`suppliedAmount`)를 함께 보여준다.** 퇴원 환불 차감이 **정상가 기준**이라
+       그 값이 있어야 되짚을 수 있다.
+     ★ 항목이 없는 청구(급식·특강)는 `undefined` 를 돌려 **펼치기 단추도 안 그린다** —
+       나눌 것이 없는데 단추만 있으면 눌러도 아무 일이 없는 것처럼 보인다. */
+  const renderBillingItems = useCallback((r: ReceiptRow) => {
+    const items = r.items ?? []
+    if (items.length < 2) return undefined
+    return (
+      <table className="mini-tbl">
+        <thead>
+          <tr>
+            <th>항목</th>
+            <th style={{ textAlign: 'right' }}>정가</th>
+            <th style={{ textAlign: 'right' }}>할인</th>
+            <th style={{ textAlign: 'right' }}>청구액</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((it) => (
+            <tr key={it.id}>
+              <td>
+                {BILLING_ITEM_LABEL[it.itemType] ?? it.itemType}
+                {/* 서버가 알려준다 — 화면이 「독서실비는 할인 없음」을 코드로 들지 않는다 */}
+                {!it.discountable && (
+                  <span className="mk supplement" style={{ marginLeft: 6 }}>
+                    할인 없음
+                  </span>
+                )}
+              </td>
+              <td style={{ textAlign: 'right' }}>{wonOf(it.suppliedAmount)}</td>
+              <td style={{ textAlign: 'right', color: it.discountAmount > 0 ? 'var(--red)' : undefined }}>
+                {it.discountAmount > 0 ? `-${wonOf(it.discountAmount)}` : '-'}
+              </td>
+              <td style={{ textAlign: 'right', fontWeight: 700 }}>{wonOf(it.billedAmount)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )
+  }, [])
+
   /** 표 끝에 붙는 행 액션. 모듈 상수 COLUMNS 는 그대로 두고 여기서만 더한다 */
   const columnsWithAct: Column<ReceiptRow>[] = useMemo(
     () => [
@@ -1259,6 +1305,7 @@ function Content() {
             <DataTable
               nowrap
               columns={columnsWithAct}
+              renderExpanded={renderBillingItems}
               rows={filtered}
               rowKey={(r) => String(r.billingId)}
               masked={masked}

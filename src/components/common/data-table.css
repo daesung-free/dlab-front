@@ -97,3 +97,29 @@
 .dt tbody tr.on .stk { background: var(--mint-wash); }
 /* 마지막 고정 칸 오른쪽에 그림자 — 여기서부터 밀린다는 표시 */
 .dt .stk-last { box-shadow: 6px 0 6px -6px rgba(15, 23, 42, 0.18); }
+
+/* 행 펼치기 (1016 피드백 1-4 — 수납현황의 교습비·독서실비 두 줄)
+ *
+ * ★ 단추를 **첫 칸 안에** 넣는다. 열을 따로 만들면 46개 화면의 폭 계산이 전부 어긋난다.
+ */
+
+.dt-exp {
+  background: none;
+  border: 0;
+  padding: 0 4px 0 0;
+  margin-right: 2px;
+  cursor: pointer;
+  color: var(--muted);
+  vertical-align: middle;
+  line-height: 1;
+}
+
+.dt-exp:hover {
+  color: var(--mint);
+}
+
+/* 펼쳐진 줄 — 본문과 **다른 바탕**이라야 어느 행에 딸린 것인지 보인다 */
+.dt-exp-row > td {
+  background: var(--bg-2, #fafbfc);
+  padding: 10px 14px;
+}
