@@ -17,6 +17,7 @@ import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
 import {
   PAY_METHOD_CODE_LABEL,
+  PAY_METHOD_SELECTABLE,
   createPaymentRequest,
   issueVbank,
   recordTerminalPayment,
@@ -1563,12 +1564,14 @@ function Content() {
                     value={payReq.payMethod}
                     onChange={(e) => setPayReq({ ...payReq, payMethod: e.target.value as PayMethodCode })}
                   >
-                    {(Object.keys(PAY_METHOD_CODE_LABEL) as PayMethodCode[]).map((m) => (
+                    {PAY_METHOD_SELECTABLE.map((m) => (
                       <option key={m} value={m}>
                         {PAY_METHOD_CODE_LABEL[m]}
                       </option>
                     ))}
                   </select>
+                  {/* 왜 둘뿐인지 적는다 — 전에 넷이던 것을 아는 사람이 「없어졌다」고 묻는다 */}
+                  <div className="hint">카드 결제창에서 네이버페이·카카오페이도 쓸 수 있습니다.</div>
                 </div>
               </div>
               <div className="frow">

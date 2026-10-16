@@ -16,12 +16,22 @@ import { request } from './client'
 /** CARD 카드 · BANK 계좌이체 · MOBX 휴대폰 · VCNT 가상계좌 */
 export type PayMethodCode = 'CARD' | 'BANK' | 'MOBX' | 'VCNT'
 
+/* ★ **라벨은 4종을 그대로 둔다.** KCP 규격 값이고 **과거 데이터가 가리킬 수 있어서**,
+   여기서 지우면 옛 건이 코드 그대로 보인다. */
 export const PAY_METHOD_CODE_LABEL: Record<PayMethodCode, string> = {
   CARD: '카드',
   BANK: '계좌이체',
   MOBX: '휴대폰',
   VCNT: '가상계좌',
 }
+
+/* ★ **새로 고를 수 있는 것은 둘뿐이다**(2026-10-16 결제업체 미팅에서 온라인 MID 확정 —
+   신용카드·네이버페이·카카오페이·가상계좌). **계좌이체와 휴대폰은 가맹에 열려 있지
+   않아** 고르면 결제창에서 막힌다 — 화면에 두면 「되는 줄 알고 보냈는데 안 되는」 링크가
+   나간다. 디랩도 9쪽에서 계좌이체를 빼라고 했다(1016 피드백 2-7).
+   ★ 네이버페이·카카오페이는 **카드 결제창 안의 간편결제**로 열린다. 별도 선택지가
+   필요한지는 PG 확인 전이라 만들지 않는다. */
+export const PAY_METHOD_SELECTABLE: PayMethodCode[] = ['CARD', 'VCNT']
 
 export interface PaymentRequestRow {
   id: number
