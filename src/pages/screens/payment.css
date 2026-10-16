@@ -48,3 +48,38 @@
 .p-pay .crow.final b { font-size: 18px; letter-spacing: -0.03em; color: var(--mint-d); }
 .p-pay .crow.sub { font-size: 11.5px; color: var(--muted); background: var(--mint-soft); }
 .p-pay .crow.sub b { color: var(--ink-2); font-size: 12px; }
+
+/* 현금영수증 모달의 발급 내역 표 (1016 피드백 1-2)
+ *
+ * ★ **취소분도 함께 나온다.** 취소해도 행이 남는 것은 「발급한 적 없음」과 구분하기
+ *   위해서다 — 국세청 신고 내역과 대조해야 한다.
+ */
+
+.mini-tbl {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 7px;
+  font-size: 12px;
+}
+
+.mini-tbl th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--muted);
+  font-size: 11.5px;
+  padding: 5px 7px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.mini-tbl td {
+  padding: 6px 7px;
+  border-bottom: 1px solid var(--line-2);
+  vertical-align: middle;
+}
+
+/* 금액·승인번호는 자릿수를 맞춰야 대조가 된다 */
+.mini-tbl td:nth-child(3),
+.mini-tbl td:nth-child(4) {
+  font-variant-numeric: tabular-nums;
+}

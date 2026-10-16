@@ -16,6 +16,16 @@ import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
 import {
+  cancelCashReceipt,
+  issueCashReceipt,
+  listCashReceipts,
+  RECEIPT_ID_LABEL,
+  RECEIPT_PURPOSE_LABEL,
+  RECEIPT_STATUS_LABEL,
+  type CashReceipt,
+  type ReceiptPurpose,
+} from '../../api/cashReceipts'
+import {
   PAY_METHOD_CODE_LABEL,
   PAY_METHOD_SELECTABLE,
   createPaymentRequest,
@@ -577,6 +587,92 @@ function Content() {
   } | null>(null)
   const [payReqDone, setPayReqDone] = useState<PaymentRequestRow | null>(null)
   const [cancelRow, setCancelRow] = useState<ReceiptRow | null>(null)
+
+  /* ── 현금영수증(1016 피드백 1-2) ──────────────────────────
+   * 서버는 완성돼 있었는데 **화면이 없어 아무도 못 쓰고 있었다.**
+   * ★ **수납 건마다** 낸다(`transactionId`). 청구 단위가 아니다 — 한 청구를 나눠 받으면
+   *   영수증도 건별로 나간다. 그래서 어느 수납 건인지 **고르게** 한다.
+   * ★ 발급분과 취소분을 **함께** 보여준다. 취소해도 행이 남는 것은 「발급한 적 없음」과
+   *   구분하기 위해서다 — 신고 내역과 대조해야 한다. */
+  const [rcp, setRcp] = useState<{
+    row: ReceiptRow
+    list: CashReceipt[] | null
+    txId: string
+    purpose: ReceiptPurpose
+    idInfo: string
+    busy: boolean
+    err: string | null
+  } | null>(null)
+
+  const openReceipt = useCallback((row: ReceiptRow) => {
+    /* 카드 수납은 대상이 아니라 고르는 목록에서도 뺀다 */
+    const first = row.payments.find((p) => p.method !== 'CARD')
+    setRcp({
+      row,
+      list: null,
+      txId: first ? String(first.id) : '',
+      purpose: 'PERSONAL',
+      idInfo: '',
+      busy: false,
+      err: null,
+    })
+    listCashReceipts(row.billingId)
+      .then((v) => setRcp((c) => (c && c.row.billingId === row.billingId ? { ...c, list: v } : c)))
+      .catch((e) =>
+        setRcp((c) =>
+          c && c.row.billingId === row.billingId
+            ? { ...c, list: [], err: e instanceof ApiError ? e.message : '영수증을 불러오지 못했습니다.' }
+            : c,
+        ),
+      )
+  }, [])
+
+  async function runIssueReceipt() {
+    if (rcp === null || rcp.txId === '' || rcp.idInfo.trim() === '') return
+    setRcp({ ...rcp, busy: true, err: null })
+    try {
+      await issueCashReceipt({
+        transactionId: Number(rcp.txId),
+        purpose: rcp.purpose,
+        idInfo: rcp.idInfo.replace(/[^0-9]/g, ''),
+      })
+      const list = await listCashReceipts(rcp.row.billingId)
+      setRcp((c) => (c ? { ...c, list, busy: false, idInfo: '' } : c))
+    } catch (err) {
+      /* ★ 「카드사가 소득공제를 처리합니다」처럼 **담당자가 고칠 수 있는** 문구는 그대로 쓴다.
+         ★ 다만 `PG_SITE_NOT_FOUND` 는 **우리 사정**이다 — 결제업체 등록이 안 끝난 것이라
+           담당자가 할 수 있는 일이 없다. 「사이트코드」를 그대로 보여주면 데스크가 무엇을
+           잘못했나 찾게 된다(CLAUDE.md 1-1) */
+      setRcp((c) =>
+        c
+          ? {
+              ...c,
+              busy: false,
+              err:
+                err instanceof ApiError
+                  ? err.code === 'PG_SITE_NOT_FOUND'
+                    ? '현금영수증 발급은 아직 준비 중입니다.'
+                    : err.message
+                  : '발급하지 못했습니다.',
+            }
+          : c,
+      )
+    }
+  }
+
+  async function runCancelReceipt(id: number) {
+    if (rcp === null) return
+    setRcp({ ...rcp, busy: true, err: null })
+    try {
+      await cancelCashReceipt(id)
+      const list = await listCashReceipts(rcp.row.billingId)
+      setRcp((c) => (c ? { ...c, list, busy: false } : c))
+    } catch (err) {
+      setRcp((c) =>
+        c ? { ...c, busy: false, err: err instanceof ApiError ? err.message : '취소하지 못했습니다.' } : c,
+      )
+    }
+  }
   const [actBusy, setActBusy] = useState(false)
   const [actErr, setActErr] = useState<string | null>(null)
   const [actDone, setActDone] = useState<string | null>(null)
@@ -850,6 +946,22 @@ function Content() {
             >
               결제
             </button>
+            {/* ★ **현금영수증은 카드 수납에 못 낸다** — 카드사가 소득공제를 처리한다.
+                서버가 400 으로 막으므로 **아예 안 띄운다.** 띄워 두면 눌러보고 거절당한다.
+                계좌이체·가상계좌·현금 수납이 있는 행에만 보인다(1016 피드백 1-2) */}
+            {r.payments.some((p) => p.method !== 'CARD') && (
+              <button
+                className="btn"
+                style={{ padding: '4px 9px', fontSize: 11.5 }}
+                title="현금영수증 발급·취소"
+                onClick={() => {
+                  setActErr(null)
+                  openReceipt(r)
+                }}
+              >
+                현금영수증
+              </button>
+            )}
             <button
               className="btn"
               style={{ padding: '4px 9px', fontSize: 11.5, color: 'var(--red)' }}
@@ -864,7 +976,7 @@ function Content() {
         ),
       },
     ],
-    [],
+    [openReceipt],
   )
 
   const sum = useMemo(() => {
@@ -1761,6 +1873,135 @@ function Content() {
       )}
 
       {/* ── 청구 취소 ── */}
+      {rcp && (
+        <Modal
+          wide
+          title={`${rcp.row.studentName} · ${rcp.row.name} — 현금영수증`}
+          sub="카드 수납은 카드사가 소득공제를 처리하므로 대상이 아닙니다."
+          confirmLabel="발급"
+          busy={rcp.busy}
+          confirmDisabled={rcp.txId === '' || rcp.idInfo.trim() === ''}
+          error={rcp.err}
+          onConfirm={() => void runIssueReceipt()}
+          onClose={() => setRcp(null)}
+        >
+          {/* ── 이미 낸 것 ── */}
+          <div style={{ marginBottom: 14 }}>
+            <b style={{ fontSize: 12.5 }}>발급 내역</b>
+            {rcp.list === null ? (
+              <div className="hint">불러오는 중…</div>
+            ) : rcp.list.length === 0 ? (
+              <div className="hint">아직 발급한 현금영수증이 없습니다.</div>
+            ) : (
+              <table className="mini-tbl">
+                <thead>
+                  <tr>
+                    <th>용도</th>
+                    <th>번호</th>
+                    <th style={{ textAlign: 'right' }}>금액</th>
+                    <th>국세청 승인번호</th>
+                    <th>상태</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {rcp.list.map((c) => (
+                    <tr key={c.id}>
+                      <td>{c.purpose ? RECEIPT_PURPOSE_LABEL[c.purpose] : '-'}</td>
+                      <td>{c.idInfo ?? '-'}</td>
+                      <td style={{ textAlign: 'right' }}>{wonOf(c.amount)}</td>
+                      {/* 국세청 조회·신고 대조에 쓰는 값이라 그대로 보여준다 */}
+                      <td>{c.cashNo ?? '-'}</td>
+                      <td>
+                        <span
+                          className={`mk ${c.status === 'ISSUED' ? 'verified' : c.status === 'CANCELED' ? 'supplement' : 'brandnew'}`}
+                        >
+                          {RECEIPT_STATUS_LABEL[c.status] ?? c.status}
+                        </span>
+                        {c.status === 'FAILED' && c.failReason && (
+                          <div className="hint">{c.failReason}</div>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        {c.status === 'ISSUED' && (
+                          <button
+                            type="button"
+                            className="btn"
+                            style={{ padding: '3px 8px', fontSize: 11.5, color: 'var(--red)' }}
+                            disabled={rcp.busy}
+                            onClick={() => void runCancelReceipt(c.id)}
+                          >
+                            취소
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* ── 새로 내기 ── */}
+          <div className="frow">
+            <label className="req">수납 건</label>
+            <div>
+              <select className="sel" value={rcp.txId} onChange={(e) => setRcp({ ...rcp, txId: e.target.value })}>
+                {rcp.row.payments
+                  .filter((p) => p.method !== 'CARD')
+                  .map((p) => (
+                    <option key={p.id} value={String(p.id)}>
+                      {(p.paidAt ?? '').slice(0, 10)} · {PAY_METHOD_LABEL[p.method] ?? p.method} · {wonOf(p.amount)}
+                    </option>
+                  ))}
+              </select>
+              {/* ★ 청구가 아니라 수납 건에 붙는다 — 나눠 받으면 영수증도 건별이다 */}
+              <div className="hint">한 청구를 나눠 받았다면 받은 건마다 따로 냅니다.</div>
+            </div>
+          </div>
+
+          <div className="frow">
+            <label className="req">용도</label>
+            <div className="type-picks">
+              {(['PERSONAL', 'BUSINESS'] as ReceiptPurpose[]).map((k) => (
+                <button
+                  type="button"
+                  key={k}
+                  className={`type-pick${rcp.purpose === k ? ' on' : ''}`}
+                  onClick={() => setRcp({ ...rcp, purpose: k, idInfo: '' })}
+                >
+                  {RECEIPT_PURPOSE_LABEL[k]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="frow">
+            <label className="req">{RECEIPT_ID_LABEL[rcp.purpose]}</label>
+            <div>
+              <input
+                className="inp"
+                value={rcp.idInfo}
+                placeholder={rcp.purpose === 'PERSONAL' ? '010-0000-0000' : '000-00-00000'}
+                onChange={(e) => setRcp({ ...rcp, idInfo: e.target.value })}
+              />
+              <div className="hint">
+                {rcp.purpose === 'PERSONAL'
+                  ? '학부모 휴대폰번호로 소득공제가 잡힙니다.'
+                  : '사업자등록번호로 지출증빙이 발급됩니다.'}
+              </div>
+            </div>
+          </div>
+
+          <div className="note-box">
+            <div>
+              부가세는 자동으로 나뉘어 기록됩니다. <b>취소해도 내역은 남습니다</b> — 국세청 신고 내역과
+              대조할 수 있어야 하기 때문입니다.
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {cancelRow && (
         <Modal
           title="청구 취소"
