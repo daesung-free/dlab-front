@@ -232,10 +232,19 @@ function Content() {
     if (classesVer > 0) void loadClasses()
   }, [classesVer, loadClasses])
 
-  // 재원생 중 반이 없는 학생만. 서버가 걸러주므로 전체 명단이 맞다
+  /* ★ 아래 표가 **고른 칸을 따라간다**(1016 피드백 A-5). 전에는 반을 눌러도 미배정 학생만
+     나왔다 — 「오른쪽에 미배정 보드가 따로 있는데 반을 눌러도 미배정이 나온다」는 지적이다.
+     `null` 이면 미배정, 숫자면 그 반이다 */
+  const [viewClassId, setViewClassId] = useState<number | null>(null)
+
+  /* ⚠️ `classId` 와 `unassignedClass` 를 **같이 보내면 400** 이다(students.ts 주석) —
+     모순된 조건이라 서버가 거절한다. 하나만 보낸다 */
   const params = useMemo(
-    () => ({ status: 'ENROLLED' as const, unassignedClass: true, academyId: academyId ?? undefined }),
-    [academyId],
+    () =>
+      viewClassId === null
+        ? { status: 'ENROLLED' as const, unassignedClass: true, academyId: academyId ?? undefined }
+        : { status: 'ENROLLED' as const, classId: viewClassId, academyId: academyId ?? undefined },
+    [academyId, viewClassId],
   )
   const table = useServerTable({ fetcher: searchStudents, params, pageSize: PAGE_SIZE, sortable: SORTABLE, enabled: academyReady })
 
@@ -525,10 +534,12 @@ function Content() {
             role="button"
             tabIndex={0}
             style={{ cursor: 'pointer' }}
-            title="누르면 이름·정원·담임을 고치거나 반을 지울 수 있습니다"
-            onClick={() => openEdit(c)}
+            /* ★ 카드를 누르면 **아래 명단이 그 반으로 바뀐다**(A-5). 반 수정은 「관리」 버튼으로
+                 옮겼다 — 명단을 보려고 누를 때마다 수정 모달이 뜨면 일이 끊긴다 */
+            title="누르면 아래에 이 반 학생이 보입니다"
+            onClick={() => setViewClassId(c.id)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') openEdit(c)
+              if (e.key === 'Enter' || e.key === ' ') setViewClassId(c.id)
             }}
           >
             <div className="l">
@@ -553,31 +564,42 @@ function Content() {
               }`}
             >
               담임 {c.homeroomTeacherName ?? '미지정'}
-              {/* ★ 카드 전체가 '반 관리' 열기라 전파를 막는다 — 안 막으면 두 모달이 겹친다 */}
+              {/* ★ 카드 클릭이 명단 전환이라 전파를 막는다 — 안 막으면 누를 때마다 명단도 바뀐다 */}
               <button
                 className="btn"
                 style={{ marginLeft: 6, padding: '1px 6px', fontSize: 10 }}
-                title="이 반에 지금 누가 있는지 봅니다"
+                title="이름·정원·담임을 고치거나 반을 지웁니다"
                 onClick={(e) => {
                   e.stopPropagation()
-                  void openMembers(c)
+                  openEdit(c)
                 }}
               >
-                명단
+                관리
               </button>
               {/* 강의실은 기초 관리 > 반에서 지정한다(2026-09-21 추가) */}
               {c.roomName ? ` · ${c.roomName}` : ''}
             </div>
           </div>
         ))}
-        <div className="stat">
+        {/* ★ 미배정도 **누르는 칸**이다 — 반을 보다가 돌아올 길이 있어야 한다 */}
+        <div
+          className="stat"
+          role="button"
+          tabIndex={0}
+          style={{ cursor: 'pointer', outline: viewClassId === null ? '2px solid var(--mint)' : undefined }}
+          title="누르면 아래에 미배정 학생이 보입니다"
+          onClick={() => setViewClassId(null)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') setViewClassId(null)
+          }}
+        >
           <div className="l">
             <Icon name="user-plus" size={13} /> 미배정
           </div>
           <div className="v" style={{ color: 'var(--amber)' }}>
-            {table.totalElements}
+            {viewClassId === null ? table.totalElements : '—'}
           </div>
-          <div className="d warn">배정 필요</div>
+          <div className="d warn">{viewClassId === null ? '배정 필요' : '눌러서 보기'}</div>
         </div>
       </div>
 
@@ -661,12 +683,20 @@ function Content() {
         onSelectedChange={setSelected}
         loading={table.loading}
         serverPaging={table.serverPaging}
+        /* ★ 무엇을 보고 있는지 표에도 적는다 — 칸만 눌러 바뀌면 **어느 명단인지 모른다** */
         countLabel={
-          <>
-            미배정 학생 <b>{table.totalElements}</b>명
-          </>
+          viewClassId === null ? (
+            <>
+              미배정 학생 <b>{table.totalElements}</b>명
+            </>
+          ) : (
+            <>
+              <b>{classes.find((c) => c.id === viewClassId)?.name ?? '반'}</b> 학생{' '}
+              <b>{table.totalElements}</b>명
+            </>
+          )
         }
-        emptyText="미배정 학생이 없습니다."
+        emptyText={viewClassId === null ? '미배정 학생이 없습니다.' : '이 반에 배정된 학생이 없습니다.'}
       />
     </>
   )

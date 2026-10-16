@@ -194,13 +194,19 @@ function Content() {
 
   const maxRow = seats.reduce((a, s) => Math.max(a, s.row), 0)
   const maxCol = seats.reduce((a, s) => Math.max(a, s.col), 0)
-  const half = Math.ceil(maxCol / 2)
 
-  const rows = useMemo(
-    () =>
-      Array.from({ length: maxRow }, (_, i) => seats.filter((s) => s.row === i + 1).sort((a, b) => a.col - b.col)),
-    [seats, maxRow],
-  )
+  /* ★ **좌표 그대로 찍는다**(1016 피드백 B-5·B-6). 전에는 그 행의 좌석을 모아 **촘촘히 흘려**
+     그려서, 좌석이 1·2·5·6열에 있어도 화면엔 네 칸이 **붙어** 나왔다 — 등록 화면에서 빼 둔
+     통로·기둥이 배치도에서 사라지는 원인이었다(「등록화면과 좌석배치도가 불일치」).
+     이제 빈 좌표는 **빈 칸(`rr-gap`)으로 자리를 지킨다** — 통로는 「그리는 것」이 아니라
+     「좌석이 없는 자리」다. */
+  const grid = useMemo(() => {
+    const at = new Map<string, (typeof seats)[number]>()
+    for (const s of seats) at.set(`${s.row}:${s.col}`, s)
+    return Array.from({ length: maxRow }, (_, r) =>
+      Array.from({ length: maxCol }, (_, c) => at.get(`${r + 1}:${c + 1}`) ?? null),
+    )
+  }, [seats, maxRow, maxCol])
 
   const assignRows: AssignRow[] = useMemo(
     () =>
@@ -384,19 +390,23 @@ function Content() {
                       : '좌석 구역이 없습니다.'}
                 </div>
               ) : (
-                <div className="rr-stage">
+                /* ★ `data-print` 가 붙은 영역만 인쇄된다(print.css) — 전에는 사이드바·지표까지
+                     **페이지 전체**가 나왔다(B-11, 9/28 에도 같은 요청) */
+                <div className="rr-stage" data-print>
                   <div className="rr-front">관 리 자 데 스 크 · 출 입 구</div>
                   <div className="rr-map">
-                    {rows.map((rowSeats, ri) => (
+                    {/* ★ 가운데에 **가짜 통로**를 넣던 것을 없앴다 — 실제 통로 위치와 무관하게
+                           늘 한가운데 들어가서, 통로가 두 개인 구역에서도 하나만 보였다 */}
+                    {grid.map((rowCells, ri) => (
                       <div className="rr-row" key={ri}>
                         <span className="rr-rowno">{ri + 1}</span>
-                        {rowSeats.slice(0, half).map((s) => (
-                          <SeatBox key={s.seatId} seat={s} selected={selectedSeatId} onSelect={setSelectedSeatId} />
-                        ))}
-                        <span className="rr-aisle" />
-                        {rowSeats.slice(half).map((s) => (
-                          <SeatBox key={s.seatId} seat={s} selected={selectedSeatId} onSelect={setSelectedSeatId} />
-                        ))}
+                        {rowCells.map((s, ci) =>
+                          s === null ? (
+                            <span className="rr-gap" key={`g${ci}`} />
+                          ) : (
+                            <SeatBox key={s.seatId} seat={s} selected={selectedSeatId} onSelect={setSelectedSeatId} />
+                          ),
+                        )}
                       </div>
                     ))}
                   </div>
