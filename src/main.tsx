@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter, HashRouter } from 'react-router-dom'
 import App from './App'
 import './styles/base.css'
+import './styles/print.css'
 
 /**
  * offline 빌드(npm run build:offline)는 file:// 에서 열리므로 history API를 쓸 수 없다.

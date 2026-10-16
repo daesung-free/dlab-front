@@ -85,3 +85,90 @@
   .frow > label { padding-top: 0; }
   .two { grid-template-columns: 1fr; }
 }
+
+/* 모달 안의 작은 표 — 현금영수증 발급 내역 · 급식비 청구에서 빠진 명단 등.
+ *
+ * ★ `DataTable` 을 쓰지 않는다. 모달 안에서는 페이저·정렬·엑셀이 필요 없고,
+ *   그 폭에 맞추면 열이 눌려 읽히지 않는다.
+ */
+
+.mini-tbl {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 7px;
+  font-size: 12px;
+}
+
+.mini-tbl th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--muted);
+  font-size: 11.5px;
+  padding: 5px 7px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.mini-tbl td {
+  padding: 6px 7px;
+  border-bottom: 1px solid var(--line-2);
+  vertical-align: middle;
+}
+
+/* 숫자는 자릿수를 맞춰야 대조가 된다 */
+.mini-tbl td:nth-child(3),
+.mini-tbl td:nth-child(4) {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 모달 안에서 여러 개를 골라야 할 때 — 설문 대상자 · 교습비 일괄 청구 등.
+ *
+ * ★ **스크롤 상자에 가둔다.** 한 지점이 200명이면 폼이 통째로 밀려 아래 확인 버튼이
+ *   화면 밖으로 나간다 — 눌러야 할 것이 안 보인다.
+ */
+
+.pick-list {
+  max-height: 232px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 4px;
+}
+
+.pick-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.pick-row:hover {
+  background: var(--line-2);
+}
+
+/* 고른 줄 — 스크롤 상자라 **어디까지 골랐는지**가 한눈에 보여야 한다 */
+.pick-row.on {
+  background: var(--mint-wash);
+  color: var(--mint-d, var(--mint));
+  font-weight: 600;
+}
+
+.pick-row input {
+  flex: 0 0 auto;
+}
+
+/* 글자만 있는 버튼 — 「모두 해제」처럼 폼 안에 끼는 작은 동작 */
+.lnk {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--mint);
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+}

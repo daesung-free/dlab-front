@@ -12,6 +12,7 @@ import {
   deleteBuilding,
   deleteSeatArea,
   deleteSeatMaster,
+  deleteSeatMasters,
   listBuildings,
   listSeatAreas,
   listSeatMasters,
@@ -76,6 +77,7 @@ export function SeatSetup({ onChanged }: Props) {
   const [modalError, setModalError] = useState<string | null>(null)
   /* 삭제는 한 번 묻는다 — 누르자마자 지워졌고, 좌석을 지우면 배치도에 구멍이 남는다 */
   const [delAsk, setDelAsk] = useState<{ title: string; sub: string; run: () => Promise<unknown> } | null>(null)
+
 
   const load = useCallback(async () => {
     if (academyId === null) {
@@ -240,6 +242,11 @@ export function SeatSetup({ onChanged }: Props) {
               sub: '되돌릴 수 없습니다. 배치도에서 그 자리가 빈칸으로 남습니다.',
               run: () => deleteSeatMaster(s.id),
             })
+          }
+          /* ★ 확인 모달은 **단건과 같은 것을 쓴다.** 일괄만 다른 길로 지우면
+             「되돌릴 수 없습니다」를 한쪽에서만 보게 된다 */
+          onBulkDelete={(title, sub, seatIds) =>
+            setDelAsk({ title, sub, run: () => deleteSeatMasters(areaId!, seatIds) })
           }
         />
       )}
@@ -669,6 +676,7 @@ function SeatTab({
   onAdd,
   onPickSpot,
   onDelete,
+  onBulkDelete,
 }: {
   areas: SeatArea[]
   areaId: number | null
@@ -679,7 +687,17 @@ function SeatTab({
   onAdd: () => void
   onPickSpot: (xPos: number, yPos: number) => void
   onDelete: (s: SeatMaster) => void
+  /** `seatIds` 가 비면 그 구역 전체(= 초기화) */
+  onBulkDelete: (title: string, sub: string, seatIds: number[]) => void
 }) {
+  /* ★ 좌석 다중 선택(1016 피드백 B-4). `DataTable` 체크박스는 **제어 컴포넌트**라
+     `selected` 와 `onSelectedChange` 를 같이 줘야 눌린다(CLAUDE.md 5-1) */
+  const [picked, setPicked] = useState<string[]>([])
+
+  /* 구역을 옮기면 비운다 — 안 비우면 **다른 구역에서 고른 좌석이 일괄 삭제에 섞인다** */
+  useEffect(() => {
+    setPicked([])
+  }, [areaId])
   const columns: Column<SeatMaster>[] = [
     { key: 'seatCd', header: '좌석번호', width: '110px', value: (s) => s.seatCd },
     {
@@ -737,6 +755,40 @@ function SeatTab({
           <button type="button" className="btn pri" style={SMALL_BTN} disabled={areaId === null} onClick={onAdd}>
             격자로 만들기
           </button>
+          {/* ★ 일괄 삭제·초기화(B-4). 단건을 N번 부르면 92석 구역에서 **중간에 실패했을 때
+              절반만 지워진 배치도**가 남는다 — 무엇이 남았는지 사람이 찾을 수 없다 */}
+          <button
+            type="button"
+            className="btn"
+            style={{ ...SMALL_BTN, color: 'var(--red)' }}
+            disabled={picked.length === 0 || busy}
+            onClick={() => {
+              onBulkDelete(
+                `고른 좌석 ${picked.length}개를 지울까요?`,
+                '되돌릴 수 없습니다. 배정된 좌석이 섞여 있으면 하나도 지워지지 않습니다.',
+                picked.map(Number),
+              )
+              setPicked([])
+            }}
+          >
+            선택 삭제{picked.length > 0 ? ` ${picked.length}` : ''}
+          </button>
+          <button
+            type="button"
+            className="btn"
+            style={{ ...SMALL_BTN, color: 'var(--red)' }}
+            disabled={areaId === null || seats.length === 0 || busy}
+            onClick={() => {
+              onBulkDelete(
+                `${area?.areaNm ?? '이 구역'}의 좌석 ${seats.length}개를 모두 지울까요?`,
+                '되돌릴 수 없습니다. 배정된 좌석이 하나라도 있으면 하나도 지워지지 않습니다.',
+                [],
+              )
+              setPicked([])
+            }}
+          >
+            구역 초기화
+          </button>
         </div>
       </div>
       <div className="card-sec-b">
@@ -747,11 +799,11 @@ function SeatTab({
                 <Icon name="info" size={17} />
               </div>
               <div>
-                <b>빈 칸을 누르면 그 자리에 좌석을 만듭니다.</b> 잘못 지운 자리를 되돌릴 때 쓰세요 — 지웠던 번호를
+                <b>빈 칸을 누르면 좌석을 만들고, 좌석을 누르면 지웁니다.</b> 잘못 지운 자리는 지웠던 번호를
                 그대로 넣으면 <b>그 좌석이 되살아나</b> 예전 배정 이력이 이어집니다.
               </div>
             </div>
-            <SeatSpotMap seats={seats} busy={busy} onPickSpot={onPickSpot} />
+            <SeatSpotMap seats={seats} busy={busy} onPickSpot={onPickSpot} onRemoveSeat={onDelete} />
           </>
         )}
         <DataTable
@@ -759,6 +811,9 @@ function SeatTab({
           rows={seats}
           rowKey={(s) => String(s.id)}
           masked={false}
+          selectable
+          selected={picked}
+          onSelectedChange={setPicked}
           emptyText={areaId === null ? '구역을 먼저 등록하세요.' : '좌석이 없습니다. 격자로 만드세요.'}
         />
       </div>
@@ -781,10 +836,13 @@ function SeatSpotMap({
   seats,
   busy,
   onPickSpot,
+  onRemoveSeat,
 }: {
   seats: SeatMaster[]
   busy: boolean
   onPickSpot: (xPos: number, yPos: number) => void
+  /** ★ **토글이다**(1016 피드백 B-3) — 「만들어진 좌석을 눌러서 지우는 기능도 있었으면」 */
+  onRemoveSeat: (seat: SeatMaster) => void
 }) {
   const maxX = Math.max(...seats.map((s) => s.xPos))
   const maxY = Math.max(...seats.map((s) => s.yPos))
@@ -797,9 +855,18 @@ function SeatSpotMap({
       const seat = byPos.get(`${x}:${y}`)
       cells.push(
         seat ? (
-          <div key={x} className="sgp-cell taken" title={seat.seatNm ?? seat.seatCd}>
+          /* ★ 좌석도 **누르면 지운다**(B-3). 전에는 표까지 내려가 그 줄을 찾아야 했다 —
+             배치도에서 보고 있는데 지우는 자리가 다른 곳에 있으면 눈이 두 번 움직인다 */
+          <button
+            key={x}
+            type="button"
+            className="sgp-cell taken"
+            disabled={busy}
+            onClick={() => onRemoveSeat(seat)}
+            title={`${seat.seatNm ?? seat.seatCd} — 누르면 지웁니다`}
+          >
             {seat.seatCd}
-          </div>
+          </button>
         ) : (
           <button
             key={x}

@@ -210,6 +210,13 @@ export interface paths {
          *
          *      <p>칸마다 <b>실제 적용 강의실</b>(<code>effectiveRoomNo</code>)을 함께 내린다 —
          *      셀 강의실이 비면 반 홈룸이다. 이 판정을 화면에 맡기면 화면마다 다르게 떨어진다.
+         *
+         *      <h2>★★ 담임도 읽는다 — 이게 격자의 <b>본체</b>다</h2>
+         *      교시·강의실·교사만 열고 이것을 막으면 <b>축은 그려지고 내용이 비는</b> 더 헷갈리는
+         *      모양이 된다. 담임에게 `timetable` 메뉴를 열어 둔 이상 함께 열려야 한다.
+         *
+         *      <p>⚠️ <b>편성(`PUT`)·복사(`POST`)는 그대로 막힌다.</b> 담임이 자기 반을 보는 것과
+         *      지점 시간표를 짜는 것은 다른 일이다.
          */
         get: operations["week"];
         /**
@@ -3437,6 +3444,11 @@ export interface paths {
          * @description 양식 목록 — 지점 양식 + 전 지점 공통.
          *
          *      <p>I-17 확정 전에는 <b>공통 한 행만 있는 것이 정상</b>이다.
+         *
+         *      <p>★ <b>담임도 읽는다.</b> 신상기록부 <b>작성은 담임이 하는데</b> 양식을 못 읽으면
+         *      입력 칸이 뜨지 않는다 — 쓰기만 열고 읽기를 막아 둔 셈이었다.
+         *
+         *      <p>⚠️ 양식 <b>등록·수정</b>은 그대로 본사·지점관리자다.
          */
         get: operations["list_1"];
         put?: never;
@@ -3463,8 +3475,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 담당선생님(사감) 목록.
-         * @description 담당선생님(사감) 목록. 반 담임·승인 에스컬레이션 대상이 여기서 나온다.
+         * ★ <b>담임도 읽는다
+         * @description ★ <b>담임도 읽는다.</b> 반 담임 드롭다운과 시간표의 담당 교사 표시에 쓴다.
+         *
+         *      <p>⚠️⚠️ <b>이 메서드 하나만</b> 연다. 이 컨트롤러에는 <b>계정 역할 변경</b>
+         *      (<code>PUT /accounts/&amp;#123;id&amp;#125;/roles</code>)이 있어, 클래스 권한을 넓히면
+         *      <b>담임이 자기 권한을 올릴 수 있다.</b>
          */
         get: operations["teachers"];
         put?: never;
@@ -4048,8 +4064,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 교시 목록.
-         * @description 교시 목록.
+         * ★ <b>담임도 읽는다
+         * @description ★ <b>담임도 읽는다.</b> 시간표 격자의 <b>세로축</b>이라, 이게 막히면 담임이
+         *      시간표를 열었을 때 <b>빈 화면</b>이 뜬다 — 메뉴는 보이는데 쓸 수가 없다.
+         *
+         *      <p>⚠️ <b>읽기만</b> 연다. 클래스 권한을 담임까지 넓히면 <b>교시 마스터를 고칠 수</b>
+         *      있게 되고, 교시는 <b>순공시간 계산의 기준</b>이라 한 지점 전체 통계가 흔들린다.
          */
         get: operations["list_5"];
         put?: never;
@@ -4324,6 +4344,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/notices/students": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 고른 학생들에게 보내는 공지 (요구사항 1-5)
+         * @description 고른 학생들에게 보내는 공지 (요구사항 1-5).
+         *
+         *      <h2>★★ 사람마다 공지를 만들지 않는다</h2>
+         *      「반 내에 해당하는 <b>학생들을</b> 개별 선택하여 발송」이 원문이고 <b>복수</b>다.
+         *      <code>/students/&amp;#123;id&amp;#125;</code> 를 사람 수만큼 부르면 목록에 <b>같은 글이 N개</b> 뜨고,
+         *      오타 하나를 고치려면 <b>N번 고쳐야</b> 하며, 「읽음 몇 명」이 <b>N개로 쪼개진다.</b>
+         *
+         *      <p>⚠️ 담임은 <b>자기 반 학생에게만</b> 보낼 수 있고, 목록에 남의 반 학생이 섞이면
+         *      거절한다 — 한 번만 검사하고 넘기면 자기 반 학생 하나를 끼워 넣어
+         *      <b>전교생에게 보내는</b> 길이 열린다.
+         */
+        post: operations["createForSelected"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/notices/students/{enrollmentId}": {
         parameters: {
             query?: never;
@@ -4592,11 +4641,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 강의실 목록 (F-4
-         * @description 강의실 목록 (F-4.10-1 기초관리).
+         * ★ <b>담임도 읽는다
+         * @description ★ <b>담임도 읽는다.</b> 시간표가 강의실을 고르거나 표시하는 데 쓴다.
          *
-         *      <p><b>자습 구역(<code>/admin/seats</code> 쪽)과 다르다</b> — 자습 구역은 좌석이 속하는
-         *      단위이고 키오스크 계약에 걸려 있다. 여기는 수업 공간이라 키오스크와 무관하다.
+         *      <p>⚠️ <b>이 메서드만</b> 연다 — 이 컨트롤러에는 교습비·장학 같은 <b>돈과 관련된
+         *      마스터</b>가 함께 있어 클래스째 열면 그것까지 보인다.
          */
         get: operations["rooms"];
         put?: never;
@@ -6285,12 +6334,6 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /**
-         * 좌석 삭제(soft)
-         * @description 좌석 삭제(soft).
-         *
-         *      <p>배정 이력이 이 행을 참조하므로 물리 삭제하지 않는다. 배정 중인 좌석은 거부한다.
-         */
         delete: operations["deleteSeat"];
         options?: never;
         head?: never;
@@ -8053,8 +8096,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 그 지점·연도 전체 — 「이 시간에 어느 반이 어디에」를 되짚는 화면용.
+         * 그 지점·연도 전체 — 「이 시간에 어느 반이 어디에」를 되짚는 화면용
          * @description 그 지점·연도 전체 — 「이 시간에 어느 반이 어디에」를 되짚는 화면용.
+         *
+         *      <p>★ <b>담임도 읽는다</b> — 아래 주 단위 조회와 같은 이유다.
          */
         get: operations["year"];
         put?: never;
@@ -8880,7 +8925,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/patrols/marks": {
+    "/api/v1/admin/patrols/seats": {
         parameters: {
             query?: never;
             header?: never;
@@ -8888,10 +8933,63 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 상태 값 목록 — 화면 팔레트가 쓴다.
-         * @description 상태 값 목록 — 화면 팔레트가 쓴다. 문구를 화면에 중복 정의하지 않게 서버가 내린다.
+         * 순찰용 좌석 배치
+         * @description 순찰용 좌석 배치.
+         *
+         *      <h2>★ 배정 정보를 내리지 않는다</h2>
+         *      좌석 화면(<code>/seats/layout</code>)은 <b>배정 상태·좌석이탈 사유·반</b>까지 내리는데,
+         *      그건 <b>배정 관리에 쓰는 값</b>이고 담임 업무가 아니다. 순찰에 필요한 것은
+         *      「지금 누가 어디 앉아 있나」뿐이다.
+         *
+         *      <p>이렇게 나눠 두면 나중에 좌석 화면 권한을 바꿔도 <b>순찰이 따라 흔들리지 않는다.</b>
+         *
+         *      <p>⚠️ 이름은 다른 목록과 같은 규칙으로 마스킹된다 — <code>masked</code> 로 알려준다.
          */
+        get: operations["seats_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/patrols/marks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
         get: operations["marks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/patrols/areas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 순찰용 구역 목록
+         * @description 순찰용 구역 목록.
+         *
+         *      <h2>★ 왜 <code>/seats/areas</code> 를 쓰지 않나</h2>
+         *      좌석 구획(`/api/v1/admin/seats`)은 <b>데스크 업무</b>라 담임에게 닫혀 있다. 그런데
+         *      순찰 화면은 좌석 배치를 읽어 격자를 그리므로, 그대로 두면 <b>화면은 열리고
+         *      좌석표만 비어 있다.</b>
+         *
+         *      <p><b>좌석 구획을 담임에게 열지 않는다.</b> 그러면 독서실 좌석배치·좌석 이탈·
+         *      배정 관리까지 같이 열린다. 순찰이 필요한 것만 여기서 따로 내린다.
+         */
+        get: operations["areas_2"];
         put?: never;
         post?: never;
         delete?: never;
@@ -11828,7 +11926,7 @@ export interface components {
             /** Format: int64 */
             id?: number;
             /** @enum {string} */
-            scope?: "ALL" | "BRANCH" | "CLASS" | "INDIVIDUAL";
+            scope?: "ALL" | "BRANCH" | "CLASS" | "INDIVIDUAL" | "SELECTED";
             /** Format: int64 */
             academyId?: number;
             /** Format: int64 */
@@ -15490,9 +15588,9 @@ export interface components {
             /** @enum {string} */
             event: "MISSING_ATTENDANCE" | "APPROVAL_REQUEST_CREATED" | "APPROVAL_APPROVED_BY_PARENT" | "APPROVAL_APPROVED_AFTER_TIMEOUT" | "APPROVAL_APPROVED_BEFORE_TIMEOUT" | "APPROVAL_REMINDER" | "APPROVAL_HANDED_OVER" | "APPROVAL_APPROVED_BY_STAFF_PRIMARY" | "APPROVAL_APPROVED_BY_ADMIN" | "APPROVAL_REJECTED" | "CONSULT_RESERVED" | "CONSULT_CANCELED";
             /** @enum {string} */
-            channel: "KAKAO_ALIMTALK" | "FCM_PUSH";
+            channel: "KAKAO_ALIMTALK" | "SMS" | "FCM_PUSH";
             /** @enum {string} */
-            recipientType?: "STUDENT" | "PARENT" | "BOTH" | "ROUTED";
+            recipientType?: "STUDENT" | "PARENT" | "BOTH" | "ROUTED" | "ADMIN";
             requiredVariables?: string;
         };
         SubmitReview: {
@@ -15501,6 +15599,12 @@ export interface components {
         ReviewResult: {
             approved: boolean;
             note?: string;
+        };
+        SelectedRequest: {
+            /** @description 받을 학생들. 같은 학생이 두 번 들어와도 한 번만 들어간다 */
+            enrollmentIds: number[];
+            title: string;
+            content: string;
         };
         ContentRequest: {
             title: string;
@@ -16457,6 +16561,8 @@ export interface components {
             homeroomTeacherId?: number;
             /** Format: int32 */
             capacity?: number;
+            /** Format: int32 */
+            examClassNo?: number;
         };
         AssignStudent: {
             /** Format: int64 */
@@ -17409,9 +17515,9 @@ export interface components {
         };
         UpdateMapping: {
             /** @enum {string} */
-            channel?: "KAKAO_ALIMTALK" | "FCM_PUSH";
+            channel?: "KAKAO_ALIMTALK" | "SMS" | "FCM_PUSH";
             /** @enum {string} */
-            recipientType?: "STUDENT" | "PARENT" | "BOTH" | "ROUTED";
+            recipientType?: "STUDENT" | "PARENT" | "BOTH" | "ROUTED" | "ADMIN";
         };
         UpdateContent: {
             titleTemplate: string;
@@ -18167,7 +18273,7 @@ export interface components {
             /** Format: int64 */
             id?: number;
             /** @enum {string} */
-            scope?: "ALL" | "BRANCH" | "CLASS" | "INDIVIDUAL";
+            scope?: "ALL" | "BRANCH" | "CLASS" | "INDIVIDUAL" | "SELECTED";
             title?: string;
             content?: string;
             pinned?: boolean;
@@ -20737,6 +20843,37 @@ export interface components {
          *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
          *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
          */
+        ApiResponseListPatrolSeat: {
+            success?: boolean;
+            data?: components["schemas"]["PatrolSeat"][];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        /** @description 좌석번호·좌표·앉은 학생. 격자를 그리고 표시를 찍는 데 필요한 최소값이다 */
+        PatrolSeat: {
+            /** Format: int64 */
+            seatId?: number;
+            seatCd?: string;
+            /** Format: int32 */
+            xPos?: number;
+            /** Format: int32 */
+            yPos?: number;
+            /** Format: int64 */
+            enrollmentId?: number;
+            studentNo?: string;
+            studentName?: string;
+            masked?: boolean;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
         ApiResponseListMarkView: {
             success?: boolean;
             data?: components["schemas"]["MarkView"][];
@@ -20754,6 +20891,31 @@ export interface components {
              * @enum {string}
              */
             group?: "OK" | "WARN" | "INSIDE" | "BRIEF" | "OUTSIDE";
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseListPatrolArea: {
+            success?: boolean;
+            data?: components["schemas"]["PatrolArea"][];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        /** @description 순찰 화면이 구역을 고르는 데 필요한 것만. 반 연결·좌석 수 같은 관리 정보는 뺀다 */
+        PatrolArea: {
+            /** Format: int64 */
+            id?: number;
+            areaNm?: string;
+            buildingName?: string;
+            /** Format: int32 */
+            sortOrder?: number;
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -20795,7 +20957,7 @@ export interface components {
             /** @enum {string} */
             event?: "MISSING_ATTENDANCE" | "APPROVAL_REQUEST_CREATED" | "APPROVAL_APPROVED_BY_PARENT" | "APPROVAL_APPROVED_AFTER_TIMEOUT" | "APPROVAL_APPROVED_BEFORE_TIMEOUT" | "APPROVAL_REMINDER" | "APPROVAL_HANDED_OVER" | "APPROVAL_APPROVED_BY_STAFF_PRIMARY" | "APPROVAL_APPROVED_BY_ADMIN" | "APPROVAL_REJECTED" | "CONSULT_RESERVED" | "CONSULT_CANCELED";
             /** @enum {string} */
-            channel?: "KAKAO_ALIMTALK" | "FCM_PUSH";
+            channel?: "KAKAO_ALIMTALK" | "SMS" | "FCM_PUSH";
             /** @enum {string} */
             status?: "PENDING" | "SENT" | "FAILED" | "SKIPPED";
             /** Format: int64 */
@@ -20836,7 +20998,7 @@ export interface components {
             /** @enum {string} */
             event?: "MISSING_ATTENDANCE" | "APPROVAL_REQUEST_CREATED" | "APPROVAL_APPROVED_BY_PARENT" | "APPROVAL_APPROVED_AFTER_TIMEOUT" | "APPROVAL_APPROVED_BEFORE_TIMEOUT" | "APPROVAL_REMINDER" | "APPROVAL_HANDED_OVER" | "APPROVAL_APPROVED_BY_STAFF_PRIMARY" | "APPROVAL_APPROVED_BY_ADMIN" | "APPROVAL_REJECTED" | "CONSULT_RESERVED" | "CONSULT_CANCELED";
             /** @enum {string} */
-            channel?: "KAKAO_ALIMTALK" | "FCM_PUSH";
+            channel?: "KAKAO_ALIMTALK" | "SMS" | "FCM_PUSH";
             /**
              * Format: int64
              * @description 시도한 수. 실패·건너뜀이 섞여 있다
@@ -28412,10 +28574,8 @@ export interface operations {
     list_5: {
         parameters: {
             query: {
-                /** @description 전 지점 권한자만 지정한다. 지점 관리자는 자기 지점으로 고정된다 */
                 academyId?: number;
                 year: number;
-                /** @description 없으면 평일·토요일을 함께 내린다 */
                 dayType?: "WEEKDAY" | "SATURDAY" | "SUNDAY";
             };
             header?: never;
@@ -28857,6 +29017,30 @@ export interface operations {
             };
         };
     };
+    createForSelected: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SelectedRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseNoticeResponse"];
+                };
+            };
+        };
+    };
     createForIndividual: {
         parameters: {
             query?: never;
@@ -29267,7 +29451,6 @@ export interface operations {
         parameters: {
             query: {
                 academyId: number;
-                /** @description 상태 필터. 비우면 사용중 + 중지 전부 */
                 active?: boolean;
             };
             header?: never;
@@ -34888,6 +35071,28 @@ export interface operations {
             };
         };
     };
+    seats_1: {
+        parameters: {
+            query: {
+                studyAreaId: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListPatrolSeat"];
+                };
+            };
+        };
+    };
     marks: {
         parameters: {
             query?: never;
@@ -34904,6 +35109,28 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseListMarkView"];
+                };
+            };
+        };
+    };
+    areas_2: {
+        parameters: {
+            query?: {
+                academyId?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListPatrolArea"];
                 };
             };
         };
@@ -34935,7 +35162,7 @@ export interface operations {
                 from?: string;
                 to?: string;
                 event?: "MISSING_ATTENDANCE" | "APPROVAL_REQUEST_CREATED" | "APPROVAL_APPROVED_BY_PARENT" | "APPROVAL_APPROVED_AFTER_TIMEOUT" | "APPROVAL_APPROVED_BEFORE_TIMEOUT" | "APPROVAL_REMINDER" | "APPROVAL_HANDED_OVER" | "APPROVAL_APPROVED_BY_STAFF_PRIMARY" | "APPROVAL_APPROVED_BY_ADMIN" | "APPROVAL_REJECTED" | "CONSULT_RESERVED" | "CONSULT_CANCELED";
-                channel?: "KAKAO_ALIMTALK" | "FCM_PUSH";
+                channel?: "KAKAO_ALIMTALK" | "SMS" | "FCM_PUSH";
                 status?: "PENDING" | "SENT" | "FAILED" | "SKIPPED";
                 /**
                  * @description 사람(student) id다 — 등록 건 id가 아니다. 알림은 "누구 얘기인지"가

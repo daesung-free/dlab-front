@@ -765,20 +765,27 @@ function Content() {
             />
           </div>
 
+          {/* ★ **이 값은 아무것도 막지 않는다.** 결제 시점에 검사하는 코드가 서버에 없어,
+                 카드로 설정한 청구를 가상계좌로 받아도 통과한다(2026-10-16 확인).
+                 디랩이 「설정한 수단으로만 받을 수 있냐」고 물어 와서 적어 둔다 —
+                 칸을 아예 뺄지 제한으로 만들지는 회신 대기(1016 피드백 4-1). */}
           <div className="frow">
             <label>결제 수단</label>
-            <select
-              className="sel"
-              value={newStd.paymentMethod}
-              onChange={(e) => setNewStd({ ...newStd, paymentMethod: e.target.value as PaymentMethod | '' })}
-            >
-              <option value="">선택 안 함</option>
-              {(Object.keys(PAYMENT_METHOD_LABEL) as PaymentMethod[]).map((k) => (
-                <option key={k} value={k}>
-                  {PAYMENT_METHOD_LABEL[k]}
-                </option>
-              ))}
-            </select>
+            <div>
+              <select
+                className="sel"
+                value={newStd.paymentMethod}
+                onChange={(e) => setNewStd({ ...newStd, paymentMethod: e.target.value as PaymentMethod | '' })}
+              >
+                <option value="">선택 안 함</option>
+                {(Object.keys(PAYMENT_METHOD_LABEL) as PaymentMethod[]).map((k) => (
+                  <option key={k} value={k}>
+                    {PAYMENT_METHOD_LABEL[k]}
+                  </option>
+                ))}
+              </select>
+              <div className="hint">표시용입니다. 실제로 받을 수 있는 결제 수단을 제한하지 않습니다.</div>
+            </div>
           </div>
 
           <div className="frow">

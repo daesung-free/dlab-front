@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { DataTable, ExcelButton, MaskToggle, Modal, PrintButton, Unfilled, type Column } from '../../components/common'
 import { Icon } from '../../components/Icon'
 import { Tabs } from '../../components/Tabs'
 import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
 import {
+  assignSeat,
   assignSeatsBulk,
   getSeatLayout,
   listSeatAreas,
@@ -13,6 +14,8 @@ import {
   type SeatArea,
   type SeatCell as ApiSeatCell,
 } from '../../api/facility'
+import { searchStudents, type Student } from '../../api/students'
+import { studentNoText } from '../../lib/studentNo'
 import { SeatSetup } from './SeatSetup'
 import type { Mockup } from './types'
 import './reading-room.css'
@@ -90,7 +93,8 @@ const ASSIGN_COLUMNS: Column<AssignRow>[] = [
   { key: 'studentNo', header: '학번', width: '104px', sortable: true, value: (r) => r.studentNo },
   // 서버가 이미 마스킹해서 보내므로 mask 를 걸지 않는다(이중 마스킹 방지)
   { key: 'name', header: '이름', width: '84px', value: (r) => r.name },
-  { key: 'className', header: '고정반', width: '86px', align: 'center', value: (r) => r.className ?? '-' },
+  /* ★ 「고정반」 → 「반」(1016 피드백 A-3). 고정반/이동반 구분이 없어졌으니 화면도 그냥 반이다 */
+  { key: 'className', header: '반', width: '86px', align: 'center', value: (r) => r.className ?? '-' },
   {
     key: 'state',
     header: '현재 상태',
@@ -119,6 +123,25 @@ function Content() {
   const [areaId, setAreaId] = useState<number | null>(null)
   const [cells, setCells] = useState<ApiSeatCell[]>([])
   const [selectedSeatId, setSelectedSeatId] = useState<number | null>(null)
+  /* ★ 좌석 칸 크기(1016 피드백 B-8). 지점에 따라 **92석**까지 있어 한 화면에 안 들어간다.
+     `transform: scale` 이 아니라 **칸 자체를 줄인다** — scale 은 글자가 뭉개지고 누르는
+     자리가 어긋난다. 1.0 이 기본이고 0.6 까지 줄인다 */
+  const [zoom, setZoom] = useState(1)
+  /* ★ 좌석을 눌러 바로 배정한다(1016 피드백 C-1·C-2).
+     > 「현재는 학생이 배정되는 좌석을 **선택할 수 없고 제일 빠른 번호부터** 배정됩니다」
+     > 「좌석배치표에서도 해당 좌석을 누르면 **바로 학생 배정**이 되는 기능」
+     ★ **자동 배정은 그대로 둔다** — 한 기수를 통째로 앉힐 때는 그쪽이 빠르다. 수동을 **더한다** */
+  const [assignTo, setAssignTo] = useState<{
+    seatId: number
+    seatCd: string
+    /** 지금 그 자리에 앉은 사람. 있으면 **교체**다 */
+    occupant: { enrollmentId: number; name: string; seatId: number } | null
+    rows: Student[] | null
+    pick: string
+    keyword: string
+    busy: boolean
+    err: string | null
+  } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -194,13 +217,19 @@ function Content() {
 
   const maxRow = seats.reduce((a, s) => Math.max(a, s.row), 0)
   const maxCol = seats.reduce((a, s) => Math.max(a, s.col), 0)
-  const half = Math.ceil(maxCol / 2)
 
-  const rows = useMemo(
-    () =>
-      Array.from({ length: maxRow }, (_, i) => seats.filter((s) => s.row === i + 1).sort((a, b) => a.col - b.col)),
-    [seats, maxRow],
-  )
+  /* ★ **좌표 그대로 찍는다**(1016 피드백 B-5·B-6). 전에는 그 행의 좌석을 모아 **촘촘히 흘려**
+     그려서, 좌석이 1·2·5·6열에 있어도 화면엔 네 칸이 **붙어** 나왔다 — 등록 화면에서 빼 둔
+     통로·기둥이 배치도에서 사라지는 원인이었다(「등록화면과 좌석배치도가 불일치」).
+     이제 빈 좌표는 **빈 칸(`rr-gap`)으로 자리를 지킨다** — 통로는 「그리는 것」이 아니라
+     「좌석이 없는 자리」다. */
+  const grid = useMemo(() => {
+    const at = new Map<string, (typeof seats)[number]>()
+    for (const s of seats) at.set(`${s.row}:${s.col}`, s)
+    return Array.from({ length: maxRow }, (_, r) =>
+      Array.from({ length: maxCol }, (_, c) => at.get(`${r + 1}:${c + 1}`) ?? null),
+    )
+  }, [seats, maxRow, maxCol])
 
   const assignRows: AssignRow[] = useMemo(
     () =>
@@ -265,6 +294,70 @@ function Content() {
       setError(err instanceof ApiError ? err.message : '배정을 해제하지 못했습니다.')
     } finally {
       setBusy(false)
+    }
+  }
+
+  /* ★ 좌석을 눌러 그 자리에 학생을 앉힌다(C-1·C-2).
+     ★ **좌석 없는 학생만** 띄운다(`unassignedSeat`). 이미 앉은 학생을 고르면 서버가 막는데,
+       목록에 보여 놓고 고른 뒤에 막으면 **왜 안 되는지 모른다.**
+     ★ 지점을 넘겨 부른다 — 안 넘기면 전 지점 학생이 섞여 **남의 지점 학생을 앉히게** 된다. */
+  async function openAssign(
+    seatId: number,
+    seatCd: string,
+    occupant: { enrollmentId: number; name: string; seatId: number } | null = null,
+  ) {
+    setAssignTo({ seatId, seatCd, occupant, rows: null, pick: '', keyword: '', busy: false, err: null })
+    /* ★ **교체 상대는 서버를 또 부르지 않는다.** 이 구역 배치도에 이미 들어 있다 —
+       교체는 두 자리를 맞바꾸는 것이라 **상대도 자리가 있어야** 하고, 자리 있는 사람은
+       곧 이 배치도 위에 있다. 자리 없는 학생을 넣으면 원래 앉았던 사람만 자리를 잃는다
+       (그건 교체가 아니라 빼앗기다 — 서버도 그쪽은 막아 뒀다). */
+    if (occupant) {
+      setAssignTo((v) => (v && v.seatId === seatId ? { ...v, rows: [] } : v))
+      return
+    }
+    try {
+      const res = await searchStudents({ academyId: academyId ?? undefined, unassignedSeat: true, size: 200 })
+      setAssignTo((v) => (v && v.seatId === seatId ? { ...v, rows: res.rows } : v))
+    } catch (err) {
+      setAssignTo((v) =>
+        v && v.seatId === seatId
+          ? { ...v, rows: [], err: err instanceof ApiError ? err.message : '학생을 불러오지 못했습니다.' }
+          : v,
+      )
+    }
+  }
+
+  /** 교체 상대 — 이 구역에서 자리를 가진 사람(자기 자신 빼고) */
+  const swapMates = useMemo(
+    () =>
+      assignTo?.occupant
+        ? seats.filter((s) => s.enrollmentId !== null && s.enrollmentId !== assignTo.occupant!.enrollmentId)
+        : [],
+    [seats, assignTo?.occupant],
+  )
+
+  async function doAssign() {
+    if (!assignTo || !assignTo.pick) return
+    setAssignTo({ ...assignTo, busy: true, err: null })
+    try {
+      if (assignTo.occupant) {
+        /* ★ **두 건을 한 요청에** 보낸다. 서버가 요청 안의 학생이 쓰던 자리를 먼저 반납하고
+           전부-아니면-전무로 처리하므로, 중간에 실패해도 **한쪽만 자리를 잃는 일이 없다.**
+           해제 → 배정으로 나눠 부르면 그 사고가 난다(2026-10-16 백엔드 확인). */
+        const mate = swapMates.find((m) => String(m.enrollmentId) === assignTo.pick)
+        if (!mate) throw new Error('고른 학생의 자리를 찾지 못했습니다.')
+        await assignSeatsBulk([
+          { seatId: assignTo.seatId, enrollmentId: mate.enrollmentId! },
+          { seatId: mate.seatId, enrollmentId: assignTo.occupant.enrollmentId },
+        ])
+      } else await assignSeat(assignTo.seatId, Number(assignTo.pick))
+      setAssignTo(null)
+      await loadLayout()
+    } catch (err) {
+      /* "A01: 이미 2026-0002 학생이 배정돼 있습니다" 처럼 서버 문구가 그대로 쓸 만하다 */
+      setAssignTo((v) =>
+        v ? { ...v, busy: false, err: err instanceof ApiError ? err.message : '배정하지 못했습니다.' } : v,
+      )
     }
   }
 
@@ -371,6 +464,32 @@ function Content() {
                     {a.buildingName} {a.areaNm}
                   </button>
                 ))}
+                {/* ★ 크기 조절(B-8). 「확대·축소」가 아니라 **칸 크기**를 바꾼다 */}
+                <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', marginRight: 6 }}>
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ padding: '4px 9px', fontSize: 11.5 }}
+                    disabled={zoom <= 0.6}
+                    title="좌석 칸을 작게 — 한 화면에 더 많이 들어갑니다"
+                    onClick={() => setZoom((z) => Math.max(0.6, Math.round((z - 0.1) * 10) / 10))}
+                  >
+                    －
+                  </button>
+                  <span style={{ fontSize: 11.5, color: 'var(--muted)', width: 38, textAlign: 'center' }}>
+                    {Math.round(zoom * 100)}%
+                  </span>
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ padding: '4px 9px', fontSize: 11.5 }}
+                    disabled={zoom >= 1.4}
+                    title="좌석 칸을 크게"
+                    onClick={() => setZoom((z) => Math.min(1.4, Math.round((z + 0.1) * 10) / 10))}
+                  >
+                    ＋
+                  </button>
+                </div>
                 <PrintButton label="도면 인쇄" />
               </div>
             </div>
@@ -384,19 +503,34 @@ function Content() {
                       : '좌석 구역이 없습니다.'}
                 </div>
               ) : (
-                <div className="rr-stage">
+                /* ★ `data-print` 가 붙은 영역만 인쇄된다(print.css) — 전에는 사이드바·지표까지
+                     **페이지 전체**가 나왔다(B-11, 9/28 에도 같은 요청) */
+                <div
+                  className="rr-stage"
+                  data-print
+                  /* 칸·글자를 한꺼번에 줄인다 — 칸만 줄이면 이름이 잘려 누가 앉았는지 안 보인다 */
+                  style={
+                    {
+                      '--seat-w': `${Math.round(62 * zoom)}px`,
+                      '--seat-h': `${Math.round(52 * zoom)}px`,
+                      '--seat-font': `${(11 * zoom).toFixed(1)}px`,
+                    } as CSSProperties
+                  }
+                >
                   <div className="rr-front">관 리 자 데 스 크 · 출 입 구</div>
                   <div className="rr-map">
-                    {rows.map((rowSeats, ri) => (
+                    {/* ★ 가운데에 **가짜 통로**를 넣던 것을 없앴다 — 실제 통로 위치와 무관하게
+                           늘 한가운데 들어가서, 통로가 두 개인 구역에서도 하나만 보였다 */}
+                    {grid.map((rowCells, ri) => (
                       <div className="rr-row" key={ri}>
                         <span className="rr-rowno">{ri + 1}</span>
-                        {rowSeats.slice(0, half).map((s) => (
-                          <SeatBox key={s.seatId} seat={s} selected={selectedSeatId} onSelect={setSelectedSeatId} />
-                        ))}
-                        <span className="rr-aisle" />
-                        {rowSeats.slice(half).map((s) => (
-                          <SeatBox key={s.seatId} seat={s} selected={selectedSeatId} onSelect={setSelectedSeatId} />
-                        ))}
+                        {rowCells.map((s, ci) =>
+                          s === null ? (
+                            <span className="rr-gap" key={`g${ci}`} />
+                          ) : (
+                            <SeatBox key={s.seatId} seat={s} selected={selectedSeatId} onSelect={setSelectedSeatId} />
+                          ),
+                        )}
                       </div>
                     ))}
                   </div>
@@ -479,7 +613,7 @@ function Content() {
                       </span>
                     </div>
                     <div className="row">
-                      <span className="k">고정반</span>
+                      <span className="k">반</span>
                       <span className="v">{sel.className ?? '미배정'}</span>
                     </div>
                     {sel.onSeatLeave && (
@@ -497,8 +631,32 @@ function Content() {
                   </div>
 
                   <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
-                    <button className="btn pri" disabled title="배정은 배정 관리(F-4.10-3) 화면에서 합니다">
-                      <Icon name="user-plus" size={14} /> 배정 변경
+                    {/* ★ 좌석을 골라 **여기서 바로** 앉힌다(C-1·C-2). 전에는 막아 두고
+                        「배정 관리 화면에서 하라」고 했는데, **배치도를 보면서 고르는 것**이
+                        이 화면의 일이다 — 자리를 보고 와서 다른 화면에서 번호로 찾게 했다 */}
+                    {/* ★ 빈 자리는 **배정**, 찬 자리는 **자리 바꾸기**다.
+                        교체는 `seats/bulk` 로 **두 건을 한 요청에** 보내 전부-아니면-전무로
+                        돈다 — 해제 뒤 배정으로 나누면 중간에 실패했을 때 **원래 학생만
+                        자리를 잃는다**(2026-10-16 백엔드 확인) */}
+                    <button
+                      className="btn pri"
+                      disabled={busy}
+                      onClick={() =>
+                        void openAssign(
+                          sel.seatId,
+                          sel.seatCd,
+                          sel.enrollmentId !== null
+                            ? {
+                                enrollmentId: sel.enrollmentId,
+                                name: sel.studentName ?? '이 학생',
+                                seatId: sel.seatId,
+                              }
+                            : null,
+                        )
+                      }
+                    >
+                      <Icon name={sel.enrollmentId === null ? 'user-plus' : 'repeat'} size={14} />{' '}
+                      {sel.enrollmentId === null ? '이 자리에 배정' : '자리 바꾸기'}
                     </button>
                     <button
                       className="btn"
@@ -583,6 +741,100 @@ function Content() {
           onConfirm={() => void submitMove()}
           onClose={() => setMoving(null)}
         />
+      )}
+
+      {assignTo && (
+        <Modal
+          title={
+            assignTo.occupant
+              ? `${assignTo.seatCd} — ${assignTo.occupant.name} 학생의 자리를 바꿉니다`
+              : `${assignTo.seatCd} 좌석에 배정`
+          }
+          sub={
+            assignTo.occupant
+              ? '고른 학생과 자리를 맞바꿉니다. 한쪽만 바뀌는 일은 없습니다.'
+              : '좌석이 없는 학생만 나옵니다.'
+          }
+          confirmLabel={assignTo.occupant ? '자리 바꾸기' : '배정'}
+          busy={assignTo.busy}
+          confirmDisabled={!assignTo.pick}
+          error={assignTo.err}
+          onConfirm={() => void doAssign()}
+          onClose={() => setAssignTo(null)}
+        >
+          {assignTo.occupant ? (
+            swapMates.length === 0 ? (
+              <div className="note-box">
+                <div>이 구역에 자리를 가진 다른 학생이 없습니다.</div>
+              </div>
+            ) : (
+              <div className="frow">
+                <label className="req">바꿀 상대</label>
+                <div>
+                  <select
+                    className="sel"
+                    value={assignTo.pick}
+                    onChange={(e) => setAssignTo({ ...assignTo, pick: e.target.value })}
+                  >
+                    <option value="">고르세요</option>
+                    {swapMates.map((m) => (
+                      <option key={m.seatId} value={String(m.enrollmentId)}>
+                        {m.seatCd} · {m.studentName ?? '배정됨'}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="hint">
+                    {/* 서버가 같은 구역만 내려주므로 상대도 이 구역 사람이다 */}
+                    같은 구역 안에서만 바꿀 수 있습니다.
+                  </div>
+                </div>
+              </div>
+            )
+          ) : assignTo.rows === null ? (
+            <div className="hint">불러오는 중…</div>
+          ) : assignTo.rows.length === 0 ? (
+            <div className="note-box">
+              <div>좌석이 없는 학생이 없습니다. 이미 모두 자리가 있습니다.</div>
+            </div>
+          ) : (
+            <>
+              {/* ★ 이름으로 좁힌다 — 200명 목록에서 고르게 하면 **못 찾는다** */}
+              <div className="frow">
+                <label>학생 찾기</label>
+                <input
+                  className="inp"
+                  value={assignTo.keyword}
+                  placeholder="이름 또는 학번"
+                  onChange={(e) => setAssignTo({ ...assignTo, keyword: e.target.value })}
+                />
+              </div>
+              <div className="frow">
+                <label className="req">배정할 학생</label>
+                <div>
+                  <select
+                    className="sel"
+                    value={assignTo.pick}
+                    onChange={(e) => setAssignTo({ ...assignTo, pick: e.target.value })}
+                  >
+                    <option value="">고르세요</option>
+                    {assignTo.rows
+                      .filter((r) => {
+                        const k = assignTo.keyword.trim()
+                        if (!k) return true
+                        return (r.name ?? '').includes(k) || String(r.studentNo ?? '').includes(k)
+                      })
+                      .map((r) => (
+                        <option key={r.enrollmentId} value={String(r.enrollmentId)}>
+                          {r.name} · {studentNoText(r.studentNo)}
+                          {r.className ? ` · ${r.className}` : ''}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+            </>
+          )}
+        </Modal>
       )}
     </div>
   )
