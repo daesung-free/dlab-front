@@ -186,7 +186,19 @@ const APPLICANT_COLUMNS: Column<ApplicantRow>[] = [
 /* ★ 강의실은 **지점마다 다르다.** 예전에는 이 다섯 개가 화면에 박혀 있어서, 없는 호실이
      선택지로 뜨고 실제 호실은 고를 수 없었다(2026-09-27 실테스트). 기초 관리의 강의실을 읽는다 */
 const TRACK_TARGETS = ['전체', '자연계열', '인문계열']
-const DOW_LABELS = ['월', '화', '수', '목', '금', '토']
+/* ★ **요일 번호를 라벨과 함께 적어 둔다.** 전에는 `['월'…'토']` 의 인덱스+1 을 번호로
+   썼는데, 회차 생성은 `Date.getDay()`(일=0) 로 비교한다 — **일요일을 배열에 더하면
+   7이 되어 영영 안 잡힌다.** 오류도 안 나고 회차만 조용히 빠진다.
+   일요일 특강이 실제로 있다(디랩 1016 피드백 2-12). */
+const DOWS: { label: string; value: number }[] = [
+  { label: '월', value: 1 },
+  { label: '화', value: 2 },
+  { label: '수', value: 3 },
+  { label: '목', value: 4 },
+  { label: '금', value: 5 },
+  { label: '토', value: 6 },
+  { label: '일', value: 0 },
+]
 
 /** 상세 모달의 수정 폼. 서버가 PATCH 로 받는 것만 든다 */
 interface LectureEdit {
@@ -1061,19 +1073,16 @@ function Content() {
               <div className="frow">
                 <label className="req">수업 요일</label>
                 <div className="sf-chips">
-                  {DOW_LABELS.map((d, i) => {
-                    const n = i + 1
-                    return (
-                      <button
-                        type="button"
-                        key={d}
-                        className={`chip${draft.dows.includes(n) ? ' on' : ''}`}
-                        onClick={() => toggleDow(n)}
-                      >
-                        {d}
-                      </button>
-                    )
-                  })}
+                  {DOWS.map((d) => (
+                    <button
+                      type="button"
+                      key={d.value}
+                      className={`chip${draft.dows.includes(d.value) ? ' on' : ''}`}
+                      onClick={() => toggleDow(d.value)}
+                    >
+                      {d.label}
+                    </button>
+                  ))}
                 </div>
               </div>
 
