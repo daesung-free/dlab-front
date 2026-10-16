@@ -63,6 +63,7 @@ import {
 } from '../../api/tuition'
 import { GRADE_LABEL, searchStudents, type Student } from '../../api/students'
 import type { Mockup } from './types'
+import '../../styles/forms.css'
 import './payment.css'
 
 /* F-4.8 수납현황 — /api/v1/admin/receipt-status
