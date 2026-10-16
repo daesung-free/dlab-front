@@ -35,6 +35,7 @@ import {
   type PaymentRequestRow,
 } from '../../api/paymentRequests'
 import { useAcademy } from '../../auth/AcademyContext'
+import { useAuth } from '../../auth/AuthContext'
 import {
   BILLING_STATUS_LABEL,
   paymentLabel,
@@ -60,11 +61,11 @@ import {
   issueAdmissionBilling,
   issueMonthlyBilling,
   issueMonthlyBillingsBulk,
-  listScholarships,
   type BulkBillingResult,
   type FeeTableRow,
   type SeatType,
 } from '../../api/tuition'
+import { listStudentScholarships } from '../../api/masters'
 import { GRADE_LABEL, searchStudents, type Student } from '../../api/students'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
@@ -588,6 +589,10 @@ function Content() {
     result: BulkBillingResult | null
   } | null>(null)
 
+  const { teacherOnly, readOnly } = useAuth()
+  /* 장학은 담임·조회전용에게 막혀 있다 — 호출 자체를 안 한다 */
+  const canSeeScholarship = !teacherOnly && !readOnly
+
   const openBulk = useCallback(() => {
     const m = thisMonth()
     const [y, mm] = m.split('-').map(Number)
@@ -606,13 +611,17 @@ function Content() {
       try {
         const res = await searchStudents({ academyId: academyId ?? undefined, status: 'ENROLLED', size: 500 })
         /* ★ 장학을 학생마다 읽는다. 500명이면 500번이라 **동시에 던지되** 실패는
-           무시한다 — 장학이 없는 학생이 대부분이고, 못 읽었다고 청구를 막을 일은 아니다 */
+           무시한다 — 장학이 없는 학생이 대부분이고, 못 읽었다고 청구를 막을 일은 아니다.
+           ★ **담임·조회전용은 아예 안 부른다.** 그 계정은 장학이 403 이라 500번이
+             전부 403 으로 떨어진다 — 점검 리포트가 403 으로 뒤덮인다.
+             데스크(STAFF)는 읽을 수 있다(2026-10-16 서버가 열었다). */
         const rows = await Promise.all(
           res.rows.map(async (r) => {
             let rate = ''
             let source: string | null = null
+            if (!canSeeScholarship) return { enrollmentId: r.enrollmentId, name: r.name, studentNo: r.studentNo, className: r.className, rate, source }
             try {
-              const sch = (await listScholarships(r.enrollmentId)).find((x) => x.discountRate !== null)
+              const sch = (await listStudentScholarships(r.enrollmentId)).find((x) => x.discountRate !== null)
               if (sch) {
                 rate = String(sch.discountRate)
                 source = sch.scholarshipType
@@ -637,7 +646,7 @@ function Content() {
         )
       }
     })()
-  }, [academyId])
+  }, [academyId, canSeeScholarship])
 
   async function runBulk() {
     if (bulk === null || bulk.picked.length === 0) return

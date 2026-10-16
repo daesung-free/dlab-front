@@ -288,13 +288,5 @@ export function previewTuitionBilling(params: {
   return request<TuitionBreakdown>('/api/v1/admin/tuition/billings/preview', { query: { ...params } })
 }
 
-/** 학생의 장학. 청구 등록 때 할인율 기본값을 여기서 끌어온다 */
-export interface Scholarship {
-  id: number
-  scholarshipType: string | null
-  discountRate: number | null
-}
-
-export function listScholarships(enrollmentId: number): Promise<Scholarship[]> {
-  return request<Scholarship[]>('/api/v1/admin/master/scholarships', { query: { enrollmentId } })
-}
+/* 장학은 `masters.ts` 의 `listStudentScholarships` 를 쓴다 — **경로가 `masters`(복수)**다.
+   여기에 또 만들면 경로가 갈려 한쪽이 404 가 된다(실제로 `master` 단수로 적었다가 걸렸다). */
