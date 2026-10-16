@@ -157,14 +157,25 @@ function Content() {
   }, [loadLayout])
 
   // 보고 있는 탭의 축으로 미배정을 거른다
+  /* ★ **`academyId` 를 반드시 넘긴다.** `/students` 는 안 넘겨도 400 이 아니라서
+     조용히 **전 지점이 섞여 온다**(CLAUDE.md 3-1). 그러면 본사 계정에서
+     **일산 학생을 분당 사물함에 앉히려다** 「다른 지점 사물함에는 배정할 수 없습니다」로
+     막힌다 — 목록에 보여 놓고 고른 뒤에 막는 꼴이라 왜 안 되는지 알 수가 없다.
+     실제로 그랬다(2026-10-16). 자동 채우기도 같은 목록을 쓰므로 함께 고쳐진다. */
   const params = useMemo(
     () =>
       kind === 'locker'
-        ? { status: 'ENROLLED' as const, unassignedLocker: true }
-        : { status: 'ENROLLED' as const, unassignedSeat: true },
-    [kind],
+        ? { academyId: academyId ?? undefined, status: 'ENROLLED' as const, unassignedLocker: true }
+        : { academyId: academyId ?? undefined, status: 'ENROLLED' as const, unassignedSeat: true },
+    [kind, academyId],
   )
-  const table = useServerTable({ fetcher: searchStudents, params, pageSize: PAGE_SIZE, sortable: SORTABLE })
+  const table = useServerTable({
+    fetcher: searchStudents,
+    params,
+    pageSize: PAGE_SIZE,
+    sortable: SORTABLE,
+    enabled: academyId !== null,
+  })
 
   const total = blocks.reduce((a, b) => a + b.cells.length, 0)
   const used = blocks.reduce((a, b) => a + b.cells.filter((c) => c.occupantEnrollmentId !== null).length, 0)
@@ -212,6 +223,29 @@ function Content() {
       )
     }
     setSelected([])
+    setBusy(false)
+    await loadLayout()
+    table.reload()
+  }
+
+  /* ★ **빈 칸을 눌러 그 자리에 앉힌다**(1016 피드백 C-1).
+     > 「현재는 학생이 배정되는 좌석을 **선택할 수 없고 제일 빠른 번호부터** 배정됩니다」
+     ★ 자동 채우기는 **그대로 둔다** — 한 기수를 통째로 앉힐 때는 그쪽이 빠르다.
+       **한 명만 고른 상태**에서만 칸을 누를 수 있게 한다. 여러 명을 고른 채 칸을 누르면
+       누구를 앉힐지 알 수 없다 */
+  async function assignToCell(cell: Cell) {
+    const picked = table.rows.filter((r) => selected.includes(String(r.enrollmentId)))
+    if (picked.length !== 1) return
+    setBusy(true)
+    setNotice(null)
+    try {
+      if (kind === 'locker') await assignLocker(cell.id, picked[0].enrollmentId)
+      else await assignSeatsBulk([{ seatId: cell.id, enrollmentId: picked[0].enrollmentId }])
+      setNotice(`${picked[0].name} 학생을 ${cell.code} 자리에 배정했습니다.`)
+      setSelected([])
+    } catch (err) {
+      setNotice(err instanceof ApiError ? err.message : '배정하지 못했습니다.')
+    }
     setBusy(false)
     await loadLayout()
     table.reload()
@@ -339,8 +373,15 @@ function Content() {
             )}
             <span style={{ fontSize: 12, color: 'var(--muted)' }}>선택 {selected.length}명 →</span>
             <button className="btn pri" disabled={selected.length === 0 || busy} onClick={() => void assignSelected()}>
-              <Icon name="check" size={14} /> {busy ? '처리 중…' : `빈 ${unit}에 배정`}
+              <Icon name="check" size={14} /> {busy ? '처리 중…' : `앞에서부터 ${unit} 채우기`}
             </button>
+            {/* ★ **자리를 고를 수 있다는 걸 모르면 못 쓴다**(C-1). 한 명만 골랐을 때만 말한다 —
+                늘 띄우면 여러 명을 고른 사람에게 안 되는 방법을 알려주는 꼴이다 */}
+            {selected.length === 1 && (
+              <span style={{ fontSize: 12, color: 'var(--mint)', fontWeight: 600 }}>
+                아래에서 자리를 눌러 직접 고를 수 있습니다
+              </span>
+            )}
           </div>
         </div>
         <div className="card-sec-b">
@@ -369,10 +410,14 @@ function Content() {
                       title={
                         c.occupantEnrollmentId !== null
                           ? `${c.code} · ${c.occupantName ?? '배정됨'} — 눌러서 해제`
-                          : `${c.code} · 빈 ${unit}`
+                          : selected.length === 1
+                            ? `${c.code} · 눌러서 이 자리에 배정`
+                            : `${c.code} · 빈 ${unit} — 학생을 한 명만 고르면 이 자리에 배정합니다`
                       }
-                      disabled={c.occupantEnrollmentId === null || busy}
-                      onClick={() => void release(c)}
+                      disabled={busy || (c.occupantEnrollmentId === null && selected.length !== 1)}
+                      onClick={() =>
+                        void (c.occupantEnrollmentId !== null ? release(c) : assignToCell(c))
+                      }
                     >
                       <span className="cc">{c.code}</span>
                       {c.occupantName && <span className="co">{c.occupantName}</span>}

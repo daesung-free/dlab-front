@@ -5,6 +5,7 @@ import { Tabs } from '../../components/Tabs'
 import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
 import {
+  assignSeat,
   assignSeatsBulk,
   getSeatLayout,
   listSeatAreas,
@@ -13,6 +14,8 @@ import {
   type SeatArea,
   type SeatCell as ApiSeatCell,
 } from '../../api/facility'
+import { searchStudents, type Student } from '../../api/students'
+import { studentNoText } from '../../lib/studentNo'
 import { SeatSetup } from './SeatSetup'
 import type { Mockup } from './types'
 import './reading-room.css'
@@ -124,6 +127,19 @@ function Content() {
      `transform: scale` 이 아니라 **칸 자체를 줄인다** — scale 은 글자가 뭉개지고 누르는
      자리가 어긋난다. 1.0 이 기본이고 0.6 까지 줄인다 */
   const [zoom, setZoom] = useState(1)
+  /* ★ 좌석을 눌러 바로 배정한다(1016 피드백 C-1·C-2).
+     > 「현재는 학생이 배정되는 좌석을 **선택할 수 없고 제일 빠른 번호부터** 배정됩니다」
+     > 「좌석배치표에서도 해당 좌석을 누르면 **바로 학생 배정**이 되는 기능」
+     ★ **자동 배정은 그대로 둔다** — 한 기수를 통째로 앉힐 때는 그쪽이 빠르다. 수동을 **더한다** */
+  const [assignTo, setAssignTo] = useState<{
+    seatId: number
+    seatCd: string
+    rows: Student[] | null
+    pick: string
+    keyword: string
+    busy: boolean
+    err: string | null
+  } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -276,6 +292,39 @@ function Content() {
       setError(err instanceof ApiError ? err.message : '배정을 해제하지 못했습니다.')
     } finally {
       setBusy(false)
+    }
+  }
+
+  /* ★ 좌석을 눌러 그 자리에 학생을 앉힌다(C-1·C-2).
+     ★ **좌석 없는 학생만** 띄운다(`unassignedSeat`). 이미 앉은 학생을 고르면 서버가 막는데,
+       목록에 보여 놓고 고른 뒤에 막으면 **왜 안 되는지 모른다.**
+     ★ 지점을 넘겨 부른다 — 안 넘기면 전 지점 학생이 섞여 **남의 지점 학생을 앉히게** 된다. */
+  async function openAssign(seatId: number, seatCd: string) {
+    setAssignTo({ seatId, seatCd, rows: null, pick: '', keyword: '', busy: false, err: null })
+    try {
+      const res = await searchStudents({ academyId: academyId ?? undefined, unassignedSeat: true, size: 200 })
+      setAssignTo((v) => (v && v.seatId === seatId ? { ...v, rows: res.rows } : v))
+    } catch (err) {
+      setAssignTo((v) =>
+        v && v.seatId === seatId
+          ? { ...v, rows: [], err: err instanceof ApiError ? err.message : '학생을 불러오지 못했습니다.' }
+          : v,
+      )
+    }
+  }
+
+  async function doAssign() {
+    if (!assignTo || !assignTo.pick) return
+    setAssignTo({ ...assignTo, busy: true, err: null })
+    try {
+      await assignSeat(assignTo.seatId, Number(assignTo.pick))
+      setAssignTo(null)
+      await loadLayout()
+    } catch (err) {
+      /* "A01: 이미 2026-0002 학생이 배정돼 있습니다" 처럼 서버 문구가 그대로 쓸 만하다 */
+      setAssignTo((v) =>
+        v ? { ...v, busy: false, err: err instanceof ApiError ? err.message : '배정하지 못했습니다.' } : v,
+      )
     }
   }
 
@@ -549,8 +598,19 @@ function Content() {
                   </div>
 
                   <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
-                    <button className="btn pri" disabled title="배정은 배정 관리(F-4.10-3) 화면에서 합니다">
-                      <Icon name="user-plus" size={14} /> 배정 변경
+                    {/* ★ 좌석을 골라 **여기서 바로** 앉힌다(C-1·C-2). 전에는 막아 두고
+                        「배정 관리 화면에서 하라」고 했는데, **배치도를 보면서 고르는 것**이
+                        이 화면의 일이다 — 자리를 보고 와서 다른 화면에서 번호로 찾게 했다 */}
+                    <button
+                      className="btn pri"
+                      disabled={busy || sel.enrollmentId !== null}
+                      /* ★ **빈 자리에만** 배정한다. 찬 자리를 바꾸려면 해제 뒤 배정인데,
+                         그건 두 번 호출이라 **중간에 실패하면 원래 학생만 자리를 잃는다.**
+                         서버에 교체 경로가 생기면 그때 한 번에 한다 */
+                      title={sel.enrollmentId !== null ? '배정을 먼저 해제하세요' : undefined}
+                      onClick={() => void openAssign(sel.seatId, sel.seatCd)}
+                    >
+                      <Icon name="user-plus" size={14} /> 이 자리에 배정
                     </button>
                     <button
                       className="btn"
@@ -635,6 +695,64 @@ function Content() {
           onConfirm={() => void submitMove()}
           onClose={() => setMoving(null)}
         />
+      )}
+
+      {assignTo && (
+        <Modal
+          title={`${assignTo.seatCd} 좌석에 배정`}
+          sub="좌석이 없는 학생만 나옵니다."
+          confirmLabel="배정"
+          busy={assignTo.busy}
+          confirmDisabled={!assignTo.pick}
+          error={assignTo.err}
+          onConfirm={() => void doAssign()}
+          onClose={() => setAssignTo(null)}
+        >
+          {assignTo.rows === null ? (
+            <div className="hint">불러오는 중…</div>
+          ) : assignTo.rows.length === 0 ? (
+            <div className="note-box">
+              <div>좌석이 없는 학생이 없습니다. 이미 모두 자리가 있습니다.</div>
+            </div>
+          ) : (
+            <>
+              {/* ★ 이름으로 좁힌다 — 200명 목록에서 고르게 하면 **못 찾는다** */}
+              <div className="frow">
+                <label>학생 찾기</label>
+                <input
+                  className="inp"
+                  value={assignTo.keyword}
+                  placeholder="이름 또는 학번"
+                  onChange={(e) => setAssignTo({ ...assignTo, keyword: e.target.value })}
+                />
+              </div>
+              <div className="frow">
+                <label className="req">배정할 학생</label>
+                <div>
+                  <select
+                    className="sel"
+                    value={assignTo.pick}
+                    onChange={(e) => setAssignTo({ ...assignTo, pick: e.target.value })}
+                  >
+                    <option value="">고르세요</option>
+                    {assignTo.rows
+                      .filter((r) => {
+                        const k = assignTo.keyword.trim()
+                        if (!k) return true
+                        return (r.name ?? '').includes(k) || String(r.studentNo ?? '').includes(k)
+                      })
+                      .map((r) => (
+                        <option key={r.enrollmentId} value={String(r.enrollmentId)}>
+                          {r.name} · {studentNoText(r.studentNo)}
+                          {r.className ? ` · ${r.className}` : ''}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+            </>
+          )}
+        </Modal>
       )}
     </div>
   )
