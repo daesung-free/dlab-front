@@ -863,22 +863,10 @@ function ClassActions() {
               <div className="hint">같은 해에 같은 이름은 만들 수 없습니다.</div>
             </div>
           </div>
-          <div className="frow">
-            <label className="req">반 종류</label>
-            <div>
-              <select
-                className="sel"
-                value={draft.classType}
-                onChange={(e) => setDraft({ ...draft, classType: e.target.value as ClassType })}
-              >
-                <option value="FIXED">고정반</option>
-                <option value="MOVING">이동반</option>
-              </select>
-              <div className="hint">
-                학생이 소속되는 반은 <b>고정반</b>입니다. 이동반은 과목별로 옮겨 다니는 반입니다.
-              </div>
-            </div>
-          </div>
+          {/* ★ **반 종류 칸을 뺐다**(1016 피드백 A-3 — 「고정반 / 이동반의 구분은 불필요합니다」).
+                 ⚠️ **`classType` 은 계속 보낸다**(`FIXED` 고정). `MOVING` 으로 들어가면 **그 학생의
+                 담임이 해석되지 않는다** — 담임 조회가 고정반 배정을 찾기 때문이다(백엔드 회신).
+                 승인 이양·상담 담당자·담임 표시가 함께 비어 버린다. 서버도 컬럼은 남겨 둔다. */}
           {/* ★ 학번의 **앞자리**다(학번 = 반 번호 + 순번). 비우면 그 반에는 학생을 못 넣는다 —
                  학번은 키패드 출결·식사체크가 쓰는 번호라, 없는 학생은 키패드를 못 쓴다 */}
           <div className="frow">

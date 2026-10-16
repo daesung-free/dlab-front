@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { DataTable, ExcelButton, MaskToggle, Modal, PrintButton, Unfilled, type Column } from '../../components/common'
 import { Icon } from '../../components/Icon'
 import { Tabs } from '../../components/Tabs'
@@ -90,7 +90,8 @@ const ASSIGN_COLUMNS: Column<AssignRow>[] = [
   { key: 'studentNo', header: '학번', width: '104px', sortable: true, value: (r) => r.studentNo },
   // 서버가 이미 마스킹해서 보내므로 mask 를 걸지 않는다(이중 마스킹 방지)
   { key: 'name', header: '이름', width: '84px', value: (r) => r.name },
-  { key: 'className', header: '고정반', width: '86px', align: 'center', value: (r) => r.className ?? '-' },
+  /* ★ 「고정반」 → 「반」(1016 피드백 A-3). 고정반/이동반 구분이 없어졌으니 화면도 그냥 반이다 */
+  { key: 'className', header: '반', width: '86px', align: 'center', value: (r) => r.className ?? '-' },
   {
     key: 'state',
     header: '현재 상태',
@@ -119,6 +120,10 @@ function Content() {
   const [areaId, setAreaId] = useState<number | null>(null)
   const [cells, setCells] = useState<ApiSeatCell[]>([])
   const [selectedSeatId, setSelectedSeatId] = useState<number | null>(null)
+  /* ★ 좌석 칸 크기(1016 피드백 B-8). 지점에 따라 **92석**까지 있어 한 화면에 안 들어간다.
+     `transform: scale` 이 아니라 **칸 자체를 줄인다** — scale 은 글자가 뭉개지고 누르는
+     자리가 어긋난다. 1.0 이 기본이고 0.6 까지 줄인다 */
+  const [zoom, setZoom] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -377,6 +382,32 @@ function Content() {
                     {a.buildingName} {a.areaNm}
                   </button>
                 ))}
+                {/* ★ 크기 조절(B-8). 「확대·축소」가 아니라 **칸 크기**를 바꾼다 */}
+                <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center', marginRight: 6 }}>
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ padding: '4px 9px', fontSize: 11.5 }}
+                    disabled={zoom <= 0.6}
+                    title="좌석 칸을 작게 — 한 화면에 더 많이 들어갑니다"
+                    onClick={() => setZoom((z) => Math.max(0.6, Math.round((z - 0.1) * 10) / 10))}
+                  >
+                    －
+                  </button>
+                  <span style={{ fontSize: 11.5, color: 'var(--muted)', width: 38, textAlign: 'center' }}>
+                    {Math.round(zoom * 100)}%
+                  </span>
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ padding: '4px 9px', fontSize: 11.5 }}
+                    disabled={zoom >= 1.4}
+                    title="좌석 칸을 크게"
+                    onClick={() => setZoom((z) => Math.min(1.4, Math.round((z + 0.1) * 10) / 10))}
+                  >
+                    ＋
+                  </button>
+                </div>
                 <PrintButton label="도면 인쇄" />
               </div>
             </div>
@@ -392,7 +423,18 @@ function Content() {
               ) : (
                 /* ★ `data-print` 가 붙은 영역만 인쇄된다(print.css) — 전에는 사이드바·지표까지
                      **페이지 전체**가 나왔다(B-11, 9/28 에도 같은 요청) */
-                <div className="rr-stage" data-print>
+                <div
+                  className="rr-stage"
+                  data-print
+                  /* 칸·글자를 한꺼번에 줄인다 — 칸만 줄이면 이름이 잘려 누가 앉았는지 안 보인다 */
+                  style={
+                    {
+                      '--seat-w': `${Math.round(62 * zoom)}px`,
+                      '--seat-h': `${Math.round(52 * zoom)}px`,
+                      '--seat-font': `${(11 * zoom).toFixed(1)}px`,
+                    } as CSSProperties
+                  }
+                >
                   <div className="rr-front">관 리 자 데 스 크 · 출 입 구</div>
                   <div className="rr-map">
                     {/* ★ 가운데에 **가짜 통로**를 넣던 것을 없앴다 — 실제 통로 위치와 무관하게
@@ -489,7 +531,7 @@ function Content() {
                       </span>
                     </div>
                     <div className="row">
-                      <span className="k">고정반</span>
+                      <span className="k">반</span>
                       <span className="v">{sel.className ?? '미배정'}</span>
                     </div>
                     {sel.onSeatLeave && (
