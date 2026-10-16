@@ -31,7 +31,7 @@ import {
 import { listTeachers, type TeacherRow } from '../../api/accounts'
 import { listRooms, type Room } from '../../api/masters'
 import { createBilling, listStudentBillings } from '../../api/billing'
-import { searchStudents } from '../../api/students'
+import { GRADE_LABEL, searchStudents } from '../../api/students'
 import type { Mockup } from './types'
 import { createScreenSignal } from './screenSignal'
 import '../../styles/forms.css'
@@ -159,6 +159,23 @@ const APPLICANT_COLUMNS: Column<ApplicantRow>[] = [
   { key: 'studentNo', header: '학번', width: '100px', value: (r) => r.studentNo ?? '-' },
   { key: 'studentName', header: '이름', width: '84px', mask: 'name', value: (r) => r.studentName },
   { key: 'className', header: '반', width: '56px', align: 'center', value: (r) => r.className ?? '-' },
+  /* 1016 피드백 1-5 — 「학년 및 좌석번호 표시를 추가해주시면 좋을 것 같습니다」 */
+  {
+    key: 'grade',
+    header: '학년',
+    width: '64px',
+    align: 'center',
+    value: (r) => (r.grade ? (GRADE_LABEL[r.grade] ?? r.grade) : '-'),
+  },
+  {
+    key: 'seatNo',
+    header: '좌석',
+    width: '64px',
+    align: 'center',
+    /* ★ 배정 전이면 비어 있는데, **좌석을 쓰지 않는 특강도 있어** 그 자체가 문제는
+       아니다. 그래서 `<Unfilled/>` 가 아니라 `'-'` 다 */
+    value: (r) => r.seatNo ?? '-',
+  },
   { key: 'phone', header: '연락처', width: '128px', mask: 'phone', value: (r) => r.phone ?? '-' },
   {
     key: 'appliedAt',

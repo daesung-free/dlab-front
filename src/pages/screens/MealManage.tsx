@@ -146,6 +146,27 @@ const ORDER_COLUMNS: Column<MealOrder>[] = [
       ),
   },
   {
+    /* ★ 청구가 **발행됐는지**를 목록에서 본다(1016 피드백 1-3). 전에는 칸이 없어
+       「이 달 청구 발행」을 눌러 봐야 알 수 있었다.
+       ★ **취소된 청구도 번호가 남는다**(이력이다). 상태를 같이 보여주지 않으면
+       「이미 발행됨」으로 읽어 **왜 또 발행되는지** 모른다 */
+    key: 'billing',
+    header: '청구',
+    width: '110px',
+    align: 'center',
+    value: (r) => (r.billingId === null ? '미발행' : r.billingStatus === 'CANCELLED' ? '취소됨' : '발행됨'),
+    render: (r) =>
+      r.billingId === null ? (
+        <span style={{ color: 'var(--muted)' }}>미발행</span>
+      ) : r.billingStatus === 'CANCELLED' ? (
+        <span className="mk supplement" title="청구가 취소됐습니다. 다시 발행할 수 있습니다">
+          취소됨
+        </span>
+      ) : (
+        <span className="mk verified">발행됨</span>
+      ),
+  },
+  {
     key: 'status',
     header: '상태',
     width: '90px',

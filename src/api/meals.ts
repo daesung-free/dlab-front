@@ -78,6 +78,14 @@ export interface MealOrder {
   refundableAmount: number
   paymentMethods: string[]
   billingId: number | null
+  /**
+   * 붙어 있는 청구의 상태(2026-10-16 추가).
+   *
+   * ★ **`CANCELLED` 면 「취소됨 · 재발행 가능」이다.** `billingId` 는 **이력이라 취소돼도
+   *   남는데**, 상태를 안 보면 화면이 「이미 발행됨」으로 읽어 **왜 또 발행되는지** 모른다.
+   *   반대로 `billingId` 를 숨기면 데스크가 「취소한 적이 없다」로 읽는다.
+   */
+  billingStatus?: string | null
   items: MealOrderItem[]
   createdAt: string | null
 }
