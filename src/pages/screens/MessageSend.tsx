@@ -520,7 +520,7 @@ function Content() {
       {codeInput && (
         <Modal
           title="카카오 템플릿 코드"
-          sub="카카오에 등록할 때 받은 코드를 그대로 넣으세요."
+          sub="카카오에 등록할 때 발급받은 코드를 그대로 입력하세요."
           confirmLabel="심사 제출"
           busy={busy}
           confirmDisabled={codeInput.code.trim() === ''}

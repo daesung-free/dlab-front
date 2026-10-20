@@ -364,7 +364,7 @@ function Content() {
               <Icon name="alert-triangle" size={17} />
             </div>
             <div>
-              <div className="tt">지우거나 고칠 수 없습니다</div>
+              <div className="tt">삭제하거나 수정할 수 없습니다</div>
               <div className="tx">
                 한 번 등록한 약관은 <b>수정·삭제가 안 됩니다.</b> 같은 코드·버전으로 다시 등록하는 것도 막혀
                 있습니다. 오타를 고치려면 버전을 올려 새로 등록해야 합니다.

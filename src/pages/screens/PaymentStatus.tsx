@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   DataTable,
   ExcelButton,
@@ -1096,14 +1096,19 @@ function Content() {
 
   const issueStudent = students.find((st) => String(st.enrollmentId) === issue.enrollmentId) ?? null
 
-  /* 입학일은 학생 정보에 있다 — 직원이 다시 적게 하면 오타로 일할 계산이 통째로 틀어진다.
-     비어 있는 학생(예전 자료)이 있어 칸은 고칠 수 있게 둔다 */
+  /* 입학일은 학생 정보에 있다 — 직원이 다시 입력하면 오타로 일할 계산이 통째로 틀어진다.
+     비어 있는 학생(예전 자료)이 있어 칸은 수정할 수 있게 둔다.
+     ★ **학생을 바꾸면 그 학생 입학일로 다시 채운다.** 전에는 「비어 있을 때만」 채워서
+       **앞 학생의 입학일이 그대로 남았다** — 그 날짜로 일할이 계산된다. */
+  const filledFor = useRef<string | null>(null)
   useEffect(() => {
     if (issue.mode !== 'admission' || issueStudent === null) return
-    const at = issueStudent.admissionDate ?? ''
+    const key = String(issueStudent.enrollmentId)
+    if (filledFor.current === key) return
+    filledFor.current = key
     setIssue((prev) =>
-      prev.mode === 'admission' && prev.enrollmentId === String(issueStudent.enrollmentId) && prev.admissionDate === ''
-        ? { ...prev, admissionDate: at }
+      prev.mode === 'admission' && prev.enrollmentId === key
+        ? { ...prev, admissionDate: issueStudent.admissionDate ?? '' }
         : prev,
     )
   }, [issue.mode, issueStudent])
@@ -2051,7 +2056,8 @@ function Content() {
                               <th>이름</th>
                               <th>반</th>
                               <th>장학</th>
-                              <th style={{ textAlign: 'right' }}>할인율</th>
+                              {/* ★ 마지막 칸이라 오른쪽에 바짝 붙는다 — 폭과 여백을 준다 */}
+                              <th style={{ textAlign: 'right', width: 96, paddingRight: 12 }}>할인율</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -2091,8 +2097,8 @@ function Content() {
                                       </span>
                                     )}
                                   </td>
-                                  <td style={{ textAlign: 'right' }}>
-                                    {/* ★ 장학값을 채워 두고 **행마다 고칠 수 있게** 둔다.
+                                  <td style={{ textAlign: 'right', paddingRight: 12 }}>
+                                    {/* ★ 장학값을 채워 두고 **행마다 수정할 수 있게** 둔다.
                                         `step` 을 안 건다 — Modal 이 form 이라 배수가 아니면 저장이 막힌다 */}
                                     <input
                                       className="inp"
@@ -2134,7 +2140,7 @@ function Content() {
       {issueOpen && (
         <Modal
           title="청구 등록"
-          sub="교습비·입학 청구는 서버가 계산하고, 그 밖은 금액을 직접 적습니다."
+          sub="교습비·입학 청구는 금액이 자동 계산되며, 그 밖은 금액을 직접 입력합니다."
           confirmLabel="등록"
           busy={actBusy}
           error={actErr}
@@ -2364,7 +2370,7 @@ function Content() {
                       ? '입학일을 고르면 일수가 채워집니다.'
                       : remainDays === null
                         ? '불러오는 중…'
-                        : `서버 제안값은 ${remainDays}일입니다. 휴원일이 있으면 고쳐서 등록하세요.`}
+                        : `기본값은 ${remainDays}일입니다. 필요한 경우 수정하세요.`}
                   </div>
                 </div>
               </div>
@@ -2687,7 +2693,7 @@ function Content() {
             refund.done
               ? '닫기'
               : refund.preview?.requiresAdditionalPayment
-                ? '추가 징수로 확정'
+                ? '추가 납부 확정'
                 : '환불'
           }
           busy={refund.busy}
@@ -2776,7 +2782,7 @@ function Content() {
                       <div style={{ fontSize: 18, fontWeight: 800 }}>
                         {wonOf(refund.preview.refundAmount)}
                         <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, marginLeft: 8 }}>
-                          돌려드릴 금액
+                          환불 금액
                         </span>
                       </div>
                     )}
@@ -2972,7 +2978,7 @@ function Content() {
         <Modal
           title="청구 취소"
           sub={`${cancelRow.studentName} · ${cancelRow.name}`}
-          confirmLabel="취소 처리"
+          confirmLabel="청구 취소"
           danger
           busy={actBusy}
           error={actErr}
@@ -2988,11 +2994,11 @@ function Content() {
               <div className="tx">
                 {cancelRow.receivedAmount > 0 ? (
                   <>
-                    이미 <b>{cancelRow.receivedAmount.toLocaleString()}원</b>이 수납된 청구입니다. 수납 기록을
-                    먼저 취소한 뒤 청구를 취소합니다. 둘 다 매출장에서 빠집니다.
+                    <b>{cancelRow.receivedAmount.toLocaleString()}원</b>이 수납된 청구입니다. 수납 내역을 먼저
+                    취소한 뒤 청구를 취소하며, 두 건 모두 매출장에서 제외됩니다.
                   </>
                 ) : (
-                  <>청구 {cancelRow.billedAmount.toLocaleString()}원이 매출장에서 빠집니다.</>
+                  <>청구 {cancelRow.billedAmount.toLocaleString()}원이 매출장에서 제외됩니다.</>
                 )}
                 {/* ★ 발급해 둔 가상계좌는 **기한까지 계속 입금을 받는다.** 함께 닫는다는 것을
                     미리 말한다 — 안 적으면 「계좌는 어떻게 되나」를 따로 묻게 된다 */}

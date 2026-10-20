@@ -601,7 +601,7 @@ function ConvertModal({ row, onClose, onDone }: { row: ReservationRow; onClose: 
 
   async function submit() {
     if (!date) {
-      setErr('등원일을 골라 주세요.')
+      setErr('등원일을 선택하세요.')
       return
     }
     setBusy(true)
@@ -629,7 +629,7 @@ function ConvertModal({ row, onClose, onDone }: { row: ReservationRow; onClose: 
     >
       <div className="note-box">
         <div>
-          전환하면 <b>학번이 발급되고 되돌릴 수 없습니다.</b> 학년과 등원일은 나중에 학생 정보에서 고칠 수 있습니다.
+          전환하면 <b>학번이 발급되며 되돌릴 수 없습니다.</b> 학년과 등원일은 학생 정보에서 수정할 수 있습니다.
         </div>
       </div>
       <div className="frow">

@@ -1218,7 +1218,7 @@ function Content() {
                       추가
                     </button>
                   </div>
-                  <div className="hint">적은 뒤에는 고칠 수 없습니다. 지우고 다시 적습니다.</div>
+                  <div className="hint">등록 후에는 수정할 수 없습니다. 삭제 후 다시 등록해야 합니다.</div>
 
                   {memo.items === null && <div className="hint">불러오는 중…</div>}
                   {memo.items !== null && memo.items.length === 0 && <div className="hint">남긴 메모가 없습니다.</div>}
@@ -1318,7 +1318,7 @@ function Content() {
         countLabel={
           <>
             검색결과 <b>{table.totalElements}</b>건
-            <span style={{ marginLeft: 8, fontSize: 11.5, color: 'var(--muted)' }}>줄을 누르면 정보를 고칠 수 있습니다</span>
+            <span style={{ marginLeft: 8, fontSize: 11.5, color: 'var(--muted)' }}>행을 선택하면 정보를 수정할 수 있습니다</span>
           </>
         }
         toolbar={
