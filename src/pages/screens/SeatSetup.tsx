@@ -197,7 +197,7 @@ export function SeatSetup({ onChanged }: Props) {
           }}
           onToggle={(b) => act(() => updateBuilding(b.id, { active: !b.active }))}
           onDelete={(b) =>
-            setDelAsk({ title: `${b.name} 을 삭제할까요?`, sub: '되돌릴 수 없습니다. 구역이 남아 있으면 지워지지 않습니다.', run: () => deleteBuilding(b.id) })
+            setDelAsk({ title: `${b.name}을 삭제할까요?`, sub: '삭제 후에는 되돌릴 수 없습니다. 하위 구역이 남아 있으면 삭제가 진행되지 않습니다.', run: () => deleteBuilding(b.id) })
           }
         />
       )}
@@ -214,7 +214,7 @@ export function SeatSetup({ onChanged }: Props) {
           }}
           onToggle={(a) => act(() => updateSeatArea(a.id, { active: !a.active }))}
           onDelete={(a) =>
-            setDelAsk({ title: `${a.buildingName} ${a.areaCd} 구역을 삭제할까요?`, sub: '되돌릴 수 없습니다. 좌석이 남아 있으면 지워지지 않습니다.', run: () => deleteSeatArea(a.id) })
+            setDelAsk({ title: `${a.buildingName} ${a.areaCd} 구역을 삭제할까요?`, sub: '삭제 후에는 되돌릴 수 없습니다. 좌석이 남아 있으면 삭제가 진행되지 않습니다.', run: () => deleteSeatArea(a.id) })
           }
         />
       )}
@@ -239,7 +239,7 @@ export function SeatSetup({ onChanged }: Props) {
           onDelete={(s) =>
             setDelAsk({
               title: `${s.seatCd} 좌석을 삭제할까요?`,
-              sub: '되돌릴 수 없습니다. 배치도에서 그 자리가 빈칸으로 남습니다.',
+              sub: '삭제 후에는 되돌릴 수 없습니다. 배치도에서 해당 자리는 빈칸으로 표시됩니다.',
               run: () => deleteSeatMaster(s.id),
             })
           }
@@ -764,8 +764,8 @@ function SeatTab({
             disabled={picked.length === 0 || busy}
             onClick={() => {
               onBulkDelete(
-                `고른 좌석 ${picked.length}개를 지울까요?`,
-                '되돌릴 수 없습니다. 배정된 좌석이 섞여 있으면 하나도 지워지지 않습니다.',
+                `선택한 좌석 ${picked.length}개를 삭제할까요?`,
+                '삭제 후에는 되돌릴 수 없습니다. 선택한 좌석 중 배정된 좌석이 하나라도 있으면 삭제가 진행되지 않습니다.',
                 picked.map(Number),
               )
               setPicked([])
@@ -780,8 +780,8 @@ function SeatTab({
             disabled={areaId === null || seats.length === 0 || busy}
             onClick={() => {
               onBulkDelete(
-                `${area?.areaNm ?? '이 구역'}의 좌석 ${seats.length}개를 모두 지울까요?`,
-                '되돌릴 수 없습니다. 배정된 좌석이 하나라도 있으면 하나도 지워지지 않습니다.',
+                `${area?.areaNm ?? '이 구역'}의 좌석 ${seats.length}개를 모두 삭제할까요?`,
+                '삭제 후에는 되돌릴 수 없습니다. 배정된 좌석이 하나라도 있으면 삭제가 진행되지 않습니다.',
                 [],
               )
               setPicked([])
