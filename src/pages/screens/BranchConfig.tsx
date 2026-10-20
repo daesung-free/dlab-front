@@ -3,7 +3,7 @@ import { DataTable, Modal, type Column } from '../../components/common'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
 import { useAuth } from '../../auth/AuthContext'
-import { listAcademies, updateAcademy, type Academy } from '../../api/academies'
+import { listAcademies, updateAcademy } from '../../api/academies'
 import {
   getBranchConfig,
   listBranchConfigHistory,
@@ -79,14 +79,38 @@ function Content() {
     acadNm: string
     fullNm: string
     deadline: string
+    /** 비워 두면 서버가 안 건드린다 — 등원 기준만 고칠 때 지각 값이 덮어써지지 않게 */
+    lateAfter: string
   } | null>(null)
   const [acadErr, setAcadErr] = useState<string | null>(null)
-  const [academies, setAcademies] = useState<Academy[]>([])
   const [modalErr, setModalErr] = useState<string | null>(null)
   const [reissue, setReissue] = useState<Row | null>(null)
   /** 재발급 결과. secret 은 여기서 놓치면 다시 못 본다 */
   const [issued, setIssued] = useState<{ name: string; clientId: string; secret: string } | null>(null)
   const [history, setHistory] = useState<{ row: Row; list: BranchConfigHistory[] } | null>(null)
+
+  /** 지점 정보 모달을 연다 — 값을 **그 자리에서 읽어** 채운다 */
+  const openAcadEdit = useCallback(async (r: Row) => {
+    setAcadErr(null)
+    setAcadEdit({ row: r, acadNm: r.academyName, fullNm: '', deadline: '', lateAfter: '' })
+    try {
+      const a = (await listAcademies()).find((x) => x.id === r.academyId)
+      if (!a) return
+      setAcadEdit((c) =>
+        c && c.row.academyId === r.academyId
+          ? {
+              ...c,
+              acadNm: a.acadNm,
+              fullNm: a.fullNm ?? '',
+              deadline: (a.attendanceDeadline ?? '').slice(0, 5),
+              lateAfter: (a.lateAfter ?? '').slice(0, 5),
+            }
+          : c,
+      )
+    } catch (e) {
+      setAcadErr(e instanceof ApiError ? e.message : '지점 정보를 불러오지 못했습니다.')
+    }
+  }, [])
 
   const load = useCallback(async () => {
     if (!isSuper) {
@@ -234,16 +258,11 @@ function Content() {
               className="btn"
               style={{ padding: '4px 8px', fontSize: 11.5, whiteSpace: 'nowrap' }}
               disabled={busy !== null}
-              onClick={() => {
-                setAcadErr(null)
-                const a = academies.find((x) => x.id === r.academyId)
-                setAcadEdit({
-                  row: r,
-                  acadNm: a?.acadNm ?? r.academyName,
-                  fullNm: a?.fullNm ?? '',
-                  deadline: (a?.attendanceDeadline ?? '').slice(0, 5),
-                })
-              }}
+              /* ★ **열 때 직접 읽는다.** 목록 상태에서 찾던 것이 비어 있어 **정식 명칭·등원
+                 기준 시각이 늘 빈 칸으로 열렸다** — 데스크가 **지금 몇 시인지 모른 채
+                 고치게** 된다. 비워 두면 서버가 기존 값을 지키므로 오류도 안 났다.
+                 모달 한 번에 호출 하나라 비용도 없다 */
+              onClick={() => void openAcadEdit(r)}
             >
               지점 정보
             </button>
@@ -297,16 +316,6 @@ function Content() {
     [busy],
   )
 
-  useEffect(() => {
-    if (!isSuper) return
-    let alive = true
-    listAcademies()
-      .then((v) => alive && setAcademies(v))
-      .catch(() => alive && setAcademies([]))
-    return () => {
-      alive = false
-    }
-  }, [isSuper])
 
   /** 지점 정보 저장. 이름은 필수다 */
   async function saveAcademy() {
@@ -319,8 +328,10 @@ function Content() {
         fullNm: acadEdit.fullNm.trim() || undefined,
         // 서버는 HH:mm:ss 를 받는다. 칸은 HH:mm 이라 초를 붙인다
         attendanceDeadline: acadEdit.deadline ? `${acadEdit.deadline}:00` : undefined,
+        /* ★ 비워 두면 **안 보낸다.** 서버가 기존 값을 지키므로, 등원 기준만 고치는
+           흐름에서 지각 값이 조용히 덮어써지지 않는다 */
+        lateAfter: acadEdit.lateAfter ? `${acadEdit.lateAfter}:00` : undefined,
       })
-      setAcademies(await listAcademies())
       setNotice(`${acadEdit.acadNm.trim()} 지점 정보를 바꿨습니다.`)
       setAcadEdit(null)
     } catch (err) {
@@ -379,6 +390,9 @@ function Content() {
               onChange={(e) => setAcadEdit({ ...acadEdit, fullNm: e.target.value })}
             />
           </div>
+          {/* ★★ **두 시각을 한 칸으로 묶지 않는다**(2026-10-19 디랩 회신으로 분리).
+                 같은 값으로 두면 기준이 08:20 인 지점에서 **07:55 에 온 학생이 출결상
+                 정상 등원인데 학부모에게는 지각 알림**이 간다. 라벨도 갈라 적는다 */}
           <div className="frow">
             <label>등원 기준 시각</label>
             <div>
@@ -388,9 +402,34 @@ function Content() {
                 value={acadEdit.deadline}
                 onChange={(e) => setAcadEdit({ ...acadEdit, deadline: e.target.value })}
               />
-              {/* 바꾸면 그날부터 지각 집계가 달라진다 — 조용히 저장하면 안 되는 값이다 */}
+              <div className="hint">
+                이 시각까지 안 오면 <b>미등원</b>으로 잡아 안내가 나갑니다.
+              </div>
+            </div>
+          </div>
+          <div className="frow">
+            <label>지각 기준 시각</label>
+            <div>
+              <input
+                className="inp"
+                type="time"
+                value={acadEdit.lateAfter}
+                onChange={(e) => setAcadEdit({ ...acadEdit, lateAfter: e.target.value })}
+              />
+              {/* ★ `type="time"` 은 **자리글이 안 보인다**(브라우저가 `--:--` 로 덮는다).
+                  비웠을 때 무슨 일이 생기는지는 **안내문에 실제 값을 넣어** 말한다 —
+                  「안 넣어도 되는 값」인지 「안 넣으면 안 도는 값」인지 여기서 갈린다.
+                  ★ 기본값을 박지 않는다. 그러면 **값이 안 들어온 지점에서 아침에 오는
+                    학생이 전부 지각**으로 찍힌다 */}
               <div className="hint">
                 이 시각 이후 첫 태깅이 <b>지각</b>입니다. 바꾸면 그날부터 지각 판정이 달라집니다.
+              </div>
+              <div className="hint">
+                {acadEdit.lateAfter === ''
+                  ? acadEdit.deadline
+                    ? `지금은 비어 있어 등원 기준 시각(${acadEdit.deadline})을 그대로 씁니다.`
+                    : '지금은 비어 있어 등원 기준 시각을 그대로 씁니다.'
+                  : '비우면 등원 기준 시각을 그대로 씁니다.'}
               </div>
             </div>
           </div>
