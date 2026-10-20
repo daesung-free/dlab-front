@@ -17,6 +17,8 @@ import {
   postNoticeToClass,
   postNoticeToStudents,
   patchNotice,
+  attachFileToNotice,
+  uploadNoticeFile,
   type Notice as ApiNotice,
 } from '../../api/notices'
 import { MOCK_STUDENTS } from './mockStudents'
@@ -289,21 +291,75 @@ function Content() {
     if (title.trim() === '' || content.trim() === '') return
     setSaving(true)
     try {
-      if (scope === 'ALL') await postNoticeToAll(title.trim(), content.trim())
-      else if (scope === 'CLASS') await postNoticeToClass(Number(classId), title.trim(), content.trim())
-      else if (scope === 'SELECTED') await postNoticeToStudents(picked.map(Number), title.trim(), content.trim())
-      else if (academyId !== null) await postNoticeToBranch(academyId, title.trim(), content.trim())
+      /* ★ **대상에 따라 경로가 넷이고 응답이 다르다.** 첨부를 붙이려면 만들어진
+         공지 id 가 필요한데, 전체·지점·반은 한 건이고 개별은 여러 건이다 */
+      let made: { id: number }[] = []
+      if (scope === 'ALL') made = [await postNoticeToAll(title.trim(), content.trim())]
+      else if (scope === 'CLASS') made = [await postNoticeToClass(Number(classId), title.trim(), content.trim())]
+      else if (scope === 'SELECTED')
+        made = [await postNoticeToStudents(picked.map(Number), title.trim(), content.trim())]
+      else if (academyId !== null) made = [await postNoticeToBranch(academyId, title.trim(), content.trim())]
+
+      /* ★ **저장 뒤에 붙인다.** 올리는 것과 붙이는 것이 따로라 `ownerId` 없이 먼저
+         올려 두었다 — 저장부터 강제하면 **쓰다 만 공지가 쌓인다.**
+         ★ 붙이기가 실패해도 **공지는 이미 나갔다.** 「발송 실패」로 뭉뚱그리지 않고
+           무엇이 안 됐는지 그대로 쓴다(CLAUDE.md 4장) */
+      let attachFailed = 0
+      if (files.length > 0 && made.length > 0 && made[0]?.id) {
+        for (const f of files) {
+          try {
+            await attachFileToNotice(f.id, made[0].id)
+          } catch {
+            attachFailed += 1
+          }
+        }
+      }
+      if (attachFailed > 0) {
+        setError(`공지는 보냈지만 첨부 ${attachFailed}개가 붙지 않았습니다. 공지를 열어 다시 올려주세요.`)
+      }
       setTitle('')
       setContent('')
       setClassId('')
       setPicked([])
       setPickClass('')
+      setFiles([])
       setComposing(false)
       await load()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '공지를 보내지 못했습니다.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  /* ── 첨부 ─────────────────────────────────────────────────
+   * ★ **저장 전에 올린다.** `ownerId` 없이 올려 id 를 받아 두고, 공지를 저장한 뒤 잇는다.
+   *   저장부터 강제하면 **쓰다 만 공지가 쌓인다.** */
+  const [files, setFiles] = useState<{ id: number; name: string }[]>([])
+  const [upBusy, setUpBusy] = useState(false)
+
+  async function onPickFiles(list: FileList | null) {
+    if (!list || list.length === 0) return
+    setUpBusy(true)
+    setError(null)
+    try {
+      for (const f of Array.from(list)) {
+        const r = await uploadNoticeFile(f)
+        setFiles((v) => [...v, { id: r.id, name: r.fileName || f.name }])
+      }
+    } catch (e) {
+      /* ★ 「파일 저장소가 설정되지 않았습니다」는 **우리 사정**이다 — 담당자가 할 수 있는
+         일이 없는데 그대로 보여주면 무엇을 잘못했나 찾는다(CLAUDE.md 1-1).
+         「이미지·PDF 만」처럼 **담당자가 고칠 수 있는** 문구는 그대로 쓴다 */
+      setError(
+        e instanceof ApiError
+          ? e.code === 'FILE_STORAGE_NOT_CONFIGURED'
+            ? '첨부는 아직 준비 중입니다.'
+            : e.message
+          : '첨부를 올리지 못했습니다.',
+      )
+    } finally {
+      setUpBusy(false)
     }
   }
 
@@ -556,6 +612,45 @@ function Content() {
                     <div className="frow">
                       <label className="req">내용</label>
                       <textarea className="ta" value={content} onChange={(e) => setContent(e.target.value)} />
+                    </div>
+                    {/* ★ **저장 전에 올린다.** 저장부터 강제하면 쓰다 만 공지가 쌓인다 —
+                        올린 파일은 공지를 보낼 때 붙는다 */}
+                    <div className="frow">
+                      <label>첨부</label>
+                      <div>
+                        {/* ★ 서버가 **이미지·PDF 만** 받는다. 안 적으면 고르고 나서야
+                            거절당한다 — `accept` 로 **고르는 단계에서** 걸러낸다 */}
+                        <input
+                          type="file"
+                          multiple
+                          accept="image/jpeg,image/png,image/gif,application/pdf"
+                          disabled={upBusy}
+                          onChange={(e) => {
+                            void onPickFiles(e.target.files)
+                            e.target.value = ''
+                          }}
+                        />
+                        {upBusy && <div className="hint">올리는 중…</div>}
+                        {files.length > 0 && (
+                          <div className="pick-list" style={{ maxHeight: 140, marginTop: 8 }}>
+                            {files.map((f) => (
+                              <label key={f.id} className="pick-row">
+                                <span style={{ flex: 1 }}>{f.name}</span>
+                                <button
+                                  type="button"
+                                  className="lnk"
+                                  onClick={() => setFiles((v) => v.filter((x) => x.id !== f.id))}
+                                >
+                                  빼기
+                                </button>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                        <div className="hint">
+                          이미지(jpg·png·gif)와 PDF 만 올릴 수 있습니다. 보내기를 눌러야 공지에 붙습니다.
+                        </div>
+                      </div>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                       <button className="btn" onClick={() => setComposing(false)}>

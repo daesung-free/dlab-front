@@ -288,6 +288,7 @@ function Content() {
     if (logSignal > 0) setTab('log')
   }, [logSignal])
 
+
   /* 발송 이력 탭 — 기본 30일. 기간을 안 좁히면 집계가 통째로 온다(페이징이 없다) */
   const [logFrom, setLogFrom] = useState(() => daysAgo(30))
   const [logTo, setLogTo] = useState(() => daysAgo(0))
@@ -350,6 +351,20 @@ function Content() {
   useEffect(() => {
     void load()
   }, [load])
+
+  /* ★ 막힌 이유를 **세어서** 보여준다. 행마다 「안 나감」이 적혀 있어도
+     **몇 종이 왜 막혀 있는지**는 눈으로 세어야 알 수 있다 */
+  const blockedSummary = useMemo(() => {
+    const blocked = rows.filter((t) => !t.sendable)
+    return {
+      total: blocked.length,
+      noContent: blocked.filter((t) => !t.contentConfirmed).length,
+      noReview: blocked.filter((t) => t.reviewStatus === 'DRAFT').length,
+      /* 앱 푸시는 심사가 없다 — 문구만 오면 바로 돈다 */
+      pushReady: blocked.filter((t) => t.channel === 'FCM_PUSH' && !t.contentConfirmed).length,
+      missingAttendance: blocked.some((t) => t.event === 'MISSING_ATTENDANCE'),
+    }
+  }, [rows])
 
   const picked = rows.find((r) => r.id === pickedId) ?? null
 
@@ -939,6 +954,45 @@ function Content() {
             {loadError && (
               <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
                 {loadError}
+              </div>
+            )}
+            {/* ★★ **하나도 안 나가고 있는데 표만 보면 모른다.** 행마다 「안 나감」이
+                적혀 있어도 **몇 종이 왜 막혀 있는지**는 세어 봐야 안다.
+                ★ 특히 **미등원 안내**가 막혀 있으면 **무단결석 학부모에게 아무 연락도
+                  가지 않는다** — SMS 폴백도 폐기돼 대체 경로가 없다(E-5). 따로 띄운다. */}
+            {rows.length > 0 && blockedSummary.total > 0 && (
+              <div className="note-box risk">
+                <div className="ic">
+                  <Icon name="triangle-alert" size={17} />
+                </div>
+                <div>
+                  <div className="tt">{blockedSummary.total}종이 나가지 않습니다</div>
+                  <div className="tx">
+                    {blockedSummary.noContent > 0 && (
+                      <>
+                        문구가 아직 안 들어온 것 <b>{blockedSummary.noContent}종</b>
+                        {blockedSummary.noReview > 0 && ' · '}
+                      </>
+                    )}
+                    {blockedSummary.noReview > 0 && (
+                      <>
+                        카카오 심사를 안 받은 것 <b>{blockedSummary.noReview}종</b>
+                      </>
+                    )}
+                    {blockedSummary.pushReady > 0 && (
+                      <div style={{ marginTop: 4 }}>
+                        이 중 <b>앱 푸시 {blockedSummary.pushReady}종</b>은 심사가 없어 <b>문구만 들어오면</b>{' '}
+                        바로 나갑니다.
+                      </div>
+                    )}
+                    {blockedSummary.missingAttendance && (
+                      <div style={{ marginTop: 6, fontWeight: 700 }}>
+                        ⚠️ 미등원 안내가 막혀 있습니다 — 지금은 무단결석 학부모에게 아무 연락도 가지
+                        않습니다.
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
             <DataTable
