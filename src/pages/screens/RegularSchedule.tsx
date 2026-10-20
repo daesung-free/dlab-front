@@ -386,7 +386,7 @@ function Content() {
                 value={edit.enrollmentId}
                 onChange={(e) => setEdit({ ...edit, enrollmentId: e.target.value })}
               >
-                <option value="">선택하세요</option>
+                <option value="">선택</option>
                 {students.map((s) => (
                   <option key={s.enrollmentId} value={String(s.enrollmentId)}>
                     {s.studentNo ?? '-'} · {s.name}

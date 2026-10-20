@@ -69,7 +69,7 @@ import {
   type FeeTableRow,
   type SeatType,
 } from '../../api/tuition'
-import { listScholarshipMasters, listStudentScholarships } from '../../api/masters'
+import { listStudentScholarships } from '../../api/masters'
 import {
   executeRefund,
   listPendingTransfers,
@@ -551,7 +551,7 @@ function BreakdownBox({ b }: { b: TuitionBreakdown }) {
   )
   return (
     <div className="frow">
-      <label>계산 근거</label>
+      <label>계산 내역</label>
       <div>
         <table className="mini-tbl">
           <tbody>
@@ -600,9 +600,9 @@ function BreakdownBox({ b }: { b: TuitionBreakdown }) {
           </tbody>
         </table>
         <div className="hint">
-          {b.rounding === 'FLOOR' ? '원 단위 버림으로 계산합니다.' : `절사 규칙: ${b.rounding}`}
+          {b.rounding === 'FLOOR' ? '금액은 원 단위 버림으로 계산합니다.' : `절사 규칙: ${b.rounding}`}
           {b.wholeMonth === false && b.remainingDays !== null && (
-            <> 교습일수는 서버 제안 {b.remainingDays}일입니다 — 고칠 수 있습니다.</>
+            <> 교습일수 {b.remainingDays}일은 기본값이며, 수정 가능합니다.</>
           )}
         </div>
       </div>
@@ -845,7 +845,16 @@ function Content() {
     month: string
     dueDate: string
     seatType: SeatType
-    rows: { enrollmentId: number; name: string; studentNo: string | null; className: string | null; rate: string; source: string | null }[] | null
+    rows: {
+      enrollmentId: number
+      name: string
+      studentNo: string | null
+      className: string | null
+      rate: string
+      source: string | null
+      /** 마스터에 없는 장학 코드 — 취소 판정에서 빠진다 */
+      unregistered: boolean
+    }[] | null
     picked: string[]
     busy: boolean
     err: string | null
@@ -872,16 +881,10 @@ function Content() {
     })
     void (async () => {
       try {
-        /* ★ **장학은 코드로 저장된다**(`CSAT_100`). 그대로 보여주면 개발자용 글자가
-           화면에 뜨고, 그 코드가 **청구의 장학명으로도 박힌다** — 나중에 통합 매출장
-           「장학」 열에 `CSAT_100` 이 남는다. 마스터에서 이름을 찾아 쓴다.
-           ★ 마스터를 못 읽어도 멈추지 않는다 — 그때는 코드가 그대로 보이지만
-             청구는 되어야 한다 */
-        const [res, masters] = await Promise.all([
-          searchStudents({ academyId: academyId ?? undefined, status: 'ENROLLED', size: 500 }),
-          listScholarshipMasters(new Date().getFullYear(), academyId ?? undefined).catch(() => []),
-        ])
-        const nameOfCode = new Map(masters.map((m) => [m.code, m.name]))
+        /* ★ **서버가 `displayName` 을 준다.** 화면에서 코드→이름을 만들지 않는다 —
+           화면마다 다르게 만들면 매출장·취소 판정·청구 근거가 **서로 다른 이름**을 본다
+           (2026-10-20 서버 추가). */
+        const res = await searchStudents({ academyId: academyId ?? undefined, status: 'ENROLLED', size: 500 })
         /* ★ 장학을 학생마다 읽는다. 500명이면 500번이라 **동시에 던지되** 실패는
            무시한다 — 장학이 없는 학생이 대부분이고, 못 읽었다고 청구를 막을 일은 아니다.
            ★ **담임·조회전용은 아예 안 부른다.** 그 계정은 장학이 403 이라 500번이
@@ -891,12 +894,16 @@ function Content() {
           res.rows.map(async (r) => {
             let rate = ''
             let source: string | null = null
-            if (!canSeeScholarship) return { enrollmentId: r.enrollmentId, name: r.name, studentNo: r.studentNo, className: r.className, rate, source }
+            let unregistered = false
+            if (!canSeeScholarship)
+              return { enrollmentId: r.enrollmentId, name: r.name, studentNo: r.studentNo, className: r.className, rate, source, unregistered }
             try {
               const sch = (await listStudentScholarships(r.enrollmentId)).find((x) => x.discountRate !== null)
               if (sch) {
                 rate = String(sch.discountRate)
-                source = nameOfCode.get(sch.scholarshipType) ?? sch.scholarshipType
+                source = sch.displayName ?? sch.scholarshipType
+                /* ★★ 마스터에 없는 코드면 **취소 판정이 이 학생을 건너뛴다.** 알려야 한다 */
+                unregistered = sch.registered === false
               }
             } catch {
               /* 장학을 못 읽어도 청구는 할 수 있다 — 기본값 0으로 둔다 */
@@ -908,6 +915,7 @@ function Content() {
               className: r.className,
               rate,
               source,
+              unregistered,
             }
           }),
         )
@@ -1327,12 +1335,15 @@ function Content() {
       try {
         const reqs = await listPaymentRequests(cancelRow.billingId)
         for (const q of reqs.filter((x) => x.status === 'CREATED' && x.vbankAccount)) {
+          const no = q.vbankAccount ?? String(q.id)
           try {
             const r = await closePaymentRequest(q.id)
             /* ⚠️ PG 가 받아들여야 서버가 상태를 바꾼다. 안 바뀌었으면 **계좌는 살아 있다** */
-            if (r.status === 'CREATED') vbankLeft.push(q.vbankAccount ?? String(q.id))
-          } catch {
-            vbankLeft.push(q.vbankAccount ?? String(q.id))
+            if (r.status === 'CREATED') vbankLeft.push(no)
+          } catch (e) {
+            /* ★ **서버 사유를 버리지 않는다.** 「이미 입금된 가상계좌입니다. 말소가 아니라
+               환불로 처리해야 합니다」처럼 **담당자가 할 일**이 거기 들어 있다 */
+            vbankLeft.push(e instanceof ApiError ? `${no} — ${e.message}` : no)
           }
         }
       } catch {
@@ -1345,7 +1356,7 @@ function Content() {
             ? `청구를 취소하고 수납 ${cancelRow.payments.length}건도 함께 취소했습니다.`
             : '청구를 취소했습니다.',
           vbankLeft.length > 0
-            ? `⚠️ 가상계좌 ${vbankLeft.join(' · ')}는 닫히지 않았습니다. 그 계좌로 입금이 들어올 수 있으니 결제업체에 확인하세요.`
+            ? `⚠️ 가상계좌 ${vbankLeft.join(' · ')}가 해지되지 않았습니다. 해당 계좌로 입금될 수 있으므로 결제업체에 확인하세요.`
             : '',
         ]
           .filter(Boolean)
@@ -1474,7 +1485,7 @@ function Content() {
               <button
                 className="btn"
                 style={{ padding: '4px 9px', fontSize: 11.5 }}
-                title="퇴원·중도해지 환불액을 계산해 집행합니다"
+                title="퇴원·중도해지 환불액을 계산합니다"
                 onClick={() => {
                   setActErr(null)
                   setRefund({ row: r, usedDays: '', preview: null, busy: false, err: null, done: null })
@@ -1602,8 +1613,8 @@ function Content() {
                   여기에 찍는다 — 안 찍으면 이 목록이 **영원히 안 줄어든다** */}
               <div className="note-box">
                 <div>
-                  <b>아직 돈이 나가지 않은 건들입니다.</b> 은행에서 직접 보낸 뒤 「이체 완료」를 누르세요.
-                  누르지 않으면 이 목록에 계속 남습니다.
+                  이체 대기 중인 환불 내역입니다. 은행에서 이체한 후 [이체 완료]를 선택하세요. 완료 처리
+                  전까지 이 목록에 표시됩니다.
                 </div>
               </div>
               <DataTable
@@ -1829,8 +1840,10 @@ function Content() {
                   >
                     <Icon name="plus" size={14} /> 청구 등록
                   </button>
-                  {/* ★ 매월 수백 명을 한 명씩 등록하던 것(1016 피드백 2-1) */}
-                  <button className="btn" disabled={academyId === null} onClick={openBulk}>
+                  {/* ★ 매월 수백 명을 한 명씩 등록하던 것(1016 피드백 2-1).
+                      `data-write` 는 **조회 전용에서 숨기는 표시**다 — 주 동작 버튼도
+                      표 안 버튼도 아니라 가드에 안 걸린다 */}
+                  <button className="btn" data-write disabled={academyId === null} onClick={openBulk}>
                     <Icon name="users" size={14} /> 교습비 일괄 청구
                   </button>
                   <MaskToggle masked={masked} onChange={setMasked} />
@@ -1924,7 +1937,7 @@ function Content() {
                             청구되지 않은 {needFix.length}명 — 확인이 필요합니다
                           </b>
                           <div className="hint" style={{ marginBottom: 6 }}>
-                            그냥 두면 이 학생들의 교습비는 청구되지 않습니다.
+                            해당 학생들의 교습비를 청구하려면 청구를 생성해야 합니다.
                           </div>
                           <table className="mini-tbl">
                             <thead>
@@ -1951,7 +1964,7 @@ function Content() {
                       )}
                       {already.length > 0 && (
                         <div className="hint" style={{ marginTop: 12 }}>
-                          이미 청구가 있는 <b>{already.length}명</b>은 건너뛰었습니다. 그대로 두면 됩니다.
+                          이미 청구가 등록된 학생 <b>{already.length}명</b>은 생성 대상에서 제외되었습니다.
                         </div>
                       )}
                     </>
@@ -1979,7 +1992,7 @@ function Content() {
                     onChange={(e) => setBulk({ ...bulk, dueDate: e.target.value })}
                   />
                   {/* 비우면 통합 매출장에서 기간으로 좁힐 때 안 보인다 */}
-                  <div className="hint">비우면 기간으로 찾을 때 이 청구가 안 보입니다.</div>
+                  <div className="hint">기간을 입력하지 않으면 기간별 검색 결과에 표시되지 않습니다.</div>
                 </div>
               </div>
               <div className="frow">
@@ -2061,7 +2074,20 @@ function Content() {
                                   <td>{r.studentNo ?? '-'}</td>
                                   <td>{r.name}</td>
                                   <td>{r.className ?? '-'}</td>
-                                  <td>{r.source ?? '-'}</td>
+                                  <td>
+                                    {r.source ?? '-'}
+                                    {/* ★★ 마스터에 없는 코드다. **장학 취소 판정이 이 학생을
+                                        건너뛴다** — 오류도 안 나고 검토 목록에도 안 뜬다 */}
+                                    {r.unregistered && (
+                                      <span
+                                        className="mk brandnew"
+                                        style={{ marginLeft: 4 }}
+                                        title="장학 기준에 등록되지 않은 코드입니다. 장학 취소 판정 대상에서 제외됩니다."
+                                      >
+                                        미등록
+                                      </span>
+                                    )}
+                                  </td>
                                   <td style={{ textAlign: 'right' }}>
                                     {/* ★ 장학값을 채워 두고 **행마다 고칠 수 있게** 둔다.
                                         `step` 을 안 건다 — Modal 이 form 이라 배수가 아니면 저장이 막힌다 */}
@@ -2090,7 +2116,7 @@ function Content() {
                         </table>
                       </div>
                       <div className="hint">
-                        할인율은 학생의 장학으로 채워 두었습니다. 행마다 고칠 수 있습니다.
+                        학생별 장학 정보에 따라 할인율이 자동 입력됩니다. 각 행에서 수정할 수 있습니다.
                       </div>
                     </>
                   )}
@@ -2125,6 +2151,9 @@ function Content() {
             {/* ★ .frow 는 112px + 1fr 2열 그리드다. 안내문을 컨트롤의 **형제**로 두면
                    라벨 칸으로 떨어져 왼쪽에 눌려 붙는다 — 한 칸에 묶는다 */}
             <div>
+              {/* ★ 버튼이 좁아지면 브라우저가 **공백이 있는 아무 데서나** 자른다 —
+                  「입학 (첫 / 달)」 처럼 괄호 안에서 잘린다. 괄호 안 공백을 줄바꿈 없는
+                  공백(`\u00a0`)으로 두어 **괄호 앞에서만** 잘리게 한다 */}
               <div style={{ display: 'flex', gap: 8 }}>
                 <button
                   type="button"
@@ -2138,14 +2167,14 @@ function Content() {
                   className={`btn${issue.mode === 'admission' ? ' pri' : ''}`}
                   onClick={() => setIssue({ ...issue, mode: 'admission' })}
                 >
-                  입학 (첫 달)
+                  {'입학 (첫\u00a0달)'}
                 </button>
                 <button
                   type="button"
                   className={`btn${issue.mode === 'etc' ? ' pri' : ''}`}
                   onClick={() => setIssue({ ...issue, mode: 'etc' })}
                 >
-                  특강비 · 급식비 · 그 밖
+                  {'특강비 · 급식비 · 그\u00a0밖'}
                 </button>
               </div>
               <div className="hint">
@@ -2165,7 +2194,7 @@ function Content() {
               value={issue.enrollmentId}
               onChange={(e) => setIssue({ ...issue, enrollmentId: e.target.value })}
             >
-              <option value="">선택하세요</option>
+              <option value="">선택</option>
               {students.map((st) => (
                 <option key={st.enrollmentId} value={String(st.enrollmentId)}>
                   {st.studentNo ?? '-'} · {st.name}
@@ -2656,7 +2685,7 @@ function Content() {
               ? '닫기'
               : refund.preview?.requiresAdditionalPayment
                 ? '추가 징수로 확정'
-                : '환불 집행'
+                : '환불'
           }
           busy={refund.busy}
           confirmDisabled={!refund.done && (refund.preview === null || refund.usedDays === '')}
@@ -2678,18 +2707,18 @@ function Content() {
                     </>
                   ) : refund.done.status === 'ADDITIONAL_PAYMENT' ? (
                     <>
-                      <b>{wonOf(Math.abs(refund.done.refundAmount))}을 더 받아야 합니다.</b> 돌려드릴 금액이
-                      아닙니다 — 학부모에게 추가 납부를 안내하세요.
+                      추가 납부가 필요한 금액은 <b>{wonOf(Math.abs(refund.done.refundAmount))}</b>입니다.
+                      학부모에게 추가 납부를 안내하세요.
                     </>
                   ) : refund.done.status === 'PENDING' ? (
                     <>
-                      <b>{wonOf(refund.done.refundAmount)} 이체 대기로 등록했습니다.</b> 아직 돈이 나가지
-                      않았습니다 — 은행에서 보낸 뒤 「이체 완료」를 눌러 주세요.
+                      <b>{wonOf(refund.done.refundAmount)}이 이체 대기로 등록되었습니다.</b> 아직 이체되지
+                      않았습니다. 은행에서 이체한 후 [이체 완료]를 선택하세요.
                     </>
                   ) : (
                     <>
-                      <b>{wonOf(refund.done.refundAmount)}을 환불했습니다.</b> 카드 결제분은 결제사에서 부분
-                      취소됐습니다.
+                      <b>{wonOf(refund.done.refundAmount)} 환불이 완료되었습니다.</b> 카드 결제 건은 결제사를
+                      통해 부분 취소되었습니다.
                     </>
                   )}
                 </div>
@@ -2714,7 +2743,7 @@ function Content() {
                     placeholder="예: 12"
                     onChange={(e) => setRefund({ ...refund, usedDays: e.target.value })}
                   />
-                  <div className="hint">실제로 다닌 날만 셉니다. 휴원일은 빼고 넣으세요.</div>
+                  <div className="hint">실제 수강한 일수를 입력하세요. 휴원일은 제외합니다.</div>
                 </div>
               </div>
 
@@ -2728,11 +2757,9 @@ function Content() {
                     {refund.preview.requiresAdditionalPayment ? (
                       <div className="note-box bad">
                         <div>
-                          <b style={{ color: 'var(--red)' }}>
-                            돌려줄 금액이 없습니다 — {wonOf(Math.abs(refund.preview.refundAmount))}을 더 받아야
-                            합니다.
-                          </b>{' '}
-                          할인받은 금액보다 다닌 만큼의 수강료가 커서 생기는 경우입니다.
+                          실제 수강한 기간의 수강료가 납부액을 초과하여 환불액이 없습니다. 추가 납부가 필요한
+                          금액은 <b style={{ color: 'var(--red)' }}>{wonOf(Math.abs(refund.preview.refundAmount))}</b>
+                          입니다.
                         </div>
                       </div>
                     ) : (
@@ -2793,8 +2820,8 @@ function Content() {
 
               <div className="note-box">
                 <div>
-                  <b>되돌릴 수 없습니다.</b> 카드 결제분은 <b>결제사에서 바로 부분 취소</b>되고, 가상계좌분은{' '}
-                  <b>이체 대기</b>로 쌓여 은행에서 따로 보내야 합니다.
+                  환불 후에는 되돌릴 수 없습니다. 카드 결제 건은 결제사를 통해 즉시 부분 취소됩니다. 가상계좌
+                  결제 건은 <b>이체 대기</b>로 등록되며, 은행에서 직접 이체해야 합니다.
                 </div>
               </div>
             </>
@@ -2960,7 +2987,7 @@ function Content() {
                 {/* ★ 발급해 둔 가상계좌는 **기한까지 계속 입금을 받는다.** 함께 닫는다는 것을
                     미리 말한다 — 안 적으면 「계좌는 어떻게 되나」를 따로 묻게 된다 */}
                 <div style={{ marginTop: 6 }}>
-                  발급된 <b>가상계좌가 있으면 함께 닫습니다.</b> 닫지 않으면 그 번호로 입금이 들어옵니다.
+                  취소 시 발급된 가상계좌도 함께 해지됩니다.
                 </div>
               </div>
             </div>

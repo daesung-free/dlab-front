@@ -1427,7 +1427,7 @@ function Content() {
                   />
                 </label>
                 <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>
-                  발행하면 수납현황 통합 매출장에 잡힙니다. 이미 발행된 주문은 건너뜁니다.
+                  발행 시 수납현황의 통합 매출장에 반영됩니다. 이미 발행된 주문은 발행 대상에서 제외됩니다.
                 </span>
               </div>
             </div>
@@ -1548,7 +1548,7 @@ function Content() {
                             청구되지 않은 {needFix.length}명 — 확인이 필요합니다
                           </b>
                           <div className="hint" style={{ marginBottom: 6 }}>
-                            그냥 두면 이 학생들의 급식비는 청구되지 않습니다.
+                            해당 학생들의 급식비를 청구하려면 청구를 생성해야 합니다.
                           </div>
                           <table className="mini-tbl">
                             <thead>
@@ -1572,7 +1572,7 @@ function Content() {
                       )}
                       {already.length > 0 && (
                         <div className="hint" style={{ marginTop: 12 }}>
-                          이미 청구가 발행된 <b>{already.length}명</b>은 건너뛰었습니다. 그대로 두면 됩니다.
+                          이미 청구가 등록된 학생 <b>{already.length}명</b>은 생성 대상에서 제외되었습니다.
                         </div>
                       )}
                     </>

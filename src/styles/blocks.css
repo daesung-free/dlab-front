@@ -161,22 +161,27 @@
   font-size: 12.5px;
 }
 
-/* 조회 전용 계정에서 쓰기 버튼을 죽인다.
-   ★ `[data-allow-readonly]` 는 비켜 간다. 이 예외가 없어서 **비밀번호 변경 모달의 확인
-     버튼까지 막혀, 임시 비밀번호를 받은 조회 전용 계정이 영구히 잠겼다**(2026-09-27 실테스트).
-     조회 전용 계정에는 '비밀번호 변경' 메뉴가 따로 없어 빠져나갈 길이 없었다. */
+/* 조회 전용 계정에서 쓰기 버튼을 **숨긴다**.
+ *
+ * ★ 전에는 흐리게 두고 「조회 전용」 꼬리표를 달았는데, **눌러도 아무 일이 없는 버튼**이
+ *   화면에 남는다 — 「고장났나」로 읽힌다. 없는 편이 낫다(2026-10-20 결정).
+ * ★ `[data-allow-readonly]` 는 비켜 간다. 이 예외가 없어서 **비밀번호 변경 모달의 확인
+ *   버튼까지 막혀, 임시 비밀번호를 받은 조회 전용 계정이 영구히 잠겼다**(2026-09-27 실테스트).
+ *   조회 전용 계정에는 '비밀번호 변경' 메뉴가 따로 없어 빠져나갈 길이 없었다.
+ */
 [data-readonly] .btn.pri:not([data-allow-readonly]) {
-  opacity: 0.45;
-  pointer-events: none;
+  display: none;
 }
 
-[data-readonly] .btn.pri:not([data-allow-readonly])::after {
-  content: '조회 전용';
-  margin-left: 6px;
-  padding: 1px 5px;
-  border-radius: 5px;
-  background: rgba(0, 0, 0, 0.12);
-  font-size: 9.5px;
-  font-weight: 800;
-  white-space: nowrap;
+/* ★ 표 끝 동작 칸 — 수납·환불·삭제처럼 **바꾸는 것**만 들어간다.
+ *   검색·엑셀·인쇄는 표 밖이라 그대로 남는다. 상세 보기 모달도 영향 없다. */
+[data-readonly] .dt-act .btn:not([data-allow-readonly]) {
+  display: none;
 }
+
+/* ★ 표 밖에 있는 쓰기 버튼 — 주 동작도 행 동작도 아닌 것(예: 「교습비 일괄 청구」).
+ *   `data-write` 를 달아 둔다. 검색·엑셀·인쇄에는 달지 않는다. */
+[data-readonly] .btn[data-write] {
+  display: none;
+}
+

@@ -1103,7 +1103,7 @@ function Content() {
                     setRenaming({ ...renaming, extra: { ...renaming.extra, [f.key]: e.target.value } })
                   }
                 >
-                  <option value="">선택하세요</option>
+                  <option value="">선택</option>
                   {(f.options ?? []).map((o) => (
                     <option key={o.value} value={o.value}>
                       {o.label}
@@ -1207,7 +1207,7 @@ function Content() {
                   value={draft.extra[f.key] ?? ''}
                   onChange={(e) => setDraft({ ...draft, extra: { ...draft.extra, [f.key]: e.target.value } })}
                 >
-                  <option value="">선택하세요</option>
+                  <option value="">선택</option>
                   {(f.options ?? []).map((o) => (
                     <option key={o.value} value={o.value}>
                       {o.label}

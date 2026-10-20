@@ -290,7 +290,15 @@ export function DataTable<T>({
                       <td
                         key={c.key}
                         style={stickyStyle(c.key)}
-                        className={[stickyClass(c.key), c.align ? `al-${c.align}` : '', c.mask && masked ? 'masked' : '']
+                        className={[
+                          stickyClass(c.key),
+                          c.align ? `al-${c.align}` : '',
+                          c.mask && masked ? 'masked' : '',
+                          /* ★ 행 끝 동작 칸. **조회 전용 계정에서 이 칸의 버튼을 숨긴다** —
+                             수납·환불·삭제처럼 **바꾸는 것**만 여기 들어간다(검색·엑셀은
+                             표 밖이다). 화면마다 버튼을 찾아 표시하지 않아도 된다 */
+                          c.key === 'act' ? 'dt-act' : '',
+                        ]
                           .filter(Boolean)
                           .join(' ')}
                       >

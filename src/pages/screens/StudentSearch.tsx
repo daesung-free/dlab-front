@@ -823,7 +823,7 @@ function Content() {
               value={statusEdit.next}
               onChange={(e) => setStatusEdit({ ...statusEdit, next: e.target.value as EnrollmentStatus | '' })}
             >
-              <option value="">선택하세요</option>
+              <option value="">선택</option>
               {/* ★ 지금과 같은 상태는 빼둔다. 서버가 "이미 같은 상태입니다"로 거절하는데,
                      고를 수 있게 두면 그 오류를 보고서야 안다. */}
               {(['ENROLLED', 'LEAVE', 'WITHDRAWN', 'EXPELLED', 'GRADUATED'] as EnrollmentStatus[])

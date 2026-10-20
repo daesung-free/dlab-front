@@ -506,7 +506,7 @@ function Content() {
                         <label className="req">반</label>
                         <div>
                           <select className="sel" value={classId} onChange={(e) => setClassId(e.target.value)}>
-                            <option value="">선택하세요</option>
+                            <option value="">선택</option>
                             {classes.map((c) => (
                               <option key={c.id} value={String(c.id)}>
                                 {c.name}
@@ -648,7 +648,8 @@ function Content() {
                           </div>
                         )}
                         <div className="hint">
-                          이미지(jpg·png·gif)와 PDF 만 올릴 수 있습니다. 보내기를 눌러야 공지에 붙습니다.
+                          이미지(JPG·PNG·GIF)와 PDF 파일만 첨부할 수 있습니다. [보내기]를 선택해야 공지에
+                          등록됩니다.
                         </div>
                       </div>
                     </div>

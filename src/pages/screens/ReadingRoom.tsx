@@ -776,7 +776,7 @@ function Content() {
                     value={assignTo.pick}
                     onChange={(e) => setAssignTo({ ...assignTo, pick: e.target.value })}
                   >
-                    <option value="">고르세요</option>
+                    <option value="">학생 선택</option>
                     {swapMates.map((m) => (
                       <option key={m.seatId} value={String(m.enrollmentId)}>
                         {m.seatCd} · {m.studentName ?? '배정됨'}
@@ -816,7 +816,7 @@ function Content() {
                     value={assignTo.pick}
                     onChange={(e) => setAssignTo({ ...assignTo, pick: e.target.value })}
                   >
-                    <option value="">고르세요</option>
+                    <option value="">학생 선택</option>
                     {assignTo.rows
                       .filter((r) => {
                         const k = assignTo.keyword.trim()

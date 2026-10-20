@@ -1028,7 +1028,7 @@ function Content() {
                 <label className="req">강의실</label>
                 <div>
                   <select className="sel" value={draft.room} onChange={(e) => patch({ room: e.target.value })}>
-                    <option value="">선택하세요</option>
+                    <option value="">선택</option>
                     {rooms.map((r) => (
                       <option key={r.id} value={r.name ?? r.roomNo}>
                         {r.name ? `${r.roomNo} · ${r.name}` : r.roomNo}

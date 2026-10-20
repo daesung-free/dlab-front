@@ -1358,8 +1358,8 @@ function stamp(v: string | null | undefined): string {
                 <>
                   <div className="note-box">
                     <div>
-                      <b>응답이 하나라도 들어오면 문항을 바꿀 수 없습니다.</b> 이미 낸 사람의 답이 다른
-                      질문의 답이 되기 때문입니다. 그때는 <b>복제해서 새로 만드세요</b>.
+                      응답이 등록된 설문은 문항을 수정할 수 없습니다. 수정이 필요한 경우 설문을 복제하여
+                      새로 생성하세요.
                     </div>
                   </div>
 
@@ -1523,8 +1523,8 @@ function stamp(v: string | null | undefined): string {
         >
           <div className="note-box">
             <div>
-              <b>대상자와 응답은 따라오지 않습니다.</b> 복제한 뒤 대상자를 다시 골라야 합니다. 설문 범위
-              (전체·지점·반)도 원래 설문을 그대로 따릅니다.
+              설문 문항과 범위(전체·지점·반)는 유지되며, 대상자와 응답 내역은 복제되지 않습니다. 복제 후
+              대상자를 다시 선택하세요.
             </div>
           </div>
           <div className="frow">
@@ -1827,7 +1827,7 @@ function stamp(v: string | null | undefined): string {
                     value={targetId ?? ''}
                     onChange={(e) => setTargetId(e.target.value === '' ? null : Number(e.target.value))}
                   >
-                    <option value="">설문을 고르세요</option>
+                    <option value="">설문 선택</option>
                     {surveys.map((sv) => (
                       <option key={sv.id} value={sv.id}>
                         {sv.title}
@@ -1908,7 +1908,7 @@ function stamp(v: string | null | undefined): string {
              학생은 앱을 열어 설문 목록에서 본다. 「발송됩니다」라고 쓰면 담당자가
              **학생에게 알림이 간 줄 안다**(디랩이 실제로 그렇게 읽고 물어 왔다).
              알림 이벤트는 서버에 생겼지만 **문구가 미확정이라 아직 안 나간다** */
-          sub="고른 학생이 앱에서 이 설문을 볼 수 있게 됩니다. 따로 알림은 가지 않습니다."
+          sub="선택한 학생은 앱에서 이 설문을 확인할 수 있습니다. 별도 알림은 발송되지 않습니다."
           confirmLabel="대상자로 지정"
           wide
           busy={picking.busy}
