@@ -275,7 +275,22 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * 문항 <b>정의</b> 조회 — 수정 화면이 「읽어서 → 고쳐서 → 교체」 하는 데 쓴다
+         * @description 문항 <b>정의</b> 조회 — 수정 화면이 「읽어서 → 고쳐서 → 교체」 하는 데 쓴다.
+         *
+         *      <p>★★ <b>집계(<code>/results</code>)로 읽으면 안 된다.</b> 집계에는
+         *      <code>required</code>·<code>minValue</code>·<code>maxValue</code>·조건부·합산이 없어서,
+         *      그걸로 읽어 교체하면 <b>제목 한 글자만 고쳐도 그 설정들이 사라진다</b> —
+         *      오류가 나지 않으므로 아무도 모른다.
+         *
+         *      <p>응답은 <b>교체 요청과 칸이 같다</b>. 읽은 것을 그대로 되돌려 보내면
+         *      바뀌는 것이 없어야 한다.
+         *
+         *      <p>⚠️ 집계의 <code>min</code>·<code>max</code> 는 <b>응답 통계</b>다. 설정값은 여기의
+         *      <code>minValue</code>·<code>maxValue</code> 이고 <b>이름이 겹치니 섞지 말 것</b>.
+         */
+        get: operations["questions"];
         /**
          * 문항 교체
          * @description 문항 교체.
@@ -3044,6 +3059,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/tuition/billings/monthly/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 여러 학생 한 번에 (1016 피드백 2-1)
+         * @description 여러 학생 한 번에 (1016 피드백 2-1).
+         *
+         *      <p>★★ <b>한 건이 막혀도 나머지는 발행한다.</b> 매월 수백 명이라 전체 롤백이면
+         *      <b>한 명이 중복 청구라는 이유로 전부 막힌다.</b> 그리고 <b>왜 빠졌는지</b>를
+         *      건별로 돌려준다 — 건수만 주면 데스크가 수백 명 중 누가 안 됐는지 찾을 수 없다.
+         *
+         *      <p>⚠️ <b>응답에 breakdown 을 싣지 않는다.</b> 수백 건이면 전송량이 그만큼 늘고,
+         *      일괄 등록 화면이 건별 계산식을 펼쳐 보여줄 자리가 아니다 — 근거가 필요하면
+         *      <code>GET /preview</code> 로 한 건씩 본다.
+         */
+        post: operations["issueMonthlyBulk"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/tuition/billings/admission": {
         parameters: {
             query?: never;
@@ -3689,7 +3732,15 @@ export interface paths {
          * @description 좌석 단건 등록. 배치도에 한 자리만 끼워 넣을 때 쓴다.
          */
         post: operations["createSeat"];
-        delete?: never;
+        /**
+         * 좌석 일괄 삭제 · 구역 초기화 — <b>전부-아니면-전무</b>
+         * @description 좌석 일괄 삭제 · 구역 초기화 — <b>전부-아니면-전무</b>.
+         *
+         *      <p><code>seatIds</code>를 비우면 <b>그 구역 전체</b>다. 배정된 좌석이 하나라도 섞이면
+         *      <b>아무것도 지우지 않고</b> 그 좌석번호를 전부 모아 돌려준다 — 일부만 지우고
+         *      성공으로 돌려주면 「지운 줄 알았는데 남아 있는」 상태가 된다.
+         */
+        delete: operations["deleteSeats"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4453,6 +4504,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/meals/orders/{orderId}/billing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 급식비 청구 발행 — 주문 한 건
+         * @description 급식비 청구 발행 — 주문 한 건.
+         *
+         *      <p>★★ <b>이 경로가 없어서 급식비가 통합 매출장에 들어가지 않았다.</b>
+         *      발행 로직(<code>MealBillingService</code>)은 처음부터 있었는데 <b>컨트롤러에 붙어 있지
+         *      않아 테스트에서만 호출됐다</b> — 화면에는 급식 신청이 보이고 금액도 보이는데
+         *      수납 쪽에는 그 돈이 없는 상태였다.
+         */
+        post: operations["issueBilling"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/meals/closures": {
         parameters: {
             query?: never;
@@ -4474,6 +4550,34 @@ export interface paths {
          *      환불 대상 건수다 — 화면이 이 값을 띄워 관리자가 알고 저장하게 한다.
          */
         post: operations["addClosure"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/meals/billings/monthly": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 급식비 청구 일괄 발행 — 그 달 지점 전체
+         * @description 급식비 청구 일괄 발행 — 그 달 지점 전체.
+         *
+         *      <p>급식은 <b>월 단위 일괄 결제</b>라(A-9) 이쪽이 기본 경로다.
+         *
+         *      <p>★ <b>한 건이 막혀도 나머지는 발행한다.</b> 그리고 <b>건너뛴 주문은 사유와 함께</b>
+         *      돌려준다 — 발행 건수만 주면 빠진 학생이 누구인지 화면이 알 수 없고, 단가 미등록으로
+         *      빠진 경우라면 <b>그 학생 급식비는 영영 청구되지 않는다.</b>
+         *
+         *      <p><b>두 번 눌러도 안전하다</b> — 이미 발행된 주문은 건너뛴다.
+         */
+        post: operations["issueMonthlyBilling"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8080,6 +8184,33 @@ export interface paths {
          *      모른다.</b> 화면에서 데스크가 고칠 수 있어야 한다 — 서버가 확정하면 조용히 틀린다.
          */
         get: operations["remainingDays"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/tuition/billings/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 등록 <b>전</b> 미리보기 (1016 피드백 2-4)
+         * @description 등록 <b>전</b> 미리보기 (1016 피드백 2-4).
+         *
+         *      <p>★ <b>저장하지 않는다.</b> 디랩 요청이 <i>"일할계산의 과정과 값이 함께 출력"</i>인데,
+         *      그건 <b>등록을 누르기 전에</b> 봐야 의미가 있다 — 누른 뒤에 보면 이미 청구가 나갔다.
+         *
+         *      <p>⚠️ <code>remainingDays</code> 는 <b>제안값이지 확정값이 아니다</b>
+         *      (<code>suggestRemainingDays</code> 주석). 화면에서 고칠 수 있게 두고
+         *      「서버 제안 12일 — 고칠 수 있습니다」로 적는 편이 낫다.
+         */
+        get: operations["preview"];
         put?: never;
         post?: never;
         delete?: never;
@@ -13647,20 +13778,25 @@ export interface components {
         RosterRow: {
             /** Format: int64 */
             applicationId?: number;
-            /**
-             * Format: int64
-             * @description 사람(student) id
-             */
+            /** Format: int64 */
             studentId?: number;
-            /**
-             * Format: int64
-             * @description 등록 건 id — 학생 상세·출결 등 다른 관리자 화면으로 넘어갈 때 쓴다
-             */
+            /** Format: int64 */
             enrollmentId?: number;
             studentNo?: string;
             studentName?: string;
             className?: string;
             phone?: string;
+            /**
+             * @description 학년. 수강 대상 구분(N수생/고3/고2/고1)과 같은 축이다
+             * @enum {string}
+             */
+            grade?: "HIGH2" | "HIGH3" | "N_SU" | "STAFF";
+            /**
+             * @description 독서실 좌석번호. ⚠️ <b>배정 전이면 <code>null</code></b> 이다 —
+             *                    화면에 <b>「미배정」으로 쓰지 말 것</b>. <b>좌석을 쓰지 않는 특강</b>도
+             *                    있어서, 비어 있는 것이 곧 문제라는 뜻이 아니다
+             */
+            seatNo?: string;
             status?: string;
             waitlisted?: boolean;
             /** Format: date-time */
@@ -14007,19 +14143,26 @@ export interface components {
         IssueMonthly: {
             /** Format: int64 */
             enrollmentId: number;
-            /** @description 청구 대상 월. <code>yyyy-MM</code> — <b>청구 1건 = 한 달분</b>이다 */
             month: string;
             /** @enum {string} */
             seatType: "GENERAL" | "SINGLE";
             /** Format: int32 */
             discountRate?: number;
-            /**
-             * Format: int32
-             * @description 비우면 월 정액. 중도 입·퇴원이면 실제 다니는 교습일수
-             */
+            /** Format: int32 */
             remainingDays?: number;
             /** Format: date */
             dueDate?: string;
+            /**
+             * @description 할인 근거(장학명). 장학을 끌어와 채운 값이면 그 이름을 함께 보낸다 —
+             *                            <b>발행 시점 스냅샷으로 박힌다.</b> 수기 할인이면 비운다
+             */
+            discountSource?: string;
+            /**
+             * Format: date
+             * @description 일할 청구의 시작일. ⚠️ <b>비우면 대상 기간을 저장하지 않는다</b> —
+             *                            <code>remainingDays</code> 는 교습일수 기준이라 말일에서 역산하면 어긋난다
+             */
+            serviceFrom?: string;
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -14045,6 +14188,21 @@ export interface components {
             serviceYear?: number;
             /** Format: int32 */
             serviceMonth?: number;
+            /**
+             * Format: date
+             * @description 대상 기간 시작일. ⚠️ <b>일할 청구인데 시작일을 모르면 <code>null</code></b> 이다
+             */
+            serviceFrom?: string;
+            /** Format: date */
+            serviceTo?: string;
+            /**
+             * @description 월 전체 청구인가. ★ 화면은 월 전체면 <code>2026-10</code>,
+             *                             아니면 <code>2026-10 (10/15~10/31)</code> 로 적는다 —
+             *                             <b>전부 괄호가 붙으면 중도입학 건이 눈에 안 띈다</b>
+             */
+            wholeMonth?: boolean;
+            /** @description 할인 근거(장학명) 스냅샷. 수기 할인이면 <code>null</code> */
+            discountSource?: string;
             /** Format: int32 */
             suppliedAmount?: number;
             /** Format: int32 */
@@ -14053,11 +14211,9 @@ export interface components {
             billedAmount?: number;
             /** Format: date */
             dueDate?: string;
-            /**
-             * @description 교습비·독서실비. <b>환불 산식이 달라</b> 나눠 든다 —
-             *                   청구 금액(<code>billedAmount</code>)은 합계 한 줄이고 영수증도 그대로다
-             */
             items?: components["schemas"]["ItemView"][];
+            /** @description 일할 계산 근거. <b>발행 응답과 미리보기에 같은 모양으로 실린다</b> */
+            breakdown?: components["schemas"]["TuitionBreakdownResponse"];
         };
         ItemView: {
             itemType?: string;
@@ -14067,6 +14223,109 @@ export interface components {
             discountAmount?: number;
             /** Format: int32 */
             billedAmount?: number;
+        };
+        /** @description 일할 계산 근거 한 장. */
+        TuitionBreakdownResponse: {
+            /**
+             * Format: int32
+             * @description 월 정가 교습비(할인 전)
+             */
+            monthlyTuition?: number;
+            /** Format: int32 */
+            monthlyStudyRoom?: number;
+            /** Format: int32 */
+            teachingDays?: number;
+            /**
+             * Format: int32
+             * @description 일할 일수. <b>월 전체면 <code>null</code></b>
+             */
+            remainingDays?: number;
+            /**
+             * Format: int32
+             * @description 1일 교습비. <b>월 전체면 <code>null</code></b> — 위 참고
+             */
+            dailyTuition?: number;
+            /** Format: int32 */
+            dailyStudyRoom?: number;
+            /** Format: int32 */
+            suppliedTuition?: number;
+            /** Format: int32 */
+            suppliedStudyRoom?: number;
+            /** Format: int32 */
+            suppliedTotal?: number;
+            /** Format: int32 */
+            discountRate?: number;
+            /**
+             * Format: int32
+             * @description 할인액. <b>교습비에만 붙는다</b>(독서실비는 규정상 할인 없음)
+             */
+            discountAmount?: number;
+            /** Format: int32 */
+            billedAmount?: number;
+            /** @description 원 단위 절사 방식(<code>FLOOR</code> = 버림). 화면이 문구로 적는다 */
+            rounding?: string;
+            wholeMonth?: boolean;
+        };
+        BulkTargetRequest: {
+            /** Format: int64 */
+            enrollmentId: number;
+            /** @enum {string} */
+            seatType: "GENERAL" | "SINGLE";
+            /** Format: int32 */
+            discountRate?: number;
+            /** Format: int32 */
+            remainingDays?: number;
+            discountSource?: string;
+            /** Format: date */
+            serviceFrom?: string;
+        };
+        /**
+         * @description 일괄 청구 요청.
+         *
+         *      <p>★ <b>대상을 서버가 고르지 않는다.</b> 화면이 학생 목록에서 체크한 것을 보낸다 —
+         *      검색 조건(반·학년·좌석유형)으로 서버가 추려 발행하게 만들면 <b>데스크가 누구에게
+         *      나갈지 보지 못한 채</b> 수백 건이 발행된다.
+         *
+         *      <p>할인율·좌석유형이 <b>행마다 다르다</b> — 장학이 걸린 학생이 섞여 있다.
+         */
+        IssueMonthlyBulk: {
+            month: string;
+            /** Format: date */
+            dueDate?: string;
+            targets: components["schemas"]["BulkTargetRequest"][];
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseBulkResultView: {
+            success?: boolean;
+            data?: components["schemas"]["BulkResultView"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        /** @description 일괄 발행 결과. */
+        BulkResultView: {
+            /** Format: int32 */
+            issuedCount?: number;
+            issued?: components["schemas"]["BillingView"][];
+            /**
+             * @description <b>비어 있어야 정상</b>이다. 건별 사유가 있어야 데스크가 수백 명 중
+             *                    누가 왜 빠졌는지 알 수 있다 — 「중복이라 건너뜀」과 「가격 미등록」은
+             *                    할 일이 전혀 다르다
+             */
+            failed?: components["schemas"]["FailureView"][];
+        };
+        FailureView: {
+            /** Format: int64 */
+            enrollmentId?: number;
+            reason?: string;
         };
         IssueAdmission: {
             /** Format: int64 */
@@ -15586,7 +15845,7 @@ export interface components {
         };
         NotificationTemplateCreate: {
             /** @enum {string} */
-            event: "MISSING_ATTENDANCE" | "APPROVAL_REQUEST_CREATED" | "APPROVAL_APPROVED_BY_PARENT" | "APPROVAL_APPROVED_AFTER_TIMEOUT" | "APPROVAL_APPROVED_BEFORE_TIMEOUT" | "APPROVAL_REMINDER" | "APPROVAL_HANDED_OVER" | "APPROVAL_APPROVED_BY_STAFF_PRIMARY" | "APPROVAL_APPROVED_BY_ADMIN" | "APPROVAL_REJECTED" | "CONSULT_RESERVED" | "CONSULT_CANCELED";
+            event: "MISSING_ATTENDANCE" | "ATTENDANCE_CHECK_IN" | "ATTENDANCE_CHECK_OUT" | "ATTENDANCE_OUTING" | "ATTENDANCE_RETURN" | "ATTENDANCE_EARLY_LEAVE" | "APPROVAL_REQUEST_CREATED" | "APPROVAL_APPROVED_BY_PARENT" | "APPROVAL_APPROVED_AFTER_TIMEOUT" | "APPROVAL_APPROVED_BEFORE_TIMEOUT" | "APPROVAL_REMINDER" | "APPROVAL_HANDED_OVER" | "APPROVAL_APPROVED_BY_STAFF_PRIMARY" | "APPROVAL_APPROVED_BY_ADMIN" | "APPROVAL_REJECTED" | "CONSULT_RESERVED" | "CONSULT_CANCELED";
             /** @enum {string} */
             channel: "KAKAO_ALIMTALK" | "SMS" | "FCM_PUSH";
             /** @enum {string} */
@@ -15609,6 +15868,32 @@ export interface components {
         ContentRequest: {
             title: string;
             content: string;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseBillingIssued: {
+            success?: boolean;
+            data?: components["schemas"]["BillingIssued"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        /** @description 발행된 청구 한 건. */
+        BillingIssued: {
+            /** Format: int64 */
+            billingId?: number;
+            name?: string;
+            /** Format: int32 */
+            amount?: number;
+            /** Format: date */
+            dueDate?: string;
         };
         ClosureRequest: {
             /** Format: int64 */
@@ -15644,6 +15929,40 @@ export interface components {
              * @description 함께 취소된 신청 수(환불 대상). 조회 시에는 <code>null</code>
              */
             canceledCount?: number;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseMonthBillingResult: {
+            success?: boolean;
+            data?: components["schemas"]["MonthBillingResult"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        /** @description 일괄 발행 결과. */
+        MonthBillingResult: {
+            /** Format: int32 */
+            issuedCount?: number;
+            issued?: components["schemas"]["BillingIssued"][];
+            /**
+             * @description <b>비어 있어야 정상</b>이다. 사유별로 조치가 다르다 —
+             *                     「이미 발행」은 그냥 두면 되지만 「단가 미등록」은 손을 써야 한다
+             */
+            skipped?: components["schemas"]["SkippedOrderResponse"][];
+        };
+        SkippedOrderResponse: {
+            /** Format: int64 */
+            orderId?: number;
+            studentNo?: string;
+            studentName?: string;
+            reason?: string;
         };
         SaveVendor: {
             name?: string;
@@ -16777,6 +17096,36 @@ export interface components {
             meta?: components["schemas"]["PageMeta"];
             error?: components["schemas"]["ErrorBody"];
         };
+        /**
+         * @description 청구 하위 항목.
+         *
+         *      <h2>★ 왜 합계만으로는 안 되는가</h2>
+         *      한 청구(750,000)가 <b>교습비 660,000 + 독서실비 90,000</b>으로 나뉘어 있고
+         *      <b>환불 계산 방식이 서로 다르다</b> — 교습비는 이용기간 <b>구간</b>(1/3·1/2),
+         *      독서실비는 <b>일할</b>이다. 합계 한 줄로는 나눌 수가 없다.
+         */
+        BillingItemResponse: {
+            /** Format: int64 */
+            id?: number;
+            /** @enum {string} */
+            itemType?: "TUITION" | "STUDY_ROOM" | "MEAL" | "LECTURE" | "REGISTRATION" | "ETC";
+            /**
+             * Format: int32
+             * @description <b>항목별 정가</b>. ★ 환불 차감이 <b>정상가 기준</b>이라
+             *                            (할인받았으면 차감이 납부액보다 커질 수 있다) 이 값이 없으면
+             *                            청구 합계에서 교습비 몫을 되짚을 수 없다
+             */
+            suppliedAmount?: number;
+            /**
+             * Format: int32
+             * @description 할인액. ⚠️ <b>독서실비는 규정상 할인이 없다</b>
+             *                            (<code>isDiscountable()</code> 이 false) — 화면에 할인 칸을 두지 말 것
+             */
+            discountAmount?: number;
+            /** Format: int32 */
+            billedAmount?: number;
+            discountable?: boolean;
+        };
         BillingResponse: {
             /** Format: int64 */
             id?: number;
@@ -16802,6 +17151,12 @@ export interface components {
             dueDate?: string;
             /** @enum {string} */
             status?: "PENDING" | "ISSUED" | "PAID" | "CANCELLED" | "EXPIRED" | "REFUNDED";
+            /**
+             * @description 하위 항목. <b>교습비·독서실비가 한 청구 안에서 나뉘어 있다</b> —
+             *                          합계만으로는 환불 계산이 성립하지 않는다(아래 참고).
+             *                          급식·특강처럼 나눌 것이 없는 청구는 <b>빈 목록</b>이다
+             */
+            items?: components["schemas"]["BillingItemResponse"][];
         };
         PayRequest: {
             /** Format: int32 */
@@ -19412,6 +19767,22 @@ export interface components {
          *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
          *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
          */
+        ApiResponseTuitionBreakdownResponse: {
+            success?: boolean;
+            data?: components["schemas"]["TuitionBreakdownResponse"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
         ApiResponseListAdminSurveySummary: {
             success?: boolean;
             data?: components["schemas"]["AdminSurveySummary"][];
@@ -19461,6 +19832,48 @@ export interface components {
             /** Format: int32 */
             responseCount?: number;
             questions?: components["schemas"]["QuestionResult"][];
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseListSurveyQuestionSettingResponse: {
+            success?: boolean;
+            data?: components["schemas"]["SurveyQuestionSettingResponse"][];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        /**
+         * @description 문항 <b>정의</b> 한 줄 — 교체 요청(<code>AdminSurveyQuestion</code>)과 칸이 같다.
+         *
+         *      <p>★ <b>번호는 「순서」(1부터)다</b> — DB 의 <code>seq</code> 가 아니다. 교체가
+         *      soft delete 라 <code>seq</code> 는 이어지는데 요청의 번호는 배열 순서라, <code>seq</code> 를
+         *      그대로 쓰면 되돌려 보낼 때 엉뚱한 문항을 가리킨다.
+         *
+         *      <p>⚠️ <code>minValue</code>·<code>maxValue</code> 는 <b>설정</b>이다. 집계
+         *      (<code>SurveyResultResponse</code>)의 <code>min</code>·<code>max</code>(응답 통계)와 다르다.
+         */
+        SurveyQuestionSettingResponse: {
+            /** Format: int64 */
+            questionId?: number;
+            /** @enum {string} */
+            type?: "SINGLE_CHOICE" | "MULTI_CHOICE" | "TEXT" | "NUMBER";
+            title?: string;
+            required?: boolean;
+            minValue?: number;
+            maxValue?: number;
+            options?: string[];
+            /** Format: int32 */
+            showIfQuestionIndex?: number;
+            /** Format: int32 */
+            showIfOptionIndex?: number;
+            sumOfIndexes?: number[];
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -20510,28 +20923,53 @@ export interface components {
             name?: string;
             billingType?: string;
             serviceMonth?: string;
-            /**
-             * Format: int32
-             * @description 청구 기수
-             */
+            /** Format: int32 */
             year?: number;
+            /**
+             * Format: date
+             * @description 대상 기간 시작일. ⚠️ <b>일할 청구인데 시작일을 받지 못했으면
+             *                            <code>null</code></b> 이다 — <code>remainingDays</code> 가 교습일수
+             *                            기준이라(설·추석 제외) <b>말일에서 역산하면 어긋난다.</b>
+             *                            그때는 괄호 없이 월만 적는다 — <b>추측한 기간은 영수증처럼 보인다.</b>
+             */
+            serviceFrom?: string;
+            /** Format: date */
+            serviceTo?: string;
+            /**
+             * @description 월 전체 청구인가. ★ 「대상월」 열을 이걸로 가른다 —
+             *                            <code>true</code> 면 <code>2026-11</code>, 아니면
+             *                            <code>2026-11 (11/15~11/30)</code>. <b>전부 괄호가 붙으면
+             *                            중도입학 건이 눈에 안 띈다.</b>
+             */
+            wholeMonth?: boolean;
+            /**
+             * @description 할인 근거(장학명) 스냅샷 — 「장학」 열에 그대로 쓴다
+             *                            (예: <code>수능 100%</code>). <b>수기 할인이면 <code>null</code></b> 이다.
+             *                            나중에 장학이 취소돼도 과거 청구의 근거는 남는다
+             */
+            discountSource?: string;
             /** Format: int32 */
             billedAmount?: number;
             /** Format: int32 */
             receivedAmount?: number;
-            /**
-             * Format: int32
-             * @description 과납이어도 0에서 멈춘다 — 음수가 섞이면 미납 합계가 줄어든다
-             */
+            /** Format: int32 */
             unpaid?: number;
             /** Format: date */
             dueDate?: string;
             status?: string;
-            /**
-             * @description 살아 있는 수납 거래. <b>취소분은 빠진다</b> — 취소까지 세면 화면의
-             *                      결제수단이 "지금 실제로 결제된 수단"과 어긋난다
-             */
             payments?: components["schemas"]["PaymentView"][];
+            /**
+             * @description 청구 하위 항목 — <b>행을 펼쳐 교습비·독서실비 두 줄</b>로 보여주는 데 쓴다.
+             *
+             *          <p>★ <b>합계 한 줄만 보여주면 할인 건에서 데스크가 독서실비도 깎인 줄 안다.</b>
+             *          할인은 교습비에만 붙는다(독서실비는 규정상 할인이 없고, 항목의
+             *          <code>discountable</code> 이 그걸 알려준다). 그리고 <b>항목별 정가</b>가 있어야
+             *          퇴원 시 환불 차감(정상가 기준)을 되짚을 수 있다.
+             *
+             *          <p>급식·특강처럼 나눌 것이 없는 청구는 <b>빈 목록</b>이고 그게 정상이다 —
+             *          그때는 청구 금액이 곧 단일 항목이다.
+             */
+            items?: components["schemas"]["BillingItemResponse"][];
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -20955,7 +21393,7 @@ export interface components {
             /** Format: int64 */
             academyId?: number;
             /** @enum {string} */
-            event?: "MISSING_ATTENDANCE" | "APPROVAL_REQUEST_CREATED" | "APPROVAL_APPROVED_BY_PARENT" | "APPROVAL_APPROVED_AFTER_TIMEOUT" | "APPROVAL_APPROVED_BEFORE_TIMEOUT" | "APPROVAL_REMINDER" | "APPROVAL_HANDED_OVER" | "APPROVAL_APPROVED_BY_STAFF_PRIMARY" | "APPROVAL_APPROVED_BY_ADMIN" | "APPROVAL_REJECTED" | "CONSULT_RESERVED" | "CONSULT_CANCELED";
+            event?: "MISSING_ATTENDANCE" | "ATTENDANCE_CHECK_IN" | "ATTENDANCE_CHECK_OUT" | "ATTENDANCE_OUTING" | "ATTENDANCE_RETURN" | "ATTENDANCE_EARLY_LEAVE" | "APPROVAL_REQUEST_CREATED" | "APPROVAL_APPROVED_BY_PARENT" | "APPROVAL_APPROVED_AFTER_TIMEOUT" | "APPROVAL_APPROVED_BEFORE_TIMEOUT" | "APPROVAL_REMINDER" | "APPROVAL_HANDED_OVER" | "APPROVAL_APPROVED_BY_STAFF_PRIMARY" | "APPROVAL_APPROVED_BY_ADMIN" | "APPROVAL_REJECTED" | "CONSULT_RESERVED" | "CONSULT_CANCELED";
             /** @enum {string} */
             channel?: "KAKAO_ALIMTALK" | "SMS" | "FCM_PUSH";
             /** @enum {string} */
@@ -20996,7 +21434,7 @@ export interface components {
             /** Format: date */
             date?: string;
             /** @enum {string} */
-            event?: "MISSING_ATTENDANCE" | "APPROVAL_REQUEST_CREATED" | "APPROVAL_APPROVED_BY_PARENT" | "APPROVAL_APPROVED_AFTER_TIMEOUT" | "APPROVAL_APPROVED_BEFORE_TIMEOUT" | "APPROVAL_REMINDER" | "APPROVAL_HANDED_OVER" | "APPROVAL_APPROVED_BY_STAFF_PRIMARY" | "APPROVAL_APPROVED_BY_ADMIN" | "APPROVAL_REJECTED" | "CONSULT_RESERVED" | "CONSULT_CANCELED";
+            event?: "MISSING_ATTENDANCE" | "ATTENDANCE_CHECK_IN" | "ATTENDANCE_CHECK_OUT" | "ATTENDANCE_OUTING" | "ATTENDANCE_RETURN" | "ATTENDANCE_EARLY_LEAVE" | "APPROVAL_REQUEST_CREATED" | "APPROVAL_APPROVED_BY_PARENT" | "APPROVAL_APPROVED_AFTER_TIMEOUT" | "APPROVAL_APPROVED_BEFORE_TIMEOUT" | "APPROVAL_REMINDER" | "APPROVAL_HANDED_OVER" | "APPROVAL_APPROVED_BY_STAFF_PRIMARY" | "APPROVAL_APPROVED_BY_ADMIN" | "APPROVAL_REJECTED" | "CONSULT_RESERVED" | "CONSULT_CANCELED";
             /** @enum {string} */
             channel?: "KAKAO_ALIMTALK" | "SMS" | "FCM_PUSH";
             /**
@@ -21094,48 +21532,40 @@ export interface components {
             canceledAt?: string;
             cancelPath?: string;
         };
-        /** @description 급식 신청 한 건 — 화면 목록의 한 행. */
         OrderResponse: {
             /** Format: int64 */
             id?: number;
-            /**
-             * @description 표시용 주문번호(<code>M2609-000123</code>). <code>id</code>에서 파생되며
-             *                       뒤 6자리가 곧 <code>id</code>라 불러준 번호로 되짚을 수 있다
-             */
             orderNo?: string;
             studentNo?: string;
             studentName?: string;
-            /** @description 반 이름. <b>미배정이면 <code>null</code></b> */
             className?: string;
             targetMonth?: string;
-            /**
-             * @description 결제 라이프사이클. 결제 붙기 전까지 전부 <code>PENDING</code>이다
-             * @enum {string}
-             */
+            /** @enum {string} */
             status?: "PENDING" | "ISSUED" | "PAID" | "CANCELLED" | "EXPIRED" | "REFUNDED";
             /** Format: int32 */
             activeCount?: number;
             /**
              * Format: int32
-             * @description <b>지금 살아 있는 끼니의 합계</b>. 취소가 반영된 실제 이용액이다.
-             *                       단가가 안 박힌 옛 주문은 0이다
+             * @description 신청 금액. ★ <b>단가가 등록되지 않은 끼니가 있으면 <code>null</code></b> 이다 —
+             *                           0 으로 내리면 화면이 「무료」로 읽고, 정작 손을 써야 하는
+             *                           <b>단가 미등록</b> 이 발행을 누를 때까지 안 보인다
              */
             amount?: number;
-            /**
-             * Format: int32
-             * @description 발행된 청구액. <b>청구 전이면 <code>null</code></b> — 0으로 내리면
-             *                       "0원 청구"와 "아직 청구 안 함"이 구분되지 않는다
-             */
+            /** Format: int32 */
             billedAmount?: number;
-            /**
-             * Format: int32
-             * @description 발행 후 취소된 만큼의 환불 대상 금액. 청구 전이면 0
-             */
+            /** Format: int32 */
             refundableAmount?: number;
-            /** @description 수납 수단. <b>미수납이면 빈 목록</b>이고, 분납이면 여러 개다 */
             paymentMethods?: string[];
             /** Format: int64 */
             billingId?: number;
+            /**
+             * @description 붙어 있는 청구의 상태. ★ <b><code>CANCELLED</code> 면 「취소됨 · 재발행
+             *                           가능」</b> 이다 — <code>billingId</code> 는 <b>이력</b>이라 취소된 청구도
+             *                           그대로 보이는데, 상태가 없으면 화면이 그것을 「발행됨」으로 읽어
+             *                           <b>발행 버튼이 왜 살아 있는지</b> 알 수 없다
+             * @enum {string}
+             */
+            billingStatus?: "PENDING" | "ISSUED" | "PAID" | "CANCELLED" | "EXPIRED" | "REFUNDED";
             items?: components["schemas"]["MealItemResponse"][];
             /** Format: date-time */
             createdAt?: string;
@@ -23081,7 +23511,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                event: "MISSING_ATTENDANCE" | "APPROVAL_REQUEST_CREATED" | "APPROVAL_APPROVED_BY_PARENT" | "APPROVAL_APPROVED_AFTER_TIMEOUT" | "APPROVAL_APPROVED_BEFORE_TIMEOUT" | "APPROVAL_REMINDER" | "APPROVAL_HANDED_OVER" | "APPROVAL_APPROVED_BY_STAFF_PRIMARY" | "APPROVAL_APPROVED_BY_ADMIN" | "APPROVAL_REJECTED" | "CONSULT_RESERVED" | "CONSULT_CANCELED";
+                event: "MISSING_ATTENDANCE" | "ATTENDANCE_CHECK_IN" | "ATTENDANCE_CHECK_OUT" | "ATTENDANCE_OUTING" | "ATTENDANCE_RETURN" | "ATTENDANCE_EARLY_LEAVE" | "APPROVAL_REQUEST_CREATED" | "APPROVAL_APPROVED_BY_PARENT" | "APPROVAL_APPROVED_AFTER_TIMEOUT" | "APPROVAL_APPROVED_BEFORE_TIMEOUT" | "APPROVAL_REMINDER" | "APPROVAL_HANDED_OVER" | "APPROVAL_APPROVED_BY_STAFF_PRIMARY" | "APPROVAL_APPROVED_BY_ADMIN" | "APPROVAL_REJECTED" | "CONSULT_RESERVED" | "CONSULT_CANCELED";
             };
             cookie?: never;
         };
@@ -23389,6 +23819,28 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseVoid"];
+                };
+            };
+        };
+    };
+    questions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                surveyId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListSurveyQuestionSettingResponse"];
                 };
             };
         };
@@ -27234,6 +27686,30 @@ export interface operations {
             };
         };
     };
+    issueMonthlyBulk: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueMonthlyBulk"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseBulkResultView"];
+                };
+            };
+        };
+    };
     issueOnAdmission: {
         parameters: {
             query?: never;
@@ -28058,6 +28534,29 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseSeatMasterResponse"];
+                };
+            };
+        };
+    };
+    deleteSeats: {
+        parameters: {
+            query: {
+                studyAreaId: number;
+                seatIds?: number[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseInteger"];
                 };
             };
         };
@@ -29143,6 +29642,34 @@ export interface operations {
             };
         };
     };
+    issueBilling: {
+        parameters: {
+            query?: {
+                /**
+                 * @description 납기일. 비우면 없음 — 청구 자동 발행 시점이 미확정이라(디랩 회신 대기)
+                 *                     지금은 데스크가 넣는다
+                 */
+                dueDate?: string;
+            };
+            header?: never;
+            path: {
+                orderId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseBillingIssued"];
+                };
+            };
+        };
+    };
     closures: {
         parameters: {
             query: {
@@ -29186,6 +29713,30 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseClosureResponse"];
+                };
+            };
+        };
+    };
+    issueMonthlyBilling: {
+        parameters: {
+            query: {
+                academyId?: number;
+                month: string;
+                dueDate?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseMonthBillingResult"];
                 };
             };
         };
@@ -34125,6 +34676,32 @@ export interface operations {
             };
         };
     };
+    preview: {
+        parameters: {
+            query: {
+                enrollmentId: number;
+                month: string;
+                seatType: "GENERAL" | "SINGLE";
+                discountRate?: number;
+                remainingDays?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseTuitionBreakdownResponse"];
+                };
+            };
+        };
+    };
     year: {
         parameters: {
             query: {
@@ -35161,7 +35738,7 @@ export interface operations {
                 academyId?: number;
                 from?: string;
                 to?: string;
-                event?: "MISSING_ATTENDANCE" | "APPROVAL_REQUEST_CREATED" | "APPROVAL_APPROVED_BY_PARENT" | "APPROVAL_APPROVED_AFTER_TIMEOUT" | "APPROVAL_APPROVED_BEFORE_TIMEOUT" | "APPROVAL_REMINDER" | "APPROVAL_HANDED_OVER" | "APPROVAL_APPROVED_BY_STAFF_PRIMARY" | "APPROVAL_APPROVED_BY_ADMIN" | "APPROVAL_REJECTED" | "CONSULT_RESERVED" | "CONSULT_CANCELED";
+                event?: "MISSING_ATTENDANCE" | "ATTENDANCE_CHECK_IN" | "ATTENDANCE_CHECK_OUT" | "ATTENDANCE_OUTING" | "ATTENDANCE_RETURN" | "ATTENDANCE_EARLY_LEAVE" | "APPROVAL_REQUEST_CREATED" | "APPROVAL_APPROVED_BY_PARENT" | "APPROVAL_APPROVED_AFTER_TIMEOUT" | "APPROVAL_APPROVED_BEFORE_TIMEOUT" | "APPROVAL_REMINDER" | "APPROVAL_HANDED_OVER" | "APPROVAL_APPROVED_BY_STAFF_PRIMARY" | "APPROVAL_APPROVED_BY_ADMIN" | "APPROVAL_REJECTED" | "CONSULT_RESERVED" | "CONSULT_CANCELED";
                 channel?: "KAKAO_ALIMTALK" | "SMS" | "FCM_PUSH";
                 status?: "PENDING" | "SENT" | "FAILED" | "SKIPPED";
                 /**
