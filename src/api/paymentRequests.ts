@@ -64,6 +64,22 @@ export function listPaymentRequests(billingId: number): Promise<PaymentRequestRo
   return request<PaymentRequestRow[]>('/api/v1/admin/payment-requests', { query: { billingId } })
 }
 
+/**
+ * 가상계좌 말소 (디랩 2026-10-12 회신 ① — 「입금 전 취소 시 가상계좌 즉시 말소」).
+ *
+ * ★★ **발급해 둔 가상계좌는 기한까지 계속 입금을 받는다.** 청구를 취소했는데 계좌를
+ *   그대로 두면 학부모가 그 번호로 넣고, 그 돈은 **어디에 붙일지 모르는 입금**이 된다.
+ * ★ **두 번 눌러도 안전하다** — 이미 말소된 건은 그대로 돌아온다(PG 에 두 번 안 보낸다).
+ * ⚠️ **이미 입금된 건은 400 이다.** 그때는 말소가 아니라 **환불**이다 — 입금된 것을
+ *   말소하면 **돈은 우리에게 있는데 거래가 사라진다.**
+ * ⚠️ **실패하면 상태가 `CREATED` 로 남는다.** PG 가 받아들인 뒤에만 서버가 상태를 바꾼다 —
+ *   우리만 닫힌 것으로 그리면 **계좌는 살아 있는데 화면엔 닫힌 것으로** 보여, 그 뒤
+ *   들어온 입금을 아무도 예상하지 못한다. **응답 `status` 를 확인한다.**
+ */
+export function closePaymentRequest(requestId: number): Promise<PaymentRequestRow> {
+  return request<PaymentRequestRow>(`/api/v1/admin/payment-requests/${requestId}/close`, { method: 'POST' })
+}
+
 /** 결제 링크 생성. `sendSms` 를 끄면 `payUrl` 을 화면이 전달해야 한다 */
 export function createPaymentRequest(body: {
   billingId: number

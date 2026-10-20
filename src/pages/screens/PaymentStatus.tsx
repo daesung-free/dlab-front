@@ -26,6 +26,8 @@ import {
   type ReceiptPurpose,
 } from '../../api/cashReceipts'
 import {
+  closePaymentRequest,
+  listPaymentRequests,
   PAY_METHOD_CODE_LABEL,
   PAY_METHOD_SELECTABLE,
   createPaymentRequest,
@@ -1313,10 +1315,41 @@ function Content() {
          매출장에서 통째로 사라진다 — 어디에도 안 보이는 수납이 된다 */
       for (const p of cancelRow.payments) await deletePayment(p.id)
       await deleteBilling(cancelRow.billingId)
+
+      /* ★★ **발급해 둔 가상계좌를 함께 닫는다**(디랩 2026-10-12 회신 ①).
+         계좌를 그대로 두면 **기한까지 계속 입금을 받는다** — 학부모가 그 번호로 넣으면
+         **어디에 붙일지 모르는 입금**이 된다.
+         ★ **청구 취소가 끝난 뒤에 한다.** 계좌부터 닫고 청구 취소가 실패하면
+           **받을 길만 막고 청구는 살아 있는** 상태가 된다.
+         ★ 실패해도 **청구 취소를 되돌리지 않는다.** 대신 무엇이 안 됐는지 그대로 쓴다 —
+           「취소 실패」로 뭉뚱그리면 담당자가 다시 취소하려 든다(CLAUDE.md 4장). */
+      let vbankLeft: string[] = []
+      try {
+        const reqs = await listPaymentRequests(cancelRow.billingId)
+        for (const q of reqs.filter((x) => x.status === 'CREATED' && x.vbankAccount)) {
+          try {
+            const r = await closePaymentRequest(q.id)
+            /* ⚠️ PG 가 받아들여야 서버가 상태를 바꾼다. 안 바뀌었으면 **계좌는 살아 있다** */
+            if (r.status === 'CREATED') vbankLeft.push(q.vbankAccount ?? String(q.id))
+          } catch {
+            vbankLeft.push(q.vbankAccount ?? String(q.id))
+          }
+        }
+      } catch {
+        /* 목록을 못 읽었으면 계좌가 있는지도 모른다 — 있다고 단정하지 않는다 */
+      }
+
       setActDone(
-        cancelRow.payments.length > 0
-          ? `청구를 취소하고 수납 ${cancelRow.payments.length}건도 함께 취소했습니다.`
-          : '청구를 취소했습니다.',
+        [
+          cancelRow.payments.length > 0
+            ? `청구를 취소하고 수납 ${cancelRow.payments.length}건도 함께 취소했습니다.`
+            : '청구를 취소했습니다.',
+          vbankLeft.length > 0
+            ? `⚠️ 가상계좌 ${vbankLeft.join(' · ')}는 닫히지 않았습니다. 그 계좌로 입금이 들어올 수 있으니 결제업체에 확인하세요.`
+            : '',
+        ]
+          .filter(Boolean)
+          .join('\n'),
       )
       setCancelRow(null)
       await load()
@@ -2924,6 +2957,11 @@ function Content() {
                 ) : (
                   <>청구 {cancelRow.billedAmount.toLocaleString()}원이 매출장에서 빠집니다.</>
                 )}
+                {/* ★ 발급해 둔 가상계좌는 **기한까지 계속 입금을 받는다.** 함께 닫는다는 것을
+                    미리 말한다 — 안 적으면 「계좌는 어떻게 되나」를 따로 묻게 된다 */}
+                <div style={{ marginTop: 6 }}>
+                  발급된 <b>가상계좌가 있으면 함께 닫습니다.</b> 닫지 않으면 그 번호로 입금이 들어옵니다.
+                </div>
               </div>
             </div>
           </div>
