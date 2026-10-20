@@ -82,15 +82,16 @@ function preview(body: string): string {
 /* ── 실연동 템플릿 컬럼. 목업 컬럼 구성을 그대로 따르고 서버에 없는 둘만 <Unfilled/> 다 ── */
 
 const API_TEMPLATE_COLUMNS: Column<NotificationTemplate>[] = [
+  /* ★ **이름을 앞에 둔다.** 전에는 `APPROVAL_APPROVED_BY_ADMIN` 같은 **개발자용 식별자**가
+     첫 열이었다 — 데스크가 읽을 값이 아니다. 코드는 뒤로 보내고 작게 쓴다(서버에 문의할
+     때 필요해서 지우지는 않는다). */
   {
-    key: 'event',
-    header: '코드',
+    key: 'name',
+    header: '템플릿명',
     width: '190px',
     sortable: true,
-    value: (r) => r.event,
-    render: (_r, v) => <code style={{ fontSize: 10.5 }}>{v}</code>,
+    value: (r) => EVENT_LABEL[r.event] ?? r.event,
   },
-  { key: 'name', header: '템플릿명', width: '140px', sortable: true, value: (r) => EVENT_LABEL[r.event] ?? r.event },
   {
     key: 'channel',
     header: '채널',
@@ -167,7 +168,16 @@ const API_TEMPLATE_COLUMNS: Column<NotificationTemplate>[] = [
     width: '80px',
     // 2026-09-21 이전에 고친 문구는 누가 고쳤는지 기록이 없다
     value: (r) => r.updatedByName ?? '-',
+  },  {
+    key: 'event',
+    header: '코드',
+    width: '186px',
+    sortable: true,
+    value: (r) => r.event,
+    /* 서버에 문의할 때 쓰는 값이라 남기되, 눈에 먼저 들어오지 않게 작게 */
+    render: (_r, v) => <code style={{ fontSize: 10, color: 'var(--muted)' }}>{v}</code>,
   },
+
 ]
 
 const REVIEW_TONE_BY_STATUS: Record<string, string> = {
@@ -689,7 +699,7 @@ function Content() {
                       value={pickedClassId ?? ''}
                       onChange={(e) => setPickedClassId(e.target.value === '' ? null : Number(e.target.value))}
                     >
-                      <option value="">반을 고르세요</option>
+                      <option value="">반 선택</option>
                       {classes.map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.name}
@@ -788,7 +798,7 @@ function Content() {
                     value={pickedId ?? ''}
                     onChange={(e) => setPickedId(e.target.value === '' ? null : Number(e.target.value))}
                   >
-                    <option value="">템플릿을 고르세요</option>
+                    <option value="">템플릿 선택</option>
                     {rows.map((t) => (
                       <option key={t.id} value={t.id}>
                         {EVENT_LABEL[t.event] ?? t.event} · {CHANNEL_LABEL[t.channel] ?? t.channel}

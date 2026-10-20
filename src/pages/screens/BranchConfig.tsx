@@ -422,14 +422,13 @@ function Content() {
                   ★ 기본값을 박지 않는다. 그러면 **값이 안 들어온 지점에서 아침에 오는
                     학생이 전부 지각**으로 찍힌다 */}
               <div className="hint">
-                이 시각 이후 첫 태깅이 <b>지각</b>입니다. 바꾸면 그날부터 지각 판정이 달라집니다.
+                이 시각 이후의 첫 태깅은 <b>지각</b>으로 처리됩니다. 기준 시각을 변경하면 변경 당일부터
+                적용됩니다.
               </div>
               <div className="hint">
-                {acadEdit.lateAfter === ''
-                  ? acadEdit.deadline
-                    ? `지금은 비어 있어 등원 기준 시각(${acadEdit.deadline})을 그대로 씁니다.`
-                    : '지금은 비어 있어 등원 기준 시각을 그대로 씁니다.'
-                  : '비우면 등원 기준 시각을 그대로 씁니다.'}
+                {acadEdit.deadline
+                  ? `입력하지 않으면 등원 기준 시각(${acadEdit.deadline})이 적용됩니다.`
+                  : '입력하지 않으면 등원 기준 시각이 적용됩니다.'}
               </div>
             </div>
           </div>

@@ -529,7 +529,7 @@ function Content() {
             <div className="frow">
               <label className="req">항목</label>
               <select className="sel" value={itemId} onChange={(e) => setItemId(e.target.value)}>
-                <option value="">선택하세요</option>
+                <option value="">선택</option>
                 {(items.data ?? []).map((it) => (
                   <option key={it.id} value={String(it.id)}>
                     [{PENALTY_CATEGORY_LABEL[it.category]}] {it.itemName} ({it.point > 0 ? `+${it.point}` : it.point})

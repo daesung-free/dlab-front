@@ -799,8 +799,8 @@ function SeatTab({
                 <Icon name="info" size={17} />
               </div>
               <div>
-                <b>빈 칸을 누르면 좌석을 만들고, 좌석을 누르면 지웁니다.</b> 잘못 지운 자리는 지웠던 번호를
-                그대로 넣으면 <b>그 좌석이 되살아나</b> 예전 배정 이력이 이어집니다.
+                빈칸을 누르면 좌석이 생성되고, 좌석을 누르면 삭제됩니다. 삭제한 좌석과 동일한 번호로 다시
+                생성하면 기존 배정 이력이 유지됩니다.
               </div>
             </div>
             <SeatSpotMap seats={seats} busy={busy} onPickSpot={onPickSpot} onRemoveSeat={onDelete} />
