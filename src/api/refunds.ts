@@ -61,6 +61,13 @@ export interface RefundView {
   /** 항목별 근거. 클라이언트가 요청한 「추가결제 시 상세 내역 출력」이 이 값을 쓴다 */
   items?: RefundItem[]
   method?: string | null
+  /**
+   * 이용일수 — **등록 기간 중 경과한 날**이다.
+   *
+   * ★★ **출석일수가 아니다.** 규정이 경과 비율이라 **결석해도 줄지 않는다**
+   *   (0820 규정 「퇴원하는 달 이용기간의 1/3까지 2/3 환불」). 화면에 「다닌」·
+   *   「수강한」이라고 쓰면 담당자가 **출석부를 보고 결석을 빼** 환불액이 틀린다.
+   */
   usedDays?: number
   createdAt?: string | null
   transferredAt?: string | null

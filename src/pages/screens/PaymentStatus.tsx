@@ -715,6 +715,9 @@ function Content() {
   /* 미리보기는 일수를 고칠 때마다 다시 본다 — **집행 전에** 금액과 방향을 봐야 뜻이 있다 */
   useEffect(() => {
     if (refund === null || refund.done !== null) return
+    /* ★ **입력 전에는 계산하지 않는다.** 빈 칸이면 0일로 읽혀 **전액 환불**이 뜨는데,
+       담당자가 그 금액을 보고 그대로 누를 수 있다 — 되돌릴 수 없는 일이다 */
+    if (refund.usedDays.trim() === '') return
     const d = Number(refund.usedDays)
     if (!Number.isFinite(d) || d < 0) return
     let cancelled = false
@@ -2679,7 +2682,7 @@ function Content() {
         <Modal
           wide
           title={`${refund.row.studentName} · ${refund.row.name} — 환불`}
-          sub="실제로 다닌 교습일수로 계산합니다."
+          sub="환불 규정에 따라 이용일수 기준으로 계산합니다."
           confirmLabel={
             refund.done
               ? '닫기'
@@ -2732,7 +2735,7 @@ function Content() {
           ) : (
             <>
               <div className="frow">
-                <label className="req">다닌 교습일수</label>
+                <label className="req">이용일수</label>
                 <div>
                   {/* ★ `step` 을 안 건다 — Modal 이 form 이라 배수가 아니면 저장이 막힌다 */}
                   <input
@@ -2743,7 +2746,14 @@ function Content() {
                     placeholder="예: 12"
                     onChange={(e) => setRefund({ ...refund, usedDays: e.target.value })}
                   />
-                  <div className="hint">실제 수강한 일수를 입력하세요. 휴원일은 제외합니다.</div>
+                  {/* ★★ **출석일수가 아니다.** 「다닌」·「수강한」이라고 쓰면 담당자가
+                      출석부를 보고 결석을 뺀다 — **그러면 환불액이 틀린다.** 규정은
+                      경과 비율이라 결석해도 줄지 않는다(0820 규정 원문 확인).
+                      ★ 분모(교습일수)는 **관리자가 연 1회 등록한 값**을 서버가 읽는다 —
+                      화면에서 받는 값이 아니다. 여기는 이용일수만 받는다 */}
+                  <div className="hint">
+                    등록일부터 환불일까지의 일수를 입력하세요. 실제 출석 여부와 무관합니다.
+                  </div>
                 </div>
               </div>
 
