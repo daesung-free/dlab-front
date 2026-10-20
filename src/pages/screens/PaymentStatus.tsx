@@ -68,6 +68,15 @@ import {
   type SeatType,
 } from '../../api/tuition'
 import { listScholarshipMasters, listStudentScholarships } from '../../api/masters'
+import {
+  executeRefund,
+  listPendingTransfers,
+  markRefundTransferred,
+  previewRefund,
+  REFUND_STATUS_LABEL,
+  type RefundStatus,
+  type RefundView,
+} from '../../api/refunds'
 import { GRADE_LABEL, searchStudents, type Student } from '../../api/students'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
@@ -685,6 +694,145 @@ function Content() {
 
   const unpaid = useMemo(() => filtered.filter((r) => r.unpaid > 0), [filtered])
 
+  /* ── 환불 집행 (0820 규정 · 디랩 2026-10-12 확정) ──────────
+   *
+   * ★★ **「돌려준다」와 「더 받는다」를 가른다.** 규정이 정상가 기준 차감이라
+   *   할인받은 학생은 **차감이 납부액을 넘는다** — 그때는 추가 징수다.
+   *   「돌려드립니다」로 띄우면 **데스크가 반대로 처리한다.**
+   * ★★ **집행 결과의 `status` 를 그대로 본다.** 200 이어도 `FAILED` 일 수 있다
+   *   (PG 취소 거절). 「완료」로 띄우면 **돈이 안 갔는데 갔다고 기록**된다. */
+  const [refund, setRefund] = useState<{
+    row: ReceiptRow
+    usedDays: string
+    preview: RefundView | null
+    busy: boolean
+    err: string | null
+    done: RefundView | null
+  } | null>(null)
+
+  /* 미리보기는 일수를 고칠 때마다 다시 본다 — **집행 전에** 금액과 방향을 봐야 뜻이 있다 */
+  useEffect(() => {
+    if (refund === null || refund.done !== null) return
+    const d = Number(refund.usedDays)
+    if (!Number.isFinite(d) || d < 0) return
+    let cancelled = false
+    previewRefund(refund.row.billingId, d)
+      .then((v) => !cancelled && setRefund((c) => (c && c.done === null ? { ...c, preview: v, err: null } : c)))
+      .catch((e) =>
+        !cancelled &&
+        setRefund((c) =>
+          c && c.done === null
+            ? { ...c, preview: null, err: e instanceof ApiError ? e.message : '환불액을 계산하지 못했습니다.' }
+            : c,
+        ),
+      )
+    return () => {
+      cancelled = true
+    }
+  }, [refund?.row.billingId, refund?.usedDays, refund?.done])
+
+  /* ── 환불 이체 대기 ──────────────────────────────────────── */
+
+  const [transfers, setTransfers] = useState<RefundView[]>([])
+  const [transferBusy, setTransferBusy] = useState<number | null>(null)
+
+  const loadTransfers = useCallback(async () => {
+    if (academyId === null) {
+      setTransfers([])
+      return
+    }
+    try {
+      setTransfers(await listPendingTransfers(academyId, new Date().getFullYear()))
+    } catch {
+      /* 서버가 아직 이 경로를 모르면 빈 목록으로 둔다 — 화면이 먼저 배포될 수 있다 */
+      setTransfers([])
+    }
+  }, [academyId])
+
+  useEffect(() => {
+    void loadTransfers()
+  }, [loadTransfers])
+
+  async function markTransferred(r: RefundView) {
+    if (r.id === undefined) return
+    setTransferBusy(r.id)
+    try {
+      await markRefundTransferred(r.id)
+      await loadTransfers()
+    } catch (err) {
+      setActErr(err instanceof ApiError ? err.message : '이체 완료로 바꾸지 못했습니다.')
+    } finally {
+      setTransferBusy(null)
+    }
+  }
+
+  const transferColumns: Column<RefundView>[] = useMemo(
+    () => [
+      { key: 'studentNo', header: '학번', width: '104px', value: (r) => r.studentNo ?? '-' },
+      { key: 'studentName', header: '이름', width: '90px', mask: 'name', value: (r) => r.studentName ?? '-' },
+      {
+        key: 'refundAmount',
+        header: '환불액',
+        width: '110px',
+        align: 'right',
+        value: (r) => r.refundAmount,
+        render: (r) => <b>{wonOf(r.refundAmount)}</b>,
+      },
+      {
+        key: 'status',
+        header: '상태',
+        width: '92px',
+        align: 'center',
+        value: (r) => (r.status ? (REFUND_STATUS_LABEL[r.status] ?? r.status) : '-'),
+        render: (r) => {
+          const st = r.status as RefundStatus | undefined
+          /* ★ `FAILED` 는 **돈이 안 간 것**이다. 사유를 그대로 띄운다 */
+          return (
+            <>
+              <span className={`mk ${st === 'FAILED' ? 'brandnew' : st === 'DONE' ? 'verified' : 'supplement'}`}>
+                {st ? (REFUND_STATUS_LABEL[st] ?? st) : '-'}
+              </span>
+              {st === 'FAILED' && r.failReason && <div className="hint">{r.failReason}</div>}
+            </>
+          )
+        },
+      },
+      { key: 'createdAt', header: '신청일', width: '110px', align: 'center', value: (r) => (r.createdAt ?? '').slice(0, 10) || '-' },
+      {
+        key: 'act',
+        header: '',
+        width: '104px',
+        align: 'center',
+        value: () => '',
+        render: (r) => (
+          <button
+            className="btn"
+            style={{ padding: '4px 9px', fontSize: 11.5 }}
+            disabled={transferBusy !== null}
+            onClick={() => void markTransferred(r)}
+          >
+            {transferBusy === r.id ? '처리 중…' : '이체 완료'}
+          </button>
+        ),
+      },
+    ],
+    [transferBusy],
+  )
+
+  async function runRefund() {
+    if (refund === null) return
+    setRefund({ ...refund, busy: true, err: null })
+    try {
+      const r = await executeRefund(refund.row.billingId, Number(refund.usedDays))
+      setRefund((c) => (c ? { ...c, busy: false, done: r } : c))
+      void load()
+    } catch (err) {
+      setRefund((c) =>
+        c ? { ...c, busy: false, err: err instanceof ApiError ? err.message : '환불을 처리하지 못했습니다.' } : c,
+      )
+    }
+  }
+
   /* ── 일괄 청구(1016 피드백 2-1) ────────────────────────────
    * > 「매월 수백명의 학생을 설정하기에는 매우 번거로울 것 같습니다」
    *
@@ -1286,6 +1434,22 @@ function Content() {
                 현금영수증
               </button>
             )}
+            {/* ★ **급식비에는 안 띄운다.** 업체 명의 TID 라 처리 주체가 아직 안 정해져
+                서버가 400 으로 막는다 — 띄워 두면 눌러보고 거절당한다.
+                ★ 받은 돈이 없으면 돌려줄 것도 없다 */}
+            {r.billingType !== 'MEAL' && r.receivedAmount > 0 && (
+              <button
+                className="btn"
+                style={{ padding: '4px 9px', fontSize: 11.5 }}
+                title="퇴원·중도해지 환불액을 계산해 집행합니다"
+                onClick={() => {
+                  setActErr(null)
+                  setRefund({ row: r, usedDays: '', preview: null, busy: false, err: null, done: null })
+                }}
+              >
+                환불
+              </button>
+            )}
             <button
               className="btn"
               style={{ padding: '4px 9px', fontSize: 11.5, color: 'var(--red)' }}
@@ -1389,6 +1553,9 @@ function Content() {
           items={[
             { key: 'all', label: '통합 매출장', count: filtered.length },
             { key: 'unpaid', label: '미납자 관리', count: unpaid.length },
+            /* ★ **이 탭이 없으면 가상계좌 환불이 영원히 안 끝난다.** 우리가 이체하는 게
+               아니라 사람이 은행에서 보내고 여기에 찍어야 목록이 줄어든다 */
+            { key: 'transfer', label: '환불 이체 대기', count: transfers.length },
             { key: 'discount', label: '할인 정책 · 청구액 계산', count: DISCOUNTS.filter((d) => d.active).length },
           ]}
           active={tab}
@@ -1396,6 +1563,29 @@ function Content() {
         />
         <div className="p-pay" style={{ padding: 14 }}>
           {/* ═══ 할인 정책 · 청구액 계산 ═══ */}
+          {tab === 'transfer' && (
+            <div style={{ padding: 14 }}>
+              {/* ★ **우리가 이체하지 않는다.** 가상계좌 환불은 사람이 은행에서 보내고
+                  여기에 찍는다 — 안 찍으면 이 목록이 **영원히 안 줄어든다** */}
+              <div className="note-box">
+                <div>
+                  <b>아직 돈이 나가지 않은 건들입니다.</b> 은행에서 직접 보낸 뒤 「이체 완료」를 누르세요.
+                  누르지 않으면 이 목록에 계속 남습니다.
+                </div>
+              </div>
+              <DataTable
+                columns={transferColumns}
+                rows={transfers}
+                rowKey={(r) => String(r.id)}
+                masked={masked}
+                pageSize={15}
+                emptyText={
+                  academyId === null ? '지점을 먼저 선택하세요.' : '이체할 환불이 없습니다.'
+                }
+              />
+            </div>
+          )}
+
           {tab === 'discount' && (
             <>
               {/* 할인 정책 API 가 아직 없다 — 이 탭만 목업 그대로다(docs/API_GAPS.md 6-3) */}
@@ -2423,6 +2613,162 @@ function Content() {
       )}
 
       {/* ── 청구 취소 ── */}
+      {refund && (
+        <Modal
+          wide
+          title={`${refund.row.studentName} · ${refund.row.name} — 환불`}
+          sub="실제로 다닌 교습일수로 계산합니다."
+          confirmLabel={
+            refund.done
+              ? '닫기'
+              : refund.preview?.requiresAdditionalPayment
+                ? '추가 징수로 확정'
+                : '환불 집행'
+          }
+          busy={refund.busy}
+          confirmDisabled={!refund.done && (refund.preview === null || refund.usedDays === '')}
+          error={refund.err}
+          danger={!refund.done}
+          onConfirm={() => (refund.done ? setRefund(null) : void runRefund())}
+          onClose={() => setRefund(null)}
+        >
+          {refund.done ? (
+            /* ★★ **집행 결과는 `status` 로 가른다.** 200 이어도 `FAILED` 일 수 있다 —
+               「완료」로 띄우면 **돈이 안 갔는데 갔다고 기록**된다 */
+            <>
+              <div className={`note-box${refund.done.status === 'FAILED' ? ' bad' : ''}`}>
+                <div>
+                  {refund.done.status === 'FAILED' ? (
+                    <>
+                      <b style={{ color: 'var(--red)' }}>환불이 되지 않았습니다.</b>{' '}
+                      {refund.done.failReason ?? '결제사에서 거절했습니다.'}
+                    </>
+                  ) : refund.done.status === 'ADDITIONAL_PAYMENT' ? (
+                    <>
+                      <b>{wonOf(Math.abs(refund.done.refundAmount))}을 더 받아야 합니다.</b> 돌려드릴 금액이
+                      아닙니다 — 학부모에게 추가 납부를 안내하세요.
+                    </>
+                  ) : refund.done.status === 'PENDING' ? (
+                    <>
+                      <b>{wonOf(refund.done.refundAmount)} 이체 대기로 등록했습니다.</b> 아직 돈이 나가지
+                      않았습니다 — 은행에서 보낸 뒤 「이체 완료」를 눌러 주세요.
+                    </>
+                  ) : (
+                    <>
+                      <b>{wonOf(refund.done.refundAmount)}을 환불했습니다.</b> 카드 결제분은 결제사에서 부분
+                      취소됐습니다.
+                    </>
+                  )}
+                </div>
+              </div>
+              {refund.done.detail && (
+                <div className="hint" style={{ marginTop: 10, whiteSpace: 'pre-line' }}>
+                  {refund.done.detail}
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="frow">
+                <label className="req">다닌 교습일수</label>
+                <div>
+                  {/* ★ `step` 을 안 건다 — Modal 이 form 이라 배수가 아니면 저장이 막힌다 */}
+                  <input
+                    className="inp"
+                    type="number"
+                    min={0}
+                    value={refund.usedDays}
+                    placeholder="예: 12"
+                    onChange={(e) => setRefund({ ...refund, usedDays: e.target.value })}
+                  />
+                  <div className="hint">실제로 다닌 날만 셉니다. 휴원일은 빼고 넣으세요.</div>
+                </div>
+              </div>
+
+              {refund.preview && (
+                <div className="frow">
+                  <label>계산 결과</label>
+                  <div>
+                    {/* ★★ **방향을 먼저 말한다.** 규정이 정상가 기준 차감이라 할인받은
+                        학생은 차감이 납부액을 넘어 **추가 징수**가 된다 —
+                        「돌려드립니다」로 띄우면 데스크가 반대로 처리한다 */}
+                    {refund.preview.requiresAdditionalPayment ? (
+                      <div className="note-box bad">
+                        <div>
+                          <b style={{ color: 'var(--red)' }}>
+                            돌려줄 금액이 없습니다 — {wonOf(Math.abs(refund.preview.refundAmount))}을 더 받아야
+                            합니다.
+                          </b>{' '}
+                          할인받은 금액보다 다닌 만큼의 수강료가 커서 생기는 경우입니다.
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 18, fontWeight: 800 }}>
+                        {wonOf(refund.preview.refundAmount)}
+                        <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, marginLeft: 8 }}>
+                          돌려드릴 금액
+                        </span>
+                      </div>
+                    )}
+                    {/* ★ **금액만 보여주면 「왜 이 금액인가」에 답할 수 없다.**
+                        클라이언트가 요청한 「추가결제 시 상세 내역 출력」이 이 자리다.
+                        항목별로 **납부·차감·결과**를 나란히 둔다 — 차감이 납부를 넘는
+                        항목이 어느 것인지 거기서 보인다 */}
+                    {refund.preview.items && refund.preview.items.length > 0 ? (
+                      <table className="mini-tbl" style={{ marginTop: 8 }}>
+                        <thead>
+                          <tr>
+                            <th>항목</th>
+                            <th style={{ textAlign: 'right' }}>납부</th>
+                            <th style={{ textAlign: 'right' }}>차감</th>
+                            <th style={{ textAlign: 'right' }}>환불</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {refund.preview.items.map((it) => (
+                            <tr key={it.itemType}>
+                              <td>
+                                {BILLING_ITEM_LABEL[it.itemType] ?? it.itemType}
+                                {it.detail && <div className="hint">{it.detail}</div>}
+                              </td>
+                              <td style={{ textAlign: 'right' }}>{wonOf(it.paidAmount)}</td>
+                              <td style={{ textAlign: 'right' }}>-{wonOf(it.deduction)}</td>
+                              <td
+                                style={{
+                                  textAlign: 'right',
+                                  fontWeight: 700,
+                                  color: it.refund < 0 ? 'var(--red)' : undefined,
+                                }}
+                              >
+                                {wonOf(it.refund)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
+                      refund.preview.detail && (
+                        /* 항목이 없으면 문자열을 그대로 — **여러 줄이라 `pre-line` 이어야 한다** */
+                        <div className="hint" style={{ marginTop: 8, whiteSpace: 'pre-line' }}>
+                          {refund.preview.detail}
+                        </div>
+                      )
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="note-box">
+                <div>
+                  <b>되돌릴 수 없습니다.</b> 카드 결제분은 <b>결제사에서 바로 부분 취소</b>되고, 가상계좌분은{' '}
+                  <b>이체 대기</b>로 쌓여 은행에서 따로 보내야 합니다.
+                </div>
+              </div>
+            </>
+          )}
+        </Modal>
+      )}
+
       {rcp && (
         <Modal
           wide
