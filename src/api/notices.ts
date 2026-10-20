@@ -133,3 +133,50 @@ export function patchNotice(
 export function deleteNotice(id: number): Promise<void> {
   return request<void>(`/api/v1/admin/notices/${id}`, { method: 'DELETE' })
 }
+
+/* ── 첨부 (2026-10-20 서버 추가) ──────────────────────────────
+ *
+ * ★ **저장 전에 올린다.** `ownerId` 없이 올려 `fileId` 를 받고, 공지를 저장한 뒤
+ *   `PATCH /files/{id}/owner` 로 붙인다 — 저장부터 강제하면 **쓰다 만 공지가 쌓인다.**
+ * ★★ **`ownerType` 은 대문자 `NOTICE`** 다. `owner_type` 이 자유 문자열이라
+ *   소문자로 보내면 **업로드는 되고 조회만 안 되는데 오류도 안 난다.**
+ * ★ `url` 은 **고정 주소**라 화면이 저장해 써도 된다(비공개 첨부와 다르다).
+ */
+
+export interface NoticeAttachment {
+  id: number
+  originalName: string
+  contentType: string
+  sizeBytes: number
+  /** 고정 주소 */
+  url: string
+}
+
+/**
+ * 공지 상세 — **첨부는 여기에만 실린다.**
+ *
+ * ★ 목록 응답의 첨부는 **늘 빈 목록**이다. 목록에 넣으면 공지 수만큼 조회가 따라붙는다.
+ */
+export function getNotice(id: number): Promise<Notice & { attachments?: NoticeAttachment[] }> {
+  return request<Notice & { attachments?: NoticeAttachment[] }>(`/api/v1/admin/notices/${id}`)
+}
+
+/** 공개 업로드 → 파일 id. **저장 전에 올린다**(`ownerId` 없이) */
+export async function uploadNoticeFile(file: File): Promise<{ id: number; fileName: string; url?: string }> {
+  const fd = new FormData()
+  fd.append('file', file)
+  return request<{ id: number; fileName: string; url?: string }>('/api/v1/admin/files/public', {
+    method: 'POST',
+    /* ★ 대문자다 — 소문자면 조회가 조용히 비어 온다 */
+    query: { ownerType: 'NOTICE' },
+    body: fd,
+  })
+}
+
+/** 저장한 공지에 파일을 붙인다 */
+export function attachFileToNotice(fileId: number, noticeId: number): Promise<void> {
+  return request<void>(`/api/v1/admin/files/${fileId}/owner`, {
+    method: 'PATCH',
+    body: { ownerType: 'NOTICE', ownerId: noticeId },
+  })
+}
