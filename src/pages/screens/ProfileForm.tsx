@@ -5,7 +5,7 @@ import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
 import { useAcademy } from '../../auth/AcademyContext'
 import { useAuth } from '../../auth/AuthContext'
-import { searchStudents, type Student } from '../../api/students'
+import { GRADE_LABEL, searchStudents, type Student } from '../../api/students'
 import { studentNoText } from '../../lib/studentNo'
 import {
   getFileUrl,
@@ -68,7 +68,8 @@ const EXPORT_COLUMNS: Column<Student>[] = [
   { key: 'studentNo', header: '학번', value: (r) => studentNoText(r.studentNo) },
   { key: 'name', header: '이름', mask: 'name', value: (r) => r.name },
   { key: 'className', header: '반', value: (r) => r.className ?? '-' },
-  { key: 'grade', header: '학년', value: (r) => r.grade ?? '-' },
+  /* ★ 코드(`HIGH3`·`N_SU`)가 아니라 사람이 읽는 말로 — `GRADE_LABEL` 이 정본이다 */
+  { key: 'grade', header: '학년', value: (r) => (r.grade ? (GRADE_LABEL[r.grade] ?? r.grade) : '-') },
 ]
 
 function Content() {

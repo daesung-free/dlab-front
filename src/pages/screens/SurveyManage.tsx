@@ -31,7 +31,7 @@ import {
   type ParticipantState,
   type SurveyParticipant,
 } from '../../api/surveys'
-import { searchStudents, type Student } from '../../api/students'
+import { GRADE_LABEL, searchStudents, type Student } from '../../api/students'
 import { createScreenSignal } from './screenSignal'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
@@ -538,7 +538,15 @@ function stamp(v: string | null | undefined): string {
     () => [
       { key: 'studentNo', header: '학번', width: '120px', value: (r) => r.studentNo ?? '-' },
       { key: 'name', header: '이름', width: '110px', mask: 'name', value: (r) => r.name },
-      { key: 'grade', header: '학년', width: '80px', align: 'center', value: (r) => r.grade ?? '-' },
+      {
+        /* ★ **코드가 그대로 보이고 있었다**(`HIGH3`·`N_SU`). 사람이 읽는 말로 바꾼다 —
+           학년은 `GRADE_LABEL` 이 정본이다(CLAUDE.md 1-1) */
+        key: 'grade',
+        header: '학년',
+        width: '80px',
+        align: 'center',
+        value: (r) => (r.grade ? (GRADE_LABEL[r.grade] ?? r.grade) : '-'),
+      },
       { key: 'className', header: '반', width: '110px', value: (r) => r.className ?? '-' },
     ],
     [],
@@ -1896,8 +1904,12 @@ function stamp(v: string | null | undefined): string {
       {picking && (
         <Modal
           title="대상자 지정"
-          sub="고른 학생에게 설문이 발송됩니다"
-          confirmLabel="발송"
+          /* ★ **「발송」이 아니다.** 이 호출은 대상자 행을 만들 뿐 **아무것도 보내지 않는다** —
+             학생은 앱을 열어 설문 목록에서 본다. 「발송됩니다」라고 쓰면 담당자가
+             **학생에게 알림이 간 줄 안다**(디랩이 실제로 그렇게 읽고 물어 왔다).
+             알림 이벤트는 서버에 생겼지만 **문구가 미확정이라 아직 안 나간다** */
+          sub="고른 학생이 앱에서 이 설문을 볼 수 있게 됩니다. 따로 알림은 가지 않습니다."
+          confirmLabel="대상자로 지정"
           wide
           busy={picking.busy}
           error={picking.err}
