@@ -1066,6 +1066,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/lectures/{lectureId}/targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 수강 대상·대기 상한 (디랩 1021 답변 Q2·Q3)
+         * @description 수강 대상·대기 상한 (디랩 1021 답변 Q2·Q3).
+         *
+         *      <p>★ <b>대상을 통째로 바꾼다</b> — 부분 수정을 두면 「비움」과 「안 보냄」이
+         *      구분되지 않는다. 두 축 모두 비우면 제한 없음이다.
+         *
+         *      <p>★ 신청 시 <b>자격을 실제로 검사한다</b> — 표시만 하면 고3 대상 특강에 고1이
+         *      신청한다.
+         */
+        put: operations["changeTargets"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/lectures/{lectureId}/status": {
         parameters: {
             query?: never;
@@ -1084,6 +1110,42 @@ export interface paths {
         put: operations["changeStatus"];
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/lectures/sessions/{sessionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 회차 수정 (디랩 1021 답변 Q1 의 예외 요청)
+         * @description 회차 수정 (디랩 1021 답변 Q1 의 예외 요청).
+         *
+         *      <p>디랩 원문: <i>"주1회 수요일 수업이었는데 … <b>2회차 수업을 목요일에 한다</b>던지
+         *      … <b>수동으로 설정</b>할 수 있을까요?"</i>
+         *
+         *      <p>★ <b>출석 기록이 있어도 날짜를 바꾼다</b> — 보강이라 같은 수업이다.
+         *      삭제와 다르다(삭제는 그날 누가 왔는지가 사라져 400 이다).
+         */
+        put: operations["updateSession"];
+        post?: never;
+        /**
+         * 회차 삭제
+         * @description 회차 삭제.
+         *
+         *      <p>개설 폼이 기간·요일로 회차를 한 번에 만드는 구조라 날짜를 잘못 넣으면
+         *      그만큼 쌓이는데, <b>되돌릴 방법이 없었다.</b>
+         *
+         *      <p>출결이 찍힌 회차는 400 이다 — 지우면 그날 누가 왔는지가 사라진다.
+         *      번호는 다시 매기지 않는다(이미 안내된 "3회차" 가 다른 날을 가리키게 된다).
+         */
+        delete: operations["deleteSession"];
         options?: never;
         head?: never;
         patch?: never;
@@ -10983,32 +11045,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/lectures/sessions/{sessionId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * 회차 삭제
-         * @description 회차 삭제.
-         *
-         *      <p>개설 폼이 기간·요일로 회차를 한 번에 만드는 구조라 날짜를 잘못 넣으면
-         *      그만큼 쌓이는데, <b>되돌릴 방법이 없었다.</b>
-         *
-         *      <p>출결이 찍힌 회차는 400 이다 — 지우면 그날 누가 왔는지가 사라진다.
-         *      번호는 다시 매기지 않는다(이미 안내된 "3회차" 가 다른 날을 가리키게 된다).
-         */
-        delete: operations["deleteSession"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/admin/lectures/applications/{applicationId}": {
         parameters: {
             query?: never;
@@ -12827,10 +12863,84 @@ export interface components {
             confirmedCount?: number;
             /** Format: int64 */
             waitlistedCount?: number;
+            targetTracks?: string[];
+            targetGrades?: string[];
+            /** Format: int32 */
+            waitlistCapacity?: number;
+        };
+        /**
+         * @description 수강 대상·대기 상한 (디랩 1021 답변 Q2·Q3).
+         *
+         *      <h2>★★ 두 축 모두 비우면 제한 없음이다</h2>
+         *      「전체」를 값으로 보내지 말 것 — 「전체」와 「인문+자연 둘 다」가 같은 뜻인데
+         *      데이터가 두 가지로 갈린다.
+         *
+         *      <p>⚠️ 학년에 <code>STAFF</code> 를 보내도 저장되지 않는다 — 직원은 학년이 아니다.
+         */
+        ChangeTargets: {
+            tracks?: ("HUMANITIES" | "SCIENCE" | "ART" | "COMMON")[];
+            grades?: ("HIGH2" | "HIGH3" | "N_SU" | "STAFF")[];
+            /**
+             * Format: int32
+             * @description 대기 상한. 비우면 유지, <code>null</code> 로 두면 무제한이다
+             */
+            waitlistCapacity?: number;
         };
         LectureChangeStatus: {
             /** @enum {string} */
             status: "DRAFT" | "OPEN" | "CLOSED" | "DONE" | "CANCELED";
+        };
+        /**
+         * @description 회차 수정 (디랩 1021 답변 Q1 의 예외 요청).
+         *
+         *      <p>★ <b>비워 보낸 항목은 바꾸지 않는다.</b> 날짜만 옮기는 경우가 대부분이다.
+         *
+         *      <p>⚠️ <b>번호는 바꿀 수 없다</b> — 이미 안내된 「3회차」가 다른 날을 가리키게 된다.
+         */
+        UpdateSession: {
+            /** Format: date */
+            sessionDate?: string;
+            startTime?: string;
+            endTime?: string;
+            room?: string;
+            /**
+             * Format: int32
+             * @description 그 회차 수강료. 비우면 유지, 명시하면 교체
+             */
+            fee?: number;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseSession: {
+            success?: boolean;
+            data?: components["schemas"]["Session"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        Session: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int32 */
+            sessionNo?: number;
+            /** Format: date */
+            sessionDate?: string;
+            startTime?: string;
+            endTime?: string;
+            room?: string;
+            /**
+             * Format: int32
+             * @description 그 회차 수강료. ★ <code>null</code> 은 <b>미설정</b>이다 —
+             *                 화면에서 0원으로 표시하지 말 것. 「0원 무료」와 구분되지 않는다
+             */
+            fee?: number;
         };
         MarkAttendance: {
             /** Format: int64 */
@@ -16700,33 +16810,6 @@ export interface components {
         AddSession: {
             /** Format: date */
             sessionDate: string;
-            startTime?: string;
-            endTime?: string;
-            room?: string;
-        };
-        /**
-         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
-         *      성공: { "success": true, "data": ... }
-         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
-         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
-         *
-         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
-         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
-         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
-         */
-        ApiResponseSession: {
-            success?: boolean;
-            data?: components["schemas"]["Session"];
-            meta?: components["schemas"]["PageMeta"];
-            error?: components["schemas"]["ErrorBody"];
-        };
-        Session: {
-            /** Format: int64 */
-            id?: number;
-            /** Format: int32 */
-            sessionNo?: number;
-            /** Format: date */
-            sessionDate?: string;
             startTime?: string;
             endTime?: string;
             room?: string;
@@ -25740,6 +25823,32 @@ export interface operations {
             };
         };
     };
+    changeTargets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lectureId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeTargets"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseLectureDetail"];
+                };
+            };
+        };
+    };
     changeStatus: {
         parameters: {
             query?: never;
@@ -25762,6 +25871,54 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseLectureDetail"];
+                };
+            };
+        };
+    };
+    updateSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSession"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseSession"];
+                };
+            };
+        };
+    };
+    deleteSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseVoid"];
                 };
             };
         };
@@ -38280,28 +38437,6 @@ export interface operations {
             header?: never;
             path: {
                 id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ApiResponseVoid"];
-                };
-            };
-        };
-    };
-    deleteSession: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                sessionId: number;
             };
             cookie?: never;
         };
