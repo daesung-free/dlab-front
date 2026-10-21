@@ -1031,10 +1031,10 @@ function stamp(v: string | null | undefined): string {
                   <Icon name="lock" size={17} />
                 </div>
                 <div>
-                  <div className="tt">이미 응답이 쌓인 설문이라 문항을 고칠 수 없습니다</div>
+                  <div className="tt">응답이 등록된 설문은 문항을 수정할 수 없습니다</div>
                   <div className="tx">
-                    문항을 바꾸면 <b>바꾸기 전 응답과 후 응답의 의미가 달라져</b> 집계가 깨집니다. 제목·마감일 같은 메타
-                    정보만 수정할 수 있고, 문항을 바꾸려면 <b>복제해서 새로 배포</b>하세요.
+                    문항을 수정하면 <b>수정 전후 응답의 의미가 달라져</b> 집계가 어긋납니다. 제목·마감일만 수정할 수
+                    있으며, 문항을 수정하려면 <b>설문을 복제하여 새로 배포</b>하세요.
                   </div>
                 </div>
               </div>
@@ -1303,8 +1303,10 @@ function stamp(v: string | null | undefined): string {
     <>
       {editing && (
         <Modal
+          /* ★ 문항 편집기가 들어가는 모달이라 **좁으면 가로 스크롤이 생긴다** */
+          wide
           title="설문 수정"
-          sub="문항은 응답이 들어오기 전까지 바꿀 수 있습니다. 대상은 복제해서 새로 만드세요."
+          sub="문항은 응답이 등록되기 전까지 수정할 수 있습니다. 대상은 설문을 복제하여 새로 생성하세요."
           confirmLabel="저장"
           busy={rowBusy}
           confirmDisabled={editing.title.trim() === ''}
@@ -1352,7 +1354,7 @@ function stamp(v: string | null | undefined): string {
                   disabled={editing.loadingQ}
                   onClick={() => void loadQuestionsForEdit()}
                 >
-                  <Icon name="list-ordered" size={13} /> {editing.loadingQ ? '불러오는 중…' : '문항 고치기'}
+                  <Icon name="list-ordered" size={13} /> {editing.loadingQ ? '불러오는 중…' : '문항 수정'}
                 </button>
               ) : (
                 <>
@@ -1440,7 +1442,7 @@ function stamp(v: string | null | undefined): string {
                         <input
                           className="inp"
                           value={q.options.join(', ')}
-                          placeholder="보기를 쉼표로 구분해 적으세요 — 예: 예, 아니오"
+                          placeholder="보기를 쉼표로 구분해 입력하세요 — 예: 예, 아니오"
                           onChange={(e) => patchQ(q.key, { options: e.target.value.split(',').map((x) => x.trim()) })}
                         />
                       )}
@@ -1544,9 +1546,9 @@ function stamp(v: string | null | undefined): string {
 
       {removing && (
         <Modal
-          title={`${removing.title} 설문을 지울까요?`}
+          title={`${removing.title} 설문을 삭제할까요?`}
           sub="되돌릴 수 없습니다."
-          confirmLabel="지우기"
+          confirmLabel="삭제"
           danger
           busy={rowBusy}
           onConfirm={() => void removeOne()}
@@ -1554,7 +1556,7 @@ function stamp(v: string | null | undefined): string {
         >
           <div className="note-box">
             <div>
-              응답이 들어온 설문은 지워지지 않습니다. 더 받지 않으려면 <b>마감</b>을 쓰세요.
+              응답이 등록된 설문은 삭제할 수 없습니다. 더 이상 응답을 받지 않으려면 <b>마감</b>을 선택하세요.
             </div>
           </div>
         </Modal>

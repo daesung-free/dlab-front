@@ -306,7 +306,7 @@ function MenuModal({ row, onClose, onSaved }: { row: AccountRow; onClose: () => 
             </div>
             <div className="hint" style={{ marginTop: 6 }}>
               {restricted
-                ? '아래에서 체크한 것만 보입니다. 하나 이상 골라야 합니다.'
+                ? '아래에서 선택한 항목만 표시됩니다. 하나 이상 선택해야 합니다.'
                 : '이 계정의 구분(역할)에 따라 정해진 메뉴가 보입니다 — 아래 체크가 그 목록입니다.'}
             </div>
           </div>
@@ -912,7 +912,7 @@ function Content() {
             })}
           </div>
           {roleEdit.picked.length === 0 && (
-            <div className="note-box" style={{ marginTop: 12 }}>역할을 하나 이상 골라야 합니다.</div>
+            <div className="note-box" style={{ marginTop: 12 }}>역할을 하나 이상 선택해야 합니다.</div>
           )}
         </Modal>
       )}

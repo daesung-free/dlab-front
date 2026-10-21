@@ -513,7 +513,7 @@ function Content() {
               disabled={editBusy}
               onClick={() => setRemoving(editing)}
             >
-              <Icon name="trash-2" size={14} /> 반 지우기
+              <Icon name="trash-2" size={14} /> 반 삭제
             </button>
           </div>
         </Modal>
@@ -521,9 +521,9 @@ function Content() {
 
       {removing && (
         <Modal
-          title={`${removing.name} 반을 지울까요?`}
+          title={`${removing.name} 반을 삭제할까요?`}
           sub="되돌릴 수 없습니다."
-          confirmLabel="지우기"
+          confirmLabel="삭제"
           danger
           busy={editBusy}
           error={editErr}

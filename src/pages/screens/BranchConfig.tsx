@@ -403,7 +403,7 @@ function Content() {
                 onChange={(e) => setAcadEdit({ ...acadEdit, deadline: e.target.value })}
               />
               <div className="hint">
-                이 시각까지 안 오면 <b>미등원</b>으로 잡아 안내가 나갑니다.
+                설정한 시각까지 등원하지 않으면 <b>미등원</b>으로 처리되며, 안내가 발송됩니다.
               </div>
             </div>
           </div>
@@ -512,7 +512,7 @@ function Content() {
                 {edit.clear ? (
                   <>
                     실수로 지우지 않도록 <b>지금 값을 그대로</b> 적어야 지워집니다.
-                    {edit.kind === 'pg' && ' 화면에는 가려져 보이므로 발급받은 코드를 확인해 적으세요.'}
+                    {edit.kind === 'pg' && ' 화면에는 가려져 표시되므로 발급받은 코드를 확인해 입력하세요.'}
                   </>
                 ) : (
                   EDIT_META[edit.kind].hint
@@ -540,7 +540,7 @@ function Content() {
               {/* 저장된 값은 서버가 가려서 준다 — 지금 값을 채워 넣을 수가 없다 */}
               <div>
                 지금 값은 <b>{edit.row.pgMerchantCodeMasked ?? '없음'}</b> 입니다. 보안상 일부만 보여서
-                이어서 고칠 수 없고, <b>전체를 다시 입력</b>해야 합니다.
+                이어서 수정할 수 없으며, <b>전체를 다시 입력</b>해야 합니다.
               </div>
             </div>
           )}
@@ -574,7 +574,7 @@ function Content() {
       {issued && (
         <Modal
           title={`${issued.name} 키오스크 자격증명`}
-          sub="이 창을 닫으면 비밀값을 다시 볼 수 없습니다. 지금 옮겨 적으세요."
+          sub="이 창을 닫으면 비밀값을 다시 확인할 수 없습니다. 지금 저장하세요."
           hideCancel
           confirmLabel="옮겨 적었습니다"
           onConfirm={() => setIssued(null)}
@@ -601,14 +601,14 @@ function Content() {
         <Modal
           wide
           title={`${history.row.academyName} 변경 이력`}
-          sub="무엇을 언제 바꿨는지만 남습니다 — 값은 남기지 않습니다."
+          sub="변경 항목과 시점만 기록되며, 변경된 값은 저장되지 않습니다."
           hideCancel
           confirmLabel="닫기"
           onConfirm={() => setHistory(null)}
           onClose={() => setHistory(null)}
         >
           {history.list.length === 0 ? (
-            <div style={{ padding: 14, color: 'var(--muted)', fontSize: 13 }}>아직 바꾼 기록이 없습니다.</div>
+            <div style={{ padding: 14, color: 'var(--muted)', fontSize: 13 }}>변경 이력이 없습니다.</div>
           ) : (
             <div style={{ display: 'grid', gap: 6 }}>
               {history.list.map((h) => (

@@ -887,7 +887,7 @@ function Content() {
       {monthEdit && (
         <Modal
           title={`${year}년 ${monthEdit.mo}월 교습일수`}
-          sub="달력 일수가 아니라 실제 수업한 날수입니다. 학원이 아는 값을 그대로 넣으세요."
+          sub="달력 일수가 아니라 실제 수업일수입니다. 학원이 관리하는 값을 그대로 입력하세요."
           confirmLabel="저장"
           busy={busy}
           error={monthErr}
