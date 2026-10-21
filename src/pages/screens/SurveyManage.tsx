@@ -12,6 +12,9 @@ import {
   SURVEY_RUN_STATE_LABEL,
   SURVEY_TYPE_LABEL,
   closeSurvey,
+  previewSurveyRemind,
+  remindSurvey,
+  type SurveyRemindPreview,
   deleteSurvey,
   updateSurvey,
   exportSurveyResponses,
@@ -448,6 +451,16 @@ function stamp(v: string | null | undefined): string {
   /** 제출이 있어 문항을 못 고칠 때 — 복제로 돌린다 */
   const [dup, setDup] = useState<{ row: SurveySummary; title: string; busy: boolean; err: string | null } | null>(null)
   const [removing, setRemoving] = useState<SurveySummary | null>(null)
+
+  /* ★★ **문자는 건당 과금이고 되돌릴 수 없다.** 누르기 전에 **몇 명에게 나가는지**
+   *   반드시 보여준다 — 전 지점 설문이면 수천 건이다. 그래서 집계를 먼저 받고
+   *   모달을 띄운다. */
+  const [remind, setRemind] = useState<{
+    row: SurveySummary
+    preview: SurveyRemindPreview | null
+    loading: boolean
+    err: string | null
+  } | null>(null)
   const [rowBusy, setRowBusy] = useState(false)
   /* 담임은 설문을 고치거나 지울 수 없다 — 메뉴에는 들어 있지만 쓰기는 매트릭스 밖이다
      (2026-09-28 테스트 회신). 결과 보기·마감은 담당 업무라 남긴다 */
@@ -636,6 +649,37 @@ function stamp(v: string | null | undefined): string {
       await loadSurveys()
     } catch (err) {
       setApiError(err instanceof ApiError ? err.message : '설문을 개설하지 못했습니다.')
+    }
+  }
+
+  async function openRemind(row: SurveySummary) {
+    setRemind({ row, preview: null, loading: true, err: null })
+    try {
+      const preview = await previewSurveyRemind(row.id)
+      setRemind({ row, preview, loading: false, err: null })
+    } catch (err) {
+      setRemind({
+        row,
+        preview: null,
+        loading: false,
+        err: err instanceof ApiError ? err.message : '대상 인원을 확인하지 못했습니다.',
+      })
+    }
+  }
+
+  async function runRemind() {
+    if (remind === null) return
+    setRemind({ ...remind, loading: true, err: null })
+    try {
+      await remindSurvey(remind.row.id)
+      setApiNotice(`미응답자 ${remind.preview?.pendingCount ?? 0}명에게 독촉을 발송했습니다.`)
+      setRemind(null)
+    } catch (err) {
+      setRemind({
+        ...remind,
+        loading: false,
+        err: err instanceof ApiError ? err.message : '독촉을 발송하지 못했습니다.',
+      })
     }
   }
 
@@ -869,7 +913,7 @@ function stamp(v: string | null | undefined): string {
       {
         key: 'act',
         header: '',
-        width: '196px',
+        width: '240px',
         align: 'center',
         value: () => '',
         render: (r) => (
@@ -902,6 +946,18 @@ function stamp(v: string | null | undefined): string {
                 title="제목·기간을 고칩니다. 문항은 제출이 들어오기 전까지 바꿀 수 있습니다"
               >
                 수정
+              </button>
+            )}
+            {!teacherOnly && (
+              /* ★ 마감된 설문에는 독촉이 의미가 없다 — 더 받을 수 없다 */
+              <button
+                className="btn"
+                style={{ padding: '4px 9px', fontSize: 11.5 }}
+                disabled={r.status === 'CLOSED'}
+                onClick={() => void openRemind(r)}
+                title="아직 응답하지 않은 학생에게 독촉을 발송합니다"
+              >
+                독촉
               </button>
             )}
             <button
@@ -1541,6 +1597,67 @@ function stamp(v: string | null | undefined): string {
               <div className="hint">원래 설문과 구분되는 이름을 쓰세요.</div>
             </div>
           </div>
+        </Modal>
+      )}
+
+      {remind && (
+        <Modal
+          title={`${remind.row.title} 독촉 발송`}
+          sub="아직 응답하지 않은 학생에게 안내를 보냅니다."
+          confirmLabel="발송"
+          busy={remind.loading}
+          error={remind.err}
+          /* ★★ **보낼 수 없는 상태에서 버튼을 열어 두지 않는다.** 문자는 건당 과금이라
+             눌러 보고 400 을 받는 것으로 때울 수 없다 */
+          confirmDisabled={remind.preview === null || !remind.preview.remindable}
+          onConfirm={() => void runRemind()}
+          onClose={() => setRemind(null)}
+        >
+          {remind.loading && remind.preview === null ? (
+            <div className="hint">대상 인원을 확인하는 중입니다…</div>
+          ) : remind.preview === null ? null : (
+            <>
+              <table className="mini-tbl">
+                <tbody>
+                  <tr>
+                    <td>대상자</td>
+                    <td style={{ textAlign: 'right' }}>{remind.preview.targetCount}명</td>
+                  </tr>
+                  <tr>
+                    <td>응답 완료</td>
+                    <td style={{ textAlign: 'right' }}>{remind.preview.submittedCount}명</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <b>발송 대상</b>
+                    </td>
+                    <td style={{ textAlign: 'right', fontWeight: 800 }}>
+                      {remind.preview.pendingCount}명
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              {remind.preview.remindable ? (
+                <div className="note-box">
+                  <div>
+                    <b>{remind.preview.pendingCount}명</b>에게 발송됩니다. 발송 후에는 취소할 수 없습니다.
+                    같은 날 다시 발송해도 중복으로 전달되지 않습니다.
+                  </div>
+                </div>
+              ) : (
+                /* ★ 못 보내는 이유가 둘이라 가른다. 「보낼 수 없습니다」로 뭉치면
+                   담당자가 **무엇을 고쳐야 하는지** 알 수 없다 */
+                <div className="note-box">
+                  <div>
+                    {remind.preview.targetCount === 0
+                      ? '대상자를 지정한 설문에만 독촉을 발송할 수 있습니다. 이 설문은 대상자가 지정되어 있지 않습니다.'
+                      : '모든 대상자가 응답을 완료하여 발송할 대상이 없습니다.'}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </Modal>
       )}
 

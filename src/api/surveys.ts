@@ -268,3 +268,34 @@ export function exportSurveyResponses(surveyId: number, title: string): Promise<
   return downloadFile(`/api/v1/admin/surveys/${surveyId}/responses/export`, `${title}_응답.xlsx`)
 }
 
+
+/**
+ * 미응답자 독촉 발송 전 집계 — **확인 모달용**.
+ *
+ * ★★ **문자는 건당 과금이고 되돌릴 수 없다.** 전 지점 설문이면 수천 건이라
+ *   「○○명에게 보냅니다」를 **누르기 전에** 보여줘야 한다.
+ * ⚠️ `remindable` 이 false 면 보낼 수 없다 — **대상자를 지정하지 않은 설문**
+ *   (범위로 돌리는 일반 설문)은 서버가 400 으로 거절한다. 미응답자가 0명일 때도 false 다.
+ */
+export interface SurveyRemindPreview {
+  /** 대상자 수. 대상 지정이 없는 설문이면 0 */
+  targetCount: number
+  submittedCount: number
+  /** 독촉이 나갈 인원 */
+  pendingCount: number
+  remindable: boolean
+}
+
+export function previewSurveyRemind(surveyId: number): Promise<SurveyRemindPreview> {
+  return request<SurveyRemindPreview>(`/api/v1/admin/surveys/${surveyId}/remind-preview`)
+}
+
+/**
+ * 미응답자에게 독촉 발송.
+ *
+ * ★ **같은 날 두 번 눌러도 두 번 가지 않는다** — 중복 방지 키에 날짜가 들어간다.
+ *   며칠에 걸쳐 여러 번 보내는 것은 정상이다.
+ */
+export function remindSurvey(surveyId: number): Promise<void> {
+  return request<void>(`/api/v1/admin/surveys/${surveyId}/remind`, { method: 'POST' })
+}
