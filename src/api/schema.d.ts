@@ -681,7 +681,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * 상세 조회 — <b>수정 화면이 기존 내용·첨부를 불러온다
+         * @description 상세 조회 — <b>수정 화면이 기존 내용·첨부를 불러온다.</b>
+         *
+         *      <p>★ <b>첨부는 상세에만 실린다</b>(목록에 넣으면 공지 수만큼 조회가 따라붙는다).
+         *
+         *      <p>★ 조회는 작성 권한을 보지 않는다 — <b>조회는 관리자 전체 공유</b>이고
+         *      역할별 제한은 작성에만 있다. 목록에 보이는 공지를 눌렀을 때만 막히면 안 된다.
+         */
+        get: operations["readOne"];
         /**
          * <b>범위와 대상은 못 바꾼다</b> — 바꿀 수 있으면 권한 검사를 한 번만 통과하고 범위를 넓힐 수 있다.
          * @description <b>범위와 대상은 못 바꾼다</b> — 바꿀 수 있으면 권한 검사를 한 번만 통과하고 범위를 넓힐 수 있다.
@@ -3169,14 +3178,33 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * 대상자 발송
-         * @description 대상자 발송.
-         *
-         *      <p>장학 동의서는 대상이 <b>범위가 아니라 사람</b>이다 — 직원이 장학을 부여한 학생에게만
-         *      간다. <b>이미 대상자면 건너뛴다</b>(두 번 눌러도 행이 두 개가 되지 않는다).
-         */
         post: operations["assignTargets"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/surveys/{surveyId}/remind": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 미응답자 독촉 발송 (F-4
+         * @description 미응답자 독촉 발송 (F-4.6).
+         *
+         *      <p>★ <b>같은 날 두 번 눌러도 두 번 가지 않는다</b> — 중복 방지 키에 날짜가 들어간다.
+         *      며칠에 걸쳐 여러 번 보내는 것은 정상이다.
+         *
+         *      <p>⚠️ 대상자를 지정하지 않은 설문(범위로 돌리는 일반 설문)은 <b>400 으로 거절</b>한다.
+         *      0건을 보내고 성공을 돌려주면 데스크는 보냈다고 알고 끝내는데 아무에게도 가지 않는다.
+         */
+        post: operations["remind"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3535,6 +3563,33 @@ export interface paths {
          *      곧 "담당선생님 보장"이 된다. 합치면 배정할 때마다 역할을 검사해야 한다.
          */
         post: operations["createTeacher"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/staff/teachers/external": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 외부 강사 등록 — <b>계정 없이 사람만</b> 만든다 (1016 피드백 2-13)
+         * @description 외부 강사 등록 — <b>계정 없이 사람만</b> 만든다 (1016 피드백 2-13).
+         *
+         *      <p>특강 담당으로 세울 수 있지만 ⚠️ <b>담임으로는 지정되지 않는다.</b>
+         *      담임은 곧 방화벽 승인 에스컬레이션 대상이라, 로그인하지 못하는 사람이 담임이면
+         *      <b>학부모가 응답하지 않을 때 넘길 사람이 없어 신청이 멈춘다.</b>
+         *
+         *      <p>응답의 <code>external</code> 이 <code>true</code> 이고 <code>loginId</code>·<code>roles</code> 가
+         *      비어 있다 — 화면은 담당 강사 드롭다운에는 띄우고 <b>담임 후보에서는 빼야 한다.</b>
+         */
+        post: operations["createExternalTeacher"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4060,6 +4115,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/refunds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_4"];
+        put?: never;
+        /**
+         * 환불 집행
+         * @description 환불 집행.
+         *
+         *      <p>수단에 따라 갈린다 — <b>카드는 PG 부분취소, 가상계좌는 계좌 이체 대상으로 적재</b>.
+         *
+         *      <p>⚠️ 응답의 <code>status</code> 를 반드시 확인할 것. <code>FAILED</code> 면 <b>돈이 돌아가지
+         *      않았다</b>(사유는 <code>failReason</code>). <code>ADDITIONAL_PAYMENT</code> 면 환불이 아니라
+         *      <b>더 받아야 하는 상태</b>다.
+         */
+        post: operations["execute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/refunds/{refundId}/transferred": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 이체 완료 표시 — 사람이 이체한 뒤 누른다.
+         * @description 이체 완료 표시 — 사람이 이체한 뒤 누른다.
+         */
+        post: operations["markTransferred"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/qna/offline/slots": {
         parameters: {
             query?: never;
@@ -4098,7 +4199,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["list_4"];
+        get: operations["list_5"];
         put?: never;
         post: operations["create_5"];
         delete?: never;
@@ -4122,7 +4223,7 @@ export interface paths {
          *      <p>⚠️ <b>읽기만</b> 연다. 클래스 권한을 담임까지 넓히면 <b>교시 마스터를 고칠 수</b>
          *      있게 되고, 교시는 <b>순공시간 계산의 기준</b>이라 한 지점 전체 통계가 흔들린다.
          */
-        get: operations["list_5"];
+        get: operations["list_6"];
         put?: never;
         /**
          * 교시 등록
@@ -4244,6 +4345,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/payment-requests/{requestId}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 가상계좌 <b>말소</b> — 입금 전에 더 들어오지 못하게 닫는다 (디랩 10/12 회신 ①)
+         * @description 가상계좌 <b>말소</b> — 입금 전에 더 들어오지 못하게 닫는다 (디랩 10/12 회신 ①).
+         *
+         *      <p>★★ <b>청구를 취소할 때 이것도 같이 불러야 한다.</b> 가상계좌는 발급해 두면
+         *      기한까지 계속 입금을 받는다 — 계좌를 안 닫으면 <b>취소된 청구로 돈이 들어오고</b>
+         *      그 입금은 어디에 붙일지 모르는 돈이 된다.
+         *
+         *      <p>⚠️ <b>이미 입금된 건은 400 이다.</b> 그때는 말소가 아니라 환불이다
+         *      (<code>POST /admin/refunds</code>).
+         *
+         *      <p>두 번 눌러도 안전하다 — 이미 말소된 건은 그대로 돌려준다.
+         */
+        post: operations["closeVbank"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/payment-requests/vbank": {
         parameters: {
             query?: never;
@@ -4339,7 +4469,7 @@ export interface paths {
          * 전체 목록 — 이벤트 순으로 나와 A-C3 매핑표처럼 읽힌다.
          * @description 전체 목록 — 이벤트 순으로 나와 A-C3 매핑표처럼 읽힌다.
          */
-        get: operations["list_6"];
+        get: operations["list_7"];
         put?: never;
         /**
          * 알림 템플릿 등록
@@ -4493,10 +4623,6 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * 전 지점 공지 — <b>본사만.</b>
-         * @description 전 지점 공지 — <b>본사만.</b>
-         */
         post: operations["createForAll"];
         delete?: never;
         options?: never;
@@ -4595,7 +4721,7 @@ export interface paths {
          * 업체 목록.
          * @description 업체 목록. 내린 업체는 빠진다 — 지워지지는 않는다(과거 주문의 정산 근거).
          */
-        get: operations["list_7"];
+        get: operations["list_8"];
         put?: never;
         /**
          * 업체 등록.
@@ -4892,7 +5018,7 @@ export interface paths {
          * 특강 목록.
          * @description 특강 목록. 지점·연도 범위가 걸린다.
          */
-        get: operations["list_8"];
+        get: operations["list_9"];
         put?: never;
         /**
          * 특강 등록.
@@ -4986,7 +5112,7 @@ export interface paths {
          * 목록.
          * @description 목록. <b>전 지점 공통 + 그 지점 것</b>을 합쳐서 준다.
          */
-        get: operations["list_9"];
+        get: operations["list_10"];
         put?: never;
         /**
          * 등록
@@ -5043,7 +5169,7 @@ export interface paths {
          *      <p>지점 계정은 <b>전 지점 공통 + 자기 지점</b>, 본사는 <b>전 지점</b>을 본다.
          *      <code>academyId</code>를 주면 그 지점으로 좁힌다.
          */
-        get: operations["list_10"];
+        get: operations["list_11"];
         put?: never;
         /**
          * 공휴일 등록
@@ -5280,7 +5406,7 @@ export interface paths {
          * 등록된 시험 회차 목록.
          * @description 등록된 시험 회차 목록.
          */
-        get: operations["list_11"];
+        get: operations["list_12"];
         put?: never;
         /**
          * 시험 회차 + 과목 등록.
@@ -5352,7 +5478,7 @@ export interface paths {
          * 기간별 상담 목록.
          * @description 기간별 상담 목록. <code>teacherId</code>로 담임별 필터.
          */
-        get: operations["list_12"];
+        get: operations["list_13"];
         put?: never;
         /**
          * 상담 일지 작성.
@@ -5576,7 +5702,7 @@ export interface paths {
          * 지점·연도 청구 목록.
          * @description 지점·연도 청구 목록. 미납자 추출은 <code>/admin/receipt-status</code>가 담당한다.
          */
-        get: operations["list_13"];
+        get: operations["list_14"];
         put?: never;
         /**
          * 청구 생성
@@ -5623,7 +5749,7 @@ export interface paths {
          * 청구기준 목록.
          * @description 청구기준 목록.
          */
-        get: operations["list_14"];
+        get: operations["list_15"];
         put?: never;
         post: operations["create_15"];
         delete?: never;
@@ -5952,7 +6078,7 @@ export interface paths {
          * 그 해 행사 — <b>지점 행사와 전 지점 공통을 합쳐서</b> 내린다.
          * @description 그 해 행사 — <b>지점 행사와 전 지점 공통을 합쳐서</b> 내린다.
          */
-        get: operations["list_15"];
+        get: operations["list_16"];
         put?: never;
         post: operations["create_16"];
         delete?: never;
@@ -6132,7 +6258,7 @@ export interface paths {
          * 목록.
          * @description 목록. 화면 탭(대기/승인/반려)이 <code>status</code>로 걸린다.
          */
-        get: operations["list_16"];
+        get: operations["list_17"];
         put?: never;
         /**
          * 관리자 직접 등록
@@ -6159,7 +6285,7 @@ export interface paths {
          * 목록.
          * @description 목록. <b>전 지점 공통 + 그 지점 것</b>을 합쳐서 준다.
          */
-        get: operations["list_17"];
+        get: operations["list_18"];
         put?: never;
         /**
          * 등록
@@ -7203,7 +7329,7 @@ export interface paths {
          * 내게 배포된 설문 목록.
          * @description 내게 배포된 설문 목록.
          */
-        get: operations["list_18"];
+        get: operations["list_19"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7529,7 +7655,7 @@ export interface paths {
          *      <p><b>내게 보이는 공지인지 확인하고 내린다</b> — id만으로 열어주면
          *      번호를 바꿔가며 다른 반 공지를 읽을 수 있다.
          */
-        get: operations["readOne"];
+        get: operations["readOne_1"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7630,7 +7756,7 @@ export interface paths {
          * 신청할 수 있는 특강 목록 (A-15).
          * @description 신청할 수 있는 특강 목록 (A-15). 정원이 찬 것도 나오되 마감으로 표시된다.
          */
-        get: operations["list_19"];
+        get: operations["list_20"];
         put?: never;
         post?: never;
         delete?: never;
@@ -8289,6 +8415,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/surveys/{surveyId}/remind-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 독촉 발송 전 집계 — <b>확인 모달용</b> (F-4
+         * @description 독촉 발송 전 집계 — <b>확인 모달용</b> (F-4.6).
+         *
+         *      <p>★★ <b>문자는 건당 과금이고 되돌릴 수 없다.</b> 전 지점 설문이면 수천 건이다 —
+         *      「○○명에게 보냅니다」를 <b>누르기 전에</b> 보여줘야 한다.
+         *
+         *      <p>⚠️ <code>remindable</code> 이 <code>false</code> 면 <b>범위로 돌리는 설문</b>이라
+         *      미응답자를 알 수 없다. 그때 발송을 부르면 400 이다 — 버튼을 비활성으로 두는 편이 낫다.
+         */
+        get: operations["remindPreview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/surveys/{surveyId}/participants": {
         parameters: {
             query?: never;
@@ -8873,7 +9025,7 @@ export interface paths {
          * 그 달에 정기일정을 낸 학생 전체.
          * @description 그 달에 정기일정을 낸 학생 전체.
          */
-        get: operations["list_20"];
+        get: operations["list_21"];
         put?: never;
         post?: never;
         delete?: never;
@@ -8905,6 +9057,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/refunds/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 환불 <b>미리보기</b> — 저장하지 않는다
+         * @description 환불 <b>미리보기</b> — 저장하지 않는다.
+         *
+         *      <p>★ <b>누르기 전에 봐야 한다.</b> 추가 징수가 나오는 경우는 「돌려주는」 화면이
+         *      「더 받아야 한다」로 뒤집히므로, 모르고 누르면 안 된다.
+         */
+        get: operations["preview_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/refunds/pending-transfers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 계좌 이체 대상 목록 — <b>데스크가 매일 보는 자리</b>다
+         * @description 계좌 이체 대상 목록 — <b>데스크가 매일 보는 자리</b>다.
+         *
+         *      <p>우리가 이체를 실행하지 않으므로(사람이 은행에서 한다) 이 목록이 비지 않으면
+         *      <b>누군가 받을 돈을 아직 못 받은 상태</b>다.
+         */
+        get: operations["pendingTransfers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/receipt-status": {
         parameters: {
             query?: never;
@@ -8916,7 +9114,7 @@ export interface paths {
          * 수납현황 목록.
          * @description 수납현황 목록.
          */
-        get: operations["list_21"];
+        get: operations["list_22"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9211,7 +9409,7 @@ export interface paths {
          *      <p>열람 수(<code>readCount</code>)를 함께 내린다 — 공지마다 세면 쿼리가 행 수만큼
          *      나가므로 ID를 모아 한 번에 읽는다.
          */
-        get: operations["list_22"];
+        get: operations["list_23"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9535,7 +9733,7 @@ export interface paths {
          * 대상에 붙은 파일 목록.
          * @description 대상에 붙은 파일 목록.
          */
-        get: operations["list_23"];
+        get: operations["list_24"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9577,7 +9775,7 @@ export interface paths {
          * 요청 내역.
          * @description 요청 내역. 지점을 비우면 전 지점(전 지점 권한자만).
          */
-        get: operations["list_24"];
+        get: operations["list_25"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9742,7 +9940,7 @@ export interface paths {
          * 전 지점.
          * @description 전 지점. 설정이 없는 지점도 빈 행으로 나온다 — 화면이 9개를 다 그린다.
          */
-        get: operations["list_25"];
+        get: operations["list_26"];
         put?: never;
         post?: never;
         delete?: never;
@@ -10033,7 +10231,7 @@ export interface paths {
          * 신청유형 3종을 전부 내린다.
          * @description 신청유형 3종을 전부 내린다. 안 정한 유형은 <code>configured=false</code>로 나온다.
          */
-        get: operations["list_26"];
+        get: operations["list_27"];
         put?: never;
         post?: never;
         delete?: never;
@@ -10053,7 +10251,7 @@ export interface paths {
          * 앱 설정 목록(최소 지원 버전·점검 모드).
          * @description 앱 설정 목록(최소 지원 버전·점검 모드). 앱이 부팅할 때 첫 번째로 읽는 값이다.
          */
-        get: operations["list_27"];
+        get: operations["list_28"];
         put?: never;
         post?: never;
         delete?: never;
@@ -10209,7 +10407,7 @@ export interface paths {
          * 목록.
          * @description 목록. 상태·이름·연락처로 좁힌다.
          */
-        get: operations["list_28"];
+        get: operations["list_29"];
         put?: never;
         post?: never;
         delete?: never;
@@ -10326,7 +10524,7 @@ export interface paths {
          *
          *      <p>지점 관리자에게는 <b>자기 지점만</b> 보인다.
          */
-        get: operations["list_29"];
+        get: operations["list_30"];
         put?: never;
         post?: never;
         delete?: never;
@@ -12053,6 +12251,19 @@ export interface components {
             meta?: components["schemas"]["PageMeta"];
             error?: components["schemas"]["ErrorBody"];
         };
+        NoticeAttachmentResponse: {
+            /** Format: int64 */
+            id?: number;
+            originalName?: string;
+            contentType?: string;
+            /** Format: int64 */
+            sizeBytes?: number;
+            /**
+             * @description 볼 수 있는 주소. 공개 파일은 <b>고정 주소</b>(CloudFront)라 화면이 저장해
+             *                 써도 된다 — 공지 이미지는 공개로 올린다
+             */
+            url?: string;
+        };
         NoticeResponse: {
             /** Format: int64 */
             id?: number;
@@ -12084,6 +12295,7 @@ export interface components {
             createdAt?: string;
             /** Format: int64 */
             readCount?: number;
+            attachments?: components["schemas"]["NoticeAttachmentResponse"][];
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -12998,8 +13210,19 @@ export interface components {
         AcademyUpdateRequest: {
             acadNm: string;
             fullNm?: string;
-            /** @description 등원 기준 시각. 이 시각 이후 첫 태깅이 지각이다 */
+            /** @description 등원 기준 시각 — <b>미등원 감지 배치가 이 시각에 돈다</b> */
             attendanceDeadline: string;
+            /**
+             * @description 지각 기준 시각 — <b>이 시각 이후 첫 태깅이 지각이다</b>.
+             *
+             *          ★ 두 값은 <b>다른 축</b>이다(디랩: 지각 07:50 / 결석 08:20). 화면에서 한 칸으로
+             *          묶지 말 것 — 같은 값으로 두면 기준시각이 08:20 인 지점에서 07:55 에 온 학생이
+             *          <b>출결상 정상 등원인데 학부모에게는 지각 알림이 간다.</b>
+             *
+             *          <p>비우면 기존 값을 유지한다 — 등원 기준시각만 고치려는 화면이 지각 값을
+             *          덮어쓰지 않게 한다.
+             */
+            lateAfter?: string;
         };
         AcademyResponse: {
             /** Format: int64 */
@@ -13011,6 +13234,7 @@ export interface components {
             /** @description 키오스크 매칭 코드. <b>수정 불가</b> */
             storeCode?: string;
             attendanceDeadline?: string;
+            lateAfter?: string;
             active?: boolean;
         };
         /**
@@ -14970,6 +15194,38 @@ export interface components {
             /** @description 로그인 실패 5회로 잠긴 상태. 관리자가 풀어줘야 한다 */
             locked?: boolean;
             mustChangePassword?: boolean;
+            external?: boolean;
+            affiliation?: string;
+        };
+        /**
+         * @description 외부 강사 등록 — <b>로그인 아이디·역할을 받지 않는다</b> (1016 피드백 2-13).
+         *
+         *      <p>★ 계정을 만들지 않기 때문이다. 특강 한 건을 맡는 외부 강사에게 계정을 주면
+         *      <b>그 지점 학생 정보에 접근할 수 있는 계정이 외부에 생기고</b>, 특강이 끝난 뒤
+         *      지우는 절차가 운영에 없다.
+         */
+        CreateExternalTeacher: {
+            /** Format: int64 */
+            academyId: number;
+            name: string;
+            phone?: string;
+            affiliation?: string;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseStaffResponse: {
+            success?: boolean;
+            data?: components["schemas"]["StaffResponse"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
         };
         /** @description 직원(행정) 등록. */
         CreateEmployee: {
@@ -15512,6 +15768,48 @@ export interface components {
             month: string;
         };
         /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseRefundResponse: {
+            success?: boolean;
+            data?: components["schemas"]["RefundResponse"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        RefundResponse: {
+            /** Format: int64 */
+            id?: number;
+            /** Format: int64 */
+            billingId?: number;
+            studentNo?: string;
+            studentName?: string;
+            /** Format: int32 */
+            teachingDays?: number;
+            /** Format: int32 */
+            usedDays?: number;
+            /** Format: int32 */
+            refundAmount?: number;
+            method?: string;
+            /**
+             * @description <code>PENDING</code> 이체 대기 · <code>DONE</code> 완료 ·
+             *                        <code>FAILED</code> <b>돈이 돌아가지 않음</b> ·
+             *                        <code>ADDITIONAL_PAYMENT</code> <b>더 받아야 함</b>
+             */
+            status?: string;
+            /** @description <code>FAILED</code> 일 때의 사유. 화면에 그대로 띄울 것 */
+            failReason?: string;
+            detail?: string;
+            /** Format: date-time */
+            processedAt?: string;
+        };
+        /**
          * @description 가능 타임 일괄 개설.
          *
          *      <p><b>간격을 요청으로 받는다</b> — ▷[0803] "현재 15분, 변동 가능"이라 스키마에 두지 않았다.
@@ -15845,7 +16143,7 @@ export interface components {
         };
         NotificationTemplateCreate: {
             /** @enum {string} */
-            event: "MISSING_ATTENDANCE" | "ATTENDANCE_CHECK_IN" | "ATTENDANCE_CHECK_OUT" | "ATTENDANCE_OUTING" | "ATTENDANCE_RETURN" | "ATTENDANCE_EARLY_LEAVE" | "APPROVAL_REQUEST_CREATED" | "APPROVAL_APPROVED_BY_PARENT" | "APPROVAL_APPROVED_AFTER_TIMEOUT" | "APPROVAL_APPROVED_BEFORE_TIMEOUT" | "APPROVAL_REMINDER" | "APPROVAL_HANDED_OVER" | "APPROVAL_APPROVED_BY_STAFF_PRIMARY" | "APPROVAL_APPROVED_BY_ADMIN" | "APPROVAL_REJECTED" | "CONSULT_RESERVED" | "CONSULT_CANCELED";
+            event: "MISSING_ATTENDANCE" | "ATTENDANCE_CHECK_IN" | "ATTENDANCE_LATE" | "ATTENDANCE_CHECK_OUT" | "ATTENDANCE_OUTING" | "ATTENDANCE_RETURN" | "ATTENDANCE_EARLY_LEAVE" | "APPROVAL_REQUEST_CREATED" | "APPROVAL_APPROVED_BY_PARENT" | "APPROVAL_APPROVED_AFTER_TIMEOUT" | "APPROVAL_APPROVED_BEFORE_TIMEOUT" | "APPROVAL_REMINDER" | "APPROVAL_HANDED_OVER" | "APPROVAL_APPROVED_BY_STAFF_PRIMARY" | "APPROVAL_APPROVED_BY_ADMIN" | "APPROVAL_REJECTED" | "SURVEY_ASSIGNED" | "SURVEY_REMINDER" | "CONSULT_RESERVED" | "CONSULT_CANCELED";
             /** @enum {string} */
             channel: "KAKAO_ALIMTALK" | "SMS" | "FCM_PUSH";
             /** @enum {string} */
@@ -16115,12 +16413,29 @@ export interface components {
             meta?: components["schemas"]["PageMeta"];
             error?: components["schemas"]["ErrorBody"];
         };
+        /** @description 학생에게 부여된 장학 한 줄. */
         ScholarshipItem: {
             /** Format: int64 */
             id?: number;
             /** Format: int64 */
             enrollmentId?: number;
+            /**
+             * @description 저장된 <b>코드</b>(<code>CSAT_100</code>). ★ <b>취소 규칙이 이 값과
+             *                             문자열 일치로 걸린다</b> — 화면에 함께 노출할 것
+             */
             scholarshipType?: string;
+            /**
+             * @description 데스크가 읽는 이름(<code>수능 100%</code>). ★ <b>청구 등록 시
+             *                             <code>discountSource</code> 로 이 값을 보내면 된다</b> — 화면이
+             *                             따로 변환하면 매출장·청구 근거·취소 판정이 서로 다른 이름을 본다
+             */
+            displayName?: string;
+            /**
+             * @description 마스터에 있는 코드인가. ⚠️ <b><code>false</code> 면 취소 판정에서
+             *                             이 학생이 조용히 빠진다</b>(오류도 안 나고 검토 목록에 안 뜬다) —
+             *                             화면이 경고로 띄워야 드러난다
+             */
+            registered?: boolean;
             discountRate?: number;
         };
         /** @description 장학 종류 등록. <code>academyId</code>를 비우면 전 지점 공통 — 본사만 다룰 수 있다. */
@@ -17752,22 +18067,6 @@ export interface components {
             /** Format: email */
             email?: string;
         };
-        /**
-         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
-         *      성공: { "success": true, "data": ... }
-         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
-         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
-         *
-         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
-         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
-         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
-         */
-        ApiResponseStaffResponse: {
-            success?: boolean;
-            data?: components["schemas"]["StaffResponse"];
-            meta?: components["schemas"]["PageMeta"];
-            error?: components["schemas"]["ErrorBody"];
-        };
         UpdateEmployee: {
             name?: string;
             deptName?: string;
@@ -18620,10 +18919,6 @@ export interface components {
             meta?: components["schemas"]["PageMeta"];
             error?: components["schemas"]["ErrorBody"];
         };
-        /**
-         * @description 앱 표시용. <b>작성자 정보는 내리지 않는다</b> — 학생·학부모에게 필요 없고,
-         *      담당선생님 id가 앱으로 새어나갈 이유가 없다.
-         */
         AppNoticeResponse: {
             /** Format: int64 */
             id?: number;
@@ -18635,6 +18930,15 @@ export interface components {
             banner?: boolean;
             /** Format: date-time */
             postedAt?: string;
+            /**
+             * @description 첨부(공지 이미지). <b>상세에만 실린다</b> — 목록에 넣으면
+             *                         공지 수만큼 조회가 따라붙는다.
+             *
+             *          <p>★ 디랩 1019 확정 — <b>공지는 이미지와 텍스트를 함께</b> 작성·업로드하고,
+             *          알림톡 「안내문 보기」 버튼이 그 공지를 연다. 세로로 긴 안내문 이미지가
+             *          올라오므로 화면은 가로를 꽉 채우고 비율을 유지한다.
+             */
+            attachments?: components["schemas"]["NoticeAttachmentResponse"][];
         };
         /**
          * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
@@ -19843,6 +20147,38 @@ export interface components {
          *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
          *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
          */
+        ApiResponseRemindPreview: {
+            success?: boolean;
+            data?: components["schemas"]["RemindPreview"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        RemindPreview: {
+            /** Format: int32 */
+            targetCount?: number;
+            /** Format: int32 */
+            submittedCount?: number;
+            /**
+             * Format: int32
+             * @description 미응답 수 — <b>실제로 나갈 건수</b>다. 모달에 이 숫자를 띄운다
+             */
+            pendingCount?: number;
+            /**
+             * @description 독촉을 보낼 수 있는가. <b>대상자를 지정하지 않은 설문은 false</b> —
+             *                        범위로 돌리면 누가 응답하지 않았는지 서버가 알 수 없다
+             */
+            remindable?: boolean;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
         ApiResponseListSurveyQuestionSettingResponse: {
             success?: boolean;
             data?: components["schemas"]["SurveyQuestionSettingResponse"][];
@@ -20897,6 +21233,67 @@ export interface components {
          *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
          *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
          */
+        ApiResponseListRefundResponse: {
+            success?: boolean;
+            data?: components["schemas"]["RefundResponse"][];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseRefundPreviewResponse: {
+            success?: boolean;
+            data?: components["schemas"]["RefundPreviewResponse"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        RefundItemView: {
+            itemType?: string;
+            /** Format: int32 */
+            paidAmount?: number;
+            /** Format: int32 */
+            deduction?: number;
+            /**
+             * Format: int32
+             * @description 납부액 − 차감액. <b>음수 가능</b>
+             */
+            refund?: number;
+            detail?: string;
+        };
+        RefundPreviewResponse: {
+            /** Format: int32 */
+            teachingDays?: number;
+            /** Format: int32 */
+            usedDays?: number;
+            /**
+             * Format: int32
+             * @description ★ <b>음수면 추가 징수</b>다 — 0 으로 읽지 말 것
+             */
+            refundAmount?: number;
+            /** @description 화면이 「돌려드립니다」와 「더 받아야 합니다」를 가른다 */
+            requiresAdditionalPayment?: boolean;
+            /** @description 항목별 계산 근거. 「추가결제 상세 내역 출력」이 이걸 쓴다 */
+            detail?: string;
+            items?: components["schemas"]["RefundItemView"][];
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
         ApiResponseListRowView: {
             success?: boolean;
             data?: components["schemas"]["RowView"][];
@@ -21393,7 +21790,7 @@ export interface components {
             /** Format: int64 */
             academyId?: number;
             /** @enum {string} */
-            event?: "MISSING_ATTENDANCE" | "ATTENDANCE_CHECK_IN" | "ATTENDANCE_CHECK_OUT" | "ATTENDANCE_OUTING" | "ATTENDANCE_RETURN" | "ATTENDANCE_EARLY_LEAVE" | "APPROVAL_REQUEST_CREATED" | "APPROVAL_APPROVED_BY_PARENT" | "APPROVAL_APPROVED_AFTER_TIMEOUT" | "APPROVAL_APPROVED_BEFORE_TIMEOUT" | "APPROVAL_REMINDER" | "APPROVAL_HANDED_OVER" | "APPROVAL_APPROVED_BY_STAFF_PRIMARY" | "APPROVAL_APPROVED_BY_ADMIN" | "APPROVAL_REJECTED" | "CONSULT_RESERVED" | "CONSULT_CANCELED";
+            event?: "MISSING_ATTENDANCE" | "ATTENDANCE_CHECK_IN" | "ATTENDANCE_LATE" | "ATTENDANCE_CHECK_OUT" | "ATTENDANCE_OUTING" | "ATTENDANCE_RETURN" | "ATTENDANCE_EARLY_LEAVE" | "APPROVAL_REQUEST_CREATED" | "APPROVAL_APPROVED_BY_PARENT" | "APPROVAL_APPROVED_AFTER_TIMEOUT" | "APPROVAL_APPROVED_BEFORE_TIMEOUT" | "APPROVAL_REMINDER" | "APPROVAL_HANDED_OVER" | "APPROVAL_APPROVED_BY_STAFF_PRIMARY" | "APPROVAL_APPROVED_BY_ADMIN" | "APPROVAL_REJECTED" | "SURVEY_ASSIGNED" | "SURVEY_REMINDER" | "CONSULT_RESERVED" | "CONSULT_CANCELED";
             /** @enum {string} */
             channel?: "KAKAO_ALIMTALK" | "SMS" | "FCM_PUSH";
             /** @enum {string} */
@@ -21434,7 +21831,7 @@ export interface components {
             /** Format: date */
             date?: string;
             /** @enum {string} */
-            event?: "MISSING_ATTENDANCE" | "ATTENDANCE_CHECK_IN" | "ATTENDANCE_CHECK_OUT" | "ATTENDANCE_OUTING" | "ATTENDANCE_RETURN" | "ATTENDANCE_EARLY_LEAVE" | "APPROVAL_REQUEST_CREATED" | "APPROVAL_APPROVED_BY_PARENT" | "APPROVAL_APPROVED_AFTER_TIMEOUT" | "APPROVAL_APPROVED_BEFORE_TIMEOUT" | "APPROVAL_REMINDER" | "APPROVAL_HANDED_OVER" | "APPROVAL_APPROVED_BY_STAFF_PRIMARY" | "APPROVAL_APPROVED_BY_ADMIN" | "APPROVAL_REJECTED" | "CONSULT_RESERVED" | "CONSULT_CANCELED";
+            event?: "MISSING_ATTENDANCE" | "ATTENDANCE_CHECK_IN" | "ATTENDANCE_LATE" | "ATTENDANCE_CHECK_OUT" | "ATTENDANCE_OUTING" | "ATTENDANCE_RETURN" | "ATTENDANCE_EARLY_LEAVE" | "APPROVAL_REQUEST_CREATED" | "APPROVAL_APPROVED_BY_PARENT" | "APPROVAL_APPROVED_AFTER_TIMEOUT" | "APPROVAL_APPROVED_BEFORE_TIMEOUT" | "APPROVAL_REMINDER" | "APPROVAL_HANDED_OVER" | "APPROVAL_APPROVED_BY_STAFF_PRIMARY" | "APPROVAL_APPROVED_BY_ADMIN" | "APPROVAL_REJECTED" | "SURVEY_ASSIGNED" | "SURVEY_REMINDER" | "CONSULT_RESERVED" | "CONSULT_CANCELED";
             /** @enum {string} */
             channel?: "KAKAO_ALIMTALK" | "SMS" | "FCM_PUSH";
             /**
@@ -23511,7 +23908,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                event: "MISSING_ATTENDANCE" | "ATTENDANCE_CHECK_IN" | "ATTENDANCE_CHECK_OUT" | "ATTENDANCE_OUTING" | "ATTENDANCE_RETURN" | "ATTENDANCE_EARLY_LEAVE" | "APPROVAL_REQUEST_CREATED" | "APPROVAL_APPROVED_BY_PARENT" | "APPROVAL_APPROVED_AFTER_TIMEOUT" | "APPROVAL_APPROVED_BEFORE_TIMEOUT" | "APPROVAL_REMINDER" | "APPROVAL_HANDED_OVER" | "APPROVAL_APPROVED_BY_STAFF_PRIMARY" | "APPROVAL_APPROVED_BY_ADMIN" | "APPROVAL_REJECTED" | "CONSULT_RESERVED" | "CONSULT_CANCELED";
+                event: "MISSING_ATTENDANCE" | "ATTENDANCE_CHECK_IN" | "ATTENDANCE_LATE" | "ATTENDANCE_CHECK_OUT" | "ATTENDANCE_OUTING" | "ATTENDANCE_RETURN" | "ATTENDANCE_EARLY_LEAVE" | "APPROVAL_REQUEST_CREATED" | "APPROVAL_APPROVED_BY_PARENT" | "APPROVAL_APPROVED_AFTER_TIMEOUT" | "APPROVAL_APPROVED_BEFORE_TIMEOUT" | "APPROVAL_REMINDER" | "APPROVAL_HANDED_OVER" | "APPROVAL_APPROVED_BY_STAFF_PRIMARY" | "APPROVAL_APPROVED_BY_ADMIN" | "APPROVAL_REJECTED" | "SURVEY_ASSIGNED" | "SURVEY_REMINDER" | "CONSULT_RESERVED" | "CONSULT_CANCELED";
             };
             cookie?: never;
         };
@@ -24411,6 +24808,28 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseNotificationTemplateResponse"];
+                };
+            };
+        };
+    };
+    readOne: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseNoticeResponse"];
                 };
             };
         };
@@ -27819,7 +28238,29 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 이번에 새로 발송된 수 */
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseSentCount"];
+                };
+            };
+        };
+    };
+    remind: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                surveyId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -28262,6 +28703,30 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseStaffCreated"];
+                };
+            };
+        };
+    };
+    createExternalTeacher: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateExternalTeacher"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseStaffResponse"];
                 };
             };
         };
@@ -28977,6 +29442,74 @@ export interface operations {
             };
         };
     };
+    list_4: {
+        parameters: {
+            query: {
+                academyId?: number;
+                year: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListRefundResponse"];
+                };
+            };
+        };
+    };
+    execute: {
+        parameters: {
+            query: {
+                billingId: number;
+                usedDays: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseRefundResponse"];
+                };
+            };
+        };
+    };
+    markTransferred: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                refundId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseRefundResponse"];
+                };
+            };
+        };
+    };
     slots: {
         parameters: {
             query: {
@@ -29026,7 +29559,7 @@ export interface operations {
             };
         };
     };
-    list_4: {
+    list_5: {
         parameters: {
             query?: never;
             header?: never;
@@ -29070,7 +29603,7 @@ export interface operations {
             };
         };
     };
-    list_5: {
+    list_6: {
         parameters: {
             query: {
                 academyId?: number;
@@ -29323,6 +29856,28 @@ export interface operations {
             };
         };
     };
+    closeVbank: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                requestId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponsePaymentRequestResponse"];
+                };
+            };
+        };
+    };
     issueVbank: {
         parameters: {
             query?: never;
@@ -29420,7 +29975,7 @@ export interface operations {
             };
         };
     };
-    list_6: {
+    list_7: {
         parameters: {
             query?: never;
             header?: never;
@@ -29741,7 +30296,7 @@ export interface operations {
             };
         };
     };
-    list_7: {
+    list_8: {
         parameters: {
             query?: never;
             header?: never;
@@ -30259,7 +30814,7 @@ export interface operations {
             };
         };
     };
-    list_8: {
+    list_9: {
         parameters: {
             query: {
                 academyId: number;
@@ -30401,7 +30956,7 @@ export interface operations {
             };
         };
     };
-    list_9: {
+    list_10: {
         parameters: {
             query?: {
                 academyId?: number;
@@ -30503,7 +31058,7 @@ export interface operations {
             };
         };
     };
-    list_10: {
+    list_11: {
         parameters: {
             query: {
                 academyId?: number;
@@ -30837,7 +31392,7 @@ export interface operations {
             };
         };
     };
-    list_11: {
+    list_12: {
         parameters: {
             query: {
                 year: number;
@@ -30936,7 +31491,7 @@ export interface operations {
             };
         };
     };
-    list_12: {
+    list_13: {
         parameters: {
             query: {
                 /**
@@ -31307,7 +31862,7 @@ export interface operations {
             };
         };
     };
-    list_13: {
+    list_14: {
         parameters: {
             query: {
                 academyId?: number;
@@ -31380,7 +31935,7 @@ export interface operations {
             };
         };
     };
-    list_14: {
+    list_15: {
         parameters: {
             query: {
                 year: number;
@@ -31765,7 +32320,7 @@ export interface operations {
             };
         };
     };
-    list_15: {
+    list_16: {
         parameters: {
             query: {
                 academyId?: number;
@@ -32042,7 +32597,7 @@ export interface operations {
             };
         };
     };
-    list_16: {
+    list_17: {
         parameters: {
             query?: {
                 academyId?: number;
@@ -32093,7 +32648,7 @@ export interface operations {
             };
         };
     };
-    list_17: {
+    list_18: {
         parameters: {
             query?: {
                 academyId?: number;
@@ -33607,7 +34162,7 @@ export interface operations {
             };
         };
     };
-    list_18: {
+    list_19: {
         parameters: {
             query?: {
                 /** @description <b>학부모만</b> 쓴다. 계정 하나에 자녀가 여럿이라 서버가 고를 수 없다 */
@@ -33951,7 +34506,7 @@ export interface operations {
             };
         };
     };
-    readOne: {
+    readOne_1: {
         parameters: {
             query?: {
                 studentId?: number;
@@ -34066,7 +34621,7 @@ export interface operations {
             };
         };
     };
-    list_19: {
+    list_20: {
         parameters: {
             query?: never;
             header?: never;
@@ -34769,6 +35324,28 @@ export interface operations {
             };
         };
     };
+    remindPreview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                surveyId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseRemindPreview"];
+                };
+            };
+        };
+    };
     participants: {
         parameters: {
             query?: never;
@@ -35411,7 +35988,7 @@ export interface operations {
             };
         };
     };
-    list_20: {
+    list_21: {
         parameters: {
             query?: {
                 academyId?: number;
@@ -35458,7 +36035,54 @@ export interface operations {
             };
         };
     };
-    list_21: {
+    preview_1: {
+        parameters: {
+            query: {
+                billingId: number;
+                /** @description 이용한 <b>교습일수</b>. 달력 일수가 아니다(설·추석 당일이 빠진다) */
+                usedDays: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseRefundPreviewResponse"];
+                };
+            };
+        };
+    };
+    pendingTransfers: {
+        parameters: {
+            query: {
+                academyId?: number;
+                year: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListRefundResponse"];
+                };
+            };
+        };
+    };
+    list_22: {
         parameters: {
             query: {
                 /**
@@ -35738,7 +36362,7 @@ export interface operations {
                 academyId?: number;
                 from?: string;
                 to?: string;
-                event?: "MISSING_ATTENDANCE" | "ATTENDANCE_CHECK_IN" | "ATTENDANCE_CHECK_OUT" | "ATTENDANCE_OUTING" | "ATTENDANCE_RETURN" | "ATTENDANCE_EARLY_LEAVE" | "APPROVAL_REQUEST_CREATED" | "APPROVAL_APPROVED_BY_PARENT" | "APPROVAL_APPROVED_AFTER_TIMEOUT" | "APPROVAL_APPROVED_BEFORE_TIMEOUT" | "APPROVAL_REMINDER" | "APPROVAL_HANDED_OVER" | "APPROVAL_APPROVED_BY_STAFF_PRIMARY" | "APPROVAL_APPROVED_BY_ADMIN" | "APPROVAL_REJECTED" | "CONSULT_RESERVED" | "CONSULT_CANCELED";
+                event?: "MISSING_ATTENDANCE" | "ATTENDANCE_CHECK_IN" | "ATTENDANCE_LATE" | "ATTENDANCE_CHECK_OUT" | "ATTENDANCE_OUTING" | "ATTENDANCE_RETURN" | "ATTENDANCE_EARLY_LEAVE" | "APPROVAL_REQUEST_CREATED" | "APPROVAL_APPROVED_BY_PARENT" | "APPROVAL_APPROVED_AFTER_TIMEOUT" | "APPROVAL_APPROVED_BEFORE_TIMEOUT" | "APPROVAL_REMINDER" | "APPROVAL_HANDED_OVER" | "APPROVAL_APPROVED_BY_STAFF_PRIMARY" | "APPROVAL_APPROVED_BY_ADMIN" | "APPROVAL_REJECTED" | "SURVEY_ASSIGNED" | "SURVEY_REMINDER" | "CONSULT_RESERVED" | "CONSULT_CANCELED";
                 channel?: "KAKAO_ALIMTALK" | "SMS" | "FCM_PUSH";
                 status?: "PENDING" | "SENT" | "FAILED" | "SKIPPED";
                 /**
@@ -35789,7 +36413,7 @@ export interface operations {
             };
         };
     };
-    list_22: {
+    list_23: {
         parameters: {
             query?: {
                 year?: number;
@@ -36124,7 +36748,7 @@ export interface operations {
             };
         };
     };
-    list_23: {
+    list_24: {
         parameters: {
             query: {
                 ownerType: string;
@@ -36169,7 +36793,7 @@ export interface operations {
             };
         };
     };
-    list_24: {
+    list_25: {
         parameters: {
             query: {
                 academyId?: number;
@@ -36338,7 +36962,7 @@ export interface operations {
             };
         };
     };
-    list_25: {
+    list_26: {
         parameters: {
             query?: never;
             header?: never;
@@ -36666,7 +37290,7 @@ export interface operations {
             };
         };
     };
-    list_26: {
+    list_27: {
         parameters: {
             query: {
                 academyId?: number;
@@ -36689,7 +37313,7 @@ export interface operations {
             };
         };
     };
-    list_27: {
+    list_28: {
         parameters: {
             query?: never;
             header?: never;
@@ -36857,7 +37481,7 @@ export interface operations {
             };
         };
     };
-    list_28: {
+    list_29: {
         parameters: {
             query: {
                 year: number;
@@ -36984,7 +37608,7 @@ export interface operations {
             };
         };
     };
-    list_29: {
+    list_30: {
         parameters: {
             query?: {
                 /** @description 비활성 지점 포함. 기본은 활성만 — 셀렉트에 죽은 지점이 뜨면 안 된다 */
