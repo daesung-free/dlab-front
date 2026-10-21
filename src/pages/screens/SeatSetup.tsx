@@ -354,7 +354,7 @@ function BuildingTab({
     {
       key: 'act',
       header: '',
-      width: '150px',
+      width: '152px',
       align: 'right',
       value: () => '',
       render: (b) => (
@@ -391,8 +391,8 @@ function BuildingTab({
             <Icon name="info" size={17} />
           </div>
           <div>
-            별관은 본관과 <b>같은 구역명·좌석번호</b>를 쓸 수 있습니다. 키오스크에 내려갈 때만 번호대가 밀립니다 —
-            데스크는 본래 번호로 보고 말하면 됩니다.
+            별관은 본관과 <b>같은 구역명·좌석번호</b>를 사용할 수 있습니다. 키오스크로 전송할 때만 번호대가
+            더해지며, 데스크 화면에는 본래 번호로 표시됩니다.
           </div>
         </div>
         <DataTable
@@ -439,7 +439,7 @@ function BuildingModal({
   return (
     <Modal
       title="관 등록"
-      sub="본관/별관을 나눕니다. 코드와 번호대는 등록 후 바꿀 수 없습니다."
+      sub="본관과 별관을 구분합니다. 코드와 번호대는 등록 후 수정할 수 없습니다."
       confirmLabel="등록"
       busy={busy}
       error={error}
@@ -459,10 +459,15 @@ function BuildingModal({
       </div>
       <div className="frow">
         <label className="req">구분</label>
-        <select className="sel" value={annex ? 'annex' : 'main'} onChange={(e) => setAnnex(e.target.value === 'annex')}>
-          <option value="main">본관 — 좌석번호를 그대로 내린다</option>
-          <option value="annex">별관 — 키오스크에는 번호대를 밀어 내린다</option>
-        </select>
+        <div>
+          <select className="sel" value={annex ? 'annex' : 'main'} onChange={(e) => setAnnex(e.target.value === 'annex')}>
+            <option value="main">본관</option>
+            <option value="annex">별관</option>
+          </select>
+          <div className="hint">
+            별관은 본관과 같은 좌석번호를 사용할 수 있습니다. 키오스크로 전송할 때만 번호대가 더해집니다.
+          </div>
+        </div>
       </div>
       {annex && (
         <>
@@ -473,7 +478,8 @@ function BuildingModal({
               type="number"
               value={offset}
               min={1000}
-              step={1000}
+              /* ⚠️ `step` 을 걸지 않는다. Modal 이 form 이라 배수가 아닌 값(1500)은
+                 **브라우저가 제출을 막는다** — 요청도 오류도 안 뜨고 「저장이 안 된다」로 보인다 */
               onChange={(e) => setOffset(Number(e.target.value))}
             />
           </div>
@@ -485,12 +491,12 @@ function BuildingModal({
               이 관의 <b>1번 좌석</b>이 키오스크에서 <b>{offset + 1}번</b>이 됩니다. 데스크 화면에는 계속 1번으로
               보입니다.
               <br />
-              1000 미만은 받지 않습니다 — 100이면 본관 101번과 곧바로 겹칩니다.
+              1000 미만은 입력할 수 없습니다 — 100이면 본관 101번과 번호가 겹칩니다.
               {taken && (
                 <>
                   <br />
                   <b style={{ color: 'var(--red)' }}>
-                    {taken.name}이(가) 쓰고 있는 번호대입니다. 다른 번호대를 쓰세요.
+                    {taken.name}이(가) 사용 중인 번호대입니다. 다른 번호대를 입력하세요.
                   </b>
                 </>
               )}
@@ -546,7 +552,7 @@ function AreaTab({
     {
       key: 'act',
       header: '',
-      width: '150px',
+      width: '152px',
       align: 'right',
       value: () => '',
       render: (a) => (
@@ -721,7 +727,7 @@ function SeatTab({
     {
       key: 'act',
       header: '',
-      width: '80px',
+      width: '196px',
       align: 'right',
       value: () => '',
       render: (s) => (

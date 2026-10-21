@@ -869,7 +869,7 @@ function stamp(v: string | null | undefined): string {
       {
         key: 'act',
         header: '',
-        width: '150px',
+        width: '196px',
         align: 'center',
         value: () => '',
         render: (r) => (
@@ -948,7 +948,7 @@ function stamp(v: string | null | undefined): string {
       {
         key: 'act',
         header: '',
-        width: '150px',
+        width: '196px',
         align: 'center',
         value: () => '',
         render: (r) => (

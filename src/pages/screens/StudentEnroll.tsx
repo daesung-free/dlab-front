@@ -844,7 +844,7 @@ function SignupApproval() {
       {
         key: 'act',
         header: '',
-        width: '90px',
+        width: '108px',
         align: 'center',
         value: () => '',
         /* ★ 여기에 OT 버튼을 같이 두지 않는다. 승인 전 OT 는 403 이고, 승인하면 이 행이

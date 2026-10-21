@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   DataTable,
@@ -70,8 +70,14 @@ const STATUS_META: Record<AttendanceStatus, { cls: string; icon: string }> = {
 
 /* 칩은 options 가 string[] 이라 표시 라벨과 서버 enum 코드를 함께 실을 수 없다.
  * 라벨을 값으로 쓰고 여기서 코드로 되돌린다 — 화면에 ON_TIME 이 그대로 보이면 안 된다. */
-const EXCUSED_CHIP = '사유 승인'
-const STATUS_CHIPS = [...ATTENDANCE_STATUS.map((s) => ATTENDANCE_STATUS_LABEL[s]), EXCUSED_CHIP]
+/* ★ 「사유 승인」은 **출결 상태가 아니다.** 상태와 직교하는 플래그라
+ *   ('지각인데 사유 승인됨' 이 성립한다) **제 줄로 빼서** 고르게 한다(1021 피드백 2-9).
+ *   보내는 방식은 그대로다 — `excused` 파라미터로 따로 간다. */
+const EXCUSED_CHIP = '승인된 건만'
+
+/* ★ 「기록 전」(NOT_YET)은 **미래 날짜를 조회했을 때만** 나온다. 과거·오늘 조회에서
+ *   고를 수 있게 두면 **결과가 늘 0건**이라 고장으로 읽힌다(1021 피드백 2-9). */
+const PAST_STATUS = ATTENDANCE_STATUS.filter((s) => s !== 'NOT_YET')
 
 const CHIP_TO_STATUS = new Map<string, AttendanceStatus>(
   ATTENDANCE_STATUS.map((s) => [ATTENDANCE_STATUS_LABEL[s], s]),
@@ -117,6 +123,22 @@ function one(v: unknown): string | undefined {
 function Content() {
   const { academyId, ready: academyReady } = useAcademy()
   const [query, setQuery] = useState<SearchValues>({})
+
+  /* ★ 상단 카드를 누르면 **조건 검색의 칩도 같이 바뀐다**(1021 피드백 2-7).
+   *   목록만 걸러 놓으면 **조건 검색은 비어 있는데 표만 줄어** 왜 줄었는지 알 수 없다.
+   *   `SearchForm` 이 제 상태를 갖고 있어 `key` 로 다시 그린다 — 고른 기간은
+   *   `query` 를 깔아 **유지**한다. */
+  const [seed, setSeed] = useState(0)
+  const [seedValues, setSeedValues] = useState<SearchValues | undefined>(undefined)
+  const pickCard = useCallback(
+    (patch: SearchValues) => {
+      const next = { ...query, status: [], excused: [], ...patch }
+      setSeedValues(next)
+      setSeed((n) => n + 1)
+      setQuery(next)
+    },
+    [query],
+  )
   const [masked, setMasked] = useState(true)
   const [recalcMsg, setRecalcMsg] = useState<{ text: string; error?: boolean } | null>(null)
   const [recalcing, setRecalcing] = useState(false)
@@ -161,20 +183,28 @@ function Content() {
     [classes.data, academyId],
   )
 
+  const range = query.date as DateRangeValue | undefined
+  // 기간을 양쪽 다 고른 경우만 기간 조회다. 한쪽만 고르면 그날 하루로 본다
+  const ranged = Boolean(range?.from && range.to && range.from !== range.to)
+  const date = range?.from || todayStr()
+
+  /* ★ **미래를 조회할 때만** 「기록 전」을 고를 수 있게 한다. 과거·오늘에서 고르면
+   *   결과가 늘 0건이라 **고장으로 읽힌다**(1021 피드백 2-9) */
+  const statusChips = useMemo(() => {
+    const future = (ranged ? (range?.to ?? date) : date) > todayStr()
+    return (future ? ATTENDANCE_STATUS : PAST_STATUS).map((s) => ATTENDANCE_STATUS_LABEL[s])
+  }, [ranged, range, date])
+
   const fields: Field[] = useMemo(
     () => [
       { type: 'dateRange', name: 'date', label: '조회 기간', presets: true, span: 2 },
       { type: 'text', name: 'keyword', label: '이름 · 학번 · 좌석', placeholder: '예: 이승민 / A-24', span: 2 },
       { type: 'select', name: 'classId', label: '담당 반', options: classOptions },
-      { type: 'chips', name: 'status', label: '출결 상태', options: STATUS_CHIPS, multiple: true },
+      { type: 'chips', name: 'status', label: '출결 상태', options: statusChips, multiple: true },
+      { type: 'chips', name: 'excused', label: '사유 승인', options: [EXCUSED_CHIP] },
     ],
-    [classOptions],
+    [classOptions, statusChips],
   )
-
-  const range = query.date as DateRangeValue | undefined
-  // 기간을 양쪽 다 고른 경우만 기간 조회다. 한쪽만 고르면 그날 하루로 본다
-  const ranged = Boolean(range?.from && range.to && range.from !== range.to)
-  const date = range?.from || todayStr()
 
   // ★ useMemo 필수 — 매 렌더 새 객체면 무한 요청이 된다
   const params = useMemo(() => {
@@ -191,7 +221,9 @@ function Content() {
       classId: classId ? Number(classId) : undefined,
       statuses: statuses.length > 0 ? statuses : undefined,
       // 상태와 다른 축이라 함께 고르면 AND 로 걸린다(파일 머리 주석)
-      excused: chips.includes(EXCUSED_CHIP) ? true : undefined,
+      excused: (Array.isArray(query.excused) ? query.excused : [query.excused]).includes(EXCUSED_CHIP)
+        ? true
+        : undefined,
       keyword: one(query.keyword),
     }
   }, [query, academyId, date, ranged, range])
@@ -241,9 +273,12 @@ function Content() {
         ? [{ key: 'date', header: '일자', width: '100px', align: 'center' as const, sortable: true, value: (r: AttendanceRow) => r.date }]
         : []),
       { key: 'studentNo', header: '학번', width: '100px', sortable: true, value: (r) => r.studentNo ?? '-' },
-      { key: 'name', header: '이름', width: '84px', mask: 'name', value: (r) => r.name },
-      { key: 'className', header: '반', width: '56px', align: 'center', value: (r) => r.className ?? '-' },
-      { key: 'seatCd', header: '좌석', width: '68px', align: 'center', value: (r) => r.seatCd ?? '-' },
+      /* ★ 이름·반·좌석 정렬(1021 피드백 2-8). 이 목록은 `useServerData` 라 **전량이 손에 있어**
+         화면 정렬이 틀리지 않는다 — 서버 허용키로 제한할 필요가 없다.
+         ⚠️ 이 엔드포인트에 **서버 페이징이 생기면 그 전제가 깨진다** */
+      { key: 'name', header: '이름', width: '84px', mask: 'name', sortable: true, value: (r) => r.name },
+      { key: 'className', header: '반', width: '56px', align: 'center', sortable: true, value: (r) => r.className ?? '-' },
+      { key: 'seatCd', header: '좌석', width: '68px', align: 'center', sortable: true, value: (r) => r.seatCd ?? '-' },
       { key: 'checkInAt', header: '등원', width: '76px', align: 'center', sortable: true, value: (r) => hhmm(r.checkInAt) },
       { key: 'checkOutAt', header: '하원', width: '76px', align: 'center', value: (r) => hhmm(r.checkOutAt) },
       {
@@ -528,16 +563,22 @@ function Content() {
       )}
 
       <div className="stat-strip c8">
-        <div className="stat">
+        <button type="button" className="stat" onClick={() => pickCard({})}>
           <div className="l">
             <Icon name="users" size={13} /> 조회 대상
           </div>
           <div className="v">{summary?.total ?? 0}</div>
           {/* 기간 조회면 학생 수가 아니라 학생 × 날짜 합이다 — 그대로 '재원생 기준'이라 쓰면 틀린 말이 된다 */}
           <div className="d">{ranged ? '학생 × 일수 합계' : '재원생 기준'}</div>
-        </div>
-        {ATTENDANCE_STATUS.map((s) => (
-          <div className="stat" key={s}>
+        </button>
+        {statusChips.length > 0 &&
+          ATTENDANCE_STATUS.filter((s) => statusChips.includes(ATTENDANCE_STATUS_LABEL[s])).map((s) => (
+          <button
+            type="button"
+            className="stat"
+            key={s}
+            onClick={() => pickCard({ status: [ATTENDANCE_STATUS_LABEL[s]] })}
+          >
             <div className="l">
               <Icon name={STATUS_META[s].icon} size={13} /> {ATTENDANCE_STATUS_LABEL[s]}
             </div>
@@ -546,19 +587,21 @@ function Content() {
             <div className="d">
               {summary?.total ? `조회 대상의 ${Math.round(((summary[s] ?? 0) / summary.total) * 100)}%` : '-'}
             </div>
-          </div>
+          </button>
         ))}
-        <div className="stat">
+        <button type="button" className="stat" onClick={() => pickCard({ excused: [EXCUSED_CHIP] })}>
           <div className="l">
             <Icon name="check-check" size={13} /> 사유 승인
           </div>
           <div className="v">{summary?.EXCUSED ?? 0}</div>
           {/* 상태가 아니라 플래그라 위 5개와 합해도 total 이 되지 않는다 */}
           <div className="d">상태와 별개 집계</div>
-        </div>
+        </button>
       </div>
 
       <SearchForm
+        key={seed}
+        initial={seedValues}
         fields={fields}
         onSearch={setQuery}
         presetKey="ATTENDANCE"

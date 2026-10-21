@@ -516,7 +516,7 @@ const DISCOUNT_COLUMNS: Column<Discount>[] = [
   {
     key: 'act',
     header: '',
-    width: '92px',
+    width: '108px',
     align: 'center',
     value: () => '',
     render: () => (
@@ -1431,7 +1431,7 @@ function Content() {
       {
         key: 'act',
         header: '',
-        width: '116px',
+        width: '152px',
         align: 'center',
         value: () => '',
         render: (r) => (
@@ -1737,7 +1737,8 @@ function Content() {
                       <input
                         className="inp"
                         type="number"
-                        step={10000}
+                        /* ⚠️ `step` 을 걸지 않는다 — 445,000 처럼 배수가 아닌 정가는
+                           **브라우저가 제출을 막아** 저장이 안 되는 것처럼 보인다 */
                         value={calcBase}
                         onChange={(e) => setCalcBase(Number(e.target.value))}
                       />
@@ -2056,8 +2057,9 @@ function Content() {
                               <th>이름</th>
                               <th>반</th>
                               <th>장학</th>
-                              {/* ★ 마지막 칸이라 오른쪽에 바짝 붙는다 — 폭과 여백을 준다 */}
-                              <th style={{ textAlign: 'right', width: 96, paddingRight: 12 }}>할인율</th>
+                              {/* ★ 머리글과 입력칸의 **가운데를 맞춘다.** 오른쪽 정렬이면
+                                  머리글만 칸 끝에 붙어 입력칸과 어긋나 보인다 */}
+                              <th style={{ textAlign: 'center', width: 96 }}>할인율</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -2097,7 +2099,7 @@ function Content() {
                                       </span>
                                     )}
                                   </td>
-                                  <td style={{ textAlign: 'right', paddingRight: 12 }}>
+                                  <td style={{ textAlign: 'center' }}>
                                     {/* ★ 장학값을 채워 두고 **행마다 수정할 수 있게** 둔다.
                                         `step` 을 안 건다 — Modal 이 form 이라 배수가 아니면 저장이 막힌다 */}
                                     <input
@@ -2105,7 +2107,7 @@ function Content() {
                                       type="number"
                                       min={0}
                                       max={100}
-                                      style={{ width: 72, textAlign: 'right' }}
+                                      style={{ width: 72, textAlign: 'center' }}
                                       value={r.rate}
                                       placeholder="0"
                                       onChange={(e) =>
@@ -2770,6 +2772,45 @@ function Content() {
                     {/* ★★ **방향을 먼저 말한다.** 규정이 정상가 기준 차감이라 할인받은
                         학생은 차감이 납부액을 넘어 **추가 징수**가 된다 —
                         「돌려드립니다」로 띄우면 데스크가 반대로 처리한다 */}
+                    {/* ★★ **한 숫자만 보여주면 안 된다**(1021 피드백 4-2). 디랩 표가
+                        「총 환불 금액 395,000」이라 적었는데 그건 **학생이 최종 부담하는
+                        금액**이고 실제 환불액은 1,506,000 이었다 — **110만원 넘게 차이난다.**
+                        세 줄로 나눠 **무엇이 얼마인지** 못박는다.
+                        ★ 디랩 표의 「재결제」는 쓰지 않는다 — **다시 결제하는 것이 아니라
+                          학원이 갖는 몫**이다. 아래 항목 표의 「차감」과 같은 값이라
+                          **같은 말**로 쓴다 */}
+                    {(() => {
+                      const paid = (refund.preview.items ?? []).reduce((a, x) => a + x.paidAmount, 0)
+                      const ded = (refund.preview.items ?? []).reduce((a, x) => a + x.deduction, 0)
+                      if (paid === 0) return null
+                      return (
+                        <table className="mini-tbl" style={{ marginBottom: 10 }}>
+                          <tbody>
+                            <tr>
+                              <td>납부액</td>
+                              <td style={{ textAlign: 'right' }}>{wonOf(paid)}</td>
+                            </tr>
+                            <tr>
+                              <td>
+                                <b>환불액</b>
+                              </td>
+                              <td style={{ textAlign: 'right', fontWeight: 800 }}>
+                                {wonOf(refund.preview.refundAmount)}
+                              </td>
+                            </tr>
+                            <tr>
+                              <td>
+                                차감액
+                                <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 6 }}>
+                                  학원 수납 확정
+                                </span>
+                              </td>
+                              <td style={{ textAlign: 'right' }}>{wonOf(ded)}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      )
+                    })()}
                     {refund.preview.requiresAdditionalPayment ? (
                       <div className="note-box bad">
                         <div>

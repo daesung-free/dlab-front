@@ -459,7 +459,13 @@ function Content() {
     errorMessage: '계정 목록을 불러오지 못했습니다.',
   })
 
-  const rows = list.data ?? []
+  const all = list.data ?? []
+
+  /* ★ 상단 카드를 누르면 **그 역할만** 남긴다(1021 피드백 5-7). 계정 목록에는 조건 검색이
+   *   없어 상태를 여기서 들고, **무엇이 걸려 있는지 목록 위에 띄운다** — 안 보이면
+   *   "계정이 사라졌다" 로 읽힌다. */
+  const [roleFilter, setRoleFilter] = useState<Role | null>(null)
+  const rows = roleFilter === null ? all : all.filter((u) => u.roles.includes(roleFilter))
   const pending = rows.filter((u) => u.status === 'PENDING').length
 
   /** 역할은 계정마다 여러 개일 수 있어 계정 수가 아니라 부여 건수를 센다 */
@@ -945,7 +951,17 @@ function Content() {
 
       <div className="stat-strip">
         {ROLES.map((r) => (
-          <div className="stat" key={r.key}>
+          <button
+            type="button"
+            className="stat"
+            key={r.key}
+            aria-pressed={roleFilter === r.key}
+            style={roleFilter === r.key ? { borderColor: r.color } : undefined}
+            onClick={() => {
+              setRoleFilter((cur) => (cur === r.key ? null : r.key))
+              setTab('users')
+            }}
+          >
             <div className="l">
               <Icon name="shield-check" size={13} /> {r.label}
             </div>
@@ -955,9 +971,20 @@ function Content() {
             {/* 영문 코드(SUPER_ADMIN 등)는 뺀다 — 한글 라벨이 바로 위에 있고,
                  클라이언트가 읽을 이유가 없는 말이다(CLAUDE.md 1-1) */}
             <div className="d">{r.desc}</div>
-          </div>
+          </button>
         ))}
       </div>
+
+      {roleFilter !== null && (
+        <div className="note-box">
+          <div>
+            <b>{ROLE_LABEL[roleFilter]}</b> 역할을 가진 계정 {rows.length}개만 표시하고 있습니다.{' '}
+            <button type="button" className="btn" onClick={() => setRoleFilter(null)}>
+              전체 보기
+            </button>
+          </div>
+        </div>
+      )}
 
       {list.error && (
         <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
@@ -1247,7 +1274,7 @@ function Content() {
         <Tabs
           items={[
             { key: 'users', label: '계정 목록', count: rows.length },
-            { key: 'matrix', label: '권한 매트릭스 (초안)' },
+            { key: 'matrix', label: '권한 매트릭스 (설명용)' },
           ]}
           active={tab}
           onChange={setTab}
@@ -1301,6 +1328,27 @@ function Content() {
           </div>
         ) : (
           <div className="card-sec-b">
+            {/* ★★ **이 표는 편집되지 않는다.** 편집 가능한 화면(계정별 메뉴 지정) 옆에
+                놓여 있어 디랩이 이 표를 고치려 했다(1021 피드백 5-1). 안내가 범례 끝에
+                작게 있어 눈에 안 띄었다 — **표 위로 올린다.** */}
+            <div className="note-box">
+              <div className="ic">
+                <Icon name="info" size={17} />
+              </div>
+              <div>
+                이 표는 <b>역할별 기본값을 설명하는 자료</b>이며 수정할 수 없습니다. 실제 권한은{' '}
+                <b>계정 목록</b> 탭에서 계정마다 <b>메뉴</b> 버튼으로 지정합니다.
+                <br />
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ marginTop: 8 }}
+                  onClick={() => setTab('users')}
+                >
+                  <Icon name="users" size={14} /> 계정 목록으로 이동
+                </button>
+              </div>
+            </div>
             <div className="mx-scroll">
               <table className="mx">
                 <thead>
@@ -1351,7 +1399,7 @@ function Content() {
                   화면이 거짓말을 하게 된다 — 확정 전이라는 것을 그대로 적는다.
                   ★ 계정별 메뉴 노출은 따로 생겼다. 안 적으면 "아직 아무것도 안 된다" 로 읽힌다 */}
               <span style={{ marginLeft: 'auto', color: 'var(--muted)' }}>
-                확정 전 초안입니다. 실제 메뉴 노출은 계정 목록의 <b>메뉴</b> 버튼에서 계정마다 정합니다
+                역할별 기본값 설명입니다
               </span>
             </div>
           </div>
