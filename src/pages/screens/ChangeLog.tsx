@@ -144,14 +144,19 @@ const COLUMNS: Column<LogRow>[] = [
     key: 'field',
     header: '변경 항목',
     width: '120px',
-    value: (r) => changesOf(r.changes).map((c) => changeFieldLabel(c.field)).join(', ') || '-',
+    /* ★ `entityType` 을 함께 넘긴다 — 같은 칸 이름이 영역마다 다른 뜻이라
+       안 넘기면 청구의 `status` 가 「계정 상태」로 번역된다 */
+    value: (r) =>
+      changesOf(r.changes)
+        .map((c) => changeFieldLabel(c.field, r.entityType))
+        .join(', ') || '-',
   },
   {
     key: 'diff',
     header: '변경 전 → 변경 후',
     value: (r) =>
       changesOf(r.changes)
-        .map((c) => `${changeValueLabel(c.before)} → ${changeValueLabel(c.after)}`)
+        .map((c) => `${changeValueLabel(c.before, r.entityType)} → ${changeValueLabel(c.after, r.entityType)}`)
         .join(' / ') || '-',
   },
   {
