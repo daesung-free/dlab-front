@@ -2783,6 +2783,11 @@ function Content() {
                       const paid = (refund.preview.items ?? []).reduce((a, x) => a + x.paidAmount, 0)
                       const ded = (refund.preview.items ?? []).reduce((a, x) => a + x.deduction, 0)
                       if (paid === 0) return null
+                      /* ★★ 차감이 납부액을 넘으면 `refundAmount` 가 **음수**다. 할인받은 학생이
+                         이용기간을 많이 쓰고 퇴원하면 **환불이 아니라 더 받아야** 한다.
+                         그대로 「환불액 -50,000」으로 찍으면 **돌려줄 돈으로 읽힌다** —
+                         이름 자체를 「추가 징수」로 바꾼다(1021 회신). */
+                      const add = refund.preview.requiresAdditionalPayment || refund.preview.refundAmount < 0
                       return (
                         <table className="mini-tbl" style={{ marginBottom: 10 }}>
                           <tbody>
@@ -2792,10 +2797,16 @@ function Content() {
                             </tr>
                             <tr>
                               <td>
-                                <b>환불액</b>
+                                <b>{add ? '추가 징수' : '환불액'}</b>
                               </td>
-                              <td style={{ textAlign: 'right', fontWeight: 800 }}>
-                                {wonOf(refund.preview.refundAmount)}
+                              <td
+                                style={{
+                                  textAlign: 'right',
+                                  fontWeight: 800,
+                                  color: add ? 'var(--red)' : undefined,
+                                }}
+                              >
+                                {wonOf(Math.abs(refund.preview.refundAmount))}
                               </td>
                             </tr>
                             <tr>
@@ -2838,7 +2849,9 @@ function Content() {
                             <th>항목</th>
                             <th style={{ textAlign: 'right' }}>납부</th>
                             <th style={{ textAlign: 'right' }}>차감</th>
-                            <th style={{ textAlign: 'right' }}>환불</th>
+                            {/* ★ 차감이 납부를 넘는 항목은 환불이 아니라 **추가 징수**다 —
+                                머리글 하나로 둘을 덮으면 음수가 「돌려줄 돈」으로 읽힌다 */}
+                            <th style={{ textAlign: 'right' }}>환불 · 추가 징수</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -2849,7 +2862,9 @@ function Content() {
                                 {it.detail && <div className="hint">{it.detail}</div>}
                               </td>
                               <td style={{ textAlign: 'right' }}>{wonOf(it.paidAmount)}</td>
-                              <td style={{ textAlign: 'right' }}>-{wonOf(it.deduction)}</td>
+                              {/* ★ 음수 부호를 안 붙인다. 머리글이 이미 「차감」이고,
+                                  위 요약의 차감액 합계는 양수라 **부호가 있으면 둘이 어긋나 보인다** */}
+                              <td style={{ textAlign: 'right' }}>{wonOf(it.deduction)}</td>
                               <td
                                 style={{
                                   textAlign: 'right',
@@ -2857,7 +2872,10 @@ function Content() {
                                   color: it.refund < 0 ? 'var(--red)' : undefined,
                                 }}
                               >
-                                {wonOf(it.refund)}
+                                {wonOf(Math.abs(it.refund))}
+                                {it.refund < 0 && (
+                                  <div style={{ fontSize: 11, fontWeight: 600 }}>추가 징수</div>
+                                )}
                               </td>
                             </tr>
                           ))}
