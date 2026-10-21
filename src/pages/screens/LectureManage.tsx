@@ -10,6 +10,12 @@ import {
   LECTURE_TYPE_LABEL,
   listLectureApplicants,
   listLectureSessions,
+  updateLectureSession,
+  changeLectureTargets,
+  LECTURE_TRACK_LABEL,
+  LECTURE_GRADE_LABEL,
+  type LectureTrack,
+  type LectureGrade,
   listSessionAttendances,
   saveSessionAttendance,
   LECTURE_ATTENDANCE_LABEL,
@@ -229,6 +235,12 @@ interface LectureEdit {
   applyFrom: string
   applyTo: string
   teacherId: number | null
+  /* ★★ 수강 대상. **둘 다 비면 제한 없음**이다 — 「전체」라는 값은 없다.
+     「전체」와 「인문+자연 둘 다」가 같은 뜻인데 데이터가 두 가지로 갈린다 */
+  tracks: LectureTrack[]
+  grades: LectureGrade[]
+  /** 대기 상한. 빈 칸이면 무제한 */
+  waitlistCapacity: string
 }
 
 interface LectureDraft {
@@ -303,6 +315,9 @@ function toEdit(l: ApiLecture): LectureEdit {
     applyFrom: l.applyFrom ? localDay(l.applyFrom) : '',
     applyTo: l.applyTo ? localDay(l.applyTo) : '',
     teacherId: l.teacherId,
+    tracks: (l.targetTracks ?? []).filter((t): t is LectureTrack => t in LECTURE_TRACK_LABEL),
+    grades: (l.targetGrades ?? []).filter((g): g is LectureGrade => g in LECTURE_GRADE_LABEL),
+    waitlistCapacity: l.waitlistCapacity == null ? '' : String(l.waitlistCapacity),
   }
 }
 
@@ -454,6 +469,15 @@ function Content() {
   /* 회차 추가. 개설 때 한 번에 만들지만 **보강·연장은 나중에 생긴다** — 지금까지는
      지우는 것만 되고 더하는 길이 없어, 실수로 지운 회차도 되살릴 수 없었다 */
   const [newSession, setNewSession] = useState<{ date: string; start: string; end: string; room: string } | null>(null)
+  /* ★ 회차 수정. **번호는 못 바꾼다** — 이미 안내된 「3회차」가 다른 날을 가리키게 된다 */
+  const [editSession, setEditSession] = useState<{
+    row: LectureSession
+    date: string
+    start: string
+    end: string
+    room: string
+    fee: string
+  } | null>(null)
   const [sessionBusy, setSessionBusy] = useState(false)
   const [sessionErr, setSessionErr] = useState<string | null>(null)
 
@@ -813,9 +837,14 @@ function Content() {
   }
 
   /** 목록을 다시 읽고 열려 있는 상세도 새 값으로 바꾼다 — 안 그러면 고친 값이 안 보인다 */
-  async function refreshDetail() {
+  /** 되돌아온 행을 **그대로 돌려준다** — 저장 결과를 바로 대조해야 하는 곳이 있다.
+   *  (상태 갱신 함수 안에서 값을 빼내면 StrictMode 에서 두 번 돌아 어긋난다) */
+  async function refreshDetail(id?: number): Promise<ApiLecture | null> {
     const next = await loadLectures()
-    setDetail((cur) => (cur ? (next.find((x) => x.id === cur.id) ?? cur) : cur))
+    const key = id ?? detail?.id
+    const found = key === undefined ? null : (next.find((x) => x.id === key) ?? null)
+    if (found) setDetail(found)
+    return found
   }
 
   /** 상세에서 고친 것을 저장한다. 접수 기간만 시점이라 따로 변환한다(lectures.ts 주석) */
@@ -835,7 +864,37 @@ function Content() {
         applyTo: toInstant(editing.applyTo, '23:59'),
         teacherId: editing.teacherId ?? undefined,
       })
-      await refreshDetail()
+      /* ★★ 대상은 **별도 엔드포인트**다. 고른 그대로 **항상 명시해서** 보낸다 —
+         배열을 생략하면 「유지」라 **「풀었는데 안 풀렸다」** 가 생긴다(서버 확인 2026-10-21).
+         ⚠️ 특강 수정이 먼저 성공하고 여기서 실패할 수 있어, 그때는 **어디까지 됐는지**를
+            그대로 알린다. 「저장 실패」로 뭉치면 담당자가 전부 다시 입력한다 */
+      try {
+        await changeLectureTargets(detail.id, {
+          tracks: editing.tracks,
+          grades: editing.grades,
+          waitlistCapacity:
+            editing.waitlistCapacity.trim() === '' ? null : Number(editing.waitlistCapacity),
+        })
+      } catch (err) {
+        await refreshDetail()
+        setEditing(null)
+        setDetailErr(
+          `특강 정보는 저장했지만 수강 대상·대기 상한은 저장하지 못했습니다. ${
+            err instanceof ApiError ? err.message : ''
+          } 대상만 다시 지정해 주세요.`,
+        )
+        return
+      }
+      /* ⚠️ **대기 상한은 무제한으로 되돌릴 수 없다**(서버가 null 을 「유지」로 받는다).
+         비워서 저장했는데 값이 남아 있으면 **그 사실을 그대로 알린다** — 조용히 두면
+         담당자는 풀린 줄 안다 */
+      const after = await refreshDetail(detail.id)
+      if (editing.waitlistCapacity.trim() === '' && after?.waitlistCapacity != null) {
+        setDetailErr(
+          `대기 상한은 한 번 지정하면 해제할 수 없습니다. ${after.waitlistCapacity}명으로 유지됩니다. ` +
+            '대기를 받지 않으려면 0을 입력하세요.',
+        )
+      }
       setEditing(null)
     } catch (err) {
       /* 모달을 닫지 않는다 — 고친 값을 다시 치게 하면 안 된다 */
@@ -905,6 +964,29 @@ function Content() {
       setNewSession(null)
     } catch (err) {
       setSessionErr(err instanceof ApiError ? err.message : '회차를 추가하지 못했습니다.')
+    } finally {
+      setSessionBusy(false)
+    }
+  }
+
+  async function saveSession() {
+    if (!editSession || lectureId === null) return
+    setSessionBusy(true)
+    setSessionErr(null)
+    try {
+      /* ★ 빈 칸은 **보내지 않는다** — 서버가 「비우면 유지」라 빈 문자열을 보내면
+         시각이 지워지는 게 아니라 400 이 난다 */
+      await updateLectureSession(editSession.row.id, {
+        sessionDate: editSession.date,
+        startTime: editSession.start || undefined,
+        endTime: editSession.end || undefined,
+        room: editSession.room.trim() || undefined,
+        fee: editSession.fee.trim() === '' ? undefined : Number(editSession.fee),
+      })
+      setSessionList(await listLectureSessions(lectureId))
+      setEditSession(null)
+    } catch (err) {
+      setSessionErr(err instanceof ApiError ? err.message : '회차를 수정하지 못했습니다.')
     } finally {
       setSessionBusy(false)
     }
@@ -1455,6 +1537,33 @@ function Content() {
                       {sessionList.map((se) => (
                         <th key={se.id} className="al-center" style={{ width: 68 }} title={se.room ?? ''}>
                           {se.sessionDate.slice(5)}
+                          {/* ★ 보강·휴강으로 **날짜가 옮겨지는 일이 잦다.** 지우고 다시
+                              만들면 번호가 밀려 이미 안내된 「3회차」가 다른 날이 된다 */}
+                          <button
+                            type="button"
+                            aria-label={`${se.sessionNo}회차 수정`}
+                            title="날짜·시각·강의실을 바꿉니다"
+                            onClick={() => {
+                              setSessionErr(null)
+                              setEditSession({
+                                row: se,
+                                date: se.sessionDate,
+                                start: (se.startTime ?? '').slice(0, 5),
+                                end: (se.endTime ?? '').slice(0, 5),
+                                room: se.room ?? '',
+                                fee: se.fee == null ? '' : String(se.fee),
+                              })
+                            }}
+                            style={{
+                              border: 'none',
+                              background: 'none',
+                              color: 'var(--muted)',
+                              cursor: 'pointer',
+                              padding: '0 0 0 4px',
+                            }}
+                          >
+                            <Icon name="pencil" size={11} />
+                          </button>
                           {/* 회차가 곧 이 표의 열이라 지우는 자리도 여기가 맞다 */}
                           <button
                             type="button"
@@ -1716,9 +1825,77 @@ function Content() {
                     />
                   </div>
                 </div>
+                <div className="frow">
+                  <label>수강 대상</label>
+                  <div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {(Object.keys(LECTURE_TRACK_LABEL) as LectureTrack[]).map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          className={`chip${editing.tracks.includes(t) ? ' on' : ''}`}
+                          onClick={() =>
+                            setEditing({
+                              ...editing,
+                              tracks: editing.tracks.includes(t)
+                                ? editing.tracks.filter((x) => x !== t)
+                                : [...editing.tracks, t],
+                            })
+                          }
+                        >
+                          {LECTURE_TRACK_LABEL[t]}
+                        </button>
+                      ))}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+                      {(Object.keys(LECTURE_GRADE_LABEL) as LectureGrade[]).map((g) => (
+                        <button
+                          key={g}
+                          type="button"
+                          className={`chip${editing.grades.includes(g) ? ' on' : ''}`}
+                          onClick={() =>
+                            setEditing({
+                              ...editing,
+                              grades: editing.grades.includes(g)
+                                ? editing.grades.filter((x) => x !== g)
+                                : [...editing.grades, g],
+                            })
+                          }
+                        >
+                          {LECTURE_GRADE_LABEL[g]}
+                        </button>
+                      ))}
+                    </div>
+                    {/* ★ 「전체」라는 칩을 두지 않는다 — 「전체」와 「전부 선택」이 같은 뜻인데
+                        데이터가 두 가지로 갈린다. 아무것도 안 고른 것이 곧 제한 없음이다 */}
+                    <div className="hint">
+                      {editing.tracks.length === 0 && editing.grades.length === 0
+                        ? '아무것도 선택하지 않으면 모든 학생이 신청할 수 있습니다.'
+                        : '선택한 계열과 학년에 모두 해당하는 학생만 신청할 수 있습니다.'}
+                      {' 고1은 아직 선택할 수 없습니다.'}
+                    </div>
+                  </div>
+                </div>
+                <div className="frow">
+                  <label>대기 상한</label>
+                  <div>
+                    <input
+                      className="inp"
+                      type="number"
+                      min={0}
+                      style={{ width: 120 }}
+                      placeholder="무제한"
+                      value={editing.waitlistCapacity}
+                      onChange={(e) => setEditing({ ...editing, waitlistCapacity: e.target.value })}
+                    />
+                    <div className="hint">비워 두면 대기 인원을 제한하지 않습니다.</div>
+                  </div>
+                </div>
                 {/* ★ 회차는 여기서 못 고친다. 기간·요일을 바꿔도 이미 만들어진 회차는 그대로다 —
-                       출결이 그 회차에 붙어 있기 때문이다. 회차는 출석부에서 하나씩 지운다. */}
-                <div className="hint">수업 기간을 바꿔도 이미 만들어진 회차는 그대로입니다.</div>
+                       출결이 그 회차에 붙어 있기 때문이다. 회차는 출석부에서 하나씩 고치거나 지운다. */}
+                <div className="hint">
+                  수업 기간을 바꿔도 이미 만들어진 회차는 그대로입니다. 회차 날짜는 출석부에서 고칩니다.
+                </div>
               </>
             ) : (
               <>
@@ -1733,6 +1910,31 @@ function Content() {
                     <span className="k">담당 강사</span>
                     <span className="v">
                       {detail.teacherName || <span style={{ color: 'var(--muted)' }}>미지정</span>}
+                    </span>
+                  </div>
+                  {/* ★★ **지금 무엇으로 제한돼 있는지 보여야 한다.** 안 보이면 담당자가
+                      현재 값을 모른 채 덮어쓴다 */}
+                  <div className="row">
+                    <span className="k">수강 대상</span>
+                    <span className="v">
+                      {[
+                        ...(detail.targetTracks ?? []).map(
+                          (t) => LECTURE_TRACK_LABEL[t as LectureTrack] ?? t,
+                        ),
+                        ...(detail.targetGrades ?? []).map(
+                          (g) => LECTURE_GRADE_LABEL[g as LectureGrade] ?? g,
+                        ),
+                      ].join(' · ') || <span style={{ color: 'var(--muted)' }}>제한 없음</span>}
+                    </span>
+                  </div>
+                  <div className="row">
+                    <span className="k">대기 상한</span>
+                    <span className="v">
+                      {detail.waitlistCapacity == null ? (
+                        <span style={{ color: 'var(--muted)' }}>무제한</span>
+                      ) : (
+                        `${detail.waitlistCapacity}명`
+                      )}
                     </span>
                   </div>
                   <div className="row">
@@ -1882,6 +2084,80 @@ function Content() {
                 value={newSession.room}
                 onChange={(e) => setNewSession({ ...newSession, room: e.target.value })}
               />
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {editSession && (
+        <Modal
+          title={`${editSession.row.sessionNo}회차 수정`}
+          sub="날짜·시각·강의실을 바꿉니다. 회차 번호는 바꿀 수 없습니다."
+          confirmLabel="저장"
+          busy={sessionBusy}
+          error={sessionErr}
+          confirmDisabled={editSession.date === ''}
+          onConfirm={() => void saveSession()}
+          onClose={() => setEditSession(null)}
+        >
+          <div className="frow">
+            <label className="req">날짜</label>
+            <input
+              className="inp"
+              type="date"
+              value={editSession.date}
+              onChange={(e) => setEditSession({ ...editSession, date: e.target.value })}
+            />
+          </div>
+          <div className="frow">
+            <label>시각</label>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input
+                className="inp"
+                type="time"
+                value={editSession.start}
+                onChange={(e) => setEditSession({ ...editSession, start: e.target.value })}
+              />
+              <span>–</span>
+              <input
+                className="inp"
+                type="time"
+                value={editSession.end}
+                onChange={(e) => setEditSession({ ...editSession, end: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="frow">
+            <label>강의실</label>
+            <input
+              className="inp"
+              maxLength={50}
+              value={editSession.room}
+              onChange={(e) => setEditSession({ ...editSession, room: e.target.value })}
+            />
+          </div>
+          <div className="frow">
+            <label>이 회차 수강료</label>
+            <div>
+              {/* ★ `step` 을 안 건다 — Modal 이 form 이라 배수가 아닌 값(77,000)은 저장이 막힌다 */}
+              <input
+                className="inp"
+                type="number"
+                min={0}
+                style={{ width: 140 }}
+                placeholder="특강 금액을 따름"
+                value={editSession.fee}
+                onChange={(e) => setEditSession({ ...editSession, fee: e.target.value })}
+              />
+              <div className="hint">
+                비워 두면 특강 전체 금액을 따릅니다. 회차마다 금액이 다를 때만 입력하세요.
+              </div>
+            </div>
+          </div>
+          <div className="note-box">
+            <div>
+              이 회차를 신청한 학생에게는 <b>변경 안내가 자동으로 발송되지 않습니다.</b> 날짜를 옮긴 경우
+              따로 안내해야 합니다.
             </div>
           </div>
         </Modal>

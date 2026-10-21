@@ -71,6 +71,11 @@ export interface Lecture {
   categoryName: string | null
   confirmedCount: number
   waitlistedCount: number
+  /* ★ 수강 대상. **둘 다 비어 있으면 제한 없음**이다 — 「전체」라는 값은 없다 */
+  targetTracks?: string[]
+  targetGrades?: string[]
+  /** 대기 상한. 없으면 무제한 */
+  waitlistCapacity?: number | null
 }
 
 export interface LectureSession {
@@ -80,6 +85,8 @@ export interface LectureSession {
   startTime: string | null
   endTime: string | null
   room: string | null
+  /** 그 회차 수강료. 특강 전체 금액(`Lecture.fee`)과 별개다 — 회차마다 다를 수 있다 */
+  fee: number | null
 }
 
 /** 신청 상태. **취소는 행이 지워지지 않고 이 값이 바뀐다** — 아래 ★ 참고 */
@@ -337,4 +344,76 @@ export function saveSessionAttendance(
  */
 export function cancelApplication(applicationId: number): Promise<void> {
   return request<void>(`/api/v1/admin/lectures/applications/${applicationId}`, { method: 'DELETE' })
+}
+
+/* ── 수강 대상 · 대기 상한 (디랩 1021 Q2·Q3) ─────────────────────── */
+
+/** 계열. ★ `STAFF` 는 학년이 아니라 등록 구분값이라 **대상에 넣지 않는다** */
+export type LectureTrack = 'HUMANITIES' | 'SCIENCE' | 'ART' | 'COMMON'
+export type LectureGrade = 'HIGH2' | 'HIGH3' | 'N_SU'
+
+export const LECTURE_TRACK_LABEL: Record<LectureTrack, string> = {
+  HUMANITIES: '인문',
+  SCIENCE: '자연',
+  ART: '예체능',
+  COMMON: '공통',
+}
+
+/**
+ * ★ **고1(`HIGH1`)이 서버에 없다.** 디랩 답변은 「N수생/고3/고2/고1」인데
+ *   `GradeType` 은 3분류다 — 없는 값을 화면에만 띄우면 **저장할 때 터진다.**
+ *   회신이 오면 그때 연다(2026-10-21 확인 요청).
+ * ★ `STAFF`(직원)는 뺐다. **서버가 걸러서 저장하지 않는다** — 두면 고를 수는
+ *   있는데 저장은 안 되는 칸이 된다.
+ */
+export const LECTURE_GRADE_LABEL: Record<LectureGrade, string> = {
+  HIGH2: '고2',
+  HIGH3: '고3',
+  N_SU: 'N수생',
+}
+
+/**
+ * 수강 대상·대기 상한 교체.
+ *
+ * ★★ **두 축 모두 비우면 제한 없음이다.** 「전체」를 값으로 보내지 않는다 —
+ *   「전체」와 「인문+자연 둘 다」가 같은 뜻인데 **데이터가 두 가지로 갈린다.**
+ * ★★ **배열을 생략하면 「유지」, `[]` 를 보내면 「제한 없음으로 바꿈」이다**
+ *   (2026-10-21 서버 확인). 그래서 화면은 **고른 그대로 항상 명시해 보낸다** —
+ *   생략 분기를 안 타야 「풀었는데 안 풀렸다」가 안 생긴다.
+ * ⚠️⚠️ **`waitlistCapacity` 는 한 번 넣으면 무제한으로 되돌릴 수 없다**(2026-10-21 실측).
+ *   스키마 설명은 「null 로 두면 무제한」인데 **`null` 도 키 생략과 똑같이 「유지」**다 —
+ *   숫자를 보낼 때만 바뀐다. 그래서 화면은 **비워서 저장한 뒤 값이 그대로면 그 사실을
+ *   알린다.** 조용히 두면 「풀었는데 안 풀렸다」가 된다.
+ *
+ *   ```
+ *   {"waitlistCapacity": null}   → 5 그대로
+ *   키 생략                       → 5 그대로
+ *   {"waitlistCapacity": 0}      → 0   (0 은 「대기 안 받음」이지 무제한이 아니다)
+ *   ```
+ */
+export function changeLectureTargets(
+  lectureId: number,
+  body: { tracks: LectureTrack[]; grades: LectureGrade[]; waitlistCapacity: number | null },
+): Promise<void> {
+  return request<void>(`/api/v1/admin/lectures/${lectureId}/targets`, { method: 'PUT', body })
+}
+
+/**
+ * 회차 수정.
+ *
+ * ★ **비워 보낸 항목은 바꾸지 않는다.** 날짜만 옮기는 경우가 대부분이다.
+ * ⚠️ **번호는 바꿀 수 없다** — 이미 안내된 「3회차」가 다른 날을 가리키게 된다.
+ */
+export function updateLectureSession(
+  sessionId: number,
+  body: {
+    sessionDate?: string
+    startTime?: string
+    endTime?: string
+    room?: string
+    /** 그 회차 수강료. 비우면 유지, 명시하면 교체 */
+    fee?: number
+  },
+): Promise<void> {
+  return request<void>(`/api/v1/admin/lectures/sessions/${sessionId}`, { method: 'PUT', body })
 }
