@@ -3045,6 +3045,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/universities/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 마스터 엑셀 적재
+         * @description 마스터 엑셀 적재.
+         *
+         *      <p>★ <b>연도마다 새 파일이 온다</b>(원본 파일명이 <code>2026더프모...20260223</code>).
+         *      그래서 마이그레이션에 박지 않고 여기로 올린다 — 4,921행을 마이그레이션에 넣으면
+         *      해마다 새 파일을 쓰게 되고, 이미 적용된 마이그레이션은 고칠 수 없다.
+         *
+         *      <p>★ <b>재업로드가 행을 늘리지 않는다.</b> 같은 <code>(연도, 코드)</code> 는 갱신한다 —
+         *      늘리면 검색에 같은 대학이 두 번 나오고 어느 쪽이 최신인지 알 수 없다.
+         *
+         *      <p>⚠️ <b>본사만</b> 올린다. 전 지점 공통 마스터라 한 지점이 바꾸면 다른 지점 실적
+         *      입력까지 흔들린다.
+         */
+        post: operations["importMaster"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/tuition/billings/monthly": {
         parameters: {
             query?: never;
@@ -8272,6 +8302,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/universities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 대학 검색
+         * @description 대학 검색.
+         *
+         *      <p>★ 캠퍼스가 이름에 들어 있어(「연세대(미래-원주)」) <code>연세</code> 만 넣으면
+         *      캠퍼스가 전부 나온다.
+         */
+        get: operations["search_2"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/universities/{universityCode}/departments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 그 대학의 학과 목록
+         * @description 그 대학의 학과 목록.
+         *
+         *      <p>★ <b>대학코드로 받는다</b> — 학과코드만으로는 유일하지 않다(503개가 여러 대학
+         *      공용). 응답에 계열이 함께 오므로 화면은 그 값을 그대로 채우면 된다.
+         */
+        get: operations["departments_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/tuition/fee-table": {
         parameters: {
             query?: never;
@@ -8915,7 +8991,7 @@ export interface paths {
          *      <p>지점 범위는 계정이 정한다 — <b>전 지점 권한자는 전 지점</b>을 한 번에 본다
          *      (본사가 아침에 한눈에 보는 화면이다). 지점 관리자는 자기 지점만 나온다.
          */
-        get: operations["search_2"];
+        get: operations["search_3"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9360,7 +9436,7 @@ export interface paths {
          *
          *      <p>기본이 <b>최근 7일</b>이다 — 기간을 안 주면 전 기간을 훑게 되어 화면이 안 뜬다.
          */
-        get: operations["search_3"];
+        get: operations["search_4"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9693,7 +9769,7 @@ export interface paths {
          * 신청·해제 이력.
          * @description 신청·해제 이력. 조건을 비우면 그 조건은 빠진다.
          */
-        get: operations["search_4"];
+        get: operations["search_5"];
         put?: never;
         post?: never;
         delete?: never;
@@ -10083,7 +10159,7 @@ export interface paths {
          *      <p><b>지점을 모르는 로그도 함께 보인다.</b> 전 지점 공통 마스터를 누가 고쳤는지도
          *      기록되어야 하는데, 지점 필터에 걸려 빠지면 그 기록이 어디에도 안 남는다.
          */
-        get: operations["search_5"];
+        get: operations["search_6"];
         put?: never;
         post?: never;
         delete?: never;
@@ -10338,7 +10414,7 @@ export interface paths {
          * 그해 전체 실적 — 학생을 고르지 않고 지점 전체를 본다.
          * @description 그해 전체 실적 — 학생을 고르지 않고 지점 전체를 본다. 학번순.
          */
-        get: operations["search_6"];
+        get: operations["search_7"];
         put?: never;
         post?: never;
         delete?: never;
@@ -11118,6 +11194,35 @@ export interface paths {
          * @description 수납 취소. 거래를 지우지 않고 표시만 한다 — 이력이 사라지면 정산 추적이 끊긴다.
          */
         delete: operations["cancelPayment"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/attendance/{enrollmentId}/taggings/{taggingId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * 태깅 <b>삭제</b> (디랩 1021 피드백 2-1)
+         * @description 태깅 <b>삭제</b> (디랩 1021 피드백 2-1).
+         *
+         *      <p>⚠️ <b>사람이 넣은 태깅(<code>MANUAL</code>)만 지워진다.</b> 키오스크로 찍힌 행은
+         *      400 이고, 그건 상태 정정으로 간다 — 원장을 지우면 그 학생이 정말 왔었는지
+         *      확인할 방법이 없어진다.
+         *
+         *      <p>★ <b>조퇴 취소가 이 경로다.</b> 조퇴 뒤 다시 들어온 학생은 조퇴를 지워야 한다.
+         *
+         *      <p>지운 뒤 그날 상태와 순공시간을 <b>서버가 다시 계산한다.</b>
+         *      두 번 눌러도 안전하다.
+         */
+        delete: operations["deleteTagging"];
         options?: never;
         head?: never;
         patch?: never;
@@ -14363,6 +14468,39 @@ export interface components {
              * @description 동의한 시각. 이 값이 곧 동의 근거다
              */
             agreedAt?: string;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseImportResult: {
+            success?: boolean;
+            data?: components["schemas"]["ImportResult"];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        Counts: {
+            /** Format: int32 */
+            inserted?: number;
+            /** Format: int32 */
+            updated?: number;
+        };
+        /** @description 적재 결과. */
+        ImportResult: {
+            /** Format: int32 */
+            rowCount?: number;
+            /** @description 대학 — 새로 넣은 수 / 이름이 바뀌어 갱신한 수 */
+            universities?: components["schemas"]["Counts"];
+            /** @description 학과 — 같은 기준 */
+            departments?: components["schemas"]["Counts"];
+            /** @description 행 번호와 사유. ★ <b>엑셀 기준 1-based</b> 다 */
+            errors?: string[];
         };
         IssueMonthly: {
             /** Format: int64 */
@@ -20003,6 +20141,49 @@ export interface components {
          *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
          *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
          */
+        ApiResponseListUniversityView: {
+            success?: boolean;
+            data?: components["schemas"]["UniversityView"][];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        UniversityView: {
+            code?: string;
+            name?: string;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
+        ApiResponseListDepartmentView: {
+            success?: boolean;
+            data?: components["schemas"]["DepartmentView"][];
+            meta?: components["schemas"]["PageMeta"];
+            error?: components["schemas"]["ErrorBody"];
+        };
+        DepartmentView: {
+            code?: string;
+            name?: string;
+            trackCode?: string;
+            /** @description 계열. ★ 화면이 이 값을 <b>자동으로 채운다</b> — 따로 입력받지 말 것 */
+            trackName?: string;
+        };
+        /**
+         * @description 모든 컨트롤러 응답의 공통 포맷 (CLAUDE.md §7).
+         *      성공: { "success": true, "data": ... }
+         *      실패: { "success": false, "error": { "code": ..., "message": ... } }
+         *      목록: { "success": true, "data": [...], "meta": { "page": ..., "totalElements": ... } }
+         *
+         *      <p><b>적용 범위는 <code>/api/v1/**</code> 뿐이다.</b> 키오스크가 호출하는 DSA 호환 구획
+         *      (<code>/auth/**</code>, <code>/kiosk/**</code>)은 <code>{code, message, data, ...</code>} 형태라
+         *      이 래퍼를 적용하면 키오스크가 응답을 못 읽는다.
+         */
         ApiResponseListPriceView: {
             success?: boolean;
             data?: components["schemas"]["PriceView"][];
@@ -23841,6 +24022,10 @@ export interface components {
         ClearedCount: {
             /** Format: int32 */
             cleared?: number;
+        };
+        DeleteTaggingRequest: {
+            /** @description 필수. 없으면 이력이 감사 자료가 되지 못한다 */
+            reason: string;
         };
     };
     responses: never;
@@ -28077,6 +28262,35 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponsePrimaryApproverResponse"];
+                };
+            };
+        };
+    };
+    importMaster: {
+        parameters: {
+            query: {
+                year: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseImportResult"];
                 };
             };
         };
@@ -35182,6 +35396,55 @@ export interface operations {
             };
         };
     };
+    search_2: {
+        parameters: {
+            query: {
+                year: number;
+                /** @description 비우면 전체. 223개라 화면에서는 보통 2글자 이상부터 호출한다 */
+                keyword?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListUniversityView"];
+                };
+            };
+        };
+    };
+    departments_1: {
+        parameters: {
+            query: {
+                year: number;
+                keyword?: string;
+            };
+            header?: never;
+            path: {
+                universityCode: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListDepartmentView"];
+                };
+            };
+        };
+    };
     feeTable: {
         parameters: {
             query: {
@@ -35860,7 +36123,7 @@ export interface operations {
             };
         };
     };
-    search_2: {
+    search_3: {
         parameters: {
             query?: {
                 /** @description 비우면 최근 2주 */
@@ -36356,7 +36619,7 @@ export interface operations {
             };
         };
     };
-    search_3: {
+    search_4: {
         parameters: {
             query: {
                 academyId?: number;
@@ -36700,7 +36963,7 @@ export interface operations {
             };
         };
     };
-    search_4: {
+    search_5: {
         parameters: {
             query?: {
                 academyId?: number;
@@ -37088,7 +37351,7 @@ export interface operations {
             };
         };
     };
-    search_5: {
+    search_6: {
         parameters: {
             query: {
                 /** @description 비우면 내 지점. 전 지점 권한자가 비우면 전 지점이다 */
@@ -37402,7 +37665,7 @@ export interface operations {
             };
         };
     };
-    search_6: {
+    search_7: {
         parameters: {
             query: {
                 /** @description 비우면 내 지점. 전 지점 권한자는 지정해야 한다 */
@@ -38242,6 +38505,33 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseVoid"];
+                };
+            };
+        };
+    };
+    deleteTagging: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enrollmentId: number;
+                taggingId: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteTaggingRequest"];
+            };
+        };
         responses: {
             /** @description OK */
             200: {
