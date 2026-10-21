@@ -20,7 +20,10 @@ export const ROLES: readonly Role[] = ['SUPER_ADMIN', 'BRANCH_ADMIN', 'TEACHER',
 export const ROLE_LABEL: Record<Role, string> = {
   SUPER_ADMIN: '본사 관리자',
   BRANCH_ADMIN: '지점 관리자',
-  TEACHER: '담임·강사',
+  /* ★ 「담임선생님」 — 디랩 요청(1021 피드백 5-4).
+     ⚠️ **학생·학부모에게 나가는 문구는 「교직원」**이다(9월 알림톡 요청). 관리자 화면과
+        갈린다 — **하나로 통일하지 않는다.** */
+  TEACHER: '담임선생님',
   STAFF: '행정 직원',
   READONLY: '조회 전용',
 }

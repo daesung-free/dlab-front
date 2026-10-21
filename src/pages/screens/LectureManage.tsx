@@ -917,7 +917,7 @@ function Content() {
       {
         key: 'act',
         header: '',
-        width: '64px',
+        width: '152px',
         align: 'center',
         value: () => '',
         render: (r) => (
@@ -1072,7 +1072,8 @@ function Content() {
                   <input
                     className="inp"
                     type="number"
-                    step={10000}
+                    /* ⚠️ `step` 을 걸지 않는다 — 77,000 처럼 배수가 아닌 수강료는
+                       **브라우저가 제출을 막아** 저장이 안 되는 것처럼 보인다 */
                     value={draft.fee}
                     onChange={(e) => patch({ fee: Number(e.target.value) })}
                   />
