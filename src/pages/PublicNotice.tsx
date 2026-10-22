@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { getPublicNotice, type PublicNotice as Notice } from '../api/publicNotices'
 import './public-notice.css'
 
@@ -45,7 +45,12 @@ function sizeText(bytes: number): string {
 }
 
 export function PublicNotice() {
-  const { token = '' } = useParams()
+  /* ★ 토큰을 **경로와 쿼리 둘 다**에서 받는다. 카카오가 버튼 주소에 변수를 허용하지
+     않으면 주소를 고정하고 토큰만 쿼리로 넘겨야 할 수 있다 — 그때 화면을 안 고치려고
+     지금 열어 둔다(`/notice/{토큰}` · `/notice?t={토큰}`) */
+  const { token: pathToken } = useParams()
+  const [search] = useSearchParams()
+  const token = pathToken ?? search.get('t') ?? ''
   const [notice, setNotice] = useState<Notice | null>(null)
   const [failed, setFailed] = useState(false)
 

@@ -23,8 +23,11 @@ export default function App() {
       {/* 알림톡 「등록비 안내」 버튼이 여는 자리. 받는 사람이 학부모라 같은 이유로
           Gate 밖·AuthProvider 밖이다 */}
       <Route path="notice/:token" element={<PublicNotice />} />
+      {/* 토큰을 쿼리로 받는 형태(`/notice?t=…`). 알림톡 버튼 주소에 변수를 못 쓰면 이쪽이다 */}
+      <Route path="notice" element={<PublicNotice />} />
       {/* 대기자 안내톡의 [등록하겠습니다]·[등록하지 않겠습니다] 가 여는 자리 */}
       <Route path="waitlist/:token" element={<PublicWaitlist />} />
+      <Route path="waitlist" element={<PublicWaitlist />} />
       <Route path="*" element={<AdminApp />} />
     </Routes>
   )

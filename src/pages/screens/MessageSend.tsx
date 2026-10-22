@@ -940,6 +940,15 @@ function Content() {
                   <label>받는 사람</label>
                   <div style={{ paddingTop: 9 }}>
                     <b style={{ fontSize: 13 }}>{RECIPIENT_LABEL[sendPick.recipientType]}</b>
+                    {/* ★ **전원 공통 안내는 한 분에게 한 통**이다(급식 마감·등록기간).
+                        자녀가 둘인 학부모가 한 번만 세어져 **대상 수가 반 인원보다 적게**
+                        나오는데, 그 설명이 없으면 **빠진 것으로 읽는다** */}
+                    {sendPick.studentSpecific === false && (
+                      <div style={{ fontSize: 12, color: 'var(--ink-2)', marginTop: 5 }}>
+                        전원 공통 안내입니다 — <b>학부모 한 분에게 한 통</b>씩 갑니다. 자녀가 둘이어도
+                        한 통입니다.
+                      </div>
+                    )}
                     <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 5 }}>
                       템플릿에 정해져 있습니다. 바꾸려면 「템플릿 관리」 탭에서 고칩니다.
                     </div>
@@ -1103,6 +1112,11 @@ function Content() {
                   <div className="note-box" style={{ marginTop: 12 }}>
                     <div>
                       <b>{prev.targetCount.toLocaleString()}명</b>에게 나갑니다. 위 문장 그대로 발송됩니다.
+                      {sendPick?.studentSpecific === false && (
+                        <div style={{ marginTop: 4 }}>
+                          자녀가 둘인 학부모는 <b>한 번만</b> 셉니다. 그래서 학생 수보다 적을 수 있습니다.
+                        </div>
+                      )}
                     </div>
                   </div>
 
