@@ -121,6 +121,14 @@ export interface ReservationStatusLog {
   reason: string | null
   changedBy: number | null
   changedAt: string | null
+  /**
+   * 누가 바꿨나. ★ **`changedBy` 로는 못 가른다** — 공개 경로(학부모가 누른 버튼)와 배치가
+   *   둘 다 시스템 계정(0)으로 남는다. 학부모가 누른 것과 직원이 고친 것이 같아 보이면
+   *   「누가 이렇게 바꿨지」에 답할 수 없다(2026-10-22 서버가 축을 더했다).
+   */
+  actorType?: 'STUDENT' | 'STAFF' | null
+  /** 화면에 그대로 쓰는 말. 서버가 준 것을 쓴다 */
+  actorLabel?: string | null
 }
 
 export interface ReservationMemo {
@@ -194,6 +202,22 @@ export function changeReservationStatus(
     method: 'POST',
     body,
   })
+}
+
+/**
+ * 대기자에게 보낼 **공개 응답 링크**를 만든다 — `/waitlist/{token}`.
+ *
+ * ★ **같은 대상이면 같은 토큰**이다(서버가 기존 것을 돌려준다). 누를 때마다 새로 생기면
+ *   **이미 보낸 알림톡의 링크가 죽는다.**
+ * ★ 기한은 **서버가 정한다**(대기자는 7일). 화면이 보내지 않는다.
+ * ★ 학부모가 누르면 **상태가 바로 바뀐다** — 「등록하겠습니다」는 입학 확정, 「등록하지
+ *   않겠습니다」는 미등록이다. 그 변경은 이력에 `actorType: 'STUDENT'` 로 남는다.
+ */
+export function shareReservation(reservationId: number): Promise<{ token: string; expiresAt: string | null }> {
+  return request<{ token: string; expiresAt: string | null }>(
+    `/api/v1/admin/admission-reservations/${reservationId}/share`,
+    { method: 'POST' },
+  )
 }
 
 export function listStatusLogs(reservationId: number): Promise<ReservationStatusLog[]> {

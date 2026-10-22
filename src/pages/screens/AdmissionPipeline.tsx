@@ -18,6 +18,7 @@ import {
   listReservationMemos,
   listReservations,
   listStatusLogs,
+  shareReservation,
 } from '../../api/admissions'
 import type { ConvertGrade, ReservationRow, ReservationStatus } from '../../api/admissions'
 import { ApiError } from '../../api/client'
@@ -299,6 +300,28 @@ function Detail({
 
   const [convert, setConvert] = useState(false)
 
+  /* 등록 안내 링크. ★ 학부모가 누르면 **상태가 바로 바뀐다** — 전화를 받아 적는 일이 없어진다 */
+  const [link, setLink] = useState<string | null>(null)
+  const [linkErr, setLinkErr] = useState<string | null>(null)
+  const [linkBusy, setLinkBusy] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  async function makeLink() {
+    setLinkBusy(true)
+    setLinkErr(null)
+    setCopied(false)
+    try {
+      const { token } = await shareReservation(row.id)
+      /* 주소는 화면이 만든다 — 운영·로컬에서 도메인이 다르다 */
+      setLink(`${window.location.origin}/waitlist/${token}`)
+    } catch (e) {
+      /* ★ 404 를 서버 문장 그대로 띄우지 않는다 — 담당자가 할 수 있는 일이 없다 */
+      setLinkErr(e instanceof ApiError && e.status === 404 ? '등록 안내 링크는 준비 중입니다.' : why(e, '링크를 만들지 못했습니다.'))
+    } finally {
+      setLinkBusy(false)
+    }
+  }
+
   const d = detail.data
 
   async function submitStatus() {
@@ -548,6 +571,53 @@ function Detail({
           </div>
         </div>
 
+        {/* ★ 학부모에게 보내는 **등록 안내 링크**. 누르면 상태가 바로 바뀌어 이 화면에
+               반영된다 — 「등록하겠습니다」는 입학 확정, 「등록하지 않겠습니다」는 미등록 */}
+        <div className="frow">
+          <label>등록 안내 링크</label>
+          <div>
+            {link === null ? (
+              <>
+                <button className="btn" type="button" disabled={linkBusy} onClick={() => void makeLink()}>
+                  <Icon name="link" size={14} /> {linkBusy ? '만드는 중…' : '링크 만들기'}
+                </button>
+                <div className="hint">
+                  알림톡에 넣을 주소를 만듭니다. 학부모가 누른 답이 <b>상태에 바로 반영</b>됩니다.
+                </div>
+              </>
+            ) : (
+              <>
+                <input className="inp" readOnly value={link} onFocus={(e) => e.target.select()} />
+                <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(link)
+                        setCopied(true)
+                        window.setTimeout(() => setCopied(false), 1600)
+                      } catch {
+                        /* 클립보드 권한 거부 — 칸을 직접 복사하면 된다 */
+                      }
+                    }}
+                  >
+                    <Icon name={copied ? 'check' : 'clipboard-list'} size={14} />
+                    {copied ? '복사됨' : '복사'}
+                  </button>
+                  <a className="btn" href={link} target="_blank" rel="noreferrer">
+                    <Icon name="external-link" size={14} /> 열어보기
+                  </a>
+                </div>
+                <div className="hint">
+                  답은 <b>한 번만</b> 할 수 있습니다. 바꾸려면 전화를 받아 이 화면에서 고칩니다.
+                </div>
+              </>
+            )}
+            {linkErr !== null && <div className="hint" style={{ color: 'var(--red)' }}>{linkErr}</div>}
+          </div>
+        </div>
+
         <div className="frow">
           <label>상태 이력</label>
           <div>
@@ -557,7 +627,13 @@ function Detail({
               <div key={l.id} className="lead-meta">
                 {l.fromStatus ? RESERVATION_STATUS_LABEL[l.fromStatus] : '접수'} →{' '}
                 <b>{RESERVATION_STATUS_LABEL[l.toStatus]}</b>
-                {l.reason ? ` · ${l.reason}` : ''} <span className="mk">{dateOnly(l.changedAt)}</span>
+                {l.reason ? ` · ${l.reason}` : ''}{' '}
+                {/* ★ **학부모가 누른 것과 직원이 고친 것을 가른다.** 둘 다 시스템 계정으로
+                    남아 `changedBy` 로는 구분이 안 된다 — 서버가 준 말을 그대로 쓴다 */}
+                {l.actorLabel && (
+                  <span className={`mk ${l.actorType === 'STUDENT' ? 'supplement' : ''}`}>{l.actorLabel}</span>
+                )}{' '}
+                <span className="mk">{dateOnly(l.changedAt)}</span>
               </div>
             ))}
           </div>

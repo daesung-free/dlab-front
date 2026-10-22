@@ -97,6 +97,14 @@ export interface NotificationTemplate {
    * 축을 따로 보면 "왜 알림이 안 가지"를 못 짚으므로 화면은 이 값을 쓴다.
    */
   sendable: boolean
+  /**
+   * 학생 개인에 관한 알림인가. ★ **`false` 면 전원 공통 안내**다(급식 마감·등록기간).
+   *
+   * ⚠️ 공통 안내는 **학부모 한 분에게 한 통**이라, 자녀가 둘이면 목록에 한 번만 나온다 —
+   *   「대상 수」가 반 인원보다 적을 수 있고, 그걸 모르면 **빠진 것으로 읽힌다.**
+   * ⚠️ 반대로 **출결·미납은 자녀마다 한 통**이 맞다. 거기서 묶으면 한 자녀의 알림이 사라진다.
+   */
+  studentSpecific?: boolean
   /** 마지막으로 고친 시각·사람(2026-09-21 추가). 그 전에 고친 행은 사람이 null 이다 */
   updatedAt?: string | null
   updatedByName?: string | null
