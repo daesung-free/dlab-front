@@ -180,3 +180,25 @@ export function attachFileToNotice(fileId: number, noticeId: number): Promise<vo
     body: { ownerType: 'NOTICE', ownerId: noticeId },
   })
 }
+
+/* ── 공개 링크 (알림톡 「등록비 안내」 버튼이 여는 자리) ───────────────── */
+
+/**
+ * 공지를 로그인 없이 볼 수 있는 주소를 만든다 — `/notice/{token}`.
+ *
+ * ★ **공지 번호를 주소에 쓰지 않는다.** `/notice/37` 이면 38·39 로 바꿔 가며 **남의 반·
+ *   남의 학생에게만 보낸 공지까지** 읽힌다. 그래서 추측할 수 없는 토큰을 서버가 만든다.
+ * ★ **기한은 서버가 정한다.** 화면마다 다른 값을 보내면 「왜 이 링크만 일찍 닫혔나」를
+ *   나중에 추적할 수 없다(2026-10-22 서버와 합의).
+ * ★ **같은 공지를 또 누르면 같은 주소가 온다**(서버가 기존 것을 돌려준다). 누를 때마다
+ *   새 주소가 생기면 **이미 보낸 알림톡의 링크가 죽는다.**
+ */
+export interface NoticeShare {
+  token: string
+  /** ISO. `null` 이면 기한 없음 */
+  expiresAt: string | null
+}
+
+export function shareNotice(id: number): Promise<NoticeShare> {
+  return request<NoticeShare>(`/api/v1/admin/notices/${id}/share`, { method: 'POST' })
+}

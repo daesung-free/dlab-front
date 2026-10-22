@@ -20,6 +20,7 @@ import {
   attachFileToNotice,
   uploadNoticeFile,
   type Notice as ApiNotice,
+  shareNotice,
 } from '../../api/notices'
 import { MOCK_STUDENTS } from './mockStudents'
 import type { Mockup } from './types'
@@ -206,6 +207,10 @@ function Content() {
   const [saving, setSaving] = useState(false)
   /* 삭제는 되돌릴 수 없고 학생 앱에서도 빠진다 — 한 번 묻는다 */
   const [removing, setRemoving] = useState<ApiNotice | null>(null)
+  /* 공개 링크. ★ **주소를 화면이 조립한다** — 서버는 토큰만 준다. 운영·로컬에서 주소가
+     달라지므로 지금 열려 있는 곳을 기준으로 만든다(`window.location.origin`) */
+  const [sharing, setSharing] = useState<{ notice: ApiNotice; url: string | null; err: string | null }>()
+  const [copied, setCopied] = useState(false)
   /* '이번 주 공지' — 올해 전체 건수를 이번 주라고 써 두었었다. 월요일부터 센다 */
   const weekCount = useMemo(() => {
     const now = new Date()
@@ -373,6 +378,28 @@ function Content() {
     }
   }
 
+  /**
+   * 공개 링크 만들기.
+   *
+   * ★ **토큰만 서버가 준다. 주소는 화면이 만든다** — 운영·로컬에서 도메인이 다르다.
+   * ★ **같은 공지를 또 눌러도 같은 주소**가 온다(서버가 기존 것을 돌려준다). 누를 때마다
+   *   새로 생기면 **이미 보낸 알림톡의 링크가 죽는다.**
+   */
+  async function openShare(n: ApiNotice) {
+    setCopied(false)
+    setSharing({ notice: n, url: null, err: null })
+    try {
+      const { token } = await shareNotice(n.id)
+      setSharing({ notice: n, url: `${window.location.origin}/notice/${token}`, err: null })
+    } catch (err) {
+      setSharing({
+        notice: n,
+        url: null,
+        err: err instanceof ApiError ? err.message : '링크를 만들지 못했습니다.',
+      })
+    }
+  }
+
   async function remove(id: number) {
     try {
       await deleteNotice(id)
@@ -386,6 +413,60 @@ function Content() {
 
   return (
     <>
+      {sharing && (
+        <Modal
+          title="안내문 링크"
+          sub={sharing.notice.title}
+          confirmLabel="닫기"
+          hideCancel
+          error={sharing.err}
+          onConfirm={() => setSharing(undefined)}
+          onClose={() => setSharing(undefined)}
+        >
+          {sharing.url === null && sharing.err === null ? (
+            <div className="hint">링크를 만드는 중입니다.</div>
+          ) : sharing.url !== null ? (
+            <>
+              <div className="frow">
+                <label>주소</label>
+                <div>
+                  {/* 읽기만 하는 칸이다. 고치면 안 열리는 주소가 되므로 막는다 */}
+                  <input className="inp" readOnly value={sharing.url} onFocus={(e) => e.target.select()} />
+                  <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(sharing.url ?? '')
+                          setCopied(true)
+                          window.setTimeout(() => setCopied(false), 1600)
+                        } catch {
+                          /* 클립보드 권한 거부 — 칸을 직접 복사하면 된다 */
+                        }
+                      }}
+                    >
+                      <Icon name={copied ? 'check' : 'clipboard-list'} size={14} />
+                      {copied ? '복사됨' : '복사'}
+                    </button>
+                    <a className="btn" href={sharing.url} target="_blank" rel="noreferrer">
+                      <Icon name="external-link" size={14} /> 열어보기
+                    </a>
+                  </div>
+                </div>
+              </div>
+              {/* ★ 담당자가 알아야 하는 것만 쓴다 — 토큰·만료 같은 말은 쓰지 않는다 */}
+              <div className="note-box">
+                <div>
+                  이 주소를 아는 사람은 <b>로그인 없이</b> 이 공지를 볼 수 있습니다. 다른 공지는
+                  열리지 않습니다. 같은 공지는 몇 번을 눌러도 <b>같은 주소</b>입니다.
+                </div>
+              </div>
+            </>
+          ) : null}
+        </Modal>
+      )}
+
       {removing && (
         <Modal
           title={`'${removing.title}' 공지를 삭제할까요?`}
@@ -683,7 +764,8 @@ function Content() {
                   {
                     key: 'act',
                     header: '',
-                    width: '164px',
+                    /* ★ 버튼 수에 맞춘다(n*44+20). 좁으면 버튼이 세로로 눌린다 */
+                    width: '216px',
                     align: 'center',
                     value: () => '',
                     render: (r) => (
@@ -705,6 +787,16 @@ function Content() {
                             title="배너 노출"
                           >
                             {r.banner ? '배너 끄기' : '배너'}
+                          </button>
+                        )}
+                        {!teacherOnly && (
+                          <button
+                            className="btn"
+                            style={{ padding: '4px 8px', fontSize: 11 }}
+                            onClick={() => void openShare(r)}
+                            title="알림톡·문자에 넣을 주소를 만듭니다"
+                          >
+                            링크
                           </button>
                         )}
                         {!teacherOnly && (

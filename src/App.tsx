@@ -9,6 +9,7 @@ import { ScreenPage } from './pages/ScreenPage'
 import { InternalSpecRoutes } from './pages/internal/SpecRoutes'
 import { DoorPublic } from './pages/DoorPublic'
 import { PublicNotice } from './pages/PublicNotice'
+import { PublicWaitlist } from './pages/PublicWaitlist'
 
 export default function App() {
   return (
@@ -22,6 +23,8 @@ export default function App() {
       {/* 알림톡 「등록비 안내」 버튼이 여는 자리. 받는 사람이 학부모라 같은 이유로
           Gate 밖·AuthProvider 밖이다 */}
       <Route path="notice/:token" element={<PublicNotice />} />
+      {/* 대기자 안내톡의 [등록하겠습니다]·[등록하지 않겠습니다] 가 여는 자리 */}
+      <Route path="waitlist/:token" element={<PublicWaitlist />} />
       <Route path="*" element={<AdminApp />} />
     </Routes>
   )

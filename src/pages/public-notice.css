@@ -107,3 +107,77 @@
   margin-bottom: 10px;
   opacity: 0.6;
 }
+
+/* ── 대기자 응답 (/waitlist/:token) ─────────────────────────────────
+ * 같은 카드 위에 **고르는 자리**만 더한다.
+ * ★ 두 버튼을 같은 모양으로 둔다 — 되돌릴 수 없는 답이라 한쪽을 권하면 안 된다.
+ * ★ 손가락으로 누르는 화면이라 높이를 48px 로 둔다. 둘을 붙여 두면 잘못 누른다 — 간격을 준다. */
+
+.pw-btns {
+  display: flex;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.pw-btns-col {
+  flex-direction: column;
+}
+
+.pw-btn {
+  flex: 1 1 0;
+  min-height: 48px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pw-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* 확인 단계의 「보내기」만 채운다 — 여기서는 이미 무엇을 보내는지 읽은 뒤다 */
+.pw-btn-fill {
+  background: var(--mint-d);
+  border-color: var(--mint-d);
+  color: #fff;
+}
+
+.pw-confirm,
+.pw-done {
+  margin-top: 22px;
+  padding: 16px 14px;
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.pw-confirm-tt,
+.pw-done-sub {
+  font-size: 14px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  color: var(--ink-2);
+}
+
+.pw-done-tt {
+  font-size: 17px;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+
+.pw-confirm .pw-btns {
+  margin-top: 14px;
+}
+
+.pw-msg {
+  margin-top: 16px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--ink-2);
+  text-align: center;
+}
