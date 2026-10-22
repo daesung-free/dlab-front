@@ -59,6 +59,13 @@ export interface AdmissionResultRow {
   admissionType: AdmissionType
   universityName: string
   departmentName: string
+  /**
+   * 마스터 코드. ★ **`null` 이면 손으로 넣은 값이다** — 화면이 그걸로 「미등록」을 가른다.
+   * ⚠️ 코드가 생긴 2026-10-22 이전 데이터는 **이름이 마스터와 같아도 전부 `null`** 이다.
+   *   「서울대」·「서울대학교」·「서울대(관악)」 중 어느 것인지 서버가 단정할 수 없어 안 채웠다.
+   */
+  universityCode: string | null
+  departmentCode: string | null
   trackName: string | null
   result: AdmissionResult
   source: ResultSource
@@ -67,8 +74,16 @@ export interface AdmissionResultRow {
 
 export interface AdmissionResultInput {
   admissionType: AdmissionType
+  /** ★ **이름이 정본이다** — 마스터에 없는 대학도 저장돼야 한다(디랩 「추가 입력」 요청) */
   universityName: string
   departmentName: string
+  /**
+   * ★ **마스터에서 고른 것만 코드가 있다.** 손으로 넣었으면 `null` 을 **명시해서** 보낸다 —
+   *   키를 생략하면 수정 시 「유지」라, 대학을 마스터 밖 이름으로 바꿨는데 **앞 대학의 코드가
+   *   남는다.** 그러면 집계가 엉뚱한 대학으로 간다.
+   */
+  universityCode?: string | null
+  departmentCode?: string | null
   trackName?: string
   /** 비우면 발표 전(PENDING) */
   result?: AdmissionResult
