@@ -392,10 +392,18 @@ function Content() {
       const { token } = await shareNotice(n.id)
       setSharing({ notice: n, url: `${window.location.origin}/notice/${token}`, err: null })
     } catch (err) {
+      /* ★ **404 를 서버 문장 그대로 띄우지 않는다.** 「요청하신 경로를 찾을 수 없습니다」는
+         우리 사정이지 담당자가 할 수 있는 일이 아니다 — 고장으로 읽힌다(CLAUDE.md 1-1).
+         경로가 붙으면 이 분기는 저절로 안 탄다 */
+      const soon = err instanceof ApiError && err.status === 404
       setSharing({
         notice: n,
         url: null,
-        err: err instanceof ApiError ? err.message : '링크를 만들지 못했습니다.',
+        err: soon
+          ? '안내문 링크는 준비 중입니다.'
+          : err instanceof ApiError
+            ? err.message
+            : '링크를 만들지 못했습니다.',
       })
     }
   }
