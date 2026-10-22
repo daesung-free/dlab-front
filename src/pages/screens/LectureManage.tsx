@@ -885,16 +885,7 @@ function Content() {
         )
         return
       }
-      /* ⚠️ **대기 상한은 무제한으로 되돌릴 수 없다**(서버가 null 을 「유지」로 받는다).
-         비워서 저장했는데 값이 남아 있으면 **그 사실을 그대로 알린다** — 조용히 두면
-         담당자는 풀린 줄 안다 */
-      const after = await refreshDetail(detail.id)
-      if (editing.waitlistCapacity.trim() === '' && after?.waitlistCapacity != null) {
-        setDetailErr(
-          `대기 상한은 한 번 지정하면 해제할 수 없습니다. ${after.waitlistCapacity}명으로 유지됩니다. ` +
-            '대기를 받지 않으려면 0을 입력하세요.',
-        )
-      }
+      await refreshDetail(detail.id)
       setEditing(null)
     } catch (err) {
       /* 모달을 닫지 않는다 — 고친 값을 다시 치게 하면 안 된다 */
