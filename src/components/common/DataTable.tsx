@@ -1,5 +1,5 @@
 import { useMemo, useState, type CSSProperties } from 'react'
-import type { ReactNode } from 'react'
+import { Fragment, type ReactNode } from 'react'
 import { maskValue, type MaskKind } from '../../lib/mask'
 import { Icon } from '../Icon'
 import './data-table.css'
@@ -49,6 +49,14 @@ interface Props<T> {
   columns: Column<T>[]
   rows: T[]
   rowKey: (row: T) => string
+  /**
+   * 행을 펼쳐 상세를 보여준다 — 수납현황의 교습비·독서실비 두 줄(1016 피드백 1-4).
+   *
+   * ★ **옵션이다.** 안 주면 지금 모양 그대로다(46개 화면이 쓴다).
+   * ★ `undefined` 를 돌려주면 **그 행은 펼치기 단추도 안 그린다** — 나눌 것이 없는
+   *   청구(급식·특강)에 단추만 띄우면 눌러도 아무 일이 없는 것처럼 보인다.
+   */
+  renderExpanded?: (row: T) => ReactNode | undefined
   /** 체크박스 일괄선택 — 상벌점 '선택 일괄 점수부여' 같은 화면용 */
   selectable?: boolean
   selected?: string[]
@@ -96,6 +104,7 @@ export function DataTable<T>({
   columns,
   rows,
   rowKey,
+  renderExpanded,
   selectable = false,
   selected,
   onSelectedChange,
@@ -165,6 +174,9 @@ export function DataTable<T>({
 
   // 서버 페이징인데 서버 정렬을 안 받으면 정렬을 끈다(위 serverPaging 주석 참고)
   const sortEnabled = !serverPaging || serverPaging.onSortChange !== undefined
+
+  /* 펼친 행. **행 키로 들고 있다** — 인덱스로 들면 정렬·페이지 이동에 엉뚱한 행이 열린다 */
+  const [openRows, setOpenRows] = useState<string[]>([])
 
   const pageIds = pageRows.map(rowKey)
   const allChecked = pageIds.length > 0 && pageIds.every((id) => selected?.includes(id))
@@ -254,7 +266,10 @@ export function DataTable<T>({
             {pageRows.map((row) => {
               const id = rowKey(row)
               const checked = selected?.includes(id) ?? false
+              const detail = renderExpanded?.(row)
+              const open = openRows.includes(id)
               return (
+                <Fragment key={id}>
                 <tr
                   key={id}
                   className={[checked ? 'on' : '', onRowClick ? 'clickable' : ''].filter(Boolean).join(' ')}
@@ -269,21 +284,50 @@ export function DataTable<T>({
                       <input type="checkbox" checked={checked} onChange={() => toggleOne(id)} aria-label={`${id} 선택`} />
                     </td>
                   )}
-                  {columns.map((c) => {
+                  {columns.map((c, ci) => {
                     const shown = displayCell(c, row, masked)
                     return (
                       <td
                         key={c.key}
                         style={stickyStyle(c.key)}
-                        className={[stickyClass(c.key), c.align ? `al-${c.align}` : '', c.mask && masked ? 'masked' : '']
+                        className={[
+                          stickyClass(c.key),
+                          c.align ? `al-${c.align}` : '',
+                          c.mask && masked ? 'masked' : '',
+                          /* ★ 행 끝 동작 칸. **조회 전용 계정에서 이 칸의 버튼을 숨긴다** —
+                             수납·환불·삭제처럼 **바꾸는 것**만 여기 들어간다(검색·엑셀은
+                             표 밖이다). 화면마다 버튼을 찾아 표시하지 않아도 된다 */
+                          c.key === 'act' ? 'dt-act' : '',
+                        ]
                           .filter(Boolean)
                           .join(' ')}
                       >
+                        {/* 펼치기 단추를 **첫 칸 앞에** 붙인다. 열을 따로 만들면 46개 화면의
+                            폭 계산이 전부 어긋난다 */}
+                        {ci === 0 && detail !== undefined && (
+                          <button
+                            type="button"
+                            className="dt-exp"
+                            aria-label={open ? '접기' : '펼치기'}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setOpenRows((v) => (v.includes(id) ? v.filter((x) => x !== id) : [...v, id]))
+                            }}
+                          >
+                            <Icon name={open ? 'chevron-down' : 'chevron-right'} size={13} />
+                          </button>
+                        )}
                         {c.render ? c.render(row, shown) : shown}
                       </td>
                     )
                   })}
                 </tr>
+                {open && detail !== undefined && (
+                  <tr className="dt-exp-row">
+                    <td colSpan={columns.length + (selectable ? 1 : 0)}>{detail}</td>
+                  </tr>
+                )}
+                </Fragment>
               )
             })}
           </tbody>

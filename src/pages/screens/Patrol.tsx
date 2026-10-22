@@ -300,11 +300,15 @@ function Content() {
 
   const maxRow = seats.reduce((a, s) => Math.max(a, s.row), 0)
   const maxCol = seats.reduce((a, s) => Math.max(a, s.col), 0)
-  const half = Math.ceil(maxCol / 2)
-  const rows = useMemo(
-    () => Array.from({ length: maxRow }, (_, i) => seats.filter((s) => s.row === i + 1).sort((a, b) => a.col - b.col)),
-    [seats, maxRow],
-  )
+  /* ★ **좌표 그대로 찍는다**(1016 피드백 B-5·B-6, 좌석배치표와 같은 수정). 촘촘히 흘려
+     그리면 통로·기둥이 사라져 **순찰 중에 실제 자리와 다른 그림**을 보게 된다 */
+  const grid = useMemo(() => {
+    const at = new Map<string, Seat>()
+    for (const s of seats) at.set(`${s.row}:${s.col}`, s)
+    return Array.from({ length: maxRow }, (_, r) =>
+      Array.from({ length: maxCol }, (_, c) => at.get(`${r + 1}:${c + 1}`) ?? null),
+    )
+  }, [seats, maxRow, maxCol])
 
   /* ★ 화면에서 지운 것은 **저장으로 사라지지 않는다** — 서버가 학생 단위로만 덮어쓴다.
      말 안 해주면 담당자는 지워진 줄 알고 넘어가고, 새로고침하면 되살아난다 */
@@ -589,30 +593,23 @@ function Content() {
                 <div className="rr-stage">
                   <div className="rr-front">관리자 데스크 · 출입구</div>
                   <div className="rr-map">
-                    {rows.map((rowSeats, ri) => (
+                    {grid.map((rowCells, ri) => (
                       <div className="rr-row" key={ri}>
                         <span className="rr-rowno">{ri + 1}</span>
-                        {rowSeats.slice(0, half).map((s) => (
-                          <PatrolSeat
-                            key={s.seatId}
-                            seat={s}
-                            mark={markOf(s.enrollmentId)}
-                            label={labelOf}
-                            color={colorOf}
-                            onTap={tap}
-                          />
-                        ))}
-                        <span className="rr-aisle" />
-                        {rowSeats.slice(half).map((s) => (
-                          <PatrolSeat
-                            key={s.seatId}
-                            seat={s}
-                            mark={markOf(s.enrollmentId)}
-                            label={labelOf}
-                            color={colorOf}
-                            onTap={tap}
-                          />
-                        ))}
+                        {rowCells.map((s, ci) =>
+                          s === null ? (
+                            <span className="rr-gap" key={`g${ci}`} />
+                          ) : (
+                            <PatrolSeat
+                              key={s.seatId}
+                              seat={s}
+                              mark={markOf(s.enrollmentId)}
+                              label={labelOf}
+                              color={colorOf}
+                              onTap={tap}
+                            />
+                          ),
+                        )}
                       </div>
                     ))}
                   </div>

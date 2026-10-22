@@ -3,6 +3,12 @@ import { DataTable, Modal, PrintButton, useServerTable, type Column } from '../.
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { useAcademy } from '../../auth/AcademyContext'
+import {
+  searchUniversities,
+  searchDepartments,
+  type UniversityView,
+  type DepartmentView,
+} from '../../api/universities'
 import { ApiError } from '../../api/client'
 import { GRADE_LABEL, searchStudents, type Student } from '../../api/students'
 import {
@@ -206,6 +212,67 @@ function Content() {
       alive = false
     }
   }, [draft?.universityName, draft])
+
+  /* ★★ 대학·학과 마스터. **같은 대학이 다르게 입력되던 것**을 막는다
+   *   (「서울대」·「서울대학교」·「서울대(관악)」).
+   * ★ 학과는 **대학 코드로 좁힌다** — 학과코드가 여러 대학에서 공용이라 대학 없이는
+   *   유일하지 않다.
+   * ⚠️ **자유 입력을 막지 않는다.** 디랩이 「없는 대학/학과 추가 입력」을 요청했고,
+   *   첫 해에는 마스터에 없는 지원이 나온다. 목록은 **거드는 것**이지 가두는 것이 아니다. */
+  const [uniOpts, setUniOpts] = useState<UniversityView[]>([])
+  const [deptOpts, setDeptOpts] = useState<DepartmentView[]>([])
+
+  const uniTyped = draft?.universityName.trim() ?? ''
+  const deptTyped = draft?.departmentName.trim() ?? ''
+
+  /** 입력한 이름이 마스터의 어느 대학인가. 없으면 직접 입력이다 */
+  const pickedUni = uniOpts.find((u) => u.name === uniTyped) ?? null
+
+  /* ★ 2글자 이상부터 부른다 — 비우면 223개가 통째로 온다 */
+  useEffect(() => {
+    if (uniTyped.length < 2) {
+      setUniOpts([])
+      return
+    }
+    let alive = true
+    const t = setTimeout(() => {
+      searchUniversities(year, uniTyped)
+        .then((r) => alive && setUniOpts(r))
+        /* 마스터가 아직 비었거나 그 해 파일이 없을 수 있다 — 그때는 자유 입력으로 쓴다 */
+        .catch(() => alive && setUniOpts([]))
+    }, 250)
+    return () => {
+      alive = false
+      clearTimeout(t)
+    }
+  }, [uniTyped, year])
+
+  useEffect(() => {
+    if (pickedUni === null) {
+      setDeptOpts([])
+      return
+    }
+    let alive = true
+    const t = setTimeout(() => {
+      searchDepartments(pickedUni.code, year, deptTyped || undefined)
+        .then((r) => alive && setDeptOpts(r))
+        .catch(() => alive && setDeptOpts([]))
+    }, 250)
+    return () => {
+      alive = false
+      clearTimeout(t)
+    }
+  }, [pickedUni, deptTyped, year])
+
+  /* ★ 학과를 고르면 **계열을 채운다.** 따로 입력받지 않는다 — 서버가 학과와 함께 준다 */
+  useEffect(() => {
+    if (!draft) return
+    const hit = deptOpts.find((d) => d.name === deptTyped)
+    if (hit?.trackName && hit.trackName !== draft.trackName) {
+      setDraft({ ...draft, trackName: hit.trackName })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deptTyped, deptOpts])
 
   const used = (t: AdmissionType) => studentRows.filter((r) => r.admissionType === t).length
 
@@ -628,19 +695,39 @@ function Content() {
           <div className="frow">
             <label className="req">대학</label>
             <div>
-              {/* 자동완성은 이미 넣은 값에서 만든다 — 비어 있어도 직접 쓰면 된다 */}
+              {/* ★ 마스터를 먼저 보이고, 없으면 **이미 넣은 값**으로 거든다.
+                  둘 다 비어도 직접 쓰면 된다 — 자유 입력을 막지 않는다 */}
               <input
                 className="inp"
                 list="ar-uni"
                 maxLength={60}
                 value={draft.universityName}
-                onChange={(e) => setDraft({ ...draft, universityName: e.target.value })}
+                onChange={(e) =>
+                  /* ★ 대학이 바뀌면 **학과·계열을 비운다.** 안 비우면 앞 대학의 학과가
+                     남아 **그 대학에 없는 학과**로 저장된다 */
+                  setDraft({
+                    ...draft,
+                    universityName: e.target.value,
+                    departmentName: '',
+                    trackName: '',
+                  })
+                }
               />
               <datalist id="ar-uni">
-                {suggest.universities.map((u) => (
+                {(uniOpts.length > 0
+                  ? uniOpts.map((u) => u.name)
+                  : suggest.universities
+                ).map((u) => (
                   <option key={u} value={u} />
                 ))}
               </datalist>
+              <div className="hint">
+                {pickedUni !== null
+                  ? '대학 목록에서 선택했습니다. 학과를 고르면 계열이 자동으로 입력됩니다.'
+                  : uniTyped.length < 2
+                    ? '두 글자 이상 입력하면 대학 목록이 나옵니다. 목록에 없으면 직접 입력해도 됩니다.'
+                    : '대학 목록에 없는 이름입니다. 이대로 저장하면 직접 입력한 값으로 남습니다.'}
+              </div>
             </div>
           </div>
           <div className="frow">
@@ -654,22 +741,34 @@ function Content() {
                 onChange={(e) => setDraft({ ...draft, departmentName: e.target.value })}
               />
               <datalist id="ar-dept">
-                {suggest.departments.map((d) => (
+                {(deptOpts.length > 0
+                  ? deptOpts.map((d) => d.name)
+                  : suggest.departments
+                ).map((d) => (
                   <option key={d} value={d} />
                 ))}
               </datalist>
+              {pickedUni === null && (
+                <div className="hint">대학을 목록에서 선택하면 그 대학의 학과만 나옵니다.</div>
+              )}
             </div>
           </div>
           <div className="frow">
             <label>계열</label>
             <div>
+              {/* ★ 학과를 목록에서 고르면 **서버가 준 계열이 들어간다.** 그때는 손대지
+                  않게 막는다 — 고쳐 쓰면 통일하려고 만든 마스터가 무의미해진다 */}
               <input
                 className="inp"
                 maxLength={30}
                 placeholder="예: 메디컬"
+                readOnly={deptOpts.some((d) => d.name === deptTyped && d.trackName)}
                 value={draft.trackName}
                 onChange={(e) => setDraft({ ...draft, trackName: e.target.value })}
               />
+              {deptOpts.some((d) => d.name === deptTyped && d.trackName) && (
+                <div className="hint">선택한 학과의 계열이 자동으로 입력되었습니다.</div>
+              )}
             </div>
           </div>
           <div className="frow">

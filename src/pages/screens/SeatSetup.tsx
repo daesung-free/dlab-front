@@ -12,6 +12,7 @@ import {
   deleteBuilding,
   deleteSeatArea,
   deleteSeatMaster,
+  deleteSeatMasters,
   listBuildings,
   listSeatAreas,
   listSeatMasters,
@@ -76,6 +77,7 @@ export function SeatSetup({ onChanged }: Props) {
   const [modalError, setModalError] = useState<string | null>(null)
   /* 삭제는 한 번 묻는다 — 누르자마자 지워졌고, 좌석을 지우면 배치도에 구멍이 남는다 */
   const [delAsk, setDelAsk] = useState<{ title: string; sub: string; run: () => Promise<unknown> } | null>(null)
+
 
   const load = useCallback(async () => {
     if (academyId === null) {
@@ -195,7 +197,7 @@ export function SeatSetup({ onChanged }: Props) {
           }}
           onToggle={(b) => act(() => updateBuilding(b.id, { active: !b.active }))}
           onDelete={(b) =>
-            setDelAsk({ title: `${b.name} 을 삭제할까요?`, sub: '되돌릴 수 없습니다. 구역이 남아 있으면 지워지지 않습니다.', run: () => deleteBuilding(b.id) })
+            setDelAsk({ title: `${b.name}을 삭제할까요?`, sub: '삭제 후에는 되돌릴 수 없습니다. 하위 구역이 남아 있으면 삭제가 진행되지 않습니다.', run: () => deleteBuilding(b.id) })
           }
         />
       )}
@@ -212,7 +214,7 @@ export function SeatSetup({ onChanged }: Props) {
           }}
           onToggle={(a) => act(() => updateSeatArea(a.id, { active: !a.active }))}
           onDelete={(a) =>
-            setDelAsk({ title: `${a.buildingName} ${a.areaCd} 구역을 삭제할까요?`, sub: '되돌릴 수 없습니다. 좌석이 남아 있으면 지워지지 않습니다.', run: () => deleteSeatArea(a.id) })
+            setDelAsk({ title: `${a.buildingName} ${a.areaCd} 구역을 삭제할까요?`, sub: '삭제 후에는 되돌릴 수 없습니다. 좌석이 남아 있으면 삭제가 진행되지 않습니다.', run: () => deleteSeatArea(a.id) })
           }
         />
       )}
@@ -237,9 +239,14 @@ export function SeatSetup({ onChanged }: Props) {
           onDelete={(s) =>
             setDelAsk({
               title: `${s.seatCd} 좌석을 삭제할까요?`,
-              sub: '되돌릴 수 없습니다. 배치도에서 그 자리가 빈칸으로 남습니다.',
+              sub: '삭제 후에는 되돌릴 수 없습니다. 배치도에서 해당 자리는 빈칸으로 표시됩니다.',
               run: () => deleteSeatMaster(s.id),
             })
+          }
+          /* ★ 확인 모달은 **단건과 같은 것을 쓴다.** 일괄만 다른 길로 지우면
+             「되돌릴 수 없습니다」를 한쪽에서만 보게 된다 */
+          onBulkDelete={(title, sub, seatIds) =>
+            setDelAsk({ title, sub, run: () => deleteSeatMasters(areaId!, seatIds) })
           }
         />
       )}
@@ -347,7 +354,7 @@ function BuildingTab({
     {
       key: 'act',
       header: '',
-      width: '150px',
+      width: '152px',
       align: 'right',
       value: () => '',
       render: (b) => (
@@ -384,8 +391,8 @@ function BuildingTab({
             <Icon name="info" size={17} />
           </div>
           <div>
-            별관은 본관과 <b>같은 구역명·좌석번호</b>를 쓸 수 있습니다. 키오스크에 내려갈 때만 번호대가 밀립니다 —
-            데스크는 본래 번호로 보고 말하면 됩니다.
+            별관은 본관과 <b>같은 구역명·좌석번호</b>를 사용할 수 있습니다. 키오스크로 전송할 때만 번호대가
+            더해지며, 데스크 화면에는 본래 번호로 표시됩니다.
           </div>
         </div>
         <DataTable
@@ -432,7 +439,7 @@ function BuildingModal({
   return (
     <Modal
       title="관 등록"
-      sub="본관/별관을 나눕니다. 코드와 번호대는 등록 후 바꿀 수 없습니다."
+      sub="본관과 별관을 구분합니다. 코드와 번호대는 등록 후 수정할 수 없습니다."
       confirmLabel="등록"
       busy={busy}
       error={error}
@@ -452,10 +459,15 @@ function BuildingModal({
       </div>
       <div className="frow">
         <label className="req">구분</label>
-        <select className="sel" value={annex ? 'annex' : 'main'} onChange={(e) => setAnnex(e.target.value === 'annex')}>
-          <option value="main">본관 — 좌석번호를 그대로 내린다</option>
-          <option value="annex">별관 — 키오스크에는 번호대를 밀어 내린다</option>
-        </select>
+        <div>
+          <select className="sel" value={annex ? 'annex' : 'main'} onChange={(e) => setAnnex(e.target.value === 'annex')}>
+            <option value="main">본관</option>
+            <option value="annex">별관</option>
+          </select>
+          <div className="hint">
+            별관은 본관과 같은 좌석번호를 사용할 수 있습니다. 키오스크로 전송할 때만 번호대가 더해집니다.
+          </div>
+        </div>
       </div>
       {annex && (
         <>
@@ -466,7 +478,8 @@ function BuildingModal({
               type="number"
               value={offset}
               min={1000}
-              step={1000}
+              /* ⚠️ `step` 을 걸지 않는다. Modal 이 form 이라 배수가 아닌 값(1500)은
+                 **브라우저가 제출을 막는다** — 요청도 오류도 안 뜨고 「저장이 안 된다」로 보인다 */
               onChange={(e) => setOffset(Number(e.target.value))}
             />
           </div>
@@ -478,12 +491,12 @@ function BuildingModal({
               이 관의 <b>1번 좌석</b>이 키오스크에서 <b>{offset + 1}번</b>이 됩니다. 데스크 화면에는 계속 1번으로
               보입니다.
               <br />
-              1000 미만은 받지 않습니다 — 100이면 본관 101번과 곧바로 겹칩니다.
+              1000 미만은 입력할 수 없습니다 — 100이면 본관 101번과 번호가 겹칩니다.
               {taken && (
                 <>
                   <br />
                   <b style={{ color: 'var(--red)' }}>
-                    {taken.name}이(가) 쓰고 있는 번호대입니다. 다른 번호대를 쓰세요.
+                    {taken.name}이(가) 사용 중인 번호대입니다. 다른 번호대를 입력하세요.
                   </b>
                 </>
               )}
@@ -539,7 +552,7 @@ function AreaTab({
     {
       key: 'act',
       header: '',
-      width: '150px',
+      width: '152px',
       align: 'right',
       value: () => '',
       render: (a) => (
@@ -669,6 +682,7 @@ function SeatTab({
   onAdd,
   onPickSpot,
   onDelete,
+  onBulkDelete,
 }: {
   areas: SeatArea[]
   areaId: number | null
@@ -679,7 +693,17 @@ function SeatTab({
   onAdd: () => void
   onPickSpot: (xPos: number, yPos: number) => void
   onDelete: (s: SeatMaster) => void
+  /** `seatIds` 가 비면 그 구역 전체(= 초기화) */
+  onBulkDelete: (title: string, sub: string, seatIds: number[]) => void
 }) {
+  /* ★ 좌석 다중 선택(1016 피드백 B-4). `DataTable` 체크박스는 **제어 컴포넌트**라
+     `selected` 와 `onSelectedChange` 를 같이 줘야 눌린다(CLAUDE.md 5-1) */
+  const [picked, setPicked] = useState<string[]>([])
+
+  /* 구역을 옮기면 비운다 — 안 비우면 **다른 구역에서 고른 좌석이 일괄 삭제에 섞인다** */
+  useEffect(() => {
+    setPicked([])
+  }, [areaId])
   const columns: Column<SeatMaster>[] = [
     { key: 'seatCd', header: '좌석번호', width: '110px', value: (s) => s.seatCd },
     {
@@ -703,7 +727,7 @@ function SeatTab({
     {
       key: 'act',
       header: '',
-      width: '80px',
+      width: '196px',
       align: 'right',
       value: () => '',
       render: (s) => (
@@ -737,6 +761,40 @@ function SeatTab({
           <button type="button" className="btn pri" style={SMALL_BTN} disabled={areaId === null} onClick={onAdd}>
             격자로 만들기
           </button>
+          {/* ★ 일괄 삭제·초기화(B-4). 단건을 N번 부르면 92석 구역에서 **중간에 실패했을 때
+              절반만 지워진 배치도**가 남는다 — 무엇이 남았는지 사람이 찾을 수 없다 */}
+          <button
+            type="button"
+            className="btn"
+            style={{ ...SMALL_BTN, color: 'var(--red)' }}
+            disabled={picked.length === 0 || busy}
+            onClick={() => {
+              onBulkDelete(
+                `선택한 좌석 ${picked.length}개를 삭제할까요?`,
+                '삭제 후에는 되돌릴 수 없습니다. 선택한 좌석 중 배정된 좌석이 하나라도 있으면 삭제가 진행되지 않습니다.',
+                picked.map(Number),
+              )
+              setPicked([])
+            }}
+          >
+            선택 삭제{picked.length > 0 ? ` ${picked.length}` : ''}
+          </button>
+          <button
+            type="button"
+            className="btn"
+            style={{ ...SMALL_BTN, color: 'var(--red)' }}
+            disabled={areaId === null || seats.length === 0 || busy}
+            onClick={() => {
+              onBulkDelete(
+                `${area?.areaNm ?? '이 구역'}의 좌석 ${seats.length}개를 모두 삭제할까요?`,
+                '삭제 후에는 되돌릴 수 없습니다. 배정된 좌석이 하나라도 있으면 삭제가 진행되지 않습니다.',
+                [],
+              )
+              setPicked([])
+            }}
+          >
+            구역 초기화
+          </button>
         </div>
       </div>
       <div className="card-sec-b">
@@ -747,11 +805,11 @@ function SeatTab({
                 <Icon name="info" size={17} />
               </div>
               <div>
-                <b>빈 칸을 누르면 그 자리에 좌석을 만듭니다.</b> 잘못 지운 자리를 되돌릴 때 쓰세요 — 지웠던 번호를
-                그대로 넣으면 <b>그 좌석이 되살아나</b> 예전 배정 이력이 이어집니다.
+                빈칸을 누르면 좌석이 생성되고, 좌석을 누르면 삭제됩니다. 삭제한 좌석과 동일한 번호로 다시
+                생성하면 기존 배정 이력이 유지됩니다.
               </div>
             </div>
-            <SeatSpotMap seats={seats} busy={busy} onPickSpot={onPickSpot} />
+            <SeatSpotMap seats={seats} busy={busy} onPickSpot={onPickSpot} onRemoveSeat={onDelete} />
           </>
         )}
         <DataTable
@@ -759,6 +817,9 @@ function SeatTab({
           rows={seats}
           rowKey={(s) => String(s.id)}
           masked={false}
+          selectable
+          selected={picked}
+          onSelectedChange={setPicked}
           emptyText={areaId === null ? '구역을 먼저 등록하세요.' : '좌석이 없습니다. 격자로 만드세요.'}
         />
       </div>
@@ -781,10 +842,13 @@ function SeatSpotMap({
   seats,
   busy,
   onPickSpot,
+  onRemoveSeat,
 }: {
   seats: SeatMaster[]
   busy: boolean
   onPickSpot: (xPos: number, yPos: number) => void
+  /** ★ **토글이다**(1016 피드백 B-3) — 「만들어진 좌석을 눌러서 지우는 기능도 있었으면」 */
+  onRemoveSeat: (seat: SeatMaster) => void
 }) {
   const maxX = Math.max(...seats.map((s) => s.xPos))
   const maxY = Math.max(...seats.map((s) => s.yPos))
@@ -797,9 +861,18 @@ function SeatSpotMap({
       const seat = byPos.get(`${x}:${y}`)
       cells.push(
         seat ? (
-          <div key={x} className="sgp-cell taken" title={seat.seatNm ?? seat.seatCd}>
+          /* ★ 좌석도 **누르면 지운다**(B-3). 전에는 표까지 내려가 그 줄을 찾아야 했다 —
+             배치도에서 보고 있는데 지우는 자리가 다른 곳에 있으면 눈이 두 번 움직인다 */
+          <button
+            key={x}
+            type="button"
+            className="sgp-cell taken"
+            disabled={busy}
+            onClick={() => onRemoveSeat(seat)}
+            title={`${seat.seatNm ?? seat.seatCd} — 누르면 지웁니다`}
+          >
             {seat.seatCd}
-          </div>
+          </button>
         ) : (
           <button
             key={x}

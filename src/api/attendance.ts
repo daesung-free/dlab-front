@@ -35,7 +35,9 @@ export const ATTENDANCE_STATUS_LABEL: Record<AttendanceStatus, string> = {
   OUT: '외출',
   EARLY_LEAVE: '조퇴',
   /** ★ 아직 오지 않은 날. **결석과 반드시 구분해야 한다** — 미래 날짜를 조회하면 전원 이 값이다 */
-  NOT_YET: '예정',
+  /* ★ 「예정」이 아니다 — **미래 날짜라 아직 기록이 없는 것**이다(1021 피드백 2-9).
+     디랩이 「등원 예정을 말하는 것이냐」고 물어 왔다 */
+  NOT_YET: '기록 전',
 }
 
 export interface AttendanceRow {

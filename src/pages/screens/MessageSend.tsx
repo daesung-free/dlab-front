@@ -20,7 +20,8 @@ import {
 import { useAcademy } from '../../auth/AcademyContext'
 import { getNotificationSummary, type NotificationSummaryRow } from '../../api/notifications'
 import { createScreenSignal } from './screenSignal'
-import { MOCK_STUDENTS } from './mockStudents'
+import { searchStudents, type Student } from '../../api/students'
+import { listClasses, type ClassGroup } from '../../api/classes'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
 
@@ -81,15 +82,16 @@ function preview(body: string): string {
 /* ── 실연동 템플릿 컬럼. 목업 컬럼 구성을 그대로 따르고 서버에 없는 둘만 <Unfilled/> 다 ── */
 
 const API_TEMPLATE_COLUMNS: Column<NotificationTemplate>[] = [
+  /* ★ **이름을 앞에 둔다.** 전에는 `APPROVAL_APPROVED_BY_ADMIN` 같은 **개발자용 식별자**가
+     첫 열이었다 — 데스크가 읽을 값이 아니다. 코드는 뒤로 보내고 작게 쓴다(서버에 문의할
+     때 필요해서 지우지는 않는다). */
   {
-    key: 'event',
-    header: '코드',
+    key: 'name',
+    header: '템플릿명',
     width: '190px',
     sortable: true,
-    value: (r) => r.event,
-    render: (_r, v) => <code style={{ fontSize: 10.5 }}>{v}</code>,
+    value: (r) => EVENT_LABEL[r.event] ?? r.event,
   },
-  { key: 'name', header: '템플릿명', width: '140px', sortable: true, value: (r) => EVENT_LABEL[r.event] ?? r.event },
   {
     key: 'channel',
     header: '채널',
@@ -166,7 +168,16 @@ const API_TEMPLATE_COLUMNS: Column<NotificationTemplate>[] = [
     width: '80px',
     // 2026-09-21 이전에 고친 문구는 누가 고쳤는지 기록이 없다
     value: (r) => r.updatedByName ?? '-',
+  },  {
+    key: 'event',
+    header: '코드',
+    width: '186px',
+    sortable: true,
+    value: (r) => r.event,
+    /* 서버에 문의할 때 쓰는 값이라 남기되, 눈에 먼저 들어오지 않게 작게 */
+    render: (_r, v) => <code style={{ fontSize: 10, color: 'var(--muted)' }}>{v}</code>,
   },
+
 ]
 
 const REVIEW_TONE_BY_STATUS: Record<string, string> = {
@@ -262,11 +273,14 @@ const LOG_COLUMNS: Column<NotificationSummaryRow>[] = [
   },
 ]
 
+/* ★ **대상 수를 화면에 박아 두지 않는다.** 전에는 17·12·1 이 하드코딩돼 있어
+     지점을 바꿔도 숫자가 그대로였다 — 「값이 없는데 있는 척」이다(CLAUDE.md 5-1).
+     이제 `/students` 의 `totalElements` 를 그대로 쓴다. */
 const SCOPES = [
-  { key: 'ALL', label: '전체', desc: '본사 관리자만', count: MOCK_STUDENTS.length },
-  { key: 'BRANCH', label: '지점', desc: '지점 관리자', count: 17 },
-  { key: 'CLASS', label: '반', desc: '담임', count: 12 },
-  { key: 'INDIVIDUAL', label: '개별', desc: '전체 권한', count: 1 },
+  { key: 'ALL', label: '전체', desc: '본사 관리자만' },
+  { key: 'BRANCH', label: '지점', desc: '지점 관리자' },
+  { key: 'CLASS', label: '반', desc: '담임' },
+  { key: 'INDIVIDUAL', label: '개별', desc: '전체 권한' },
 ]
 
 function Content() {
@@ -283,6 +297,7 @@ function Content() {
   useEffect(() => {
     if (logSignal > 0) setTab('log')
   }, [logSignal])
+
 
   /* 발송 이력 탭 — 기본 30일. 기간을 안 좁히면 집계가 통째로 온다(페이징이 없다) */
   const [logFrom, setLogFrom] = useState(() => daysAgo(30))
@@ -306,7 +321,9 @@ function Content() {
   )
 
   /* 발송 탭 */
-  const [scope, setScope] = useState('CLASS')
+  /* ★ 기본을 **「지점」**으로 둔다. 「반」이면 들어오자마자 「반을 먼저 고르세요」만 보여
+     **화면이 빈 채로 열린다** — 전에는 가짜 숫자 12가 박혀 있어 그게 안 보였다 */
+  const [scope, setScope] = useState('BRANCH')
   const [reserve, setReserve] = useState(false)
 
   /* 템플릿 관리 탭 — 여기만 실연동이다 */
@@ -345,6 +362,20 @@ function Content() {
     void load()
   }, [load])
 
+  /* ★ 막힌 이유를 **세어서** 보여준다. 행마다 「안 나감」이 적혀 있어도
+     **몇 종이 왜 막혀 있는지**는 눈으로 세어야 알 수 있다 */
+  const blockedSummary = useMemo(() => {
+    const blocked = rows.filter((t) => !t.sendable)
+    return {
+      total: blocked.length,
+      noContent: blocked.filter((t) => !t.contentConfirmed).length,
+      noReview: blocked.filter((t) => t.reviewStatus === 'DRAFT').length,
+      /* 앱 푸시는 심사가 없다 — 문구만 오면 바로 돈다 */
+      pushReady: blocked.filter((t) => t.channel === 'FCM_PUSH' && !t.contentConfirmed).length,
+      missingAttendance: blocked.some((t) => t.event === 'MISSING_ATTENDANCE'),
+    }
+  }, [rows])
+
   const picked = rows.find((r) => r.id === pickedId) ?? null
 
   /* 목록을 다시 불러오면 편집 중이던 문구가 서버 값으로 덮이면 안 되므로,
@@ -382,7 +413,63 @@ function Content() {
     }
   }
 
-  const target = SCOPES.find((s) => s.key === scope)!
+  const scopeMeta = SCOPES.find((s) => s.key === scope)!
+
+  /* ★ **발송 대상을 지점 → 반 → 학생 3단계로 좁힌다**(디랩 9/28 요청, 1016 알림톡 3-1).
+     ★ 「전체」는 **본사 계정에서도 상단바에서 고른 지점**이다. 전 지점 발송은 사고가
+       너무 크다 — 정말 전 지점으로 보내려면 서버가 그 경로를 따로 줘야 한다.
+     ★ 숫자는 `totalElements` 를 그대로 쓴다. **화면이 세면 2페이지부터 틀린다.** */
+  const [pickedClassId, setPickedClassId] = useState<number | null>(null)
+  const [pickedStudents, setPickedStudents] = useState<string[]>([])
+  const [classes, setClasses] = useState<ClassGroup[]>([])
+
+  useEffect(() => {
+    if (academyId === null) {
+      setClasses([])
+      return
+    }
+    let alive = true
+    listClasses(undefined, academyId)
+      .then((c) => alive && setClasses(c))
+      .catch(() => alive && setClasses([]))
+    return () => {
+      alive = false
+    }
+  }, [academyId])
+
+  /* 지점을 바꾸면 고른 반·학생을 비운다 — 안 비우면 **남의 지점 반이 고른 채로 남는다** */
+  useEffect(() => {
+    setPickedClassId(null)
+    setPickedStudents([])
+  }, [academyId])
+
+  /* 범위를 바꿔도 비운다 — 「반」에서 고른 사람이 「개별」 발송에 섞이면 안 된다 */
+  useEffect(() => {
+    setPickedStudents([])
+    if (scope !== 'CLASS') setPickedClassId(null)
+  }, [scope])
+
+  const targetParams = useMemo(
+    () => ({
+      academyId: academyId ?? undefined,
+      status: 'ENROLLED' as const,
+      ...(scope === 'CLASS' && pickedClassId !== null ? { classId: pickedClassId } : {}),
+      size: 500,
+    }),
+    [academyId, scope, pickedClassId],
+  )
+  const targets = useServerData({
+    fetcher: searchStudents,
+    params: targetParams,
+    /* 반을 안 고른 「반」 범위는 **전 지점을 세게 되므로** 부르지 않는다 */
+    enabled: academyId !== null && (scope !== 'CLASS' || pickedClassId !== null),
+    errorMessage: '발송 대상을 불러오지 못했습니다.',
+  })
+  const targetRows: Student[] = targets.data?.rows ?? []
+  /* 개별은 **고른 사람 수**, 나머지는 **범위 안 전원** */
+  const targetCount =
+    scope === 'INDIVIDUAL' ? pickedStudents.length : (targets.data?.totalElements ?? targetRows.length)
+  const target = { ...scopeMeta, count: targetCount }
 
   /* ★ 드롭다운이 서버 템플릿이 됐으므로 **아래 미리보기도 그 값을 따라가야 한다.**
      따로 두면 「고른 것과 보이는 내용이 다른」 화면이 된다 */
@@ -433,7 +520,7 @@ function Content() {
       {codeInput && (
         <Modal
           title="카카오 템플릿 코드"
-          sub="카카오에 등록할 때 받은 코드를 그대로 넣으세요."
+          sub="카카오에 등록할 때 발급받은 코드를 그대로 입력하세요."
           confirmLabel="심사 제출"
           busy={busy}
           confirmDisabled={codeInput.code.trim() === ''}
@@ -602,6 +689,104 @@ function Content() {
                 </div>
               </div>
 
+              {/* ★ 2단계 — 반. 「반」 범위일 때만 묻는다 */}
+              {scope === 'CLASS' && (
+                <div className="frow">
+                  <label className="req">반</label>
+                  <div>
+                    <select
+                      className="sel"
+                      value={pickedClassId ?? ''}
+                      onChange={(e) => setPickedClassId(e.target.value === '' ? null : Number(e.target.value))}
+                    >
+                      <option value="">반 선택</option>
+                      {classes.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                    {classes.length === 0 && (
+                      <div className="hint">이 지점에 등록된 반이 없습니다.</div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ★ 3단계 — 학생. 「개별」일 때만. **한 명씩 고른 사람에게만** 나간다 */}
+              {scope === 'INDIVIDUAL' && (
+                <div className="frow">
+                  <label className="req">학생</label>
+                  <div>
+                    <div className="pick-list">
+                      {targets.loading ? (
+                        <div className="hint">불러오는 중…</div>
+                      ) : targetRows.length === 0 ? (
+                        <div className="hint">보낼 수 있는 학생이 없습니다.</div>
+                      ) : (
+                        targetRows.map((r) => {
+                          const key = String(r.enrollmentId)
+                          const on = pickedStudents.includes(key)
+                          return (
+                            <label key={key} className={`pick-row${on ? ' on' : ''}`}>
+                              <input
+                                type="checkbox"
+                                checked={on}
+                                onChange={(e) =>
+                                  setPickedStudents((v) =>
+                                    e.target.checked ? [...v, key] : v.filter((x) => x !== key),
+                                  )
+                                }
+                              />
+                              <span>
+                                {r.name} · {r.studentNo ?? '미배정'}
+                                {r.className ? ` · ${r.className}` : ''}
+                              </span>
+                            </label>
+                          )
+                        })
+                      )}
+                    </div>
+                    {targetRows.length > 0 && (
+                      <div className="hint">
+                        {pickedStudents.length}명 골랐습니다.
+                        {pickedStudents.length > 0 && (
+                          <button
+                            type="button"
+                            className="lnk"
+                            style={{ marginLeft: 8 }}
+                            onClick={() => setPickedStudents([])}
+                          >
+                            모두 해제
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ★ **누구에게 나가는지**를 숫자 하나로 말한다. 고르기 전에는 묻는다 */}
+              <div className="frow">
+                <label>발송 대상</label>
+                <div style={{ paddingTop: 9 }}>
+                  {scope === 'CLASS' && pickedClassId === null ? (
+                    <span style={{ fontSize: 12.5, color: 'var(--muted)' }}>반을 먼저 고르세요.</span>
+                  ) : targets.loading ? (
+                    <span style={{ fontSize: 12.5, color: 'var(--muted)' }}>세는 중…</span>
+                  ) : targets.error ? (
+                    <span style={{ fontSize: 12.5, color: 'var(--red)' }}>{targets.error}</span>
+                  ) : (
+                    <>
+                      <b style={{ fontSize: 15 }}>{target.count.toLocaleString()}명</b>
+                      <span style={{ fontSize: 12, color: 'var(--muted)', marginLeft: 8 }}>
+                        재원 중인 학생만 셉니다.
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+
               {/* ★ 전에는 **화면에 박아 둔 예시 8개**를 띄우고 있었다. 디랩이 그걸 실제 기능으로
                      읽고 「초안 6개 말고 더 있는 것 같다」고 문의했다 — **없는 것을 있는 것처럼**
                      보여준 셈이다. 서버 템플릿(「템플릿 관리」 탭과 같은 값)으로 바꾼다 */}
@@ -613,7 +798,7 @@ function Content() {
                     value={pickedId ?? ''}
                     onChange={(e) => setPickedId(e.target.value === '' ? null : Number(e.target.value))}
                   >
-                    <option value="">템플릿을 고르세요</option>
+                    <option value="">템플릿 선택</option>
                     {rows.map((t) => (
                       <option key={t.id} value={t.id}>
                         {EVENT_LABEL[t.event] ?? t.event} · {CHANNEL_LABEL[t.channel] ?? t.channel}
@@ -697,15 +882,24 @@ function Content() {
               <div className="frow">
                 <label>&nbsp;</label>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  {/* 이 탭은 예시다 — 발송 업체가 붙기 전까지 눌러도 나가는 게 없다 */}
+                  {/* ★ **발송 경로가 아직 서버에 없다**(API_GAPS 15부). 템플릿은 전부 이벤트
+                      트리거라 「수동 발송」이라는 것이 서버에 없다 — 대상 고르기까지만 만들어 두고
+                      경로가 생기면 여기에 잇는다. 「준비 중」으로 막아 **눌러도 아무 일이 없는
+                      버튼**이 되지 않게 한다 */}
                   <button className="btn pri" disabled data-soon title="준비 중입니다">
                     <Icon name="send" size={14} /> {target.count.toLocaleString()}명에게 발송
                   </button>
                   <button className="btn" disabled data-soon title="준비 중입니다">테스트 발송</button>
-                  {blocked && (
+                  {blocked ? (
                     <span style={{ fontSize: 11.5, color: 'var(--red)', fontWeight: 700 }}>
                       {sendPick ? '아직 발송할 수 있는 상태가 아닙니다' : '템플릿을 먼저 고르세요'}
                     </span>
+                  ) : (
+                    target.count === 0 && (
+                      <span style={{ fontSize: 11.5, color: 'var(--red)', fontWeight: 700 }}>
+                        {scope === 'INDIVIDUAL' ? '학생을 고르세요' : '보낼 대상이 없습니다'}
+                      </span>
+                    )
                   )}
                 </div>
               </div>
@@ -770,6 +964,45 @@ function Content() {
             {loadError && (
               <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
                 {loadError}
+              </div>
+            )}
+            {/* ★★ **하나도 안 나가고 있는데 표만 보면 모른다.** 행마다 「안 나감」이
+                적혀 있어도 **몇 종이 왜 막혀 있는지**는 세어 봐야 안다.
+                ★ 특히 **미등원 안내**가 막혀 있으면 **무단결석 학부모에게 아무 연락도
+                  가지 않는다** — SMS 폴백도 폐기돼 대체 경로가 없다(E-5). 따로 띄운다. */}
+            {rows.length > 0 && blockedSummary.total > 0 && (
+              <div className="note-box risk">
+                <div className="ic">
+                  <Icon name="triangle-alert" size={17} />
+                </div>
+                <div>
+                  <div className="tt">{blockedSummary.total}종이 나가지 않습니다</div>
+                  <div className="tx">
+                    {blockedSummary.noContent > 0 && (
+                      <>
+                        문구가 아직 안 들어온 것 <b>{blockedSummary.noContent}종</b>
+                        {blockedSummary.noReview > 0 && ' · '}
+                      </>
+                    )}
+                    {blockedSummary.noReview > 0 && (
+                      <>
+                        카카오 심사를 안 받은 것 <b>{blockedSummary.noReview}종</b>
+                      </>
+                    )}
+                    {blockedSummary.pushReady > 0 && (
+                      <div style={{ marginTop: 4 }}>
+                        이 중 <b>앱 푸시 {blockedSummary.pushReady}종</b>은 심사가 없어 <b>문구만 들어오면</b>{' '}
+                        바로 나갑니다.
+                      </div>
+                    )}
+                    {blockedSummary.missingAttendance && (
+                      <div style={{ marginTop: 6, fontWeight: 700 }}>
+                        ⚠️ 미등원 안내가 막혀 있습니다 — 지금은 무단결석 학부모에게 아무 연락도 가지
+                        않습니다.
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
             <DataTable

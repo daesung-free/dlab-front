@@ -408,7 +408,7 @@ function EnrollForm() {
                     value={next.classId}
                     onChange={(e) => setNext((n) => ({ ...n, classId: e.target.value }))}
                   >
-                    <option value="">반을 고르세요</option>
+                    <option value="">반 선택</option>
                     {/* ★ **시험용 반 번호가 없는 반은 고를 수 없다.** 학번을 만들 앞자리가 없어
                            서버가 400 으로 막는다 — 고를 수 있게 두면 **눌러 보고서야** 안다 */}
                     {classes.map((c) => (
@@ -473,7 +473,7 @@ function EnrollForm() {
                     value={next.seatId}
                     onChange={(e) => setNext((n) => ({ ...n, seatId: e.target.value }))}
                   >
-                    <option value="">{next.areaId === '' ? '구역을 먼저 고르세요' : '빈 좌석을 고르세요'}</option>
+                    <option value="">{next.areaId === '' ? '구역 먼저 선택' : '좌석 선택'}</option>
                     {/* ★ **빈 좌석만** 낸다 — 찬 자리를 고르면 서버가 거절한다 */}
                     {seats
                       .filter((x) => x.enrollmentId === null)
@@ -844,7 +844,7 @@ function SignupApproval() {
       {
         key: 'act',
         header: '',
-        width: '90px',
+        width: '108px',
         align: 'center',
         value: () => '',
         /* ★ 여기에 OT 버튼을 같이 두지 않는다. 승인 전 OT 는 403 이고, 승인하면 이 행이

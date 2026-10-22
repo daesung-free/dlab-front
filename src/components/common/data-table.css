@@ -97,3 +97,42 @@
 .dt tbody tr.on .stk { background: var(--mint-wash); }
 /* 마지막 고정 칸 오른쪽에 그림자 — 여기서부터 밀린다는 표시 */
 .dt .stk-last { box-shadow: 6px 0 6px -6px rgba(15, 23, 42, 0.18); }
+
+/* 행 펼치기 (1016 피드백 1-4 — 수납현황의 교습비·독서실비 두 줄)
+ *
+ * ★ 단추를 **첫 칸 안에** 넣는다. 열을 따로 만들면 46개 화면의 폭 계산이 전부 어긋난다.
+ */
+
+.dt-exp {
+  background: none;
+  border: 0;
+  padding: 0 4px 0 0;
+  margin-right: 2px;
+  cursor: pointer;
+  color: var(--muted);
+  vertical-align: middle;
+  line-height: 1;
+}
+
+.dt-exp:hover {
+  color: var(--mint);
+}
+
+/* 펼쳐진 줄 — 본문과 **다른 바탕**이라야 어느 행에 딸린 것인지 보인다 */
+.dt-exp-row > td {
+  background: var(--bg-2, #fafbfc);
+  padding: 10px 14px;
+}
+
+/* ── 행 끝 동작 칸 ────────────────────────────────────────
+ *
+ * ★ **버튼 글자만 안 쪼개지게 한다.** 좁은 칸에서 브라우저가 「삭 / 제」처럼 글자를
+ *   세로로 쪼개던 것을 막는다.
+ * ⚠️ **칸 전체에 `nowrap` 을 걸지 않는다.** 칸이 내용만큼 넓어져 **표가 오른쪽으로
+ *   잘린다**(수납현황 94 → 269px). 줄바꿈을 허용해도 **버튼이 아래로 쌓인다.**
+ *   둘 다 해 보고 되돌렸다 — **열 폭을 화면마다 맞추는 것**이 답이다.
+ */
+.dt-act .btn {
+  white-space: nowrap;
+  flex: 0 0 auto;
+}

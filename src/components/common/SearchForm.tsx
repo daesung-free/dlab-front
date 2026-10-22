@@ -349,7 +349,9 @@ export function SearchForm({ fields, onSearch, presetKey, headerRight, initial }
           <button type="button" className="btn" onClick={reset}>
             초기화
           </button>
-          <button type="submit" className="btn pri">
+          {/* ★ **조회 전용 계정에서도 남아야 한다.** 검색은 읽기인데 주 동작 버튼이라
+              조회 전용 가드에 같이 걸린다 — 숨기면 **조회 전용이 조회를 못 한다** */}
+          <button type="submit" className="btn pri" data-allow-readonly="true">
             <Icon name="search" size={14} /> 검색
           </button>
         </div>

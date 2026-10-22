@@ -7,7 +7,6 @@ import { useAcademy } from '../../auth/AcademyContext'
 import { GRADE_LABEL } from '../../api/students'
 import type { GradeType } from '../../api/students'
 import {
-  PAYMENT_METHOD_LABEL,
   createBillingStandard,
   updateBillingStandard,
   deleteBillingStandard,
@@ -108,20 +107,9 @@ function standardColumns(
           </span>
         ),
     },
-    {
-      key: 'paymentMethod',
-      header: '결제 경로',
-      width: '104px',
-      align: 'center',
-      sortable: true,
-      value: (r) => (r.paymentMethod ? PAYMENT_METHOD_LABEL[r.paymentMethod] : '-'),
-      render: (r, shown) =>
-        r.paymentMethod === null ? (
-          <span style={{ color: 'var(--muted)' }}>-</span>
-        ) : (
-          <span className="mk verified" title={r.paymentMethod}>{shown}</span>
-        ),
-    },
+    /* ★ 결제 경로 칸을 **화면에서만** 뺐다(1021 피드백 1-4). 디랩이 쓰지 않는 값이다.
+       ⚠️ **서버 컬럼(`BillingStandard.paymentMethod`)은 지우지 않는다** — 전년도 기준 복사와
+       연도 스냅샷이 이 값을 옮기고 있어 지우면 두 곳이 깨진다. 화면에서 빼고 입력만 막는다 */
     { key: 'dueDesc', header: '청구일', width: '100px', align: 'center', value: (r) => r.dueDesc ?? '-' },
     {
       key: 'active',
@@ -180,17 +168,13 @@ function standardColumns(
 }
 
 /*
- * 단가표의 결제 채널 · 납기 — 단가표 행에는 없고 **교습비 청구 기준**(itemType TUITION)에 있다
- * (paymentMethod · dueDesc). 단가표는 학년 × 좌석 금액표라 청구 방법은 교습비 기준 하나를 따른다.
+ * 단가표의 납기 — 단가표 행에는 없고 **교습비 청구 기준**(itemType TUITION)의 `dueDesc` 에 있다.
+ * 단가표는 학년 × 좌석 금액표라 납기는 교습비 기준 하나를 따른다.
  * 교습비 기준이 없으면 '-' — 청구 기준 탭에서 등록하면 채워진다.
  */
 function priceColumns(tuition: BillingStandard | undefined): Column<TuitionPrice>[] {
   return PRICE_COLUMNS.map((c) =>
-    c.key === 'pg'
-      ? { ...c, value: () => (tuition?.paymentMethod ? PAYMENT_METHOD_LABEL[tuition.paymentMethod] : '-'), render: undefined }
-      : c.key === 'dueDay'
-        ? { ...c, value: () => tuition?.dueDesc ?? '-', render: undefined }
-        : c,
+    c.key === 'dueDay' ? { ...c, value: () => tuition?.dueDesc ?? '-', render: undefined } : c,
   )
 }
 
@@ -239,14 +223,6 @@ const PRICE_COLUMNS: Column<TuitionPrice>[] = [
     render: (r) => (
       <b>{r.monthlyTotal.toLocaleString()}원</b>
     ),
-  },
-  {
-    key: 'pg',
-    header: '결제 채널',
-    width: '110px',
-    align: 'center',
-    value: () => '',
-    render: () => <Unfilled reason="결제 채널이 청구 기준에 없다" />,
   },
   {
     key: 'dueDay',
@@ -424,6 +400,8 @@ function Content() {
       amountSource: r.amountSource,
       amount: r.amount == null ? '' : String(r.amount),
       dueDesc: r.dueDesc ?? '',
+      /* ★ 화면에서 뺀 값이지만 **그대로 되돌려 보낸다.** 안 보내면 서버가 null 로 덮어
+         전년도 복사·연도 스냅샷이 옮기던 값이 사라진다(1021 피드백 1-4) */
       paymentMethod: r.paymentMethod ?? '',
       memo: r.memo ?? '',
     })
@@ -765,21 +743,11 @@ function Content() {
             />
           </div>
 
-          <div className="frow">
-            <label>결제 수단</label>
-            <select
-              className="sel"
-              value={newStd.paymentMethod}
-              onChange={(e) => setNewStd({ ...newStd, paymentMethod: e.target.value as PaymentMethod | '' })}
-            >
-              <option value="">선택 안 함</option>
-              {(Object.keys(PAYMENT_METHOD_LABEL) as PaymentMethod[]).map((k) => (
-                <option key={k} value={k}>
-                  {PAYMENT_METHOD_LABEL[k]}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* ★ 결제 수단 칸을 **뺐다**(1021 피드백 1-4 — 「화면에서 뺀다」로 회신).
+                 **아무것도 막지 않는 값**이었다. 결제 시점에 검사하는 코드가 서버에 없어
+                 카드로 설정한 청구를 가상계좌로 받아도 통과했다(2026-10-16 확인).
+              ⚠️ **서버 컬럼은 지우지 않는다** — 전년도 기준 복사와 연도 스냅샷이 이 값을
+                 옮기고 있어 지우면 두 곳이 깨진다. 보내지 않으면 서버가 null 로 둔다 */}
 
           <div className="frow">
             <label>메모</label>
@@ -880,7 +848,7 @@ function Content() {
       {monthEdit && (
         <Modal
           title={`${year}년 ${monthEdit.mo}월 교습일수`}
-          sub="달력 일수가 아니라 실제 수업한 날수입니다. 학원이 아는 값을 그대로 넣으세요."
+          sub="달력 일수가 아니라 실제 수업일수입니다. 학원이 관리하는 값을 그대로 입력하세요."
           confirmLabel="저장"
           busy={busy}
           error={monthErr}

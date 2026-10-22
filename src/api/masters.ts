@@ -299,6 +299,23 @@ export interface ScholarshipItem {
   enrollmentId: number
   /** 마스터의 code 다 — 이름이 아니라 코드로 잇는다 */
   scholarshipType: string
+  /**
+   * 사람이 읽는 이름(2026-10-20 추가).
+   *
+   * ★ **화면에서 코드→이름을 만들지 않는다.** 화면마다 다르게 만들면 매출장·취소 판정·
+   *   청구 근거가 **서로 다른 이름**을 보게 된다. 청구의 `discountSource` 에도 이 값을
+   *   그대로 넘긴다.
+   * ★ 마스터에 없으면 **코드를 그대로** 내린다(`LEGACY_70`). 빈 값은 아니다.
+   */
+  displayName?: string
+  /**
+   * 마스터에 등록된 코드인가.
+   *
+   * ★★ **`false` 면 취소 판정이 그 학생을 조용히 건너뛴다.** 규칙이 `scholarship_type`
+   *   **문자열 일치**로 걸리기 때문이다 — 오류도 안 나고 검토 목록에도 안 뜬다.
+   *   과거 데이터나 마스터 정비 전 부여분이 그 모양일 수 있어 **화면이 알려야 한다.**
+   */
+  registered?: boolean
   discountRate: number
 }
 

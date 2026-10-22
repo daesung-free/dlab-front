@@ -27,6 +27,8 @@ import {
   setMealOrderWindow,
   cancelMealOrderItem,
   getMealDailyRoster,
+  issueMealBillingsMonthly,
+  type MealBillingResult,
   type MealDailyRoster,
   type MealRosterRow,
   type MealClosure,
@@ -38,6 +40,7 @@ import { studentNoText } from '../../lib/studentNo'
 import { MOCK_STUDENTS } from './mockStudents'
 import type { Mockup } from './types'
 import { createScreenSignal } from './screenSignal'
+import '../../styles/forms.css'
 import './meal.css'
 
 /** 일자별 명단 컬럼. **좌석번호까지 낸다** — 배식대에서 자리로 찾는다 */
@@ -130,8 +133,38 @@ const ORDER_COLUMNS: Column<MealOrder>[] = [
     width: '104px',
     align: 'right',
     sortable: true,
-    value: (r) => r.amount,
-    render: (r) => won(r.amount),
+    /* ★ **`null` 은 0원이 아니라 「금액을 모른다」**다 — 단가가 등록되지 않은 끼니가 있다.
+       0 으로 그리면 데스크가 **무료로 읽고**, 손써야 할 것이 청구 발행 때까지 안 보인다 */
+    value: (r) => r.amount ?? '',
+    render: (r) =>
+      r.amount === null ? (
+        <span style={{ color: 'var(--red)', fontWeight: 600 }} title="급식업체 단가를 먼저 등록해야 청구할 수 있습니다">
+          단가 미등록
+        </span>
+      ) : (
+        won(r.amount)
+      ),
+  },
+  {
+    /* ★ 청구가 **발행됐는지**를 목록에서 본다(1016 피드백 1-3). 전에는 칸이 없어
+       「이 달 청구 발행」을 눌러 봐야 알 수 있었다.
+       ★ **취소된 청구도 번호가 남는다**(이력이다). 상태를 같이 보여주지 않으면
+       「이미 발행됨」으로 읽어 **왜 또 발행되는지** 모른다 */
+    key: 'billing',
+    header: '청구',
+    width: '110px',
+    align: 'center',
+    value: (r) => (r.billingId === null ? '미발행' : r.billingStatus === 'CANCELLED' ? '취소됨' : '발행됨'),
+    render: (r) =>
+      r.billingId === null ? (
+        <span style={{ color: 'var(--muted)' }}>미발행</span>
+      ) : r.billingStatus === 'CANCELLED' ? (
+        <span className="mk supplement" title="청구가 취소됐습니다. 다시 발행할 수 있습니다">
+          취소됨
+        </span>
+      ) : (
+        <span className="mk verified">발행됨</span>
+      ),
   },
   {
     key: 'status',
@@ -373,6 +406,31 @@ function Content() {
     if (tab === 'roster') void loadRoster()
   }, [tab, loadRoster])
   const [masked, setMasked] = useState(true)
+
+  /* ── 급식비 청구 발행(1016 피드백 1-3) ─────────────────────
+   * ⚠️ **`skipped` 를 반드시 보여준다.** 발행 건수만 보면 빠진 사람이 안 보이는데,
+   *   사유마다 **조치가 다르다** — 「이미 발행」은 그냥 두면 되지만 **「단가 미등록」은
+   *   손을 쓰지 않으면 그 학생 급식비가 영영 청구되지 않는다.** */
+  const [billBusy, setBillBusy] = useState(false)
+  /* ★ **납기일을 비우고 발행하면 통합 매출장에서 기간으로 좁힐 때 안 보인다**
+     (`dueDate IS NULL` 이라 기간 필터에 안 걸린다 — 2026-10-16 서버 확인).
+     기본값을 그 달 말일로 채워 둔다 — 비워 두는 쪽이 기본이면 매번 안 보이는 청구가 생긴다 */
+  const [billDue, setBillDue] = useState('')
+  const [billResult, setBillResult] = useState<MealBillingResult | null>(null)
+  const [billErr, setBillErr] = useState<string | null>(null)
+
+  async function issueMonthBillings() {
+    if (academyId === null) return
+    setBillBusy(true)
+    setBillErr(null)
+    try {
+      setBillResult(await issueMealBillingsMonthly(academyId, month, billDue || undefined))
+    } catch (err) {
+      setBillErr(err instanceof ApiError ? err.message : '청구를 발행하지 못했습니다.')
+    } finally {
+      setBillBusy(false)
+    }
+  }
   const [reason, setReason] = useState(CLOSURE_REASONS[0])
   const [deadlineDays, setDeadlineDays] = useState(3)
   /* 월 접수 기간. **이 기간 밖에는 앱에서 다음 달 신청 화면이 열리지 않는다** —
@@ -385,6 +443,15 @@ function Content() {
   const [win, setWin] = useState<{ from: string; to: string }>({ from: '', to: '' })
   const [savedWin, setSavedWin] = useState<{ from: string; to: string }>({ from: '', to: '' })
   const [month, setMonth] = useState(thisMonth())
+
+  /* 달이 바뀌면 납기일을 그 달 말일로 다시 채운다 */
+  useEffect(() => {
+    const [y, m] = month.split('-').map(Number)
+    if (!y || !m) return
+    const last = new Date(y, m, 0).getDate()
+    setBillDue(`${month}-${String(last).padStart(2, '0')}`)
+  }, [month])
+
   /* 헤더 '기간 선택' — 이번 달·지난 달·다음 달을 한 번에. 본문 월 칸과 같은 값을 쓴다 */
   const monthVer = monthSignal.useVersion()
   useEffect(() => {
@@ -576,7 +643,10 @@ function Content() {
       pending: orders.filter((o) => o.status === 'PENDING' || o.status === 'ISSUED').length,
       canceled: orders.filter((o) => o.status === 'CANCELLED' || o.status === 'REFUNDED').length,
       expired: orders.filter((o) => o.status === 'EXPIRED').length,
-      revenue: paid.reduce((a, o) => a + o.amount, 0),
+      /* 금액을 모르는 주문은 **0으로 더하지 않는다** — 0으로 치면 합계가 조용히 모자란다.
+         몇 건이 빠졌는지는 아래 `unpriced` 로 함께 보여준다 */
+      revenue: paid.reduce((a, o) => a + (o.amount ?? 0), 0),
+      unpriced: orders.filter((o) => o.amount === null).length,
     }
   }, [orders])
 
@@ -669,7 +739,13 @@ function Content() {
           <div className="v" style={{ color: 'var(--green)' }}>
             {stats.paid}
           </div>
-          <div className="d up">{stats.revenue.toLocaleString()}원</div>
+          <div className="d up">
+            {stats.revenue.toLocaleString()}원
+            {/* ★ 금액을 모르는 주문은 안 더했다. **안 적으면 합계가 조용히 모자란다** */}
+            {stats.unpriced > 0 && (
+              <span style={{ color: 'var(--red)', marginLeft: 6 }}>· 단가 미등록 {stats.unpriced}건 제외</span>
+            )}
+          </div>
         </div>
         <div className="stat">
           <div className="l">
@@ -1326,6 +1402,35 @@ function Content() {
         {/* ═══ 결제 · 취소 내역 ═══ */}
         {tab === 'orders' && (
           <div style={{ padding: 14 }}>
+            {/* ★ **이게 없어서 급식비가 통합 매출장에 안 들어오고 있었다**(1016 피드백 1-3).
+                서버에 로직은 다 있었는데 컨트롤러에 안 붙어 있었다 — 2026-10-16 에 열렸다.
+                ★ 두 번 눌러도 안전하다. 이미 발행된 주문은 건너뛴다 */}
+            <div className="frow" style={{ marginBottom: 12 }}>
+              <label>급식비 청구</label>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <button
+                  className="btn pri"
+                  disabled={academyId === null || billBusy || orders.length === 0}
+                  title={orders.length === 0 ? '이 달 주문이 없습니다' : undefined}
+                  onClick={() => void issueMonthBillings()}
+                >
+                  <Icon name="receipt" size={14} /> {billBusy ? '발행 중…' : `${month} 청구 발행`}
+                </button>
+                <label style={{ fontSize: 11.5, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  납기일
+                  <input
+                    className="inp"
+                    type="date"
+                    style={{ width: 150 }}
+                    value={billDue}
+                    onChange={(e) => setBillDue(e.target.value)}
+                  />
+                </label>
+                <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>
+                  발행 시 수납현황의 통합 매출장에 반영됩니다. 이미 발행된 주문은 발행 대상에서 제외됩니다.
+                </span>
+              </div>
+            </div>
             <DataTable
               columns={orderColumns}
               rows={orders}
@@ -1405,6 +1510,79 @@ function Content() {
 
       {/* ★ 취소하면 **되살릴 수 없다** — 다시 신청해야 한다. 그래서 누구의 어느 끼니인지
              그대로 보여주고 확인받는다 */}
+      {(billResult || billErr) && (
+        <Modal
+          wide
+          title="급식비 청구 발행 결과"
+          confirmLabel="닫기"
+          error={billErr}
+          onConfirm={() => {
+            setBillResult(null)
+            setBillErr(null)
+          }}
+          onClose={() => {
+            setBillResult(null)
+            setBillErr(null)
+          }}
+        >
+          {billResult && (
+            <>
+              <div className="note-box">
+                <div>
+                  <b>{billResult.issuedCount}건</b>을 발행했습니다. 수납현황 통합 매출장에서 확인할 수 있습니다.
+                </div>
+              </div>
+
+              {/* ★ **빠진 사람을 사유별로 가른다.** 발행 건수만 보면 안 보이는데, 사유마다
+                  조치가 다르다 — 「이미 발행」은 그냥 두면 되지만 다른 사유는 손을 써야 하고,
+                  **안 그러면 그 학생 급식비는 영영 청구되지 않는다** */}
+              {billResult.skipped.length > 0 &&
+                (() => {
+                  const already = billResult.skipped.filter((x) => x.reason.includes('이미 청구'))
+                  const needFix = billResult.skipped.filter((x) => !x.reason.includes('이미 청구'))
+                  return (
+                    <>
+                      {needFix.length > 0 && (
+                        <div style={{ marginTop: 14 }}>
+                          <b style={{ fontSize: 12.5, color: 'var(--red)' }}>
+                            청구되지 않은 {needFix.length}명 — 확인이 필요합니다
+                          </b>
+                          <div className="hint" style={{ marginBottom: 6 }}>
+                            해당 학생들의 급식비를 청구하려면 청구를 생성해야 합니다.
+                          </div>
+                          <table className="mini-tbl">
+                            <thead>
+                              <tr>
+                                <th>학번</th>
+                                <th>이름</th>
+                                <th>사유</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {needFix.map((x) => (
+                                <tr key={x.orderId}>
+                                  <td>{x.studentNo ?? '-'}</td>
+                                  <td>{x.studentName}</td>
+                                  <td>{x.reason}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                      {already.length > 0 && (
+                        <div className="hint" style={{ marginTop: 12 }}>
+                          이미 청구가 등록된 학생 <b>{already.length}명</b>은 생성 대상에서 제외되었습니다.
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
+            </>
+          )}
+        </Modal>
+      )}
+
       {cancelRow && (
         <Modal
           title="급식 신청을 취소합니다"

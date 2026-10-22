@@ -94,8 +94,11 @@ export const PARTICIPANT_STATE_LABEL: Record<ParticipantState, string> = {
 }
 
 /**
- * 대상자 발송 — 고른 학생을 이 설문의 대상자로 만든다.
+ * 대상자 지정 — 고른 학생을 이 설문의 대상자로 만든다.
  *
+ * ★ **아무것도 보내지 않는다.** 이름이 `targets` 라 「발송」으로 읽기 쉬운데, 학생은
+ *   **앱을 열어 설문 목록에서** 본다. 화면에 「발송됩니다」라고 쓰면 담당자가 알림이
+ *   간 줄 안다 — 디랩이 실제로 그렇게 읽고 물어 왔다(1016 피드백 5장).
  * ★ **장학 동의서처럼 「누가 안 냈는지」를 봐야 하는 설문에 쓴다.** 범위로 돌리는 일반
  *   설문은 대상자를 만들 필요가 없다 — 만들면 미제출 행이 생겨 목록의 뜻이 달라진다.
  */
@@ -137,6 +140,11 @@ export interface SurveyQuestionCreate {
   maxValue?: number
   /** 선택형이면 필수 */
   options?: string[]
+  /* ★ 조건부·합산은 **고치지 않아도 그대로 돌려보내야 한다.** 빠뜨리면 교체하면서
+     조용히 풀린다 — 가채점의 「응시/미응시」가 이걸 쓴다(2026-10-16 백엔드 확인). */
+  showIfQuestionIndex?: number | null
+  showIfOptionIndex?: number | null
+  sumOfIndexes?: number[]
 }
 
 export interface SurveyCreate {
@@ -180,6 +188,66 @@ export function updateSurvey(
   body: { title: string; description?: string; opensAt: string; closesAt: string },
 ): Promise<SurveySummary> {
   return request<SurveySummary>(`/api/v1/admin/surveys/${surveyId}`, { method: 'PUT', body })
+}
+
+/**
+ * 문항 정의. **교체 요청과 칸이 같다** — 읽은 것을 그대로 되돌려 보내면 바뀌는 것이 없다.
+ *
+ * ★ **집계(`/results`)와 다른 경로다.** 집계의 `min`·`max` 는 **응답 통계**고 여기 `minValue`·
+ *   `maxValue` 는 **설정**이다 — 이름이 겹쳐 섞이면 안 돼 따로 둔다(2026-10-16 백엔드).
+ * ★ **번호는 「순서」(1부터)다. DB 의 `seq` 가 아니다.** 교체가 soft delete 라 두 번 교체하면
+ *   첫 문항의 `seq` 가 9가 된다 — 서버가 순서로 바꿔 내려주므로 **배열 인덱스 + 1** 로 쓴다.
+ */
+export interface SurveyQuestionDef {
+  questionId: number
+  type: QuestionType
+  title: string
+  required: boolean
+  minValue: number | null
+  maxValue: number | null
+  options: string[]
+  /** 조건부 노출 — 이 번호 문항에서 */
+  showIfQuestionIndex: number | null
+  /** 그 보기를 골랐을 때만 보인다 */
+  showIfOptionIndex: number | null
+  /** 합산 문항 — 더할 문항 번호들 */
+  sumOfIndexes: number[]
+}
+
+export function getSurveyQuestions(surveyId: number): Promise<SurveyQuestionDef[]> {
+  return request<SurveyQuestionDef[]>(`/api/v1/admin/surveys/${surveyId}/questions`)
+}
+
+/**
+ * 문항 교체.
+ *
+ * ★ **제출이 하나라도 있으면 400 이다.** 고치면 이미 낸 학생의 답이 **다른 질문의 답으로
+ *   바뀌기** 때문이다. 서버가 「몇 명이 제출했는지 + 복제해서 새로 만들라」까지 문구로
+ *   돌려주므로 **그 문구를 그대로 띄운다.**
+ * ★ 교체다 — 보낸 목록이 **그대로 새 문항이 된다.** 덧붙이기가 아니다.
+ */
+export function replaceSurveyQuestions(
+  surveyId: number,
+  questions: SurveyQuestionCreate[],
+): Promise<SurveySummary> {
+  return request<SurveySummary>(`/api/v1/admin/surveys/${surveyId}/questions`, {
+    method: 'PUT',
+    body: { questions },
+  })
+}
+
+/**
+ * 양식 복제. 문항을 그대로 옮기고 **제목만 새로 받는다.**
+ *
+ * ★ **대상자·응답은 안 따라온다** — 따라오면 남이 동의한 기록이 새 양식에 붙는다.
+ *   복제한 뒤 대상자를 다시 골라야 한다.
+ * ★ 제출이 있어 문항을 못 고칠 때 **이쪽으로 돌린다.**
+ */
+export function duplicateSurvey(surveyId: number, title: string): Promise<SurveySummary> {
+  return request<SurveySummary>(`/api/v1/admin/surveys/${surveyId}/duplicate`, {
+    method: 'POST',
+    body: { title },
+  })
 }
 
 /** 설문 삭제. 응답이 있으면 서버가 막는다 — 그때는 조기 마감을 쓴다 */

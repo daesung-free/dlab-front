@@ -19,6 +19,9 @@ import {
   getSurveyResult,
   listSurveys,
   type QuestionType,
+  getSurveyQuestions,
+  replaceSurveyQuestions,
+  duplicateSurvey,
   type SurveyCreate,
   type SurveyResult,
   type SurveySummary,
@@ -28,10 +31,11 @@ import {
   type ParticipantState,
   type SurveyParticipant,
 } from '../../api/surveys'
-import { searchStudents, type Student } from '../../api/students'
+import { GRADE_LABEL, searchStudents, type Student } from '../../api/students'
 import { createScreenSignal } from './screenSignal'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
+import './survey-manage.css'
 
 /* F-4.6-부속 설문 관리(가채점 설문, 템플릿) — 신규개발-요구사항신규
  *
@@ -248,6 +252,30 @@ interface Draft {
   locked: boolean
 }
 
+/** 수정 모달의 문항 한 줄. 서버 `SurveyQuestionCreate` 와 같은 모양에 화면용 키만 더했다 */
+interface EditQuestion {
+  key: string
+  type: QuestionType
+  title: string
+  required: boolean
+  minValue: string
+  maxValue: string
+  options: string[]
+  /* ★ **화면에서 고치지 않지만 그대로 들고 다닌다.** 교체는 보낸 것이 전부라, 안 실어
+     보내면 **조건부 노출과 합산이 조용히 풀린다** — 가채점의 「응시/미응시」가 이걸
+     쓴다. 풀리면 **숨어야 할 문항이 전부 보인다**(2026-10-16 백엔드 확인). */
+  showIfQuestionIndex: number | null
+  showIfOptionIndex: number | null
+  sumOfIndexes: number[]
+}
+
+const EDIT_QTYPE: { type: QuestionType; label: string }[] = [
+  { type: 'SINGLE_CHOICE', label: '객관식(하나)' },
+  { type: 'MULTI_CHOICE', label: '객관식(여러 개)' },
+  { type: 'TEXT', label: '주관식' },
+  { type: 'NUMBER', label: '숫자' },
+]
+
 function emptyDraft(mode: 'survey' | 'template'): Draft {
   return {
     mode,
@@ -399,8 +427,26 @@ function stamp(v: string | null | undefined): string {
   const [exporting, setExporting] = useState(false)
   /* 설문 대상 선택지. 반 이름을 화면에 박아 두면 실제 반과 어긋난다 */
   const [classes, setClasses] = useState<ClassGroup[]>([])
-  /* 설문 수정(제목·안내문·기간). **문항·대상은 서버가 못 바꾸게 한다** — 응답이 섞이기 때문이다 */
-  const [editing, setEditing] = useState<{ row: SurveySummary; title: string; opensAt: string; closesAt: string } | null>(null)
+  /* 설문 수정(제목·기간·**문항**).
+   *
+   * ★ **문항은 제출이 들어오기 전까지 바꿀 수 있다**(2026-10-16 확인). 전에는 화면이
+   *   「문항은 못 바꾼다」고 **틀리게** 안내하고 있었다 — 디랩이 그걸 보고 「수정이 안
+   *   되냐」고 물어 왔다. 서버는 **제출 0건**일 때만 거절한다.
+   * ★ `PUT .../questions` 는 **교체**다. 보낸 목록이 그대로 새 문항이 된다.
+   * ⚠️ **대상(scope)은 서버에도 수정이 없다.** 전체→1반으로 좁히려면 복제해서 새로 만든다. */
+  const [editing, setEditing] = useState<{
+    row: SurveySummary
+    title: string
+    opensAt: string
+    closesAt: string
+    /** `null` 이면 문항을 아직 안 건드린 것 — 그때는 **문항을 안 보낸다** */
+    questions: EditQuestion[] | null
+    loadingQ: boolean
+    /** ★ 모달 안에 띄운다. 밖에 띄우면 **모달에 가려 안 보여** 「눌러도 아무 일이 없다」가 된다 */
+    qErr: string | null
+  } | null>(null)
+  /** 제출이 있어 문항을 못 고칠 때 — 복제로 돌린다 */
+  const [dup, setDup] = useState<{ row: SurveySummary; title: string; busy: boolean; err: string | null } | null>(null)
   const [removing, setRemoving] = useState<SurveySummary | null>(null)
   const [rowBusy, setRowBusy] = useState(false)
   /* 담임은 설문을 고치거나 지울 수 없다 — 메뉴에는 들어 있지만 쓰기는 매트릭스 밖이다
@@ -492,7 +538,15 @@ function stamp(v: string | null | undefined): string {
     () => [
       { key: 'studentNo', header: '학번', width: '120px', value: (r) => r.studentNo ?? '-' },
       { key: 'name', header: '이름', width: '110px', mask: 'name', value: (r) => r.name },
-      { key: 'grade', header: '학년', width: '80px', align: 'center', value: (r) => r.grade ?? '-' },
+      {
+        /* ★ **코드가 그대로 보이고 있었다**(`HIGH3`·`N_SU`). 사람이 읽는 말로 바꾼다 —
+           학년은 `GRADE_LABEL` 이 정본이다(CLAUDE.md 1-1) */
+        key: 'grade',
+        header: '학년',
+        width: '80px',
+        align: 'center',
+        value: (r) => (r.grade ? (GRADE_LABEL[r.grade] ?? r.grade) : '-'),
+      },
       { key: 'className', header: '반', width: '110px', value: (r) => r.className ?? '-' },
     ],
     [],
@@ -595,6 +649,72 @@ function stamp(v: string | null | undefined): string {
     }
   }
 
+  /* ★ 문항 편집을 **눌렀을 때만** 불러온다. 수정 모달을 열 때마다 부르면 제목만 고치는
+     사람에게도 호출이 하나 더 나간다 */
+  async function loadQuestionsForEdit() {
+    if (editing === null) return
+    setEditing({ ...editing, loadingQ: true, qErr: null })
+    try {
+      /* ★ **집계(`/results`)가 아니라 문항 정의 경로로 읽는다.** 집계에는 필수 여부·숫자
+         범위·조건부·합산이 없어, 그걸로 읽어 교체하면 **다섯 가지가 조용히 풀린다.** */
+      const qs = await getSurveyQuestions(editing.row.id)
+      setEditing((v) =>
+        v && v.row.id === editing.row.id
+          ? {
+              ...v,
+              loadingQ: false,
+              questions: qs.map((q, i) => ({
+                key: `q${q.questionId}-${i}`,
+                type: q.type,
+                title: q.title,
+                required: q.required,
+                minValue: q.minValue === null ? '' : String(q.minValue),
+                maxValue: q.maxValue === null ? '' : String(q.maxValue),
+                options: q.options ?? [],
+                showIfQuestionIndex: q.showIfQuestionIndex,
+                showIfOptionIndex: q.showIfOptionIndex,
+                sumOfIndexes: q.sumOfIndexes ?? [],
+              })),
+            }
+          : v,
+      )
+    } catch (err) {
+      setEditing((v) =>
+        v
+          ? {
+              ...v,
+              loadingQ: false,
+              /* ★ **서버가 아직 이 경로를 모르면**(화면이 먼저 배포된 경우) 404·405 가 온다.
+                 「Request method 'GET' is not supported」를 그대로 보여주면 담당자가 무엇을
+                 잘못했나 찾는다 — 우리 사정이다(CLAUDE.md 1-1) */
+              qErr:
+                err instanceof ApiError
+                  ? err.status === 404 || err.status === 405
+                    ? '문항 수정은 아직 준비 중입니다.'
+                    : err.message
+                  : '문항을 불러오지 못했습니다.',
+            }
+          : v,
+      )
+    }
+  }
+
+  /** 다른 문항이 답을 쓰고 있는 문항 번호들 — 지우면 조건·합산이 깨진다 */
+  const referenced = useMemo(() => {
+    const out = new Set<number>()
+    for (const q of editing?.questions ?? []) {
+      if (q.showIfQuestionIndex !== null) out.add(q.showIfQuestionIndex)
+      for (const n of q.sumOfIndexes) out.add(n)
+    }
+    return out
+  }, [editing?.questions])
+
+  function patchQ(key: string, p: Partial<EditQuestion>) {
+    setEditing((v) =>
+      v && v.questions ? { ...v, questions: v.questions.map((q) => (q.key === key ? { ...q, ...p } : q)) } : v,
+    )
+  }
+
   async function saveEdit() {
     if (editing === null) return
     const opensAt = toInstant(editing.opensAt)
@@ -606,13 +726,69 @@ function stamp(v: string | null | undefined): string {
     setRowBusy(true)
     try {
       await updateSurvey(editing.row.id, { title: editing.title.trim(), opensAt, closesAt })
+      /* ★ 문항은 **건드렸을 때만** 보낸다. 안 건드렸는데 보내면 교체라 **같은 내용으로
+         덮어쓰면서 설정이 풀린다.**
+         ★ 제목 저장이 **이미 끝난 뒤**다 — 문항에서 실패해도 제목은 들어갔으므로
+         「무엇이 됐고 무엇이 안 됐는지」를 그대로 말한다(CLAUDE.md 4장). */
+      if (editing.questions !== null) {
+        try {
+          await replaceSurveyQuestions(
+            editing.row.id,
+            editing.questions.map((q) => ({
+              type: q.type,
+              title: q.title.trim(),
+              required: q.required,
+              /* 고치지 않아도 그대로 돌려보낸다 — 빠뜨리면 조건부·합산이 풀린다 */
+              showIfQuestionIndex: q.showIfQuestionIndex,
+              showIfOptionIndex: q.showIfOptionIndex,
+              sumOfIndexes: q.sumOfIndexes,
+              ...(q.type === 'NUMBER'
+                ? {
+                    minValue: q.minValue === '' ? undefined : Number(q.minValue),
+                    maxValue: q.maxValue === '' ? undefined : Number(q.maxValue),
+                  }
+                : {}),
+              ...(q.type === 'SINGLE_CHOICE' || q.type === 'MULTI_CHOICE'
+                ? { options: q.options.filter((o) => o.trim() !== '') }
+                : {}),
+            })),
+          )
+        } catch (qErr) {
+          setApiError(
+            `제목과 기간은 저장했습니다. 문항은 바뀌지 않았습니다 — ${
+              qErr instanceof ApiError ? qErr.message : '문항을 바꾸지 못했습니다.'
+            }`,
+          )
+          setRowBusy(false)
+          await loadSurveys()
+          return
+        }
+      }
       setEditing(null)
-      setApiNotice('설문을 수정했습니다.')
+      setApiNotice(editing.questions !== null ? '설문과 문항을 수정했습니다.' : '설문을 수정했습니다.')
       await loadSurveys()
     } catch (err) {
       setApiError(err instanceof ApiError ? err.message : '수정하지 못했습니다.')
     } finally {
       setRowBusy(false)
+    }
+  }
+
+  /** 복제 — 제출이 있어 문항을 못 고칠 때 이쪽으로 돌린다 */
+  async function runDuplicate() {
+    if (dup === null || dup.title.trim() === '') return
+    setDup({ ...dup, busy: true, err: null })
+    try {
+      await duplicateSurvey(dup.row.id, dup.title.trim())
+      setDup(null)
+      setEditing(null)
+      /* ★ 대상자는 안 따라온다 — 그걸 안 알리면 **아무에게도 안 간 설문**을 배포한 줄 안다 */
+      setApiNotice('복제했습니다. 대상자는 따라오지 않으니 다시 지정하세요.')
+      await loadSurveys()
+    } catch (err) {
+      setDup((v) =>
+        v ? { ...v, busy: false, err: err instanceof ApiError ? err.message : '복제하지 못했습니다.' } : v,
+      )
     }
   }
 
@@ -693,7 +869,7 @@ function stamp(v: string | null | undefined): string {
       {
         key: 'act',
         header: '',
-        width: '150px',
+        width: '196px',
         align: 'center',
         value: () => '',
         render: (r) => (
@@ -718,9 +894,12 @@ function stamp(v: string | null | undefined): string {
                     title: r.title,
                     opensAt: (r.opensAt ?? '').slice(0, 16),
                     closesAt: (r.closesAt ?? '').slice(0, 16),
+                    questions: null,
+                    loadingQ: false,
+                    qErr: null,
                   })
                 }
-                title="제목과 기간을 고칩니다. 문항·대상은 못 바꿉니다"
+                title="제목·기간을 고칩니다. 문항은 제출이 들어오기 전까지 바꿀 수 있습니다"
               >
                 수정
               </button>
@@ -769,7 +948,7 @@ function stamp(v: string | null | undefined): string {
       {
         key: 'act',
         header: '',
-        width: '150px',
+        width: '196px',
         align: 'center',
         value: () => '',
         render: (r) => (
@@ -852,10 +1031,10 @@ function stamp(v: string | null | undefined): string {
                   <Icon name="lock" size={17} />
                 </div>
                 <div>
-                  <div className="tt">이미 응답이 쌓인 설문이라 문항을 고칠 수 없습니다</div>
+                  <div className="tt">응답이 등록된 설문은 문항을 수정할 수 없습니다</div>
                   <div className="tx">
-                    문항을 바꾸면 <b>바꾸기 전 응답과 후 응답의 의미가 달라져</b> 집계가 깨집니다. 제목·마감일 같은 메타
-                    정보만 수정할 수 있고, 문항을 바꾸려면 <b>복제해서 새로 배포</b>하세요.
+                    문항을 수정하면 <b>수정 전후 응답의 의미가 달라져</b> 집계가 어긋납니다. 제목·마감일만 수정할 수
+                    있으며, 문항을 수정하려면 <b>설문을 복제하여 새로 배포</b>하세요.
                   </div>
                 </div>
               </div>
@@ -1124,11 +1303,14 @@ function stamp(v: string | null | undefined): string {
     <>
       {editing && (
         <Modal
+          /* ★ 문항 편집기가 들어가는 모달이라 **좁으면 가로 스크롤이 생긴다** */
+          wide
           title="설문 수정"
-          sub="제목과 응답 기간만 고칩니다. 문항·대상은 응답이 섞여 바꿀 수 없습니다."
+          sub="문항은 응답이 등록되기 전까지 수정할 수 있습니다. 대상은 설문을 복제하여 새로 생성하세요."
           confirmLabel="저장"
           busy={rowBusy}
           confirmDisabled={editing.title.trim() === ''}
+          error={editing.qErr}
           onConfirm={() => void saveEdit()}
           onClose={() => setEditing(null)}
         >
@@ -1157,14 +1339,216 @@ function stamp(v: string | null | undefined): string {
               />
             </div>
           </div>
+
+          {/* ── 문항 ─────────────────────────────────────────
+              ★ 제출이 들어오기 전까지만 바꿀 수 있다. 제출이 있으면 서버가 400 과 함께
+                「몇 명이 냈는지 + 복제해서 새로 만들라」까지 돌려주므로 그 문구를 그대로
+                띄우고 옆에 복제 버튼을 붙인다 */}
+          <div className="frow">
+            <label>문항</label>
+            <div>
+              {editing.questions === null ? (
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={editing.loadingQ}
+                  onClick={() => void loadQuestionsForEdit()}
+                >
+                  <Icon name="list-ordered" size={13} /> {editing.loadingQ ? '불러오는 중…' : '문항 수정'}
+                </button>
+              ) : (
+                <>
+                  <div className="note-box">
+                    <div>
+                      응답이 등록된 설문은 문항을 수정할 수 없습니다. 수정이 필요한 경우 설문을 복제하여
+                      새로 생성하세요.
+                    </div>
+                  </div>
+
+                  {editing.questions.map((q, i) => (
+                    <div key={q.key} className="q-edit">
+                      <div className="q-edit-h">
+                        <b>{i + 1}</b>
+                        <select
+                          className="sel"
+                          value={q.type}
+                          onChange={(e) => patchQ(q.key, { type: e.target.value as QuestionType })}
+                        >
+                          {EDIT_QTYPE.map((t) => (
+                            <option key={t.type} value={t.type}>
+                              {t.label}
+                            </option>
+                          ))}
+                        </select>
+                        <label className="q-req">
+                          <input
+                            type="checkbox"
+                            checked={q.required}
+                            onChange={(e) => patchQ(q.key, { required: e.target.checked })}
+                          />
+                          필수
+                        </label>
+                        <button
+                          type="button"
+                          className="btn"
+                          style={{ padding: '4px 8px', color: 'var(--red)' }}
+                          /* ★ **다른 문항이 이 번호를 가리키면 못 지운다.** 지우면 조건이
+                             깨져 숨어야 할 문항이 늘 보이거나 합산이 틀린다. 번호는 순서라
+                             앞 문항을 지우면 뒤 번호가 통째로 밀리는 문제도 있다 */
+                          disabled={referenced.has(i + 1)}
+                          title={
+                            referenced.has(i + 1)
+                              ? '다른 문항이 이 문항의 답을 쓰고 있어 지울 수 없습니다'
+                              : undefined
+                          }
+                          onClick={() =>
+                            setEditing({
+                              ...editing,
+                              questions: editing.questions!.filter((x) => x.key !== q.key),
+                            })
+                          }
+                          aria-label="문항 삭제"
+                        >
+                          <Icon name="trash-2" size={13} />
+                        </button>
+                      </div>
+                      <input
+                        className="inp"
+                        value={q.title}
+                        placeholder="질문을 입력하세요"
+                        onChange={(e) => patchQ(q.key, { title: e.target.value })}
+                      />
+                      {/* ★ 화면에서 고칠 수는 없지만 **걸려 있다는 것은 보여준다.**
+                          안 보이면 기준 문항을 지우고도 모른다 — 그러면 조건이 깨진다 */}
+                      {q.showIfQuestionIndex !== null && (
+                        <div className="q-cond">
+                          <Icon name="git-compare" size={12} />
+                          <span>
+                            <b>{q.showIfQuestionIndex}번</b> 문항에서{' '}
+                            <b>{q.showIfOptionIndex !== null ? `${q.showIfOptionIndex}번 보기` : '특정 보기'}</b>를
+                            고른 사람에게만 보입니다
+                          </span>
+                        </div>
+                      )}
+                      {q.sumOfIndexes.length > 0 && (
+                        <div className="q-cond">
+                          <Icon name="percent" size={12} />
+                          <span>
+                            <b>{q.sumOfIndexes.join(' · ')}번</b> 문항의 답을 더해 계산합니다
+                          </span>
+                        </div>
+                      )}
+                      {(q.type === 'SINGLE_CHOICE' || q.type === 'MULTI_CHOICE') && (
+                        <input
+                          className="inp"
+                          value={q.options.join(', ')}
+                          placeholder="보기를 쉼표로 구분해 입력하세요 — 예: 예, 아니오"
+                          onChange={(e) => patchQ(q.key, { options: e.target.value.split(',').map((x) => x.trim()) })}
+                        />
+                      )}
+                      {q.type === 'NUMBER' && (
+                        <div className="two">
+                          {/* ★ `step` 을 걸지 않는다 — Modal 이 form 이라 배수가 아니면 저장이 막힌다 */}
+                          <input
+                            className="inp"
+                            type="number"
+                            value={q.minValue}
+                            placeholder="최솟값"
+                            onChange={(e) => patchQ(q.key, { minValue: e.target.value })}
+                          />
+                          <input
+                            className="inp"
+                            type="number"
+                            value={q.maxValue}
+                            placeholder="최댓값"
+                            onChange={(e) => patchQ(q.key, { maxValue: e.target.value })}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginTop: 8 }}>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() =>
+                        setEditing({
+                          ...editing,
+                          questions: [
+                            ...editing.questions!,
+                            {
+                              key: `new-${Date.now()}`,
+                              type: 'SINGLE_CHOICE',
+                              title: '',
+                              required: false,
+                              minValue: '',
+                              maxValue: '',
+                              options: [],
+                              /* 새 문항은 조건 없이 늘 보인다 */
+                              showIfQuestionIndex: null,
+                              showIfOptionIndex: null,
+                              sumOfIndexes: [],
+                            },
+                          ],
+                        })
+                      }
+                    >
+                      <Icon name="plus" size={13} /> 문항 추가
+                    </button>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => setDup({ row: editing.row, title: `${editing.row.title} (복사본)`, busy: false, err: null })}
+                      title="문항을 그대로 옮겨 새 설문을 만듭니다"
+                    >
+                      <Icon name="copy" size={13} /> 복제해서 새로 만들기
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {dup && (
+        <Modal
+          title="복제해서 새로 만들기"
+          sub="문항만 그대로 옮깁니다."
+          confirmLabel="복제"
+          busy={dup.busy}
+          confirmDisabled={dup.title.trim() === ''}
+          error={dup.err}
+          onConfirm={() => void runDuplicate()}
+          onClose={() => setDup(null)}
+        >
+          <div className="note-box">
+            <div>
+              설문 문항과 범위(전체·지점·반)는 유지되며, 대상자와 응답 내역은 복제되지 않습니다. 복제 후
+              대상자를 다시 선택하세요.
+            </div>
+          </div>
+          <div className="frow">
+            <label className="req">새 설문명</label>
+            <div>
+              <input
+                className="inp"
+                value={dup.title}
+                onChange={(e) => setDup({ ...dup, title: e.target.value })}
+              />
+              {/* 같은 제목이 둘이면 어느 것을 보냈는지 모른다 */}
+              <div className="hint">원래 설문과 구분되는 이름을 쓰세요.</div>
+            </div>
+          </div>
         </Modal>
       )}
 
       {removing && (
         <Modal
-          title={`${removing.title} 설문을 지울까요?`}
+          title={`${removing.title} 설문을 삭제할까요?`}
           sub="되돌릴 수 없습니다."
-          confirmLabel="지우기"
+          confirmLabel="삭제"
           danger
           busy={rowBusy}
           onConfirm={() => void removeOne()}
@@ -1172,7 +1556,7 @@ function stamp(v: string | null | undefined): string {
         >
           <div className="note-box">
             <div>
-              응답이 들어온 설문은 지워지지 않습니다. 더 받지 않으려면 <b>마감</b>을 쓰세요.
+              응답이 등록된 설문은 삭제할 수 없습니다. 더 이상 응답을 받지 않으려면 <b>마감</b>을 선택하세요.
             </div>
           </div>
         </Modal>
@@ -1445,7 +1829,7 @@ function stamp(v: string | null | undefined): string {
                     value={targetId ?? ''}
                     onChange={(e) => setTargetId(e.target.value === '' ? null : Number(e.target.value))}
                   >
-                    <option value="">설문을 고르세요</option>
+                    <option value="">설문 선택</option>
                     {surveys.map((sv) => (
                       <option key={sv.id} value={sv.id}>
                         {sv.title}
@@ -1522,8 +1906,12 @@ function stamp(v: string | null | undefined): string {
       {picking && (
         <Modal
           title="대상자 지정"
-          sub="고른 학생에게 설문이 발송됩니다"
-          confirmLabel="발송"
+          /* ★ **「발송」이 아니다.** 이 호출은 대상자 행을 만들 뿐 **아무것도 보내지 않는다** —
+             학생은 앱을 열어 설문 목록에서 본다. 「발송됩니다」라고 쓰면 담당자가
+             **학생에게 알림이 간 줄 안다**(디랩이 실제로 그렇게 읽고 물어 왔다).
+             알림 이벤트는 서버에 생겼지만 **문구가 미확정이라 아직 안 나간다** */
+          sub="선택한 학생은 앱에서 이 설문을 확인할 수 있습니다. 별도 알림은 발송되지 않습니다."
+          confirmLabel="대상자로 지정"
           wide
           busy={picking.busy}
           error={picking.err}

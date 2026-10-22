@@ -1,8 +1,16 @@
 /* 출결/자습/독서실 > 독서실 좌석배치표 — 실제 실 배치를 그대로 옮긴 도면 */
+/* ★ 칸 크기를 변수로 둔다(1016 피드백 B-8 — 「화면 크기를 조정할 수 있도록」).
+   지점에 따라 **92석**까지 있어 한 화면에 안 들어간다. `transform: scale` 로 줄이면
+   **글자가 뭉개지고 클릭 자리가 어긋나므로**, 칸 자체를 줄인다. */
 .p-rr .rr-stage {
+  --seat-w: 62px;
+  --seat-h: 52px;
+  --seat-font: 11px;
   background: var(--bg);
   border-radius: 14px;
   padding: 16px;
+  /* 줄여도 안 들어가는 구역이 있어 가로 스크롤은 남긴다 */
+  overflow-x: auto;
 }
 
 /* 관리자 데스크 방향 표시 — 도면을 실제 실과 같은 방향으로 읽게 한다 */
@@ -20,7 +28,12 @@
 }
 
 .p-rr .rr-map { display: flex; flex-direction: column; gap: 7px; }
-.p-rr .rr-row { display: flex; gap: 6px; align-items: stretch; }
+/* ★ 행마다 열 수가 달라도 **칸 폭이 같아야** 블록 모양이 산다(1016 피드백 B-7).
+   전에는 .rr-seat 가 flex:1 이라 8열 행과 10열 행의 칸 폭이 달라져 **배치가 어긋나 보였다**.
+   이제 행은 고정폭 칸을 왼쪽부터 늘어놓는다 — 빈 좌표는 빈 칸으로 자리를 지킨다(B-5·B-6) */
+.p-rr .rr-row { display: flex; gap: 6px; align-items: stretch; justify-content: flex-start; }
+/* 좌석이 없는 좌표 — 통로·기둥이다. 자리만 차지하고 아무것도 그리지 않는다 */
+.p-rr .rr-gap { width: var(--seat-w); flex: 0 0 var(--seat-w); }
 .p-rr .rr-rowno {
   width: 24px;
   flex-shrink: 0;
@@ -39,13 +52,14 @@
 }
 
 .p-rr .rr-seat {
-  flex: 1;
-  min-width: 62px;
+  /* ★ 고정폭이다. `flex: 1` 로 두면 행마다 폭이 달라져 블록이 무너진다(B-7) */
+  flex: 0 0 var(--seat-w);
+  width: var(--seat-w);
   border: 1px solid var(--line);
   border-radius: 9px;
   background: #fff;
   padding: 6px 4px;
-  min-height: 52px;
+  min-height: var(--seat-h);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -58,13 +72,14 @@
 .p-rr .rr-seat:hover { border-color: var(--mint-b); }
 .p-rr .rr-seat.sel { outline: 2px solid var(--mint); outline-offset: 1px; }
 .p-rr .rr-seat .sc {
-  font-size: 9.5px;
+  /* 칸이 줄면 글자도 같이 줄어야 한다 — 칸만 줄이면 이름이 잘려 누가 앉았는지 안 보인다 */
+  font-size: calc(var(--seat-font) - 1.5px);
   font-weight: 700;
   color: var(--muted);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 .p-rr .rr-seat .sn {
-  font-size: 11px;
+  font-size: var(--seat-font);
   font-weight: 800;
   color: var(--ink);
   max-width: 100%;

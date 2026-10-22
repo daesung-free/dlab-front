@@ -337,7 +337,7 @@ function Content() {
     }
     /* ★ 빈 목록은 서버가 거절한다 — 먼저 막아야 「저장이 안 된다」로 보이지 않는다 */
     if (body.length === 0) {
-      setError('저장할 칸이 없습니다. 칸을 눌러 과목을 먼저 넣으세요.')
+      setError('저장할 항목이 없습니다. 칸을 선택해 과목을 먼저 입력하세요.')
       return
     }
     setSaving(true)
