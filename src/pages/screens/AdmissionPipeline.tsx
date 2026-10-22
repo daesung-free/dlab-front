@@ -23,6 +23,7 @@ import {
 import type { ConvertGrade, ReservationRow, ReservationStatus } from '../../api/admissions'
 import { ApiError } from '../../api/client'
 import { studentNoText } from '../../lib/studentNo'
+import { waitlistUrl } from '../../lib/publicUrl'
 import type { Mockup } from './types'
 import './admission.css'
 
@@ -312,8 +313,8 @@ function Detail({
     setCopied(false)
     try {
       const { token } = await shareReservation(row.id)
-      /* 주소는 화면이 만든다 — 운영·로컬에서 도메인이 다르다 */
-      setLink(`${window.location.origin}/waitlist/${token}`)
+      /* 주소는 화면이 만든다 — ★ 관리자 도메인이 아니라 **공개 도메인**이다(`lib/publicUrl`) */
+      setLink(waitlistUrl(token))
     } catch (e) {
       /* ★ 404 를 서버 문장 그대로 띄우지 않는다 — 담당자가 할 수 있는 일이 없다 */
       setLinkErr(e instanceof ApiError && e.status === 404 ? '등록 안내 링크는 준비 중입니다.' : why(e, '링크를 만들지 못했습니다.'))

@@ -25,6 +25,7 @@ import {
 import { MOCK_STUDENTS } from './mockStudents'
 import type { Mockup } from './types'
 import { createScreenSignal } from './screenSignal'
+import { noticeUrl } from '../../lib/publicUrl'
 import '../../styles/forms.css'
 
 /* F-4.11-3 메시지 관리(공지·행정요청·1:1채팅) — 신규개발-요구사항신규
@@ -207,8 +208,9 @@ function Content() {
   const [saving, setSaving] = useState(false)
   /* 삭제는 되돌릴 수 없고 학생 앱에서도 빠진다 — 한 번 묻는다 */
   const [removing, setRemoving] = useState<ApiNotice | null>(null)
-  /* 공개 링크. ★ **주소를 화면이 조립한다** — 서버는 토큰만 준다. 운영·로컬에서 주소가
-     달라지므로 지금 열려 있는 곳을 기준으로 만든다(`window.location.origin`) */
+  /* 공개 링크. ★ **주소를 화면이 조립한다** — 서버는 토큰만 준다.
+     ★ 조립은 `lib/publicUrl` 하나에서 한다 — 학부모에게 가는 주소는 **관리자 도메인이
+       아니어야** 하고, 알림톡 버튼 주소는 승인되면 못 바꾼다 */
   const [sharing, setSharing] = useState<{ notice: ApiNotice; url: string | null; err: string | null }>()
   const [copied, setCopied] = useState(false)
   /* '이번 주 공지' — 올해 전체 건수를 이번 주라고 써 두었었다. 월요일부터 센다 */
@@ -390,7 +392,7 @@ function Content() {
     setSharing({ notice: n, url: null, err: null })
     try {
       const { token } = await shareNotice(n.id)
-      setSharing({ notice: n, url: `${window.location.origin}/notice/${token}`, err: null })
+      setSharing({ notice: n, url: noticeUrl(token), err: null })
     } catch (err) {
       /* ★ **404 를 서버 문장 그대로 띄우지 않는다.** 「요청하신 경로를 찾을 수 없습니다」는
          우리 사정이지 담당자가 할 수 있는 일이 아니다 — 고장으로 읽힌다(CLAUDE.md 1-1).
