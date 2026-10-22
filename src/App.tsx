@@ -8,16 +8,20 @@ import { GroupPage } from './pages/GroupPage'
 import { ScreenPage } from './pages/ScreenPage'
 import { InternalSpecRoutes } from './pages/internal/SpecRoutes'
 import { DoorPublic } from './pages/DoorPublic'
+import { PublicNotice } from './pages/PublicNotice'
 
 export default function App() {
   return (
     <Routes>
-      {/* ★ **로그인 밖에 있는 유일한 화면.** 출입문 QR 을 찍은 학생이 들어오는 자리라
+      {/* ★ **로그인 밖에 있는 화면들.** 출입문 QR 을 찍은 학생이 들어오는 자리라
              토큰이 없다 — 문 앞에 선 학생이 앱을 깔고 로그인할 상황이 아니다.
              Gate 보다 **앞에서** 갈라야 한다. Gate 안에 두면 로그인 화면으로 밀려난다.
           ★ AuthProvider 밖에 둔다. 같은 브라우저에 관리자 토큰이 남아 있어도 그 세션을
              건드리지 않기 위해서다(`/me` 조회도 일어나지 않는다). */}
       <Route path="door/:academyCode" element={<DoorPublic />} />
+      {/* 알림톡 「등록비 안내」 버튼이 여는 자리. 받는 사람이 학부모라 같은 이유로
+          Gate 밖·AuthProvider 밖이다 */}
+      <Route path="notice/:token" element={<PublicNotice />} />
       <Route path="*" element={<AdminApp />} />
     </Routes>
   )
