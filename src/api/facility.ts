@@ -307,7 +307,8 @@ export function createSeatGrid(body: {
  *   **배정 이력이 끊긴다.** 형태만 바꿀 때는 반드시 이쪽이다.
  */
 export function updateSeatStyles(body: {
-  areaId: number
+  /** ⚠️ `areaId` 가 아니라 **`studyAreaId`** 다 — 다른 좌석 API 와 같은 이름이다 */
+  studyAreaId: number
   ranges: { fromNumber: number; toNumber: number; seatStyle: SeatStyle }[]
   defaultStyle?: SeatStyle
 }): Promise<number> {

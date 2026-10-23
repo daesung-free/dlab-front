@@ -307,7 +307,7 @@ export function SeatSetup({ onChanged }: Props) {
           busy={busy}
           error={modalError}
           onClose={() => setModal(null)}
-          onSubmit={(body) => submit(() => updateSeatStyles({ areaId, ...body }))}
+          onSubmit={(body) => submit(() => updateSeatStyles({ studyAreaId: areaId, ...body }))}
         />
       )}
 
