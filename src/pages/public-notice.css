@@ -24,29 +24,23 @@
   align-self: flex-start;
 }
 
-/* ★ 로고와 한 줄 설명. 관리자 상단바와 **같은 로고**를 쓴다 — 알림톡에서 눌러 들어온
+/* ★ 로고 하나. 관리자 상단바와 **같은 로고**를 쓴다 — 알림톡에서 눌러 들어온
  *   사람이 「어디서 온 링크인지」 알아야 한다.
  * ★ 세로로 쌓지 않는다. 가로로 붙이면 머리글이 본문을 밀어내지 않는다. */
 .pn-brand {
   display: flex;
+  /* ★ 가운데. 로고 하나뿐이라 왼쪽에 붙이면 **빈 오른쪽**이 허전하다 */
+  justify-content: center;
   align-items: center;
-  gap: 9px;
-  padding-bottom: 14px;
+  padding-bottom: 16px;
   border-bottom: 1px solid var(--line);
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 
 .pn-logo {
-  height: 22px;
+  height: 26px;
   width: auto;
   display: block;
-}
-
-.pn-brand span {
-  font-size: 11.5px;
-  font-weight: 500;
-  color: var(--muted);
-  letter-spacing: -0.01em;
 }
 
 .pn-title {
@@ -71,7 +65,10 @@
   font-size: 15px;
   line-height: 1.8;
   white-space: pre-wrap;
-  word-break: break-word;
+  /* ★ 어절 중간에서 안 끊기게(「바랍 / 니다」). 긴 주소만 예외로 아무 데서나 끊는다 —
+     `keep-all` 만 두면 긴 URL 이 카드를 밀고 나간다 */
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 .pn-files {

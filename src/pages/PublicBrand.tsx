@@ -8,13 +8,13 @@ import logoUrl from '../assets/logo.png'
  *   쓴다.
  * ★ **「통합관리 1.0」은 쓰지 않는다.** 그건 직원용 제품 이름이다. 학부모가 읽을 이유가
  *   없고, 버전 숫자는 더더욱 그렇다.
- * ★ 대신 **무슨 학원인지**를 한 줄 둔다(관리자 상단바와 같은 문구).
+ * ★ **로고만 둔다.** 「대성 · 관리형 독학재수」 같은 설명을 붙이지 않는다 — 받는 사람은
+ *   이미 어디 학원인지 알고 열었고, 머리글이 길면 본문이 밀린다(휴대폰 한 화면이다).
  */
 export function PublicBrand() {
   return (
     <div className="pn-brand">
       <img className="pn-logo" src={logoUrl} alt="D.Lab" />
-      <span>대성 · 관리형 독학재수</span>
     </div>
   )
 }
