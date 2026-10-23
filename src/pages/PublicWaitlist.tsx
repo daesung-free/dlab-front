@@ -7,6 +7,7 @@ import {
   type WaitlistAnswer,
   type WaitlistInvite,
 } from '../api/publicWaitlist'
+import { PublicBrand } from './PublicBrand'
 import './public-notice.css'
 
 /* 대기자 응답 — /waitlist/:token
@@ -81,7 +82,7 @@ export function PublicWaitlist() {
   return (
     <div className="pn-page">
       <main className="pn-card">
-        <div className="pn-brand">D.Lab</div>
+        <PublicBrand />
 
         {failed ? (
           <p className="pn-msg" role="status">

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { getPublicNotice, type PublicNotice as Notice } from '../api/publicNotices'
+import { PublicBrand } from './PublicBrand'
 import './public-notice.css'
 
 /* 공개 안내문 — /notice/:token
@@ -73,7 +74,7 @@ export function PublicNotice() {
   return (
     <div className="pn-page">
       <main className="pn-card">
-        <div className="pn-brand">D.Lab</div>
+        <PublicBrand />
 
         {failed ? (
           <p className="pn-msg" role="status">

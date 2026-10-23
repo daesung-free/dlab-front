@@ -1,3 +1,4 @@
+import { PublicBrand } from './PublicBrand'
 import './public-notice.css'
 
 /*
@@ -14,7 +15,7 @@ export function PublicOnly() {
   return (
     <div className="pn-page">
       <main className="pn-card">
-        <div className="pn-brand">D.Lab</div>
+        <PublicBrand />
         <p className="pn-msg" role="status">
           접속 주소를 확인해 주세요.
           <br />
