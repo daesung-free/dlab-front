@@ -109,9 +109,25 @@ export interface SeatArea {
 }
 
 /** 좌석 마스터(배치도 편집용). 배정 정보가 없는 순수 좌석이다 */
+/**
+ * 좌석 형태. ★ **디랩 요청의 핵심이 「실제 교실 모양대로」**이고, 그 둘째가 **형태가 눈에
+ * 구분되는 것**이다(2026-10-23). 통로·기둥 빼기는 `skips` 로 이미 된다.
+ *
+ * ⚠️ **교습비와 잇지 않는다.** 교실형·집중형은 교습비가 같고 **1인실만 다르다**(디랩 확정).
+ *   여기 값은 **표시·배정 전용**이다.
+ */
+export type SeatStyle = 'CLASSROOM' | 'FOCUS' | 'SINGLE_ROOM'
+
+export const SEAT_STYLE_LABEL: Record<SeatStyle, string> = {
+  CLASSROOM: '교실형',
+  FOCUS: '집중형',
+  SINGLE_ROOM: '1인실',
+}
+
 export interface SeatMaster {
   id: number
   studyAreaId: number
+  seatStyle?: SeatStyle | null
   /** 화면용 번호. **구역 안에서만** 유일하다 — 별관에 같은 번호가 있을 수 있다 */
   seatCd: string
   /** 키오스크가 쓰는 번호. 별관은 관 offset 이 더해진 값(1번 → 1001번) */
@@ -170,6 +186,8 @@ export interface SeatCell {
    * `unmask` 를 주면 원본이 오고 `masked=false` 가 된다.
    */
   masked: boolean
+  /** 좌석 형태. 배치도에서 색으로 가른다 */
+  seatStyle?: SeatStyle | null
 }
 
 export function listSeatAreas(academyId: number, opts?: { includeInactive?: boolean; buildingId?: number }): Promise<SeatArea[]> {
@@ -261,9 +279,40 @@ export function createSeatGrid(body: {
   startX?: number
   startY?: number
   columnMajor?: boolean
+  /**
+   * 번호 붙는 **순서**를 뒤집는다 — 좌표가 아니다.
+   * ★ 대구 A(가로 역방향) · 동탄 별관 C(가로·세로 둘 다)가 이것으로만 나온다.
+   *   `columnMajor` 와 조합해 네 방향이 된다.
+   */
+  reverseX?: boolean
+  reverseY?: boolean
+  /** 범위 밖 좌석의 형태. 안 주면 서버 기본값 */
+  seatStyle?: SeatStyle
+  /**
+   * 번호 범위로 형태를 한 번에 지정한다(디랩 시트2가 그 모양이다 — `1~6 1인실`).
+   * ★ 한 칸씩 찍게 하면 **2,140석을 손으로 지정**하게 된다.
+   * ⚠️ 범위가 **겹치거나 뒤집히면 서버가 거부**한다. 접두어가 붙은 번호(`A-01`)는
+   *   **끝 숫자**로 판정한다.
+   */
+  styleRanges?: { fromNumber: number; toNumber: number; seatStyle: SeatStyle }[]
   skips?: { row: number; column: number }[]
 }): Promise<SeatMaster[]> {
   return request<SeatMaster[]>('/api/v1/admin/seats/masters/grid', { method: 'POST', body })
+}
+
+/**
+ * **이미 만든 좌석**의 형태를 범위로 바꾼다.
+ *
+ * ⚠️⚠️ **좌석을 지웠다 다시 만들지 않는다.** `seat_assignment` 가 참조하던 행이 바뀌어
+ *   **배정 이력이 끊긴다.** 형태만 바꿀 때는 반드시 이쪽이다.
+ */
+export function updateSeatStyles(body: {
+  /** ⚠️ `areaId` 가 아니라 **`studyAreaId`** 다 — 다른 좌석 API 와 같은 이름이다 */
+  studyAreaId: number
+  ranges: { fromNumber: number; toNumber: number; seatStyle: SeatStyle }[]
+  defaultStyle?: SeatStyle
+}): Promise<number> {
+  return request<number>('/api/v1/admin/seats/masters/styles', { method: 'PATCH', body })
 }
 
 /** 단건 등록. 배치도에 한 자리만 끼워 넣을 때 쓴다 */

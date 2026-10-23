@@ -32,6 +32,20 @@ export type NotificationEvent =
   | 'APPROVAL_REJECTED'
   | 'CONSULT_RESERVED'
   | 'CONSULT_CANCELED'
+  /* ★ 출결 6종 — 태깅 시점에 나간다(디랩 1016 문구). 「외출」은 **출결 외출**이고
+     좌석 이탈이 아니다(2026-10-22 디랩 확정) */
+  | 'ATTENDANCE_CHECK_IN'
+  | 'ATTENDANCE_CHECK_OUT'
+  | 'ATTENDANCE_LATE'
+  | 'ATTENDANCE_EARLY_LEAVE'
+  | 'ATTENDANCE_OUTING'
+  | 'ATTENDANCE_RETURN'
+  /* 직원이 때를 골라 보내는 것들 */
+  | 'MEAL_APPLY_DEADLINE'
+  | 'TUITION_REGISTRATION_NOTICE'
+  | 'TUITION_UNPAID_NOTICE'
+  | 'SURVEY_ASSIGNED'
+  | 'SURVEY_REMINDER'
 
 /** 화면에는 이 이름으로 쓴다. 코드는 코드대로 함께 보여준다 — 백엔드와 말을 맞춰야 해서다 */
 export const EVENT_LABEL: Record<NotificationEvent, string> = {
@@ -47,6 +61,17 @@ export const EVENT_LABEL: Record<NotificationEvent, string> = {
   APPROVAL_REJECTED: '승인 반려',
   CONSULT_RESERVED: '상담 예약',
   CONSULT_CANCELED: '상담 취소',
+  ATTENDANCE_CHECK_IN: '등원 안내',
+  ATTENDANCE_CHECK_OUT: '하원 안내',
+  ATTENDANCE_LATE: '지각 안내',
+  ATTENDANCE_EARLY_LEAVE: '조퇴 안내',
+  ATTENDANCE_OUTING: '외출 안내',
+  ATTENDANCE_RETURN: '외출 복귀 안내',
+  MEAL_APPLY_DEADLINE: '급식 신청 마감 안내',
+  TUITION_REGISTRATION_NOTICE: '등록비 안내',
+  TUITION_UNPAID_NOTICE: '등록비 미납 안내',
+  SURVEY_ASSIGNED: '설문 요청',
+  SURVEY_REMINDER: '설문 독촉',
 }
 
 export type NotificationChannel = 'KAKAO_ALIMTALK' | 'FCM_PUSH'

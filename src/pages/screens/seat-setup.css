@@ -111,3 +111,12 @@
   opacity: 0.5;
   cursor: default;
 }
+
+/* 좌석 형태 — 미리보기와 배치도에서 **눈에 구분**되어야 한다(디랩 2026-10-23 요청).
+ * ★ 색만으로 가르지 않는다. 글자(교실형·집중형·1인실)를 범례에 함께 둔다 —
+ *   색 구분이 어려운 사람에게 색만 있는 표는 아무 정보가 없다.
+ * ★ 1인실이 가장 눈에 띄어야 한다. 전 지점 2,140석 중 54석뿐이고 **교습비가 다른 유일한
+ *   형태**라, 잘못 배정하면 청구가 틀어진다. */
+.sgp-cell.st-classroom { background: #fff; }
+.sgp-cell.st-focus { background: var(--blue-wash); border-color: #cfe0f5; }
+.sgp-cell.st-single_room { background: var(--amber-wash); border-color: #f0dcb4; font-weight: 700; }
