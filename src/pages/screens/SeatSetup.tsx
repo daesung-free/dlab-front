@@ -8,6 +8,7 @@ import {
   createBuilding,
   createSeatArea,
   createSeatGrid,
+  updateSeatStyles,
   createSeatMaster,
   deleteBuilding,
   deleteSeatArea,
@@ -21,6 +22,8 @@ import {
   type Building,
   type SeatArea,
   type SeatMaster,
+  SEAT_STYLE_LABEL,
+  type SeatStyle,
 } from '../../api/facility'
 import './seat-setup.css'
 
@@ -71,7 +74,7 @@ export function SeatSetup({ onChanged }: Props) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [modal, setModal] = useState<null | 'building' | 'area' | 'grid' | 'seat'>(null)
+  const [modal, setModal] = useState<null | 'building' | 'area' | 'grid' | 'seat' | 'styles'>(null)
   /** 단건 등록이 채울 빈칸. 배치도에서 그 자리를 눌러서 정한다 */
   const [spot, setSpot] = useState<{ xPos: number; yPos: number } | null>(null)
   const [modalError, setModalError] = useState<string | null>(null)
@@ -231,6 +234,10 @@ export function SeatSetup({ onChanged }: Props) {
             setModalError(null)
             setModal('grid')
           }}
+          onEditStyles={() => {
+            setModalError(null)
+            setModal('styles')
+          }}
           onPickSpot={(xPos, yPos) => {
             setModalError(null)
             setSpot({ xPos, yPos })
@@ -291,6 +298,16 @@ export function SeatSetup({ onChanged }: Props) {
           error={modalError}
           onClose={() => setModal(null)}
           onSubmit={(body) => submit(() => createSeatMaster({ studyAreaId: areaId, ...body }))}
+        />
+      )}
+
+      {modal === 'styles' && areaId !== null && (
+        <StyleModal
+          area={area}
+          busy={busy}
+          error={modalError}
+          onClose={() => setModal(null)}
+          onSubmit={(body) => submit(() => updateSeatStyles({ areaId, ...body }))}
         />
       )}
 
@@ -680,6 +697,7 @@ function SeatTab({
   busy,
   onPickArea,
   onAdd,
+  onEditStyles,
   onPickSpot,
   onDelete,
   onBulkDelete,
@@ -691,6 +709,7 @@ function SeatTab({
   busy: boolean
   onPickArea: (id: number) => void
   onAdd: () => void
+  onEditStyles: () => void
   onPickSpot: (xPos: number, yPos: number) => void
   onDelete: (s: SeatMaster) => void
   /** `seatIds` 가 비면 그 구역 전체(= 초기화) */
@@ -715,6 +734,22 @@ function SeatTab({
         s.kioskSeatCd === s.seatCd ? <span className="muted">{s.kioskSeatCd}</span> : <b>{s.kioskSeatCd}</b>,
     },
     { key: 'seatNm', header: '이름', value: (s) => s.seatNm ?? '' },
+    {
+      key: 'style',
+      header: '형태',
+      width: '84px',
+      align: 'center',
+      value: (s) => (s.seatStyle ? SEAT_STYLE_LABEL[s.seatStyle] : ''),
+      /* ★ 교실형은 배지를 안 붙인다 — 대부분이 교실형이라 다 붙이면 1인실이 안 보인다 */
+      render: (s) =>
+        s.seatStyle === undefined || s.seatStyle === null || s.seatStyle === 'CLASSROOM' ? (
+          <span className="muted">{s.seatStyle ? SEAT_STYLE_LABEL[s.seatStyle] : '-'}</span>
+        ) : (
+          <span className={`mk ${s.seatStyle === 'SINGLE_ROOM' ? 'brandnew' : 'supplement'}`}>
+            {SEAT_STYLE_LABEL[s.seatStyle]}
+          </span>
+        ),
+    },
     { key: 'pos', header: '좌표', width: '100px', align: 'center', value: (s) => `${s.xPos}, ${s.yPos}` },
     {
       key: 'usable',
@@ -760,6 +795,16 @@ function SeatTab({
           ))}
           <button type="button" className="btn pri" style={SMALL_BTN} disabled={areaId === null} onClick={onAdd}>
             격자로 만들기
+          </button>
+          {/* ★ **이미 만든 좌석**의 형태를 바꾼다. 지웠다 다시 만들면 배정 이력이 끊긴다 */}
+          <button
+            type="button"
+            className="btn"
+            style={SMALL_BTN}
+            disabled={areaId === null || seats.length === 0}
+            onClick={onEditStyles}
+          >
+            형태 바꾸기
           </button>
           {/* ★ 일괄 삭제·초기화(B-4). 단건을 N번 부르면 92석 구역에서 **중간에 실패했을 때
               절반만 지워진 배치도**가 남는다 — 무엇이 남았는지 사람이 찾을 수 없다 */}
@@ -956,6 +1001,147 @@ function SeatModal({
   )
 }
 
+/**
+ * 이미 만든 좌석의 형태를 **범위로** 바꾼다.
+ *
+ * ⚠️⚠️ **좌석을 지웠다 다시 만들지 않는다.** 그러면 `seat_assignment` 가 참조하던 행이
+ *   바뀌어 **배정 이력이 끊긴다.** 형태만 바꿀 때는 이 길이다.
+ */
+function StyleModal({
+  area,
+  busy,
+  error,
+  onClose,
+  onSubmit,
+}: {
+  area: SeatArea | null
+  busy: boolean
+  error: string | null
+  onClose: () => void
+  onSubmit: (body: {
+    ranges: { fromNumber: number; toNumber: number; seatStyle: SeatStyle }[]
+    defaultStyle?: SeatStyle
+  }) => void
+}) {
+  const [ranges, setRanges] = useState<{ from: string; to: string; style: SeatStyle }[]>([
+    { from: '', to: '', style: 'SINGLE_ROOM' },
+  ])
+  const [defaultStyle, setDefaultStyle] = useState<SeatStyle | ''>('')
+
+  const filled = ranges.filter((r) => r.from !== '' && r.to !== '')
+  const badRange = filled.find((r) => Number(r.from) > Number(r.to))
+  const overlap = filled.find((r, i) =>
+    filled.some((o, j) => j !== i && Number(r.from) <= Number(o.to) && Number(o.from) <= Number(r.to)),
+  )
+  const rangeError =
+    badRange !== undefined
+      ? '시작 번호가 끝 번호보다 큽니다.'
+      : overlap !== undefined
+        ? '번호 범위가 서로 겹칩니다.'
+        : null
+
+  return (
+    <Modal
+      title="좌석 형태 바꾸기"
+      sub={area ? `${area.buildingName} ${area.areaNm}` : undefined}
+      confirmLabel="형태 적용"
+      busy={busy}
+      error={error}
+      confirmDisabled={filled.length === 0 || rangeError !== null}
+      onClose={onClose}
+      onConfirm={() =>
+        onSubmit({
+          ranges: filled.map((r) => ({
+            fromNumber: Number(r.from),
+            toNumber: Number(r.to),
+            seatStyle: r.style,
+          })),
+          defaultStyle: defaultStyle === '' ? undefined : defaultStyle,
+        })
+      }
+    >
+      <div className="frow">
+        <label className="req">형태 범위</label>
+        <div>
+          {ranges.map((r, i) => (
+            <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+              <input
+                className="inp"
+                type="number"
+                min={1}
+                style={{ width: 84, textAlign: 'center' }}
+                value={r.from}
+                onChange={(e) => setRanges((v) => v.map((x, j) => (j === i ? { ...x, from: e.target.value } : x)))}
+              />
+              <span>~</span>
+              <input
+                className="inp"
+                type="number"
+                min={1}
+                style={{ width: 84, textAlign: 'center' }}
+                value={r.to}
+                onChange={(e) => setRanges((v) => v.map((x, j) => (j === i ? { ...x, to: e.target.value } : x)))}
+              />
+              <select
+                className="sel"
+                style={{ width: 110 }}
+                value={r.style}
+                onChange={(e) =>
+                  setRanges((v) => v.map((x, j) => (j === i ? { ...x, style: e.target.value as SeatStyle } : x)))
+                }
+              >
+                {(Object.keys(SEAT_STYLE_LABEL) as SeatStyle[]).map((k) => (
+                  <option key={k} value={k}>
+                    {SEAT_STYLE_LABEL[k]}
+                  </option>
+                ))}
+              </select>
+              <button type="button" className="lnk" onClick={() => setRanges((v) => v.filter((_, j) => j !== i))}>
+                빼기
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setRanges((v) => [...v, { from: '', to: '', style: 'SINGLE_ROOM' }])}
+          >
+            <Icon name="plus" size={13} /> 범위 추가
+          </button>
+          {rangeError !== null && (
+            <div className="hint" style={{ color: 'var(--red)' }}>
+              {rangeError}
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="frow">
+        <label>나머지 좌석</label>
+        <div>
+          <select
+            className="sel"
+            value={defaultStyle}
+            onChange={(e) => setDefaultStyle(e.target.value as SeatStyle | '')}
+          >
+            <option value="">그대로 둡니다</option>
+            {(Object.keys(SEAT_STYLE_LABEL) as SeatStyle[]).map((k) => (
+              <option key={k} value={k}>
+                {SEAT_STYLE_LABEL[k]} 으로 바꿉니다
+              </option>
+            ))}
+          </select>
+          <div className="hint">범위에 없는 좌석을 어떻게 할지 고릅니다.</div>
+        </div>
+      </div>
+      <div className="note-box">
+        <div>
+          좌석을 지우지 않고 <b>형태만</b> 바꿉니다. 배정과 이용 기록은 그대로 남습니다.
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 function GridModal({
   area,
   busy,
@@ -974,6 +1160,10 @@ function GridModal({
     startNumber?: number
     numberPadding?: number
     columnMajor?: boolean
+    reverseX?: boolean
+    reverseY?: boolean
+    seatStyle?: SeatStyle
+    styleRanges?: { fromNumber: number; toNumber: number; seatStyle: SeatStyle }[]
     skips?: { row: number; column: number }[]
   }) => void
 }) {
@@ -983,6 +1173,14 @@ function GridModal({
   const [startNumber, setStartNumber] = useState(1)
   const [padding, setPadding] = useState(2)
   const [columnMajor, setColumnMajor] = useState(false)
+  /* ★ **번호 붙는 순서**를 뒤집는다 — 좌표가 아니다. 대구 A(가로 역방향)·동탄 별관 C
+     (가로·세로 둘 다)가 이것으로만 나온다. 없으면 **지점이 그 모양을 못 만든다** */
+  const [reverseX, setReverseX] = useState(false)
+  const [reverseY, setReverseY] = useState(false)
+  /** 범위 밖 좌석의 형태 */
+  const [baseStyle, setBaseStyle] = useState<SeatStyle>('CLASSROOM')
+  /** 「1~6 1인실」처럼 **범위로** 지정한다. 한 칸씩 찍으면 2,140석을 손으로 지정하게 된다 */
+  const [ranges, setRanges] = useState<{ from: string; to: string; style: SeatStyle }[]>([])
   /** 통로. 격자를 눌러 뺀다 — 행·열을 숫자로 적게 하면 어디를 뺐는지 안 보인다 */
   const [skips, setSkips] = useState<string[]>([])
 
@@ -1001,8 +1199,12 @@ function GridModal({
     const grid: (string | null)[][] = Array.from({ length: rows }, () => Array(columns).fill(null))
     const outer = columnMajor ? columns : rows
     const inner = columnMajor ? rows : columns
-    for (let o = 1; o <= outer; o++) {
-      for (let i = 1; i <= inner; i++) {
+    /* ★ 역방향은 **세는 순서만** 뒤집는다. 격자 모양은 그대로다 —
+       `reverseX` 는 열(가로), `reverseY` 는 행(세로)이다 */
+    for (let oi = 1; oi <= outer; oi++) {
+      const o = columnMajor ? (reverseX ? columns - oi + 1 : oi) : reverseY ? rows - oi + 1 : oi
+      for (let ii = 1; ii <= inner; ii++) {
+        const i = columnMajor ? (reverseY ? rows - ii + 1 : ii) : reverseX ? columns - ii + 1 : ii
         const r = columnMajor ? i : o
         const c = columnMajor ? o : i
         if (skips.includes(`${r}:${c}`)) continue
@@ -1012,6 +1214,32 @@ function GridModal({
     preview.push(...grid.map((row) => row.map((v) => v ?? '')))
   }
 
+  /** 미리보기 칸의 형태. 번호(접두어를 뗀 끝 숫자)로 범위를 판정한다 — 서버와 같은 규칙이다 */
+  function styleOf(label: string): SeatStyle {
+    const num = Number((label.match(/(\d+)$/) ?? [])[1])
+    if (Number.isNaN(num)) return baseStyle
+    const hit = ranges.find(
+      (r) => r.from !== '' && r.to !== '' && num >= Number(r.from) && num <= Number(r.to),
+    )
+    return hit?.style ?? baseStyle
+  }
+
+  /* ⚠️ **겹치거나 뒤집힌 범위는 서버가 거부한다.** 보내고 나서 알면 다시 입력하게 되므로
+     여기서 먼저 센다 — 겹침을 허용하면 「먼저 쓴 쪽이 이기는」 숨은 규칙이 생긴다 */
+  const filled = ranges.filter((r) => r.from !== '' && r.to !== '')
+  const badRange = filled.find((r) => Number(r.from) > Number(r.to))
+  const overlap = filled.find((r, i) =>
+    filled.some(
+      (o, j) => j !== i && Number(r.from) <= Number(o.to) && Number(o.from) <= Number(r.to),
+    ),
+  )
+  const rangeError =
+    badRange !== undefined
+      ? '시작 번호가 끝 번호보다 큽니다.'
+      : overlap !== undefined
+        ? '번호 범위가 서로 겹칩니다.'
+        : null
+
   return (
     <Modal
       title="좌석 격자로 만들기"
@@ -1019,7 +1247,7 @@ function GridModal({
       confirmLabel={`${total}석 등록`}
       busy={busy}
       error={error}
-      confirmDisabled={total < 1}
+      confirmDisabled={total < 1 || rangeError !== null}
       onClose={onClose}
       onConfirm={() =>
         onSubmit({
@@ -1029,6 +1257,14 @@ function GridModal({
           startNumber,
           numberPadding: padding,
           columnMajor,
+          reverseX,
+          reverseY,
+          seatStyle: baseStyle,
+          styleRanges: filled.map((r) => ({
+            fromNumber: Number(r.from),
+            toNumber: Number(r.to),
+            seatStyle: r.style,
+          })),
           skips: skips.map((k) => {
             const [r, c] = k.split(':').map(Number)
             return { row: r, column: c }
@@ -1099,6 +1335,101 @@ function GridModal({
           <option value="col">세로 우선 — 1열을 다 채우고 2열로</option>
         </select>
       </div>
+      {/* ★ 좌표가 아니라 **번호 붙는 순서**를 뒤집는다. 미리보기에서 바로 보인다 —
+             번호가 거꾸로 붙는 것을 눈으로 봐야 실수를 알아챈다 */}
+      <div className="frow">
+        <label>번호 역방향</label>
+        <div>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginRight: 14 }}>
+            <input type="checkbox" checked={reverseX} onChange={(e) => setReverseX(e.target.checked)} />
+            가로 — 오른쪽에서 왼쪽으로
+          </label>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <input type="checkbox" checked={reverseY} onChange={(e) => setReverseY(e.target.checked)} />
+            세로 — 아래에서 위로
+          </label>
+          <div className="hint">자리 위치는 그대로이고 번호 붙는 순서만 바뀝니다.</div>
+        </div>
+      </div>
+      <div className="frow">
+        <label className="req">좌석 형태</label>
+        <div>
+          <select className="sel" value={baseStyle} onChange={(e) => setBaseStyle(e.target.value as SeatStyle)}>
+            {(Object.keys(SEAT_STYLE_LABEL) as SeatStyle[]).map((k) => (
+              <option key={k} value={k}>
+                {SEAT_STYLE_LABEL[k]}
+              </option>
+            ))}
+          </select>
+          <div className="hint">아래에서 범위를 지정하지 않은 자리에 적용됩니다.</div>
+        </div>
+      </div>
+      {/* ★ 디랩이 준 자료가 「1~6 1인실 · 7~57 교실형」 **범위 형태**다. 한 칸씩 찍게 하면
+             2,140석을 손으로 지정하게 된다 */}
+      <div className="frow">
+        <label>형태 범위</label>
+        <div>
+          {ranges.map((r, i) => (
+            <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+              <input
+                className="inp"
+                type="number"
+                min={1}
+                style={{ width: 84, textAlign: 'center' }}
+                value={r.from}
+                onChange={(e) =>
+                  setRanges((v) => v.map((x, j) => (j === i ? { ...x, from: e.target.value } : x)))
+                }
+              />
+              <span>~</span>
+              <input
+                className="inp"
+                type="number"
+                min={1}
+                style={{ width: 84, textAlign: 'center' }}
+                value={r.to}
+                onChange={(e) => setRanges((v) => v.map((x, j) => (j === i ? { ...x, to: e.target.value } : x)))}
+              />
+              <select
+                className="sel"
+                style={{ width: 110 }}
+                value={r.style}
+                onChange={(e) =>
+                  setRanges((v) =>
+                    v.map((x, j) => (j === i ? { ...x, style: e.target.value as SeatStyle } : x)),
+                  )
+                }
+              >
+                {(Object.keys(SEAT_STYLE_LABEL) as SeatStyle[]).map((k) => (
+                  <option key={k} value={k}>
+                    {SEAT_STYLE_LABEL[k]}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="lnk"
+                onClick={() => setRanges((v) => v.filter((_, j) => j !== i))}
+              >
+                빼기
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setRanges((v) => [...v, { from: '', to: '', style: 'SINGLE_ROOM' }])}
+          >
+            <Icon name="plus" size={13} /> 범위 추가
+          </button>
+          {rangeError !== null && (
+            <div className="hint" style={{ color: 'var(--red)' }}>
+              {rangeError}
+            </div>
+          )}
+          <div className="hint">번호로 지정합니다. 접두어가 있어도 숫자만 보면 됩니다.</div>
+        </div>
+      </div>
 
       <div className="note-box">
         <div className="ic">
@@ -1117,9 +1448,13 @@ function GridModal({
                 <button
                   key={ci}
                   type="button"
-                  className={`sgp-cell${skipped ? ' off' : ''}`}
+                  className={`sgp-cell${skipped ? ' off' : ` st-${styleOf(label).toLowerCase()}`}`}
                   onClick={() => toggleSkip(ri + 1, ci + 1)}
-                  title={skipped ? '통로 — 눌러서 좌석으로' : '좌석 — 눌러서 통로로'}
+                  title={
+                    skipped
+                      ? '통로 — 눌러서 좌석으로'
+                      : `${SEAT_STYLE_LABEL[styleOf(label)]} — 눌러서 통로로`
+                  }
                 >
                   {skipped ? '통로' : label}
                 </button>

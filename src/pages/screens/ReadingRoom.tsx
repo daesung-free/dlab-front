@@ -13,6 +13,7 @@ import {
   setSeatUsable,
   type SeatArea,
   type SeatCell as ApiSeatCell,
+  SEAT_STYLE_LABEL,
 } from '../../api/facility'
 import { searchStudents, type Student } from '../../api/students'
 import { studentNoText } from '../../lib/studentNo'
@@ -543,6 +544,14 @@ function Content() {
                     <span className="sw" style={{ background: STATE_META[s].color }} /> {STATE_META[s].label}
                   </span>
                 ))}
+                {/* ★ **글자를 함께 둔다.** 색만으로 가르면 색 구분이 어려운 사람에게는
+                       아무 정보가 없다. 교실형은 띠가 없다는 것도 적는다 */}
+                <span className="rr-sty-leg">
+                  <span className="bar sty-focus" /> 집중형
+                </span>
+                <span className="rr-sty-leg">
+                  <span className="bar sty-single_room" /> 1인실
+                </span>
                 <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                   <span
                     style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green)', display: 'inline-block' }}
@@ -932,12 +941,17 @@ function SeatBox({
   onSelect: (id: number) => void
 }) {
   const name = seat.state === 'off' ? '사용중지' : (seat.studentName ?? '공석')
+  /* ★ **형태를 색으로 덮지 않는다.** 칸 배경은 이미 재실·공석·중지를 뜻한다 —
+     거기에 형태까지 칠하면 **두 뜻이 한 색에 섞인다.** 왼쪽 띠로 따로 둔다.
+     ★ 교실형은 띠를 안 그린다. 2,140석 중 1,637석이라 **기본값**이고, 다 그으면 띠가
+       아무것도 안 가린다 */
+  const style = seat.seatStyle ?? 'CLASSROOM'
   return (
     <button
       type="button"
-      className={`rr-seat st-${seat.state}${selected === seat.seatId ? ' sel' : ''}`}
+      className={`rr-seat st-${seat.state} sty-${style.toLowerCase()}${selected === seat.seatId ? ' sel' : ''}`}
       onClick={() => onSelect(seat.seatId)}
-      title={`${seat.seatCd} · ${STATE_META[seat.state].label}${seat.studentName ? ` · ${seat.studentName}${seat.studentNo ? ` (${seat.studentNo})` : ''}` : ''}`}
+      title={`${seat.seatCd} · ${SEAT_STYLE_LABEL[style]} · ${STATE_META[seat.state].label}${seat.studentName ? ` · ${seat.studentName}${seat.studentNo ? ` (${seat.studentNo})` : ''}` : ''}`}
     >
       {seat.state === 'in' && <span className="live" />}
       <span className="sc">{seat.seatCd}</span>
