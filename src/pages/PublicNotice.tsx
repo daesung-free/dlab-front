@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { getPublicNotice, type PublicNotice as Notice } from '../api/publicNotices'
+import { PublicBrand } from './PublicBrand'
 import './public-notice.css'
 
 /* 공개 안내문 — /notice/:token
@@ -73,7 +74,7 @@ export function PublicNotice() {
   return (
     <div className="pn-page">
       <main className="pn-card">
-        <div className="pn-brand">D.Lab</div>
+        <PublicBrand />
 
         {failed ? (
           <p className="pn-msg" role="status">
@@ -92,7 +93,15 @@ export function PublicNotice() {
           </div>
         ) : !notice.available ? (
           <p className="pn-msg" role="status">
-            {notice.message ?? '안내문을 볼 수 없는 링크입니다.'}
+            {notice.message ?? (
+              <>
+                안내문을 확인할 수 없습니다.
+                <br />
+                유효하지 않은 링크이거나, 기간이 지났거나, 삭제된 안내문입니다.
+                <br />
+                자세한 내용은 학원으로 문의해 주시기 바랍니다.
+              </>
+            )}
           </p>
         ) : (
           <>

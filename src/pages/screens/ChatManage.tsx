@@ -342,17 +342,40 @@ function Content() {
   /* ── 첨부 ─────────────────────────────────────────────────
    * ★ **저장 전에 올린다.** `ownerId` 없이 올려 id 를 받아 두고, 공지를 저장한 뒤 잇는다.
    *   저장부터 강제하면 **쓰다 만 공지가 쌓인다.** */
-  const [files, setFiles] = useState<{ id: number; name: string }[]>([])
+  /** 올려 둔 첨부. **용량도 들고 있어야** 합계를 셀 수 있다 */
+  const [files, setFiles] = useState<{ id: number; name: string; size: number }[]>([])
   const [upBusy, setUpBusy] = useState(false)
 
   async function onPickFiles(list: FileList | null) {
     if (!list || list.length === 0) return
+    /* ★★ **고르는 순간에 막는다.** 한도를 넘기면 서버가 아니라 **그 앞 단계에서 거부**돼
+       우리 오류 문구가 아니라 알 수 없는 오류로 떨어진다(2026-10-23 서버 확인).
+       ⚠️ **한 개 10MB 와 합계 50MB 를 같이 본다** — 10MB 짜리 6개는 파일마다는 통과인데
+          요청에서 막힌다. 이미 올려 둔 것까지 더해서 센다 */
+    const picked = Array.from(list)
+    /* ★ 개수는 **화면이 정한 값**이다(서버에도 같은 값을 건다). 많이 붙이면 학부모 폰에서
+       아래로 길게 늘어진다 — 읽을 안내문이 파일 목록에 밀린다 */
+    if (files.length + picked.length > 5) {
+      setError(`첨부는 5개까지 올릴 수 있습니다. 지금 ${files.length}개를 올려 두었습니다.`)
+      return
+    }
+    const tooBig = picked.find((f) => f.size > 10 * 1024 * 1024)
+    if (tooBig !== undefined) {
+      setError(`${tooBig.name} — 파일 하나는 10MB까지 첨부할 수 있습니다.`)
+      return
+    }
+    const already = files.reduce((n, f) => n + f.size, 0)
+    const total = picked.reduce((n, f) => n + f.size, already)
+    if (total > 50 * 1024 * 1024) {
+      setError('첨부는 모두 합쳐 50MB까지 올릴 수 있습니다. 파일을 줄여 주세요.')
+      return
+    }
     setUpBusy(true)
     setError(null)
     try {
-      for (const f of Array.from(list)) {
+      for (const f of picked) {
         const r = await uploadNoticeFile(f)
-        setFiles((v) => [...v, { id: r.id, name: r.fileName || f.name }])
+        setFiles((v) => [...v, { id: r.id, name: r.fileName || f.name, size: f.size }])
       }
     } catch (e) {
       /* ★ 「파일 저장소가 설정되지 않았습니다」는 **우리 사정**이다 — 담당자가 할 수 있는
@@ -739,8 +762,8 @@ function Content() {
                           </div>
                         )}
                         <div className="hint">
-                          이미지(JPG·PNG·GIF)와 PDF 파일만 첨부할 수 있습니다. [보내기]를 선택해야 공지에
-                          등록됩니다.
+                          이미지(JPG·PNG·GIF)와 PDF 파일만 첨부할 수 있습니다. 최대 5개, 파일 하나는 10MB,
+                          모두 합쳐 50MB까지 올릴 수 있습니다. [보내기]를 선택해야 공지에 등록됩니다.
                         </div>
                       </div>
                     </div>

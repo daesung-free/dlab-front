@@ -7,11 +7,13 @@ import {
   type WaitlistAnswer,
   type WaitlistInvite,
 } from '../api/publicWaitlist'
+import { PublicBrand } from './PublicBrand'
+import { ro } from '../lib/josa'
 import './public-notice.css'
 
 /* 대기자 응답 — /waitlist/:token
  *
- * 자리가 났을 때 보내는 알림톡의 [등록하겠습니다]·[등록하지 않겠습니다] 가 여기로 온다.
+ * 자리가 났을 때 보내는 알림톡의 [등록 희망]·[등록 포기] 가 여기로 온다.
  * 누른 결과가 **대기자 상태를 바로 바꾼다** — 전화를 받아 적는 일을 없애는 것이 목적이다.
  *
  * ★ **로그인 밖·휴대폰 화면이다**(도어락·안내문과 같다). 관리자 레이아웃을 쓰면 PC 전용
@@ -21,7 +23,7 @@ import './public-notice.css'
  *   토큰까지 죽이면 누른 뒤 다시 열었을 때 페이지가 안 떠서 **「눌렀는데 아무 일도
  *   없었다」로 전화가 온다.** 답만 고정하고, 자기가 **무엇을 언제** 눌렀는지 보여준다.
  *
- * ★ **두 버튼의 무게를 다르게 두지 않는다.** 「등록하겠습니다」만 크고 진하면 그쪽으로
+ * ★ **두 버튼의 무게를 다르게 두지 않는다.** 「등록 희망」만 크고 진하면 그쪽으로
  *   손이 간다 — 되돌릴 수 없는 답이라 **고르는 화면이지 권하는 화면이 아니다.**
  *
  * ★ **누르기 전에 한 번 더 묻는다.** 알림톡에서 바로 들어와 손가락이 닿는 자리라,
@@ -81,7 +83,7 @@ export function PublicWaitlist() {
   return (
     <div className="pn-page">
       <main className="pn-card">
-        <div className="pn-brand">D.Lab</div>
+        <PublicBrand />
 
         {failed ? (
           <p className="pn-msg" role="status">
@@ -98,7 +100,15 @@ export function PublicWaitlist() {
         ) : !invite.available ? (
           /* 기한 지남·철회·없는 토큰이 전부 여기다. 사유를 화면이 가르지 않는다 */
           <p className="pn-msg" role="status">
-            {invite.message ?? '응답할 수 없는 링크입니다.'}
+            {invite.message ?? (
+              <>
+                등록 안내를 확인할 수 없습니다.
+                <br />
+                유효하지 않은 링크이거나, 응답 기간이 지났습니다.
+                <br />
+                자세한 내용은 학원으로 문의해 주시기 바랍니다.
+              </>
+            )}
           </p>
         ) : (
           <>
@@ -106,13 +116,19 @@ export function PublicWaitlist() {
             <div className="pn-meta">{invite.academyName}</div>
 
             <div className="pn-body">
-              <b>{invite.studentName}</b> 학생 등록이 가능합니다.
+              <b>{invite.studentName}</b> 학생의 대기 신청에 따른 등록이 가능합니다.
               {invite.deadline ? (
                 <>
                   {'\n'}
-                  {dateTimeText(invite.deadline)}까지 응답해 주시기 바랍니다.
+                  {/* ★ 기한만 굵게. 받는 사람이 이 화면에서 **놓치면 안 되는 것 하나**다 */}
+                  등록을 희망하시는지 <b>{dateTimeText(invite.deadline)}</b>까지 응답해 주시기 바랍니다.
                 </>
-              ) : null}
+              ) : (
+                <>
+                  {'\n'}
+                  등록을 희망하시는지 응답해 주시기 바랍니다.
+                </>
+              )}
             </div>
 
             {invite.answered ? (
@@ -120,21 +136,23 @@ export function PublicWaitlist() {
                 <div className="pw-done-tt">{WAITLIST_ANSWER_LABEL[invite.answered]}</div>
                 <div className="pw-done-sub">
                   {invite.answeredAt
-                    ? `${dateTimeText(invite.answeredAt)}에 응답하셨습니다.`
-                    : '이미 응답하셨습니다.'}
-                  {'\n'}변경이 필요하시면 학원으로 연락해 주시기 바랍니다.
+                    ? `${dateTimeText(invite.answeredAt)}에 응답이 접수되었습니다.`
+                    : '응답이 접수되었습니다.'}
+                  {'\n'}변경이 필요하신 경우 학원으로 문의해 주시기 바랍니다.
                 </div>
               </div>
             ) : asking !== null ? (
               <div className="pw-confirm">
                 <div className="pw-confirm-tt">
-                  「{WAITLIST_ANSWER_LABEL[asking]}」로 보냅니다.
+                  {/* ★ **고른 것**을 굵게 둔다. 이 단계에서 가장 흔한 실수가 **잘못 누른 것**이고,
+                      되돌릴 수 없으니 보내기 전에 눈에 걸려야 한다 */}
+                  「<b>{WAITLIST_ANSWER_LABEL[asking]}</b>」{ro(WAITLIST_ANSWER_LABEL[asking])} 응답합니다.
                   {'\n'}
-                  <b>한 번 보내면 변경할 수 없습니다.</b>
+                  <b>응답 후에는 변경할 수 없습니다.</b>
                 </div>
                 <div className="pw-btns">
                   <button className="pw-btn" type="button" disabled={busy} onClick={() => setAsking(null)}>
-                    돌아가기
+                    취소
                   </button>
                   <button
                     className="pw-btn pw-btn-fill"
@@ -142,7 +160,7 @@ export function PublicWaitlist() {
                     disabled={busy}
                     onClick={() => void submit(asking)}
                   >
-                    {busy ? '보내는 중…' : '보내기'}
+                    {busy ? '처리 중…' : '응답'}
                   </button>
                 </div>
               </div>

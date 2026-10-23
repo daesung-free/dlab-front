@@ -210,8 +210,8 @@ export function changeReservationStatus(
  * ★ **같은 대상이면 같은 토큰**이다(서버가 기존 것을 돌려준다). 누를 때마다 새로 생기면
  *   **이미 보낸 알림톡의 링크가 죽는다.**
  * ★ 기한은 **서버가 정한다**(대기자는 7일). 화면이 보내지 않는다.
- * ★ 학부모가 누르면 **상태가 바로 바뀐다** — 「등록하겠습니다」는 입학 확정, 「등록하지
- *   않겠습니다」는 미등록이다. 그 변경은 이력에 `actorType: 'STUDENT'` 로 남는다.
+ * ★ 학부모가 누르면 **상태가 바로 바뀐다** — 「등록 희망」은 입학 확정, 「등록 포기」는
+ *   미등록이다. 그 변경은 이력에 `actorType: 'STUDENT'` 로 남는다.
  */
 export function shareReservation(reservationId: number): Promise<{ token: string; expiresAt: string | null }> {
   return request<{ token: string; expiresAt: string | null }>(
