@@ -8,6 +8,7 @@ import {
   type WaitlistInvite,
 } from '../api/publicWaitlist'
 import { PublicBrand } from './PublicBrand'
+import { ro } from '../lib/josa'
 import './public-notice.css'
 
 /* 대기자 응답 — /waitlist/:token
@@ -143,7 +144,9 @@ export function PublicWaitlist() {
             ) : asking !== null ? (
               <div className="pw-confirm">
                 <div className="pw-confirm-tt">
-                  「{WAITLIST_ANSWER_LABEL[asking]}」으로 응답합니다.
+                  {/* ★ **고른 것**을 굵게 둔다. 이 단계에서 가장 흔한 실수가 **잘못 누른 것**이고,
+                      되돌릴 수 없으니 보내기 전에 눈에 걸려야 한다 */}
+                  「<b>{WAITLIST_ANSWER_LABEL[asking]}</b>」{ro(WAITLIST_ANSWER_LABEL[asking])} 응답합니다.
                   {'\n'}
                   <b>응답 후에는 변경할 수 없습니다.</b>
                 </div>
