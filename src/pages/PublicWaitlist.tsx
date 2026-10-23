@@ -119,7 +119,8 @@ export function PublicWaitlist() {
               {invite.deadline ? (
                 <>
                   {'\n'}
-                  등록을 희망하시는지 {dateTimeText(invite.deadline)}까지 응답해 주시기 바랍니다.
+                  {/* ★ 기한만 굵게. 받는 사람이 이 화면에서 **놓치면 안 되는 것 하나**다 */}
+                  등록을 희망하시는지 <b>{dateTimeText(invite.deadline)}</b>까지 응답해 주시기 바랍니다.
                 </>
               ) : (
                 <>
