@@ -2,7 +2,7 @@ import { request } from './client'
 
 /* 대기자 응답 (알림톡 「대기자 안내」 버튼이 여는 자리) — /api/v1/public/waitlist/{token}
  *
- * 자리가 났을 때 학부모에게 보내는 알림톡의 [등록하겠습니다] · [등록하지 않겠습니다] 가
+ * 자리가 났을 때 학부모에게 보내는 알림톡의 [등록 희망] · [등록 포기] 가
  * 여기로 온다. 누른 결과가 **대기자 상태를 바로 바꾼다** — 전화를 받아 적는 일을 없애는 것이
  * 목적이다(2026-10-22 서버 확인).
  *
@@ -22,9 +22,10 @@ import { request } from './client'
 
 export type WaitlistAnswer = 'ACCEPT' | 'DECLINE'
 
+/** ★ 구어체를 쓰지 않는다 — 「등록하겠습니다」가 아니라 **명사형**이다(화면 문구 규칙) */
 export const WAITLIST_ANSWER_LABEL: Record<WaitlistAnswer, string> = {
-  ACCEPT: '등록하겠습니다',
-  DECLINE: '등록하지 않겠습니다',
+  ACCEPT: '등록 희망',
+  DECLINE: '등록 포기',
 }
 
 export interface WaitlistInvite {
