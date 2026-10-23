@@ -99,7 +99,15 @@ export function PublicWaitlist() {
         ) : !invite.available ? (
           /* 기한 지남·철회·없는 토큰이 전부 여기다. 사유를 화면이 가르지 않는다 */
           <p className="pn-msg" role="status">
-            {invite.message ?? '응답할 수 없는 링크입니다.'}
+            {invite.message ?? (
+              <>
+                등록 안내를 확인할 수 없습니다.
+                <br />
+                유효하지 않은 링크이거나, 응답 기간이 지났습니다.
+                <br />
+                자세한 내용은 학원으로 문의해 주시기 바랍니다.
+              </>
+            )}
           </p>
         ) : (
           <>
