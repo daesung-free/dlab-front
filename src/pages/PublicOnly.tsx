@@ -16,9 +16,9 @@ export function PublicOnly() {
       <main className="pn-card">
         <div className="pn-brand">D.Lab</div>
         <p className="pn-msg" role="status">
-          주소를 다시 확인해 주세요.
+          접속 주소를 확인해 주세요.
           <br />
-          받으신 안내 문자의 링크로 들어와 주시기 바랍니다.
+          서비스 이용은 안내 문자에 포함된 링크로 접속해 주시기 바랍니다.
         </p>
       </main>
     </div>

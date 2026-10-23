@@ -91,12 +91,15 @@
   color: var(--muted);
 }
 
-/* 볼 수 없는 링크 · 통신 실패. ★ 사유를 늘어놓지 않는다 — 한 문장으로 끝낸다 */
+/* 볼 수 없는 링크 · 통신 실패. ★ 사유를 늘어놓지 않는다 — 한 문장으로 끝낸다
+ * ★ `keep-all` 로 **어절 중간에서 안 끊기게** 한다. 없으면 휴대폰 폭에서
+ *   「접속해 주 / 시기 바랍니다」처럼 갈려 읽다가 걸린다. */
 .pn-msg {
   font-size: 15px;
   line-height: 1.7;
   color: var(--ink-2);
   text-align: center;
+  word-break: keep-all;
   padding: 28px 4px;
 }
 
