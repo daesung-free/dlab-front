@@ -16,6 +16,10 @@ import {
   templateVars,
   updateTemplateContent,
   type NotificationTemplate,
+  listManualTemplates,
+  previewManualSend,
+  sendManual,
+  type ManualPreview,
 } from '../../api/notifications'
 import { useAcademy } from '../../auth/AcademyContext'
 import { getNotificationSummary, type NotificationSummaryRow } from '../../api/notifications'
@@ -324,7 +328,6 @@ function Content() {
   /* ★ 기본을 **「지점」**으로 둔다. 「반」이면 들어오자마자 「반을 먼저 고르세요」만 보여
      **화면이 빈 채로 열린다** — 전에는 가짜 숫자 12가 박혀 있어 그게 안 보였다 */
   const [scope, setScope] = useState('BRANCH')
-  const [reserve, setReserve] = useState(false)
 
   /* 템플릿 관리 탭 — 여기만 실연동이다 */
   const [rows, setRows] = useState<NotificationTemplate[]>([])
@@ -471,9 +474,107 @@ function Content() {
     scope === 'INDIVIDUAL' ? pickedStudents.length : (targets.data?.totalElements ?? targetRows.length)
   const target = { ...scopeMeta, count: targetCount }
 
+  /* ★★ **직원 발송.** 템플릿은 **서버가 가려 준다**(`manual=true`) — 화면이 이벤트 이름으로
+     추측하면 새 템플릿이 생길 때마다 화면을 고쳐야 한다.
+     ⚠️ 경로가 아직 없는 동안에는 404 가 온다. 그때는 **전체 템플릿으로 떨어뜨리지 않는다** —
+        자동 발송 전용 템플릿까지 고를 수 있게 되면 **보냈는데 안 나간다** */
+  const [manualRows, setManualRows] = useState<NotificationTemplate[] | null>(null)
+  const [manualSoon, setManualSoon] = useState(false)
+  useEffect(() => {
+    let alive = true
+    listManualTemplates()
+      .then((v) => alive && setManualRows(v))
+      .catch((e) => {
+        if (!alive) return
+        setManualRows([])
+        setManualSoon(e instanceof ApiError && e.status === 404)
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  /** 템플릿이 요구하는 변수에 채워 넣는 값 */
+  const [vars, setVars] = useState<Record<string, string>>({})
+  /** 미리보기 결과. ★ **이게 있어야만 발송 버튼이 열린다** */
+  const [prev, setPrev] = useState<ManualPreview | null>(null)
+  const [prevBusy, setPrevBusy] = useState(false)
+  const [sendErr, setSendErr] = useState<string | null>(null)
+  const [sent, setSent] = useState<string | null>(null)
+  /** 보내기 전 마지막 확인. 되돌릴 수 없다 */
+  const [confirming, setConfirming] = useState(false)
+
   /* ★ 드롭다운이 서버 템플릿이 됐으므로 **아래 미리보기도 그 값을 따라가야 한다.**
      따로 두면 「고른 것과 보이는 내용이 다른」 화면이 된다 */
-  const sendPick = rows.find((r) => r.id === pickedId) ?? null
+  const sendRows = manualRows ?? []
+  const sendPick = sendRows.find((r) => r.id === pickedId) ?? null
+  /** 템플릿이 요구하는 변수 목록 */
+  const needVars = sendPick ? templateVars(sendPick) : []
+
+  /* ★★ **조건이 바뀌면 미리보기를 버린다.** 안 버리면 **본 것과 다른 사람에게 나간다** —
+     대상을 바꿔 놓고 옛 미리보기로 발송 버튼을 누를 수 있게 된다. 서버도 `previewId` 로만
+     받으므로 화면이 여기서 끊어야 한다 */
+  useEffect(() => {
+    setPrev(null)
+    setSendErr(null)
+    setSent(null)
+  }, [pickedId, scope, pickedClassId, pickedStudents, academyId, vars])
+
+  /** 템플릿을 바꾸면 변수도 비운다 — 앞 템플릿 값이 남으면 엉뚱한 월이 나간다 */
+  useEffect(() => {
+    setVars({})
+  }, [pickedId])
+
+  async function runPreview() {
+    if (sendPick === null || academyId === null) return
+    setPrevBusy(true)
+    setSendErr(null)
+    try {
+      setPrev(
+        await previewManualSend({
+          templateId: sendPick.id,
+          academyId,
+          scope: scope === 'INDIVIDUAL' ? 'SELECTED' : (scope as 'BRANCH' | 'CLASS'),
+          ...(scope === 'CLASS' && pickedClassId !== null ? { classId: pickedClassId } : {}),
+          ...(scope === 'INDIVIDUAL' ? { enrollmentIds: pickedStudents.map(Number) } : {}),
+          variables: vars,
+        }),
+      )
+    } catch (e) {
+      /* ★ 404 는 우리 사정이다 — 「경로를 찾을 수 없습니다」를 담당자에게 띄우지 않는다 */
+      setSendErr(
+        e instanceof ApiError && e.status === 404
+          ? '직접 발송은 준비 중입니다.'
+          : e instanceof ApiError
+            ? e.message
+            : '미리보기를 불러오지 못했습니다.',
+      )
+    } finally {
+      setPrevBusy(false)
+    }
+  }
+
+  async function runSend() {
+    if (prev === null) return
+    setPrevBusy(true)
+    setSendErr(null)
+    try {
+      const r = await sendManual(prev.previewId)
+      setSent(
+        r.skipped > 0
+          ? `${r.requested}명에게 발송했습니다. ${r.skipped}명은 보내지 못했습니다 — 발송 이력에서 확인하세요.`
+          : `${r.requested}명에게 발송했습니다.`,
+      )
+      /* ★ 보낸 미리보기는 **다시 쓸 수 없다**(서버가 한 번만 받는다). 화면에서도 지워
+         **두 번째 발송 버튼이 아예 안 보이게** 한다 */
+      setPrev(null)
+    } catch (e) {
+      setSendErr(e instanceof ApiError ? e.message : '발송하지 못했습니다.')
+    } finally {
+      setPrevBusy(false)
+      setConfirming(false)
+    }
+  }
   /* 서버 채널(KAKAO_ALIMTALK·FCM_PUSH) → 화면 채널 */
   const channel: Channel = sendPick?.channel === 'FCM_PUSH' ? 'FCM' : 'ALIMTALK'
 
@@ -629,18 +730,19 @@ function Content() {
       />
 
       {/* ═══ 메시지 발송 ═══ */}
-      {/* 발송(사람이 골라 보내기)은 아직 API 가 없다. 화면은 그대로 두되 예시임을 밝힌다.
-          ★ 발송 이력은 실연동됐다 — 배너를 같이 씌우면 진짜 기록을 예시로 읽게 된다 */}
-      {tab === 'send' && (
+      {/* ★ 배너를 **경로가 없을 때만** 띄운다. 붙은 뒤에도 「아직 안 나갑니다」가 남아 있으면
+            담당자가 **진짜로 나간 발송을 연습이라고 읽는다.**
+         ★ 발송 이력은 실연동됐다 — 배너를 같이 씌우면 진짜 기록을 예시로 읽게 된다 */}
+      {tab === 'send' && manualSoon && (
         <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
           <div className="ic">
             <Icon name="triangle-alert" size={17} />
           </div>
           <div>
-            <div className="tt">이 탭에서는 아직 실제로 발송되지 않습니다</div>
+            <div className="tt">직접 발송은 준비 중입니다</div>
             <div className="tx">
-              알림은 등원·승인·상담 같은 사건이 일어날 때 <b>자동으로</b> 나갑니다. 사람이 직접 골라
-              보내는 기능은 준비 중입니다 — <b>문자 발송 업체 연결이 끝나야</b> 실제로 나갑니다.
+              알림은 등원·승인·상담 같은 사건이 일어날 때 <b>자동으로</b> 나갑니다. 직원이 때를 골라
+              보내는 기능은 <b>준비 중</b>입니다.
               {/* ★ 발송 이력은 **실연동됐다** — 「기록되지 않는다」고 적어 두면 진짜 기록을 예시로 읽는다 */}
               <br />
               템플릿은 <b>「템플릿 관리」 탭의 실제 값</b>이고, <b>「발송 이력」도 실제 기록</b>입니다.
@@ -799,7 +901,7 @@ function Content() {
                     onChange={(e) => setPickedId(e.target.value === '' ? null : Number(e.target.value))}
                   >
                     <option value="">템플릿 선택</option>
-                    {rows.map((t) => (
+                    {sendRows.map((t) => (
                       <option key={t.id} value={t.id}>
                         {EVENT_LABEL[t.event] ?? t.event} · {CHANNEL_LABEL[t.channel] ?? t.channel}
                         {/* ★ 「지금 실제로 나가는가」는 활성·문구확정·심사 세 축이 다 통과해야 한다 —
@@ -808,8 +910,12 @@ function Content() {
                       </option>
                     ))}
                   </select>
-                  {rows.length === 0 && !loading && (
-                    <div className="hint">등록된 템플릿이 없습니다. 「템플릿 관리」 탭에서 먼저 만드세요.</div>
+                  {sendRows.length === 0 && manualRows !== null && (
+                    <div className="hint">
+                      {manualSoon
+                        ? '직접 발송은 준비 중입니다.'
+                        : '직접 보낼 수 있는 템플릿이 없습니다. 대부분의 알림은 사건이 일어날 때 자동으로 나갑니다.'}
+                    </div>
                   )}
                 </div>
               </div>
@@ -825,6 +931,30 @@ function Content() {
                   </div>
                 </div>
               </div>
+
+              {/* ★ **받는 사람은 템플릿이 정한다.** 발송할 때 고르게 하지 않는다 —
+                     수신자는 그 문구의 일부다(「#{학생명} 학생의 등록비가…」를 학생 본인에게
+                     보내면 문장이 어긋난다). 다만 **누구에게 가는지는 보고 보내야** 한다 */}
+              {sendPick && (
+                <div className="frow">
+                  <label>받는 사람</label>
+                  <div style={{ paddingTop: 9 }}>
+                    <b style={{ fontSize: 13 }}>{RECIPIENT_LABEL[sendPick.recipientType]}</b>
+                    {/* ★ **전원 공통 안내는 한 분에게 한 통**이다(급식 마감·등록기간).
+                        자녀가 둘인 학부모가 한 번만 세어져 **대상 수가 반 인원보다 적게**
+                        나오는데, 그 설명이 없으면 **빠진 것으로 읽는다** */}
+                    {sendPick.studentSpecific === false && (
+                      <div style={{ fontSize: 12, color: 'var(--ink-2)', marginTop: 5 }}>
+                        전원 공통 안내입니다 — <b>학부모 한 분에게 한 통</b>씩 갑니다. 자녀가 둘이어도
+                        한 통입니다.
+                      </div>
+                    )}
+                    <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 5 }}>
+                      템플릿에 정해져 있습니다. 바꾸려면 「템플릿 관리」 탭에서 고칩니다.
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {sendPick && (
                 <div className="frow">
@@ -863,33 +993,57 @@ function Content() {
                 </div>
               </div>
 
-              <div className="frow">
-                <label>예약 발송</label>
-                <div>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, paddingTop: 9 }}>
-                    <input type="checkbox" checked={reserve} onChange={(e) => setReserve(e.target.checked)} />
-                    지정한 시각에 발송
-                  </label>
-                  {reserve && (
-                    <div className="two" style={{ marginTop: 8 }}>
-                      <input className="inp" type="date" defaultValue="2026-05-29" />
-                      <input className="inp" type="time" defaultValue="08:00" />
-                    </div>
-                  )}
+              {/* ★ 템플릿이 요구하는 변수만 묻는다. 문구에 없는 칸을 받으면 어디에 쓰이는지
+                     알 수 없고, 빠뜨리면 **「#{월}」이 그대로 나간다** — 서버도 막지만
+                     보내기 전에 화면에서 먼저 센다 */}
+              {needVars.length > 0 && (
+                <div className="frow">
+                  <label className="req">문구에 넣을 값</label>
+                  <div>
+                    {needVars.map((v) => (
+                      <div key={v} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                        <span style={{ fontSize: 12.5, minWidth: 92, color: 'var(--ink-2)' }}>{v}</span>
+                        <input
+                          className="inp"
+                          maxLength={60}
+                          value={vars[v] ?? ''}
+                          onChange={(e) => setVars((o) => ({ ...o, [v]: e.target.value }))}
+                        />
+                      </div>
+                    ))}
+                    <div className="hint">문구의 그 자리에 그대로 들어갑니다.</div>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="frow">
                 <label>&nbsp;</label>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  {/* ★ **발송 경로가 아직 서버에 없다**(API_GAPS 15부). 템플릿은 전부 이벤트
-                      트리거라 「수동 발송」이라는 것이 서버에 없다 — 대상 고르기까지만 만들어 두고
-                      경로가 생기면 여기에 잇는다. 「준비 중」으로 막아 **눌러도 아무 일이 없는
-                      버튼**이 되지 않게 한다 */}
-                  <button className="btn pri" disabled data-soon title="준비 중입니다">
-                    <Icon name="send" size={14} /> {target.count.toLocaleString()}명에게 발송
-                  </button>
-                  <button className="btn" disabled data-soon title="준비 중입니다">테스트 발송</button>
+                  {/* ★★ **미리보기를 거치지 않으면 보낼 수 없다.** 서버도 `previewId` 로만
+                      받는다 — 조건을 발송 때 다시 보내면 **본 것과 다른 사람에게 나간다** */}
+                  {prev === null ? (
+                    <button
+                      className="btn pri"
+                      disabled={
+                        prevBusy ||
+                        sendPick === null ||
+                        blocked ||
+                        target.count === 0 ||
+                        needVars.some((v) => (vars[v] ?? '').trim() === '')
+                      }
+                      onClick={() => void runPreview()}
+                    >
+                      <Icon name="monitor" size={14} /> {prevBusy ? '확인 중…' : '보낼 내용 확인'}
+                    </button>
+                  ) : (
+                    <button
+                      className="btn pri"
+                      disabled={prevBusy || prev.missingVariables.length > 0 || prev.targetCount === 0}
+                      onClick={() => setConfirming(true)}
+                    >
+                      <Icon name="send" size={14} /> {prev.targetCount.toLocaleString()}명에게 발송
+                    </button>
+                  )}
                   {blocked ? (
                     <span style={{ fontSize: 11.5, color: 'var(--red)', fontWeight: 700 }}>
                       {sendPick ? '아직 발송할 수 있는 상태가 아닙니다' : '템플릿을 먼저 고르세요'}
@@ -932,12 +1086,70 @@ function Content() {
                     {channel === 'ALIMTALK' ? '학부모 수신' : '학생 앱 수신'}
                   </span>
                 </div>
+                {/* ★ 미리보기를 받았으면 **서버가 변수를 채운 문장**을 보여준다. 화면이 채운
+                       것을 보여주면 **본 것과 실제로 나가는 것이 다를 수 있다** */}
                 <div style={{ fontSize: 12.5, lineHeight: 1.65, color: 'var(--ink)', whiteSpace: 'pre-wrap' }}>
-                  {preview(sendPick?.bodyTemplate ?? '') || (
+                  {(prev?.rendered.body ?? preview(sendPick?.bodyTemplate ?? '')) || (
                     <span style={{ color: 'var(--muted)' }}>템플릿을 고르면 내용이 보입니다.</span>
                   )}
                 </div>
               </div>
+
+              {sendErr !== null && (
+                <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)', marginTop: 12 }}>
+                  <div>{sendErr}</div>
+                </div>
+              )}
+
+              {sent !== null && (
+                <div className="note-box" role="status" style={{ marginTop: 12 }}>
+                  <div>{sent}</div>
+                </div>
+              )}
+
+              {prev !== null && (
+                <>
+                  <div className="note-box" style={{ marginTop: 12 }}>
+                    <div>
+                      <b>{prev.targetCount.toLocaleString()}명</b>에게 나갑니다. 위 문장 그대로 발송됩니다.
+                      {sendPick?.studentSpecific === false && (
+                        <div style={{ marginTop: 4 }}>
+                          자녀가 둘인 학부모는 <b>한 번만</b> 셉니다. 그래서 학생 수보다 적을 수 있습니다.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ★★ **빠지는 사람을 반드시 보여준다.** 「30명」이라고 했는데 28명에게
+                         가면 담당자는 영영 모른다. 사유는 서버 문장을 그대로 쓴다 */}
+                  {prev.blocked.length > 0 && (
+                    <div className="note-box risk" style={{ marginTop: 10 }}>
+                      <div className="ic">
+                        <Icon name="triangle-alert" size={17} />
+                      </div>
+                      <div>
+                        <div className="tt">{prev.blocked.length}명에게는 가지 않습니다</div>
+                        <div className="tx">
+                          {prev.blocked.slice(0, 8).map((b) => (
+                            <div key={`${b.studentName}-${b.reason}`}>
+                              {b.studentName} — {b.message}
+                            </div>
+                          ))}
+                          {prev.blocked.length > 8 && <div>그 밖 {prev.blocked.length - 8}명</div>}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {prev.missingVariables.length > 0 && (
+                    <div className="note-box risk" style={{ marginTop: 10 }}>
+                      <div>
+                        아직 채우지 않은 값이 있습니다 — <b>{prev.missingVariables.join(' · ')}</b>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
 
               <div className="note-box warn" style={{ marginTop: 14, marginBottom: 0 }}>
                 <div className="ic">
@@ -955,6 +1167,26 @@ function Content() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ★★ 되돌릴 수 없다. 알림톡은 보내는 즉시 나가고 취소가 없다 —
+             **몇 명에게 나가는지**를 버튼 문구에 그대로 쓴다 */}
+      {confirming && prev !== null && (
+        <Modal
+          title={`${prev.targetCount.toLocaleString()}명에게 발송할까요?`}
+          sub="보내면 되돌릴 수 없습니다."
+          confirmLabel={`${prev.targetCount.toLocaleString()}명에게 발송`}
+          busy={prevBusy}
+          onConfirm={() => void runSend()}
+          onClose={() => setConfirming(false)}
+        >
+          <div className="note-box">
+            <div style={{ whiteSpace: 'pre-wrap' }}>{prev.rendered.body}</div>
+          </div>
+          {prev.blocked.length > 0 && (
+            <div className="hint">{prev.blocked.length}명은 번호가 없거나 수신을 거부해 빠집니다.</div>
+          )}
+        </Modal>
       )}
 
       {/* ═══ 템플릿 관리 — 이 탭만 실연동이다 ═══ */}

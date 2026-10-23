@@ -97,6 +97,14 @@ export interface NotificationTemplate {
    * 축을 따로 보면 "왜 알림이 안 가지"를 못 짚으므로 화면은 이 값을 쓴다.
    */
   sendable: boolean
+  /**
+   * 학생 개인에 관한 알림인가. ★ **`false` 면 전원 공통 안내**다(급식 마감·등록기간).
+   *
+   * ⚠️ 공통 안내는 **학부모 한 분에게 한 통**이라, 자녀가 둘이면 목록에 한 번만 나온다 —
+   *   「대상 수」가 반 인원보다 적을 수 있고, 그걸 모르면 **빠진 것으로 읽힌다.**
+   * ⚠️ 반대로 **출결·미납은 자녀마다 한 통**이 맞다. 거기서 묶으면 한 자녀의 알림이 사라진다.
+   */
+  studentSpecific?: boolean
   /** 마지막으로 고친 시각·사람(2026-09-21 추가). 그 전에 고친 행은 사람이 null 이다 */
   updatedAt?: string | null
   updatedByName?: string | null
@@ -252,4 +260,90 @@ export function getNotificationSummary(params: {
   to?: string
 }): Promise<NotificationSummaryRow[]> {
   return request<NotificationSummaryRow[]>('/api/v1/admin/notification-logs/summary', { query: { ...params } })
+}
+
+/* ── 직원 발송 (디랩 문구 4종: 대기자 · 급식 · 등록비 · 미납) ─────────────
+ *
+ * 지금까지는 **사건이 일어나야 나가는 구조**뿐이었다. 직원이 때를 골라 보내는 길이 없어
+ * 새로 만든 경로다(2026-10-22 서버와 합의).
+ *
+ * ★★ **미리보기를 거치지 않으면 못 보낸다.** 조건을 발송 본문에 다시 실으면, 화면이
+ *   미리보기 뒤에 대상을 바꿔도 서버는 모른다 — **본 것과 다른 사람에게 나간다.**
+ *   그래서 발송은 `previewId` 하나만 보낸다.
+ * ★★ **`previewId` 는 한 번만 먹는다**(서버가 유니크로 막는다). 버튼이 두 번 눌리면
+ *   **같은 학부모에게 두 통**이 가고, 알림톡은 **건당 과금**이다.
+ * ★ **미리보기는 10분짜리다.** 창을 열어 둔 사이 퇴원한 학생이 섞이지 않게.
+ * ★ **받는 사람은 템플릿이 정한다**(`recipientType`). 발송할 때 고르게 하지 않는다 —
+ *   수신자는 그 문구의 일부다. 「#{학생명} 학생의 등록비가 미납입니다」를 학생 본인에게
+ *   보내면 문장이 어긋나고, 같은 템플릿이 어떤 날은 학부모 어떤 날은 학생에게 간 기록이
+ *   남으면 **나중에 「누가 받았나」에 답할 수 없다.**
+ */
+
+export type ManualScope = 'BRANCH' | 'CLASS' | 'SELECTED'
+
+export interface ManualPreviewRequest {
+  templateId: number
+  academyId: number
+  scope: ManualScope
+  classId?: number
+  enrollmentIds?: number[]
+  /** 템플릿의 `requiredVariables` 를 채운 값 */
+  variables: Record<string, string>
+}
+
+/** 빠지는 사람. ★ **종류가 고정이다** — 문장은 서버가 준다 */
+export interface ManualBlocked {
+  studentName: string
+  reason: 'NO_PHONE' | 'OPTED_OUT' | 'NOT_ENROLLED' | string
+  message: string
+}
+
+export interface ManualPreview {
+  /** 발송할 때 이 값만 돌려보낸다 */
+  previewId: string
+  targetCount: number
+  recipients: {
+    enrollmentId: number
+    studentName: string
+    studentNo: string | null
+    className: string | null
+    receiverName: string | null
+    /** ★ 서버에서 이미 가려져 온다. 발송 화면에서 전체 번호를 볼 이유가 없다 */
+    phone: string | null
+  }[]
+  /** 첫 대상 기준으로 변수를 채운 결과 */
+  rendered: { title: string | null; body: string }
+  /** ★ 안 보여주면 「30명」이라 했는데 28명에게 가도 아무도 모른다 */
+  blocked: ManualBlocked[]
+  /** 안 채운 변수. 있으면 발송을 막는다 */
+  missingVariables: string[]
+}
+
+export interface ManualSendResult {
+  requested: number
+  skipped: number
+  logIds: number[]
+}
+
+/** 직원이 고를 수 있는 템플릿. ★ **서버가 가린다** — 화면이 이벤트 이름으로 추측하지 않는다 */
+export function listManualTemplates(): Promise<NotificationTemplate[]> {
+  return request<NotificationTemplate[]>('/api/v1/admin/notification-templates', {
+    query: { manual: true },
+  })
+}
+
+/** 미리보기 — **아무것도 보내지 않는다** */
+export function previewManualSend(body: ManualPreviewRequest): Promise<ManualPreview> {
+  return request<ManualPreview>('/api/v1/admin/notifications/manual/preview', {
+    method: 'POST',
+    body,
+  })
+}
+
+/** 발송 — 조건을 다시 보내지 않는다. 미리보기에서 **본 그대로** 나간다 */
+export function sendManual(previewId: string): Promise<ManualSendResult> {
+  return request<ManualSendResult>('/api/v1/admin/notifications/manual/send', {
+    method: 'POST',
+    body: { previewId },
+  })
 }

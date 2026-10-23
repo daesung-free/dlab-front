@@ -64,6 +64,8 @@ type EditDraft = {
   trackName: string
   result: AdmissionResult
   memo: string
+  /** 고치기 전에 마스터 코드가 있었는가. ⚠️ **코드는 아직 지워지지 않는다**(아래 save 참고) */
+  hadUniversityCode: boolean
 }
 
 const EMPTY_DRAFT: EditDraft = {
@@ -75,6 +77,7 @@ const EMPTY_DRAFT: EditDraft = {
   trackName: '',
   result: 'PENDING',
   memo: '',
+  hadUniversityCode: false,
 }
 
 const RESULT_TONE: Record<AdmissionResult, string> = {
@@ -280,10 +283,17 @@ function Content() {
     if (!draft || draft.enrollmentId === '') return false
     setBusy(true)
     setModalErr(null)
+    /* ★★ 마스터 코드를 **항상 명시해서** 보낸다(2026-10-22, dlab-api #242 로 칸이 생겼다).
+       고른 게 없으면 `null` 이다 — 키를 빼면 수정 시 「유지」라, 대학을 마스터 밖 이름으로
+       바꿨는데 **앞 대학의 코드가 남는다.** 이름은 바뀌었는데 집계는 앞 대학으로 간다. */
+    const pickedDept = deptOpts.find((d) => d.name === deptTyped) ?? null
     const body: AdmissionResultInput = {
       admissionType: draft.admissionType,
       universityName: draft.universityName.trim(),
       departmentName: draft.departmentName.trim(),
+      universityCode: pickedUni?.code ?? null,
+      /* 학과 코드는 **대학을 마스터에서 고른 때만** 뜻이 있다 — 학과코드가 여러 대학에서 공용이다 */
+      departmentCode: pickedUni === null ? null : (pickedDept?.code ?? null),
       trackName: draft.trackName.trim() || undefined,
       result: draft.result,
       memo: draft.memo.trim() || undefined,
@@ -291,7 +301,18 @@ function Content() {
     try {
       if (draft.resultId === null) await createResult(Number(draft.enrollmentId), body)
       else await updateResult(draft.resultId, body)
-      setNotice(draft.resultId === null ? '지원을 추가했습니다.' : '수정했습니다. 이 줄은 이제 직원 확인 값입니다.')
+      /* ⚠️⚠️ **코드를 `null` 로 보내도 지워지지 않는다**(2026-10-22 실측 — 200 이 오고 앞
+         코드가 남는다. `waitlistCapacity` 와 같은 함정이고 서버에 전달했다). 그러면
+         **이름은 연세대 원주캠인데 집계는 연세대(서울) 로** 간다 — 화면이 「미등록」도 못
+         띄운다. 지워질 때까지 **그 사실을 그대로 알린다.** 조용히 두면 아무도 모른다 */
+      const stale = draft.resultId !== null && draft.hadUniversityCode && pickedUni === null
+      setNotice(
+        draft.resultId === null
+          ? '지원을 추가했습니다.'
+          : stale
+            ? '수정했습니다. 다만 대학을 목록에 없는 이름으로 바꿨습니다 — 집계는 아직 이전 대학으로 잡힙니다. 목록에서 다시 선택하거나, 이 지원을 내리고 새로 등록해 주세요.'
+            : '수정했습니다. 이 줄은 이제 직원 확인 값입니다.',
+      )
       table.reload()
       await loadStats()
       return true
@@ -344,7 +365,20 @@ function Content() {
       value: (r) => ADMISSION_TYPE_LABEL[r.admissionType],
       render: (r) => <span className="mk supplement">{ADMISSION_TYPE_LABEL[r.admissionType]}</span>,
     },
-    { key: 'universityName', header: '대학', value: (r) => r.universityName },
+    {
+      key: 'universityName',
+      header: '대학',
+      value: (r) => r.universityName,
+      /* ★ 코드가 없는 줄은 **손으로 넣은 이름**이다. 같은 대학이 다른 이름으로 들어가 있을 수
+         있어 집계에서 갈린다 — 눈에 보여야 담당자가 목록에서 다시 고른다.
+         ⚠️ 2026-10-22 이전 데이터는 전부 여기 걸린다(서버가 코드를 소급해 채우지 않았다) */
+      render: (r) => (
+        <>
+          {r.universityName}
+          {r.universityCode === null && <span className="mk brandnew" style={{ marginLeft: 6 }}>미등록</span>}
+        </>
+      ),
+    },
     { key: 'departmentName', header: '학과', value: (r) => r.departmentName },
     { key: 'trackName', header: '계열', width: '90px', value: (r) => r.trackName ?? '-' },
     {
@@ -391,6 +425,7 @@ function Content() {
                 trackName: r.trackName ?? '',
                 result: r.result,
                 memo: r.memo ?? '',
+                hadUniversityCode: r.universityCode !== null,
               })
             }}
           >
@@ -726,7 +761,7 @@ function Content() {
                   ? '대학 목록에서 선택했습니다. 학과를 고르면 계열이 자동으로 입력됩니다.'
                   : uniTyped.length < 2
                     ? '두 글자 이상 입력하면 대학 목록이 나옵니다. 목록에 없으면 직접 입력해도 됩니다.'
-                    : '대학 목록에 없는 이름입니다. 이대로 저장하면 직접 입력한 값으로 남습니다.'}
+                    : '대학 목록에 없는 이름입니다. 이대로 저장하면 목록에 「미등록」으로 표시됩니다.'}
               </div>
             </div>
           </div>

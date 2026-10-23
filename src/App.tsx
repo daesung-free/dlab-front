@@ -8,17 +8,32 @@ import { GroupPage } from './pages/GroupPage'
 import { ScreenPage } from './pages/ScreenPage'
 import { InternalSpecRoutes } from './pages/internal/SpecRoutes'
 import { DoorPublic } from './pages/DoorPublic'
+import { PublicNotice } from './pages/PublicNotice'
+import { PublicWaitlist } from './pages/PublicWaitlist'
+import { PublicOnly } from './pages/PublicOnly'
+import { isPublicHost } from './lib/publicUrl'
 
 export default function App() {
   return (
     <Routes>
-      {/* ★ **로그인 밖에 있는 유일한 화면.** 출입문 QR 을 찍은 학생이 들어오는 자리라
+      {/* ★ **로그인 밖에 있는 화면들.** 출입문 QR 을 찍은 학생이 들어오는 자리라
              토큰이 없다 — 문 앞에 선 학생이 앱을 깔고 로그인할 상황이 아니다.
              Gate 보다 **앞에서** 갈라야 한다. Gate 안에 두면 로그인 화면으로 밀려난다.
           ★ AuthProvider 밖에 둔다. 같은 브라우저에 관리자 토큰이 남아 있어도 그 세션을
              건드리지 않기 위해서다(`/me` 조회도 일어나지 않는다). */}
       <Route path="door/:academyCode" element={<DoorPublic />} />
-      <Route path="*" element={<AdminApp />} />
+      {/* 알림톡 「등록비 안내」 버튼이 여는 자리. 받는 사람이 학부모라 같은 이유로
+          Gate 밖·AuthProvider 밖이다 */}
+      <Route path="notice/:token" element={<PublicNotice />} />
+      {/* 토큰을 쿼리로 받는 형태(`/notice?t=…`). 알림톡 버튼 주소에 변수를 못 쓰면 이쪽이다 */}
+      <Route path="notice" element={<PublicNotice />} />
+      {/* 대기자 안내톡의 [등록 희망]·[등록 포기] 가 여는 자리 */}
+      <Route path="waitlist/:token" element={<PublicWaitlist />} />
+      <Route path="waitlist" element={<PublicWaitlist />} />
+      {/* ★★ **학부모용 도메인에서는 관리자 화면을 열지 않는다.** 같은 빌드가 두 도메인에
+             올라가 있어, 받은 링크에서 앞부분만 지우면 **로그인 창**이 뜬다.
+          ⚠️ 로컬·개발에서는 늘 관리자 화면이다(`VITE_PUBLIC_BASE_URL` 이 없다) */}
+      <Route path="*" element={isPublicHost() ? <PublicOnly /> : <AdminApp />} />
     </Routes>
   )
 }
