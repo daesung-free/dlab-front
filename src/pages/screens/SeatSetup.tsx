@@ -139,9 +139,13 @@ export function SeatSetup({ onChanged }: Props) {
   }, [load, loadSeats])
 
   /** 모달 저장 공통 — 실패 메시지는 **모달 안에** 띄운다. 뒤 배너는 안 보인다 */
+  /** 결과 한 줄. 성공인데 **아무것도 안 바뀐 경우**를 가르기 위해 둔다 */
+  const [notice, setNotice] = useState<string | null>(null)
+
   const submit = async (fn: () => Promise<unknown>) => {
     setBusy(true)
     setModalError(null)
+    setNotice(null)
     try {
       await fn()
       setModal(null)
@@ -175,6 +179,12 @@ export function SeatSetup({ onChanged }: Props) {
       {error && (
         <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
           {error}
+        </div>
+      )}
+
+      {notice !== null && (
+        <div className="note-box" role="status">
+          <div>{notice}</div>
         </div>
       )}
 
@@ -307,7 +317,19 @@ export function SeatSetup({ onChanged }: Props) {
           busy={busy}
           error={modalError}
           onClose={() => setModal(null)}
-          onSubmit={(body) => submit(() => updateSeatStyles({ studyAreaId: areaId, ...body }))}
+          /* ★★ **바뀐 좌석 수를 보여준다.** 서버는 「요청 정상, 0석 바뀜」도 성공으로 준다 —
+             범위가 그 구역 번호대와 안 맞으면 그렇다(C구역은 201번대인데 1~5 를 주면 0석).
+             숫자를 안 보여주면 **아무 일도 안 일어난 것과 성공이 똑같아 보인다** */
+          onSubmit={(body) =>
+            submit(async () => {
+              const changed = await updateSeatStyles({ studyAreaId: areaId, ...body })
+              setNotice(
+                changed > 0
+                  ? `${changed}석의 형태를 바꿨습니다.`
+                  : '바뀐 좌석이 없습니다. 번호 범위가 이 구역의 좌석번호와 맞는지 확인해 주세요.',
+              )
+            })
+          }
         />
       )}
 
