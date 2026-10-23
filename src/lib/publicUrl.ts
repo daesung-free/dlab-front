@@ -29,3 +29,22 @@ export function noticeUrl(token: string): string {
 export function waitlistUrl(token: string): string {
   return `${origin()}/waitlist/${encodeURIComponent(token)}`
 }
+
+/**
+ * 지금 열려 있는 곳이 **학부모용 도메인**인가.
+ *
+ * ★ 관리자 화면과 **같은 빌드**가 두 도메인에 올라간다(Amplify 앱 하나에 도메인 둘).
+ *   그래서 학부모가 받은 주소에서 앞부분만 지우면 **관리자 로그인 창**이 열린다.
+ *   로그인해야 아무것도 안 보이지만, 받은 사람이 볼 이유가 없는 화면이다.
+ * ⚠️ **로컬·개발에서는 늘 false 다**(`VITE_PUBLIC_BASE_URL` 이 없다). 개발 중에
+ *   관리자 화면이 막히면 안 된다.
+ */
+export function isPublicHost(): boolean {
+  if (BASE === undefined || BASE === '') return false
+  try {
+    return new URL(BASE).host === window.location.host
+  } catch {
+    /* 값이 주소 꼴이 아니면 **막지 않는다** — 설정 실수로 관리자 화면을 잠그지 않는다 */
+    return false
+  }
+}

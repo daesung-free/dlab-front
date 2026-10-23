@@ -10,6 +10,8 @@ import { InternalSpecRoutes } from './pages/internal/SpecRoutes'
 import { DoorPublic } from './pages/DoorPublic'
 import { PublicNotice } from './pages/PublicNotice'
 import { PublicWaitlist } from './pages/PublicWaitlist'
+import { PublicOnly } from './pages/PublicOnly'
+import { isPublicHost } from './lib/publicUrl'
 
 export default function App() {
   return (
@@ -28,7 +30,10 @@ export default function App() {
       {/* 대기자 안내톡의 [등록하겠습니다]·[등록하지 않겠습니다] 가 여는 자리 */}
       <Route path="waitlist/:token" element={<PublicWaitlist />} />
       <Route path="waitlist" element={<PublicWaitlist />} />
-      <Route path="*" element={<AdminApp />} />
+      {/* ★★ **학부모용 도메인에서는 관리자 화면을 열지 않는다.** 같은 빌드가 두 도메인에
+             올라가 있어, 받은 링크에서 앞부분만 지우면 **로그인 창**이 뜬다.
+          ⚠️ 로컬·개발에서는 늘 관리자 화면이다(`VITE_PUBLIC_BASE_URL` 이 없다) */}
+      <Route path="*" element={isPublicHost() ? <PublicOnly /> : <AdminApp />} />
     </Routes>
   )
 }
