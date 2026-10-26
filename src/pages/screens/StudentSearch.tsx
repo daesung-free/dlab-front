@@ -59,6 +59,7 @@ import {
   type ClassGroup,
 } from '../../api/classes'
 import { studentNoText } from '../../lib/studentNo'
+import { GuardianBlock } from './GuardianBlock'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
 
@@ -1161,6 +1162,10 @@ function Content() {
                 </div>
               </div>
               )}
+
+              {/* ★ 보호자 연락처 — 앱 계정 **바로 위**에 둔다. 알림톡이 계정을 거쳐 나가므로
+                     「번호를 넣었는데 왜 안 가지」의 답이 바로 아래 칸에 있어야 한다 */}
+              <GuardianBlock enrollmentId={infoEdit.row.enrollmentId} />
 
               {/* ★ 앱 계정. **학생이 비밀번호를 5회 틀리면 잠기고 저절로 안 풀린다** —
                      풀어 줄 자리가 없어서 그 학생은 앱을 못 썼다(2026-09-27 실테스트).

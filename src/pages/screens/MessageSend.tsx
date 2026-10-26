@@ -17,6 +17,7 @@ import {
   updateTemplateContent,
   type NotificationTemplate,
   listManualTemplates,
+  isTemporaryBlock,
   previewManualSend,
   sendManual,
   type ManualPreview,
@@ -1122,24 +1123,57 @@ function Content() {
 
                   {/* ★★ **빠지는 사람을 반드시 보여준다.** 「30명」이라고 했는데 28명에게
                          가면 담당자는 영영 모른다. 사유는 서버 문장을 그대로 쓴다 */}
-                  {prev.blocked.length > 0 && (
-                    <div className="note-box risk" style={{ marginTop: 10 }}>
-                      <div className="ic">
-                        <Icon name="triangle-alert" size={17} />
-                      </div>
-                      <div>
-                        <div className="tt">{prev.blocked.length}명에게는 가지 않습니다</div>
-                        <div className="tx">
-                          {prev.blocked.slice(0, 8).map((b) => (
-                            <div key={`${b.studentName}-${b.reason}`}>
-                              {b.studentName} — {b.message}
+                  {prev.blocked.length > 0 &&
+                    (() => {
+                      /* ★ 두 종류를 갈라 보여준다 — 담당자가 할 일이 다르다.
+                           설정 때문에 빠진 것은 **고칠 데이터가 없다.** */
+                      const held = prev.blocked.filter((b) => isTemporaryBlock(b.reason))
+                      const real = prev.blocked.filter((b) => !isTemporaryBlock(b.reason))
+                      return (
+                        <>
+                          {held.length > 0 && (
+                            <div className="note-box" style={{ marginTop: 10, borderColor: 'var(--amber)' }}>
+                              <div className="ic">
+                                <Icon name="shield" size={17} />
+                              </div>
+                              <div>
+                                <div className="tt">{held.length}명은 지금 설정 때문에 보류됩니다</div>
+                                <div className="tx">
+                                  이관 기간이라 <b>허용한 번호로만</b> 나갑니다. 학생 정보에는 문제가
+                                  없으니 <b>고치실 것은 없습니다.</b> 설정이 풀리면 그대로 나갑니다.
+                                  <div style={{ marginTop: 6 }}>
+                                    {held.slice(0, 6).map((b) => (
+                                      <span key={b.studentName} style={{ marginRight: 8 }}>
+                                        {b.studentName}
+                                      </span>
+                                    ))}
+                                    {held.length > 6 && <span>그 밖 {held.length - 6}명</span>}
+                                  </div>
+                                </div>
+                              </div>
                             </div>
-                          ))}
-                          {prev.blocked.length > 8 && <div>그 밖 {prev.blocked.length - 8}명</div>}
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                          )}
+                          {real.length > 0 && (
+                            <div className="note-box risk" style={{ marginTop: 10 }}>
+                              <div className="ic">
+                                <Icon name="triangle-alert" size={17} />
+                              </div>
+                              <div>
+                                <div className="tt">{real.length}명에게는 가지 않습니다</div>
+                                <div className="tx">
+                                  {real.slice(0, 8).map((b) => (
+                                    <div key={`${b.studentName}-${b.reason}`}>
+                                      {b.studentName} — {b.message}
+                                    </div>
+                                  ))}
+                                  {real.length > 8 && <div>그 밖 {real.length - 8}명</div>}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )
+                    })()}
 
                   {prev.missingVariables.length > 0 && (
                     <div className="note-box risk" style={{ marginTop: 10 }}>
