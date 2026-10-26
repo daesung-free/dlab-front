@@ -153,44 +153,9 @@ const GRADING_QUESTIONS: Question[] = [
   q('g5', 'text', '가장 어려웠던 단원·유형을 적어주세요', [], false),
 ]
 
-const SURVEYS: Survey[] = [
-  { id: 's1', title: '2026 6월 평가원 가채점', kind: '가채점', status: '배포중', target: '전체 재원생', targetCount: 296, responses: 214, openedAt: '2026-06-04 18:00', closesAt: '2026-06-05 23:59', questions: GRADING_QUESTIONS },
-  { id: 's2', title: '2026 5월 THE PREMIUM 가채점', kind: '가채점', status: '집계완료', target: '전체 재원생', targetCount: 296, responses: 289, openedAt: '2026-05-20 18:00', closesAt: '2026-05-21 23:59', questions: GRADING_QUESTIONS },
-  {
-    id: 's3',
-    title: '6월 특강 수요 조사',
-    kind: '수요조사',
-    status: '마감',
-    target: '자연계열',
-    targetCount: 198,
-    responses: 171,
-    openedAt: '2026-05-15 09:00',
-    closesAt: '2026-05-22 18:00',
-    questions: [
-      q('d1', 'multi', '수강을 희망하는 특강을 모두 고르세요', ['수학 미적 킬러', '국어 언매 심화', '지구과학 신유형', '영어 빈칸추론']),
-      q('d2', 'single', '선호 시간대', ['평일 저녁', '토요일 오전', '토요일 오후']),
-      q('d3', 'text', '개설을 원하는 다른 특강이 있다면 적어주세요', [], false),
-    ],
-  },
-  {
-    id: 's4',
-    title: '급식 만족도 조사 (5월)',
-    kind: '만족도',
-    status: '집계완료',
-    target: '급식 신청자',
-    targetCount: 241,
-    responses: 198,
-    openedAt: '2026-05-25 12:00',
-    closesAt: '2026-05-31 23:59',
-    questions: [
-      q('m1', 'scale', '전반적인 급식 만족도', SCALE_OPTIONS),
-      q('m2', 'scale', '음식의 양', SCALE_OPTIONS),
-      q('m3', 'scale', '배식 대기시간', SCALE_OPTIONS),
-      q('m4', 'text', '개선했으면 하는 점', [], false),
-    ],
-  },
-  { id: 's5', title: '2026 9월 평가원 가채점', kind: '가채점', status: '작성중', target: '-', targetCount: 0, responses: 0, openedAt: '-', closesAt: '-', questions: GRADING_QUESTIONS },
-]
+/* ★★ **예시 설문 5건을 지웠다**(2026-10-26). 상단 카드가 이걸 세고 있었는데, 아래 표에는
+ *   서버 설문이 떠 있어 **두 숫자가 서로 다른 말을** 했다. 목록은 `surveys` 상태가 쥔다.
+ *   ★ 문항 예시(GRADING_QUESTIONS)는 남긴다 — 「템플릿에서 생성」이 실제로 쓴다. */
 
 /* ══ 템플릿 ══ */
 
@@ -631,7 +596,9 @@ function stamp(v: string | null | undefined): string {
     }
     try {
       await createSurveyApi(body)
-      setApiNotice('설문을 개설했습니다.')
+      /* ★ **따로 배포하는 단계가 없다**는 것을 여기서 말한다 — 안 쓰면 담당자가
+           「이제 어디서 내보내지」를 찾는다. 알림은 안 나간다는 것도 같이 적는다 */
+      setApiNotice('설문을 열었습니다. 응답 기간이 되면 학생 앱에 바로 보입니다 — 따로 보내는 단계는 없습니다.')
       setDraft(null)
       await loadSurveys()
     } catch (err) {
@@ -1006,13 +973,14 @@ function stamp(v: string | null | undefined): string {
                 title={isTemplate ? '템플릿 저장은 아직 준비 중입니다' : undefined}
                 onClick={() => void saveSurvey(draft)}
               >
-                <Icon name="save" size={14} /> {isTemplate ? '템플릿 저장' : '저장'}
+                <Icon name="save" size={14} /> {isTemplate ? '템플릿 저장' : '저장하고 열기'}
               </button>
-              {!isTemplate && (
-                <button className="btn" disabled data-soon title="준비 중입니다">
-                  <Icon name="send" size={14} /> 저장 후 배포
-                </button>
-              )}
+              {/* ★★ 「저장 후 배포」를 뺐다(2026-10-26). **배포라는 단계가 서버에 없다** —
+                     저장하면 설문 상태가 응답 기간으로 정해지고(예정 → 진행중 → 마감),
+                     학생은 앱 목록에서 바로 본다. 버튼을 두면 **저장만 하고 배포를 안 했다고
+                     오해**해 담당자가 다음 단계를 찾게 된다.
+                     ★ 알림을 보내는 것은 또 다른 일이다(`/surveys/{id}/remind`). 그쪽 문안
+                       2종(SURVEY_ASSIGNED·SURVEY_REMINDER)이 아직 심사 전이라 못 쓴다. */}
             </div>
           </div>
 
@@ -1562,46 +1530,43 @@ function stamp(v: string | null | undefined): string {
         </Modal>
       )}
 
-      {/* ★ 이 스트립은 서버가 아니라 화면 안의 상수(SURVEYS·TEMPLATES)로 그린다.
-             아래 목록은 서버 값이라 **위아래 숫자가 안 맞는다.** 어디까지가 실데이터인지
-             화면이 스스로 밝히지 않으면 보는 사람이 구분할 방법이 없다. */}
+      {/* ★★ **예시로 센 숫자를 실제 목록으로 바꿨다**(2026-10-26).
+             전에는 화면 안의 상수(SURVEYS·TEMPLATES)를 세고 있었다 — 아래 표에는
+             서버 설문 17건이 떠 있는데 위 카드는 5·1·85%·4 를 보여줘 **두 숫자가
+             서로 다른 말을** 했다. 「표시용 예시」 딱지가 붙어 있어도, 숫자가 먼저 읽힌다.
+             ★ 평균 응답률은 여전히 못 센다 — 응답 수가 **설문마다 따로** 와서 전체를
+               내려면 17번을 더 불러야 한다. 지어내느니 '-' 다. */}
       <div className="stat-strip">
         <div className="stat">
           <div className="l">
             <Icon name="clipboard-list" size={13} /> 전체 설문
           </div>
-          <div className="v">{SURVEYS.length}</div>
-          <div className="d"><span className="mk supplement" title="준비 중입니다">표시용 예시</span></div>
+          <div className="v">{surveys.length}</div>
+          <div className="d">올해 개설</div>
         </div>
         <div className="stat">
           <div className="l">
-            <Icon name="send" size={13} /> 배포중
+            <Icon name="send" size={13} /> 진행중
           </div>
           <div className="v" style={{ color: 'var(--mint-d)' }}>
-            {SURVEYS.filter((s) => s.status === '배포중').length}
+            {surveys.filter((s) => s.status === 'OPEN').length}
           </div>
-          <div className="d"><span className="mk supplement" title="준비 중입니다">표시용 예시</span></div>
+          {/* ★ 「배포중」이라고 쓰지 않는다 — 배포라는 단계가 없다. 서버 상태 그대로 */}
+          <div className="d">응답 받는 중</div>
+        </div>
+        <div className="stat">
+          <div className="l">
+            <Icon name="calendar-clock" size={13} /> 예정
+          </div>
+          <div className="v">{surveys.filter((s) => s.status === 'SCHEDULED').length}</div>
+          <div className="d">아직 안 열림</div>
         </div>
         <div className="stat">
           <div className="l">
             <Icon name="percent" size={13} /> 평균 응답률
           </div>
-          <div className="v">
-            {Math.round(
-              (SURVEYS.filter((s) => s.targetCount).reduce((a, s) => a + s.responses / s.targetCount, 0) /
-                SURVEYS.filter((s) => s.targetCount).length) *
-                100,
-            )}
-            %
-          </div>
-          <div className="d"><span className="mk supplement" title="준비 중입니다">표시용 예시</span></div>
-        </div>
-        <div className="stat">
-          <div className="l">
-            <Icon name="copy" size={13} /> 템플릿
-          </div>
-          <div className="v">{TEMPLATES.length}</div>
-          <div className="d"><span className="mk supplement" title="준비 중입니다">표시용 예시</span></div>
+          <div className="v">-</div>
+          <div className="d">집계 준비 중</div>
         </div>
         <div className="stat">
           <div className="l">
@@ -1618,7 +1583,7 @@ function stamp(v: string | null | undefined): string {
       <div className="card-sec">
         <Tabs
           items={[
-            { key: 'list', label: '설문 목록', count: SURVEYS.length },
+            { key: 'list', label: '설문 목록', count: surveys.length },
             { key: 'template', label: '템플릿', count: TEMPLATES.length },
             { key: 'result', label: '결과 집계' },
             { key: 'target', label: '대상자' },
