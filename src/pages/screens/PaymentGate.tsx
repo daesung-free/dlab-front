@@ -394,10 +394,15 @@ function Content() {
           onSelectedChange={setSel}
           masked={masked}
           pageSize={15}
-          emptyText="결제 기록이 없습니다 — PG 연동이 아직 준비되지 않았습니다."
+          /* ★★ **두 사정을 섞지 않는다.** 여기가 빈 것은 PG 연동 때문이 아니라
+             **전체를 훑는 경로가 없기 때문**이다 — 결제 조회가 청구 한 건 단위다.
+             「연동이 안 됐다」고 적어 두면 **인증키가 와도 같은 문구가 남아** 담당자가
+             계속 연동 문제로 읽는다(2026-10-26 서버 확인) */
+          emptyText="전체 결제 목록은 아직 제공되지 않습니다. 수납현황에서 청구 건별로 확인해 주세요."
           countLabel={<>결제 <b>0</b>건</>}
           toolbar={
             <>
+              {/* 둘 다 **목록이 있어야 쓸 수 있는 것**이다. 목록 경로가 생기면 같이 풀린다 */}
               {tab === 'vbank' && (
                 <button className="btn" disabled data-soon title="준비 중입니다">
                   <Icon name="send" size={14} /> 입금 안내 재발송
@@ -461,7 +466,9 @@ function Content() {
               rows={pg.data ?? []}
               rowKey={(r) => String(r.id)}
               loading={pg.loading}
-              emptyText={pg.error ?? '등록된 상점이 없습니다.'}
+              /* ⚠️ 운영은 지금 0건이다(MID 를 받아 두고 아직 넣지 않았다). 「없다」로만
+                 끝내면 담당자가 **화면 고장으로 읽는다** */
+              emptyText={pg.error ?? '등록된 상점이 없습니다. 결제 대행사에서 받은 상점 정보를 먼저 등록해야 합니다.'}
               countLabel={
                 <>
                   상점 <b>{(pg.data ?? []).length}</b>건
