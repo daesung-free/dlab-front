@@ -3,11 +3,21 @@ import {
   DataTable,
   ExcelButton,
   MaskToggle,
+  Modal,
   SearchForm,
+  useServerData,
   type Column,
   type Field,
   type SearchValues,
 } from '../../components/common'
+import { ApiError } from '../../api/client'
+import {
+  PG_CHANNEL_LABEL,
+  PG_PURPOSE_LABEL,
+  listPgSites,
+  setPgSiteActive,
+  type PgSite,
+} from '../../api/pgSites'
 import { Icon } from '../../components/Icon'
 import { Tabs } from '../../components/Tabs'
 import { MOCK_STUDENTS } from './mockStudents'
@@ -44,13 +54,6 @@ const STATUS_META: Record<PayStatus, { label: string; cls: string }> = {
 
 type Method = '카드' | '가상계좌' | '간편결제'
 type Item = '교습비' | '급식비' | '특강비' | '등록비'
-
-const PG_OF: Record<Item, string> = {
-  교습비: '준비 중',
-  등록비: '준비 중',
-  급식비: '준비 중',
-  특강비: '준비 중',
-}
 
 const AMOUNTS: Record<Item, number> = {
   교습비: 1320000,
@@ -206,6 +209,88 @@ function Content() {
   /* selectable 만으로는 체크박스가 안 눌린다 — DataTable 이 제어 컴포넌트다 */
   const [sel, setSel] = useState<string[]>([])
 
+  /* ── PG 연동 설정 — **이 탭만 실연동이다** ──────────────────────────
+     ★ 나머지 탭은 **붙일 경로가 없다.** 결제 목록이 `billingId` 단위라 전체를 훑을 수
+       없다 — 결제 기록은 수납현황의 **청구 한 건**에서 본다(API_GAPS 42부). */
+  const pg = useServerData({
+    fetcher: listPgSites,
+    params: useMemo(() => ({}), []),
+    errorMessage: 'PG 연동 설정을 불러오지 못했습니다.',
+  })
+  const [pgBusy, setPgBusy] = useState(false)
+  const [pgErr, setPgErr] = useState<string | null>(null)
+  /** 중지는 되돌릴 수 있지만 **그동안 결제가 안 만들어진다** — 한 번 더 묻는다 */
+  const [toggling, setToggling] = useState<PgSite | null>(null)
+
+  async function runToggle(site: PgSite) {
+    setPgBusy(true)
+    setPgErr(null)
+    try {
+      await setPgSiteActive(site.id, !site.active)
+      pg.reload()
+      setToggling(null)
+    } catch (e) {
+      setPgErr(e instanceof ApiError ? e.message : '바꾸지 못했습니다.')
+    } finally {
+      setPgBusy(false)
+    }
+  }
+
+  const PG_COLUMNS: Column<PgSite>[] = [
+    { key: 'academy', header: '지점', width: '92px', value: (r) => r.academyName ?? '전 지점' },
+    {
+      key: 'purpose',
+      header: '용도',
+      width: '80px',
+      align: 'center',
+      value: (r) => PG_PURPOSE_LABEL[r.purpose] ?? r.purpose,
+    },
+    {
+      key: 'channel',
+      header: '결제 방식',
+      width: '100px',
+      align: 'center',
+      value: (r) => PG_CHANNEL_LABEL[r.channel] ?? r.channel,
+    },
+    { key: 'displayName', header: '이름', value: (r) => r.displayName },
+    { key: 'siteCd', header: '상점 코드', width: '130px', value: (r) => r.siteCd },
+    { key: 'vendor', header: 'PG사', width: '90px', value: (r) => r.vendorName ?? '-' },
+    {
+      key: 'ready',
+      header: '상태',
+      width: '104px',
+      align: 'center',
+      value: (r) => (!r.active ? '중지' : r.ready ? '연동 완료' : '연동 대기'),
+      /* ★★ **「사용」과 「지금 결제가 되는가」는 다르다.** 등록만 해두고 인증키가 안 들어온
+         상태가 있어서, 하나로 보여주면 **되는 줄 알고 링크를 보낸다** */
+      render: (r) =>
+        !r.active ? (
+          <span className="mk">중지</span>
+        ) : r.ready ? (
+          <span className="mk verified">연동 완료</span>
+        ) : (
+          <span className="mk brandnew">연동 대기</span>
+        ),
+    },
+    {
+      key: 'act',
+      header: '',
+      width: '76px',
+      align: 'center',
+      value: () => '',
+      render: (r) => (
+        <button
+          className="btn"
+          style={{ padding: '4px 9px', fontSize: 11.5 }}
+          disabled={pgBusy}
+          onClick={() => setToggling(r)}
+        >
+          {r.active ? '중지' : '사용'}
+        </button>
+      ),
+    },
+  ]
+
   const base = useMemo(() => ROWS.filter((r) => matches(r, query)), [query])
 
   const rows = useMemo(() => {
@@ -330,6 +415,23 @@ function Content() {
         />
       )}
 
+      {toggling !== null && (
+        <Modal
+          title={`${toggling.displayName} 를 ${toggling.active ? '중지' : '사용'}할까요?`}
+          sub={
+            toggling.active
+              ? '중지하면 이 지점·용도·방식으로는 결제를 만들 수 없습니다. 이미 받은 결제는 그대로 남습니다.'
+              : '다시 사용하면 이 방식으로 결제를 만들 수 있습니다.'
+          }
+          confirmLabel={toggling.active ? '중지' : '사용'}
+          danger={toggling.active}
+          busy={pgBusy}
+          error={pgErr}
+          onConfirm={() => void runToggle(toggling)}
+          onClose={() => setToggling(null)}
+        />
+      )}
+
       {tab === 'pg' && (
         <div className="card-sec">
           <div className="card-sec-h">
@@ -340,44 +442,36 @@ function Content() {
               PG 연동 설정
             </div>
             <div className="r">
-              <span className="mk brandnew">연동정보 수급 전 · 편집 불가</span>
+              <span className="mk supplement">
+                {(pg.data ?? []).filter((x) => x.ready).length} / {(pg.data ?? []).length} 연동 완료
+              </span>
             </div>
           </div>
-          <div className="card-sec-b" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {(['급식비', '교습비'] as Item[]).map((item) => (
-              <div key={item} className="link-box" style={{ display: 'block' }}>
-                <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 7 }}>
-                  {item === '급식비' ? '급식 결제' : '교습비 · 특강비 · 등록비 결제'}
-                </div>
-                <div className="kv">
-                  <div className="row">
-                    <span className="k">PG사</span>
-                    <span className="v">{PG_OF[item]}</span>
-                  </div>
-                  <div className="row">
-                    <span className="k">지원 수단</span>
-                    <span className="v">카드 · 가상계좌{item === '급식비' ? ' · 간편결제' : ''}</span>
-                  </div>
-                  <div className="row">
-                    <span className="k">취소 정책</span>
-                    <span className="v">
-                      {item === '급식비'
-                        ? '앱 3일 전 취소 시 PG 자동환불 / 관리자 취소는 즉시 처리'
-                        : '환불 기준은 청구기준 관리(관리자 > 수납관리)에서 정의'}
-                    </span>
-                  </div>
-                  <div className="row">
-                    <span className="k">미확정</span>
-                    <span className="v" style={{ color: 'var(--amber)', fontWeight: 700 }}>
-                      {'연동 준비 중'}
-                    </span>
-                  </div>
-                </div>
+          <div className="card-sec-b">
+            {/* ★ 담당자가 할 수 있는 일만 적는다. 인증서·개인키는 서버가 갖고 있고
+                화면에 보일 이유가 없다 — 보이면 캡처하는 순간 새어 나간다 */}
+            <div className="note-box">
+              <div>
+                지점·용도·결제 방식마다 상점이 따로입니다. <b>「연동 대기」</b>는 등록은 됐지만 아직
+                결제가 되지 않는 상태입니다.
               </div>
-            ))}
+            </div>
+            <DataTable
+              columns={PG_COLUMNS}
+              rows={pg.data ?? []}
+              rowKey={(r) => String(r.id)}
+              loading={pg.loading}
+              emptyText={pg.error ?? '등록된 상점이 없습니다.'}
+              countLabel={
+                <>
+                  상점 <b>{(pg.data ?? []).length}</b>건
+                </>
+              }
+            />
           </div>
         </div>
       )}
+
     </>
   )
 }
