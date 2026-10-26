@@ -22,7 +22,6 @@ import {
   type Notice as ApiNotice,
   shareNotice,
 } from '../../api/notices'
-import { MOCK_STUDENTS } from './mockStudents'
 import type { Mockup } from './types'
 import { createScreenSignal } from './screenSignal'
 import { noticeUrl } from '../../lib/publicUrl'
@@ -132,18 +131,24 @@ interface AdminRequest {
   status: '접수' | '처리중' | '완료'
 }
 
-/** ⚠ I-3 미확정 — 아래 항목은 제안이며 확정 목록이 아니다 */
-const REQUEST_ITEMS = ['재학증명서 발급', '출결확인서 발급', '사물함 변경', '좌석 변경 요청', '교재 재구매', '자습실 연장 신청']
+/** ⚠ I-3 미확정 — 제안 목록이며 확정이 아니다. **지우지 않는다** — 서버가 생길 때
+ *  무엇을 받기로 했는지가 여기 말고 남아 있는 곳이 없다(화면에는 안 쓴다) */
+export const REQUEST_ITEMS = ['재학증명서 발급', '출결확인서 발급', '사물함 변경', '좌석 변경 요청', '교재 재구매', '자습실 연장 신청']
 
-const REQUESTS: AdminRequest[] = MOCK_STUDENTS.slice(0, 22).map((s, i) => ({
-  id: `ar-${i + 1}`,
-  at: `2026-05-${String(20 + (i % 8)).padStart(2, '0')} ${String(9 + (i % 10)).padStart(2, '0')}:${String((i * 11) % 60).padStart(2, '0')}`,
-  studentNo: s.studentNo,
-  name: s.name,
-  item: REQUEST_ITEMS[i % REQUEST_ITEMS.length],
-  assignee: i % 3 === 0 ? '교무팀' : i % 3 === 1 ? '행정팀' : s.teacher,
-  status: i % 5 === 4 ? '접수' : i % 3 === 2 ? '처리중' : '완료',
-}))
+/* ★★ **예시 행정 요청 22건을 지웠다**(2026-10-26).
+ *
+ *   학번·이름·요청 항목·담당 팀·처리 상태까지 들어 있었고, **안내 문구가 하나도 없었다** —
+ *   급식 「배식 체크」는 그래도 위에 「준비 중」 상자가 있었는데 여기는 표뿐이라
+ *   **누가 봐도 실제 접수함으로 읽힌다.** 「완료」 딱지까지 붙어 있어서 **처리된 요청이
+ *   있다고 믿게 된다.**
+ *
+ *   ★ 탭 숫자도 이것을 세고 있었다(미완료 건수). 표가 비면 숫자도 같이 사라져야 한다.
+ *
+ *   ⚠️ 서버에 행정 요청 도메인이 없다. 공지(`/notices`)와 사유신청(`/absence-requests`)은
+ *     있지만 **재학증명서 발급·좌석 변경 같은 요청을 담을 곳이 없다**(2026-10-26 확인).
+ *     항목 목록(I-3)도 아직 확정이 아니다 — 컬럼은 **지우지 않고 둔다**(CLAUDE.md 1).
+ */
+const REQUESTS: AdminRequest[] = []
 
 const REQUEST_COLUMNS: Column<AdminRequest>[] = [
   { key: 'at', header: '요청일시', width: '140px', sortable: true, value: (r) => r.at },
@@ -522,10 +527,10 @@ function Content() {
           <div className="l">
             <Icon name="inbox" size={13} /> 행정 요청
           </div>
-          <div className="v" style={{ color: 'var(--amber)' }}>
-            {REQUESTS.filter((r) => r.status !== '완료').length}
-          </div>
-          <div className="d warn">미처리 · <span className="mk supplement" title="준비 중입니다">표시용 예시</span></div>
+          {/* ★ 0 을 숫자로 띄우지 않는다. 예시 행을 걷어낸 자리라 0 이 나오는데, 그러면
+                 「미처리 요청이 없다」로 읽힌다 — 실제로는 **접수 경로 자체가 없다** */}
+          <div className="v">-</div>
+          <div className="d">접수함 준비 중</div>
         </div>
         <div className="stat">
           <div className="l">
@@ -560,7 +565,9 @@ function Content() {
         <Tabs
           items={[
             { key: 'notice', label: '공지 발송', count: notices.length },
-            { key: 'request', label: '행정 요청 수신함', count: REQUESTS.filter((r) => r.status !== '완료').length },
+            /* ★ 숫자를 붙이지 않는다. 표가 빈 채로 「행정 요청 수신함 9」가 붙어 있으면
+                 **9건이 어딘가 있다고 읽는다** — 결제 관리 탭에서 걷어낸 것과 같다 */
+            { key: 'request', label: '행정 요청 수신함' },
             { key: 'chat', label: '1:1 채팅' },
           ]}
           active={tab}
@@ -869,11 +876,29 @@ function Content() {
 
           {tab === 'request' && (
             <>
+              {/* ★ 표만 두면 **빈 표가 고장으로 읽힌다.** 무엇을 받는 곳인지와 지금은
+                     어디서 처리하는지를 적는다 — 담당자가 당장 할 일이 거기 있다 */}
+              <div className="note-box" style={{ marginBottom: 14 }}>
+                <div className="ic">
+                  <Icon name="inbox" size={17} />
+                </div>
+                <div>
+                  <div className="tt">행정 요청 접수함은 준비 중입니다</div>
+                  <div className="tx">
+                    재학증명서 발급·좌석 변경처럼 <b>학생이 앱으로 넣는 요청</b>을 모아 보는
+                    자리입니다. 지금은 접수 경로가 없어 <b>전화·데스크로 받은 것을 각 화면에서
+                    직접 처리</b>해 주시기 바랍니다. 사유 신청은 「사유 신청 관리」에서 그대로
+                    처리됩니다.
+                  </div>
+                </div>
+              </div>
+
               <DataTable
                 columns={REQUEST_COLUMNS}
                 rows={REQUESTS}
                 rowKey={(r) => r.id}
                 pageSize={12}
+                emptyText="접수된 행정 요청이 없습니다."
                 countLabel={
                   <>
                     행정 요청 <b>{REQUESTS.length}</b>건
