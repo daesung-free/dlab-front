@@ -319,8 +319,24 @@ export interface ManualPreviewRequest {
 /** 빠지는 사람. ★ **종류가 고정이다** — 문장은 서버가 준다 */
 export interface ManualBlocked {
   studentName: string
-  reason: 'NO_PHONE' | 'OPTED_OUT' | 'NOT_ENROLLED' | string
+  /**
+   * ★ **모르는 값이 올 수 있다**(그래서 `string` 을 열어 뒀다). 서버가 종류를 늘리면
+   *   화면은 `message` 를 그대로 쓰면 된다 — 사유별 처리는 아는 것만 한다.
+   */
+  reason: 'NO_PHONE' | 'OPTED_OUT' | 'NOT_ENROLLED' | 'NOT_IN_ALLOWLIST' | string
   message: string
+}
+
+/**
+ * ★★ **「지금 설정 때문에 빠진 것」과 「데이터가 없어서 빠진 것」은 담당자가 할 일이 다르다.**
+ *
+ *   `NOT_IN_ALLOWLIST` 는 이관 기간에 **수신 허용목록을 켜 둬서** 빠진 것이다 — 학생
+ *   데이터에는 아무 문제가 없다. 다른 사유와 한 덩어리로 「빠집니다」라고만 쓰면
+ *   담당자가 **번호가 없는 줄 알고 학생 정보를 뒤진다.** 고칠 것이 없는데 찾게 만드는
+ *   것이 제일 나쁘다.
+ */
+export function isTemporaryBlock(reason: string): boolean {
+  return reason === 'NOT_IN_ALLOWLIST'
 }
 
 export interface ManualPreview {

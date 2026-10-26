@@ -3,6 +3,7 @@ import { Modal } from '../../components/common'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
 import {
+  isTemporaryBlock,
   listManualTemplates,
   previewManualSend,
   sendManual,
@@ -31,10 +32,10 @@ import { searchStudents, type Student } from '../../api/students'
  * ⚠️ **테스트 모드가 꺼져 있어 실제로 나가고 과금된다**(2026-10-26). 그래서 보내기 전에
  *   한 번 더 묻고, 미리보기를 거치지 않으면 버튼이 열리지 않는다.
  *
- * ★★ **「학원생 화면에서 보호자 연락처를 등록하세요」라고 쓰지 않는다.** 그렇게 적었다가
- *   확인해 보니 **`StudentUpdate` 에 보호자 번호 칸이 없다**(2026-10-26 스펙 확인) —
- *   관리자가 넣을 경로가 아예 없으니 **안내가 거짓말이 된다.** 담당자는 그 화면을 뒤지다
- *   못 찾고 우리에게 묻는다. 경로가 생기면 그때 문구를 되돌린다.
+ * ★★ **「연락처를 등록하면 나간다」고 쓰지 않는다.** 학부모 대상 발송은 번호가 아니라
+ *   **학부모 앱 계정**을 통해 수신자를 찾는다(2026-10-26 백엔드 정정). 번호만 있는
+ *   보호자는 제외된다 — 앱이 출시 전이라 **등록해도 지금은 한 통도 안 나간다.**
+ *   「등록하세요」로만 끝내면 담당자가 번호를 채워 놓고 「왜 안 오지」를 찾는다.
  */
 
 /** 서버가 쓰는 미납 안내 이벤트 */
@@ -166,7 +167,7 @@ export function UnpaidNoticeButton({
         e instanceof ApiError && e.status === 404
           ? '미납 안내 발송은 준비 중입니다.'
           : noTarget
-            ? '보낼 수 있는 보호자가 없습니다. 이 안내는 보호자 번호로만 나가는데, 등록된 번호가 없습니다.'
+            ? '보낼 수 있는 보호자가 없습니다. 이 안내는 학부모 앱 계정으로 나가는데, 가입한 보호자가 없습니다.'
             : e instanceof ApiError
               ? e.message
               : '미리보기를 불러오지 못했습니다.',
@@ -269,8 +270,8 @@ export function UnpaidNoticeButton({
                     {allMissing ? (
                       <>
                         고른 <b>{people.length}명</b> 모두 <b>보호자 연락처가 없습니다.</b> 이 안내는
-                        보호자에게만 나가므로 <b>지금은 한 통도 보낼 수 없습니다.</b> 보호자 연락처를 채우는
-                        일은 <b>준비 중</b>입니다.
+                        보호자에게만 나가므로 <b>지금은 한 통도 보낼 수 없습니다.</b> 연락처는 학원생 화면에서
+                        등록할 수 있지만, 알림톡은 <b>학부모가 앱에 가입한 뒤에</b> 나갑니다.
                       </>
                     ) : (
                       <>
@@ -355,7 +356,20 @@ export function UnpaidNoticeButton({
                 </div>
               )}
 
-              {prev !== null && prev.blocked.length > 0 && (
+              {prev !== null && prev.blocked.some((b) => isTemporaryBlock(b.reason)) && (
+                /* ★ 설정 때문에 보류된 것은 **고칠 데이터가 없다.** 빨간 표에 섞으면
+                     담당자가 번호가 없는 줄 알고 학생 정보를 뒤진다 */
+                <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
+                  <div>
+                    이 가운데{' '}
+                    <b>{prev.blocked.filter((b) => isTemporaryBlock(b.reason)).length}명</b>은 이관
+                    기간이라 <b>허용한 번호로만 나가서 보류</b>됩니다. 학생 정보에는 문제가 없으니
+                    고치실 것은 없습니다.
+                  </div>
+                </div>
+              )}
+
+              {prev !== null && prev.blocked.some((b) => !isTemporaryBlock(b.reason)) && (
                 <div style={{ maxHeight: 150, overflow: 'auto', marginBottom: 10 }}>
                   <table className="dt" style={{ width: '100%' }}>
                     <thead>
@@ -365,12 +379,14 @@ export function UnpaidNoticeButton({
                       </tr>
                     </thead>
                     <tbody>
-                      {prev.blocked.map((b, i) => (
-                        <tr key={i}>
-                          <td>{b.studentName}</td>
-                          <td style={{ color: 'var(--red)' }}>{b.message}</td>
-                        </tr>
-                      ))}
+                      {prev.blocked
+                        .filter((b) => !isTemporaryBlock(b.reason))
+                        .map((b, i) => (
+                          <tr key={i}>
+                            <td>{b.studentName}</td>
+                            <td style={{ color: 'var(--red)' }}>{b.message}</td>
+                          </tr>
+                        ))}
                     </tbody>
                   </table>
                 </div>
