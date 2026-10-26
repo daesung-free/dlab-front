@@ -21,7 +21,6 @@ import {
   type TimetableCellSave,
 } from '../../api/timetables'
 import { createScreenSignal } from './screenSignal'
-import { MOCK_STUDENTS } from './mockStudents'
 import type { Mockup } from './types'
 import './timetable.css'
 
@@ -52,17 +51,10 @@ import './timetable.css'
 const saveSignal = createScreenSignal()
 const copySignal = createScreenSignal()
 
-const DAYS = ['월', '화', '수', '목', '금', '토'] as const
+/** 이동수업 과목 축. 화면의 과목 필터가 이것으로 돈다 */
 const MOVE_SUBJECTS = ['수학', '영어', '탐구'] as const
-const ROOMS = ['201호', '202호', '203호', '301호', '302호'] as const
-const TEACHERS = ['김담임', '이수학', '박영어', '최탐구', '정국어'] as const
-
-/** 반 기본 정보 — 이동수업 목업이 쓰는 값이다(격자는 서버 값으로 돈다) */
-const CLASS_INFO = [
-  { no: '1반', homeroom: '김담임' },
-  { no: '2반', homeroom: '이수학' },
-  { no: '3반', homeroom: '박영어' },
-] as const
+/* ★ 예시 편성을 지우면서 `DAYS`·`ROOMS`·`TEACHERS`·`CLASS_INFO` 도 같이 지웠다 —
+     **목업을 만들기 위한 값**이었고 서버 값으로 도는 「반 시간표」 탭은 쓰지 않는다 */
 
 /* ── 이동수업 배정 명단 ── */
 
@@ -81,25 +73,18 @@ interface MoveRow {
   teacher: string
 }
 
-const MOVE_ROWS: MoveRow[] = MOCK_STUDENTS.filter((s) => s.status === '재원').flatMap((s, i) =>
-  MOVE_SUBJECTS.map((subject, j) => {
-    const seed = i * 5 + j * 3
-    const level = ['상', '중', '하'][seed % 3]
-    return {
-      id: `${s.id}-${subject}`,
-      studentNo: s.studentNo,
-      name: s.name,
-      fixedClass: s.classNo,
-      homeroom: CLASS_INFO.find((c) => c.no === s.classNo)?.homeroom ?? '-',
-      subject,
-      level,
-      moveClass: `${subject} ${level}반`,
-      room: ROOMS[seed % ROOMS.length],
-      slot: `${DAYS[seed % 5]} ${(seed % 6) + 1}교시`,
-      teacher: TEACHERS[seed % TEACHERS.length],
-    }
-  }),
-)
+/* ★★ **예시 이동수업 배정을 지웠다**(2026-10-26).
+ *
+ *   재원생 × 과목으로 **수백 행**을 만들어 학번·이름·담임·수준반·강의실·교시·담당 교사를
+ *   전부 지어내고 있었다. 위에 「준비 중」 상자가 있어도 **그 아래가 수백 행이면 안내가
+ *   묻힌다**(CLAUDE.md 5-1). 엑셀 버튼에도 그 행이 물려 있어서 **받으면 실제 편성표로
+ *   읽힌다** — 결제 관리에서 똑같이 걷어냈다.
+ *
+ *   ⚠️ 학생이 어느 수준별 반으로 가는지를 담을 곳이 서버에 없다. 칸별 강의실은
+ *     「반 시간표」 탭에서 실제로 저장된다 — 이 탭만 비어 있는 것이다.
+ *     컬럼·과목 필터는 **지우지 않고 둔다**(CLAUDE.md 1).
+ */
+const MOVE_ROWS: MoveRow[] = []
 
 const MOVE_COLUMNS: Column<MoveRow>[] = [
   { key: 'studentNo', header: '학번', width: '104px', sortable: true, value: (r) => r.studentNo },
@@ -650,7 +635,7 @@ function Content() {
 
       {tab === 'move' && (
         <>
-          <MockNotice reason="학생이 어느 수준별 반으로 가는지를 담을 곳이 서버에 없습니다. 칸별 강의실은 반 시간표 탭에서 실제로 저장됩니다." />
+          <MockNotice empty reason="학생이 어느 수준별 반으로 가는지를 담을 곳이 서버에 없습니다. 칸별 강의실은 반 시간표 탭에서 실제로 저장됩니다." />
           <div className="filter-row" style={{ background: '#fff', borderRadius: 12, marginBottom: 14, border: 'none' }}>
             {['전체', ...MOVE_SUBJECTS].map((s) => (
               <button key={s} type="button" className={`chip${subject === s ? ' on' : ''}`} onClick={() => setSubject(s)}>
@@ -666,6 +651,7 @@ function Content() {
             selected={sel}
             onSelectedChange={setSel}
             pageSize={15}
+            emptyText="이동수업 편성은 아직 제공되지 않습니다. 칸별 강의실은 「반 시간표」 탭에서 저장됩니다."
             countLabel={
               <>
                 이동수업 배정 <b>{moveRows.length}</b>건
