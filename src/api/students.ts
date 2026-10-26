@@ -98,6 +98,16 @@ export interface Student {
   appAccount?: AppAccount | null
   /** 학부모 계정. 한 학부모가 형제 둘에 연결돼 있으면 양쪽 학생에 다 나온다 */
   guardianAccounts?: AppAccount[]
+  /**
+   * 보호자 연락처.
+   *
+   * ★★ **학부모 대상 알림톡은 이 번호가 없으면 한 통도 못 나간다.** 승인된 문안 3종
+   *   (미납 안내·급식 신청 마감·등록비 안내)이 전부 `recipientType: PARENT` 다 —
+   *   학생 번호(`phone`)가 있어도 **발송 대상에서 빠진다.**
+   *   2026-10-26 운영 실측: 재원 86명 중 **1명만** 이 값이 있었다. 그래서 미리보기가
+   *   `MANUAL_SEND_NO_TARGET` 으로 떨어진다 — 화면이 그 말을 풀어서 해야 한다.
+   */
+  guardianPhone?: string | null
 }
 
 /** 앱 계정 한 개(학생·학부모 공통) */
