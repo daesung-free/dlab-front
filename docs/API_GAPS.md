@@ -3670,3 +3670,74 @@ POST /public/door/F/code      → 404   (홈페이지 코드)
 - **07:05 문자는 아직 안 나간다**(알리고 발신번호 대기). 11번 내역에 「문자 연동 전」으로 남고,
   발신번호가 들어오면 화면 변경 없이 「발송」으로 바뀐다 — 그때 그 화면의 **배너를 지우는 것**이
   프론트 쪽 마지막 작업이다
+
+---
+
+## 43. ★★ 보호자 연락처를 넣을 경로가 없다 (2026-10-26) — 학부모 알림톡 전체가 막힌다
+
+수납현황에 미납 안내 알림톡을 붙이다 발견했다. 미리보기가 `MANUAL_SEND_NO_TARGET` 으로
+떨어져서 파 보니, **학부모 대상 알림톡이 한 통도 나갈 수 없는 상태**였다.
+
+### 무엇이 막혀 있나
+
+```
+학부모 대상(recipientType: PARENT) 승인 문안 3종
+  TUITION_UNPAID_NOTICE       미납 안내
+  MEAL_APPLY_DEADLINE         급식 신청 마감 안내
+  TUITION_REGISTRATION_NOTICE 등록비 안내
+```
+
+운영 실측(`GET /admin/students?academyId={1..11}&size=500`) — **재원 86명 중
+`guardianPhone` 이 있는 학생 1명.** 학생 번호(`phone`)가 있어도 소용없다.
+
+```
+POST /api/v1/admin/notifications/manual/preview
+  {"templateId":23,"academyId":1,"scope":"SELECTED","enrollmentIds":[13,19,22],
+   "variables":{"월":"9월"}}
+→ 400 {"code":"MANUAL_SEND_NO_TARGET","message":"발송 대상이 없습니다."}
+   (세 학생 모두 ENROLLED · phone 은 010-0000-30xx 로 들어 있다)
+```
+
+### ★★ 관리자가 넣을 칸이 없다
+
+`PATCH /admin/students/{enrollmentId}` 의 `StudentUpdate` 필드 전부:
+
+```
+name · phone · birthDate · gender · schoolName · address
+grade · retakeCount · track · status · englishName · graduationYear · clearGraduationYear
+```
+
+보호자 칸이 없고, **보호자를 다루는 관리자 엔드포인트도 없다**(백엔드 확인).
+`guardianPhone` 은 **응답에만** 있는 읽기 전용 값이다.
+
+★ 그래서 화면에 **「학원생 화면에서 보호자 연락처를 등록해 주세요」라고 쓰면 거짓말**이 된다.
+실제로 그렇게 적었다가 내렸다 — 담당자는 그 칸을 찾아 화면을 뒤지다 못 찾고 되묻는다.
+지금 문구는 **「보호자 연락처를 채우는 일은 준비 중입니다」**다. 경로가 생기면 되돌린다.
+
+### 채우는 경로는 셋이고, 둘이 비어 있다
+
+| | 상태 |
+|---|---|
+| 학부모 앱 가입 (학생 고유ID + 휴대폰 인증) | 동작한다 |
+| **DSA 이관** (기존 재원생분) | ★ 레거시 스키마 미확보 — **컷오버 필수 항목** |
+| **관리자 입력** | ★ 경로 없음 — 백엔드가 만들기로 올림 |
+
+⚠️ **미등원 알림톡도 같이 막힌다.** 그건 필수 알림인데 보낼 곳이 없는 상태다.
+
+### `guardianPhone` 과 `guardianAccounts` 는 다른 축이다
+
+```
+guardianPhone      parent_guardian.phone — ★ 앱 계정이 없어도 있다
+guardianAccounts   account(PARENT) — 앱에 가입한 경우에만
+```
+
+**번호만 있으면 알림톡은 나간다** — 서버가 `recipient_account_id` 와 `recipient_phone`
+둘 중 하나만 있어도 되게 해 뒀다(급식업체·입학 대기자처럼 계정 없는 수신자가 있다).
+지금 막히는 이유는 **계정이 아니라 번호가 없어서**다.
+
+### ⚠️ 번호를 채우는 순간 실발송이 시작된다
+
+테스트 모드는 꺼져 있다(2026-10-26). 지금 운영의 번호가 전부 미배정 대역(`010-0000-*`)이라
+**그 대역이 안전장치 노릇을 하고 있다.** 이관 전에 **테스트 대상을 어떻게 가를지**를 먼저
+정해야 한다 — 백엔드 의견은 「발송 보류 플래그보다 번호 대역으로 가르는 편이 단순하다」
+(플래그는 코드에 분기가 생기고 지우는 것을 잊는다).
