@@ -80,6 +80,7 @@ import {
   type RefundView,
 } from '../../api/refunds'
 import { GRADE_LABEL, searchStudents, type Student } from '../../api/students'
+import { UnpaidNoticeButton, type UnpaidTarget } from './UnpaidNoticeButton'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
 import './payment.css'
@@ -346,18 +347,9 @@ const UNPAID_COLUMNS: Column<ReceiptRow>[] = [
     value: (r) => r.unpaid,
     render: (r) => <b style={{ color: 'var(--red)', fontWeight: 800 }}>{wonOf(r.unpaid)}</b>,
   },
-  {
-    key: 'act',
-    header: '',
-    width: '104px',
-    align: 'center',
-    value: () => '',
-    render: () => (
-      <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled data-soon title="준비 중입니다">
-        <Icon name="bell" size={12} /> 알림톡
-      </button>
-    ),
-  },
+  /* ★ 행마다 보내는 버튼을 두지 않는다. **한 학생이 여러 달 밀리면 행이 여러 개**라
+       행 단위로 보내면 같은 학부모에게 여러 통이 간다 — 묶어 보내는 것이 맞다.
+       체크해서 위 「미납 안내 보내기」로 보낸다(고른 건을 학생으로 묶는다). */
 ]
 
 /* ══ 할인 정책 ══
@@ -1073,6 +1065,20 @@ function Content() {
   /* 미납자 표의 체크박스. DataTable 은 selectable 만으로는 못 켜진다 —
      selected/onSelectedChange 를 안 주면 값이 undefined 로 고정돼 **눌러도 안 찍힌다** */
   const [unpaidSel, setUnpaidSel] = useState<string[]>([])
+  /* ★ 체크한 행만 보낸다. `rowKey` 가 `billingId` 라 그 값으로 되찾는다.
+       **고른 게 없으면 전원에게 보내지 않는다** — 그런 실수는 되돌릴 수 없다 */
+  const unpaidTargets: UnpaidTarget[] = useMemo(() => {
+    const picked = new Set(unpaidSel)
+    return unpaid
+      .filter((r) => picked.has(String(r.billingId)))
+      .map((r) => ({
+        billingId: r.billingId,
+        studentNo: r.studentNo,
+        studentName: r.studentName,
+        serviceMonth: r.serviceMonth,
+        unpaid: r.unpaid,
+      }))
+  }, [unpaid, unpaidSel])
   const [fee, setFee] = useState<FeeTableRow[] | null>(null)
   const [feeErr, setFeeErr] = useState<string | null>(null)
   /* 입학금은 남은 교습일수로 일할 계산된다. 화면이 달력으로 세지 않는다 — 휴일이 지점마다 다르다.
@@ -1897,9 +1903,16 @@ function Content() {
               }
               toolbar={
                 <>
-                  <button className="btn" disabled data-soon title="준비 중입니다">
-                    <Icon name="bell" size={14} /> 미납자 일괄 알림톡
-                  </button>
+                  <UnpaidNoticeButton
+                    academyId={academyId}
+                    targets={unpaidTargets}
+                    onSent={() => {
+                      /* 발송 이력이 수납 숫자를 바꾸지는 않지만, 고른 상태는 비운다 —
+                         남겨 두면 **같은 사람에게 또 보내기 쉽다** */
+                      setUnpaidSel([])
+                      void load()
+                    }}
+                  />
                   <MaskToggle masked={masked} onChange={setMasked} />
                   <ExcelButton filename="미납자_명단" columns={UNPAID_COLUMNS} rows={unpaid} masked={masked} />
                 </>
