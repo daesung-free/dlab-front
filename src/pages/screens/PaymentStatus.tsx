@@ -69,7 +69,11 @@ import {
   type FeeTableRow,
   type SeatType,
 } from '../../api/tuition'
-import { listStudentScholarships } from '../../api/masters'
+import {
+  listScholarshipMasters,
+  listStudentScholarships,
+  type ScholarshipMaster,
+} from '../../api/masters'
 import {
   executeRefund,
   listPendingTransfers,
@@ -79,7 +83,8 @@ import {
   type RefundStatus,
   type RefundView,
 } from '../../api/refunds'
-import { GRADE_LABEL, searchStudents, type Student } from '../../api/students'
+import { GRADE_LABEL, searchStudents, type GradeType, type Student } from '../../api/students'
+import { UnpaidNoticeButton, type UnpaidTarget } from './UnpaidNoticeButton'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
 import './payment.css'
@@ -346,18 +351,9 @@ const UNPAID_COLUMNS: Column<ReceiptRow>[] = [
     value: (r) => r.unpaid,
     render: (r) => <b style={{ color: 'var(--red)', fontWeight: 800 }}>{wonOf(r.unpaid)}</b>,
   },
-  {
-    key: 'act',
-    header: '',
-    width: '104px',
-    align: 'center',
-    value: () => '',
-    render: () => (
-      <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled data-soon title="준비 중입니다">
-        <Icon name="bell" size={12} /> 알림톡
-      </button>
-    ),
-  },
+  /* ★ 행마다 보내는 버튼을 두지 않는다. **한 학생이 여러 달 밀리면 행이 여러 개**라
+       행 단위로 보내면 같은 학부모에게 여러 통이 간다 — 묶어 보내는 것이 맞다.
+       체크해서 위 「미납 안내 보내기」로 보낸다(고른 건을 학생으로 묶는다). */
 ]
 
 /* ══ 할인 정책 ══
@@ -374,173 +370,83 @@ const UNPAID_COLUMNS: Column<ReceiptRow>[] = [
  * ⚠ 적용 순서가 금액을 바꾼다.
  *   정률 → 정액 순서와 정액 → 정률 순서의 결과가 다르므로 order를 정책에 못박는다. */
 
-type DiscountKind = '장학' | '형제' | '조기납부' | '재등록' | '쿠폰' | '기타'
-type DiscountMethod = 'RATE' | 'AMOUNT'
-
-const DKIND_TONE: Record<DiscountKind, string> = {
-  장학: 'verified',
-  형제: 'supplement',
-  조기납부: 'supplement',
-  재등록: 'verified',
-  쿠폰: 'brandnew',
-  기타: 'brandnew',
-}
-
-interface Discount {
-  id: string
-  code: string
-  name: string
-  kind: DiscountKind
-  /** 적용 대상 청구 항목 */
-  targets: Kind[]
-  method: DiscountMethod
-  /** RATE면 %, AMOUNT면 원 */
-  value: number
-  /** 적용 순서 — 작을수록 먼저. 순서가 최종금액을 바꾼다 */
-  order: number
-  /** 다른 할인과 중복 적용 허용 */
-  stackable: boolean
-  from: string
-  to: string
-  active: boolean
-}
-
-const DISCOUNTS: Discount[] = [
-  { id: 'd1', code: 'SCH_SAT100', name: '수능 성적 장학 100%', kind: '장학', targets: ['교습비'], method: 'RATE', value: 100, order: 1, stackable: false, from: '2026-01-01', to: '2026-12-31', active: true },
-  { id: 'd2', code: 'SCH_MOCK50', name: '평가원 성적 장학 50%', kind: '장학', targets: ['교습비'], method: 'RATE', value: 50, order: 1, stackable: false, from: '2026-01-01', to: '2026-12-31', active: true },
-  { id: 'd3', code: 'SIBLING', name: '형제 할인 10%', kind: '형제', targets: ['교습비', '급식비'], method: 'RATE', value: 10, order: 2, stackable: true, from: '2026-01-01', to: '2026-12-31', active: true },
-  { id: 'd4', code: 'REENROLL', name: '재등록 할인 5%', kind: '재등록', targets: ['교습비'], method: 'RATE', value: 5, order: 3, stackable: true, from: '2026-01-01', to: '2026-12-31', active: true },
-  { id: 'd5', code: 'EARLYBIRD', name: '조기납부 30,000원', kind: '조기납부', targets: ['교습비'], method: 'AMOUNT', value: 30000, order: 4, stackable: true, from: '2026-05-01', to: '2026-06-10', active: true },
-  { id: 'd6', code: 'CPN_50K', name: '설명회 쿠폰 50,000원', kind: '쿠폰', targets: ['등록비'], method: 'AMOUNT', value: 50000, order: 5, stackable: true, from: '2026-05-01', to: '2026-07-31', active: true },
-  { id: 'd7', code: 'CPN_LEGACY', name: '2025 프로모션 쿠폰', kind: '쿠폰', targets: ['등록비'], method: 'AMOUNT', value: 30000, order: 5, stackable: true, from: '2025-09-01', to: '2025-12-31', active: false },
-]
-
-const won = (n: number) => `${Math.round(n).toLocaleString('ko-KR')}원`
-
-interface CalcStep {
-  d: Discount
-  applied: boolean
-  /** 미적용 사유 */
-  reason?: string
-  cut: number
-  after: number
-}
-
-/**
- * 할인 계산 — order 순서대로 잔액에 적용한다.
- * 중복 불가(stackable=false) 정책이 하나 적용되면 이후 정책은 전부 막힌다.
+/* ★★ **예시 할인 정책 7건을 지웠다**(2026-10-26).
+ *
+ *   「수능 성적 장학 100%」·「형제 할인 10%」·「설명회 쿠폰 50,000원」처럼 코드·기간·중복
+ *   가능 여부까지 지어내고 있었다. 탭 숫자에도 붙어 있어 **실제 운영 정책으로 읽혔다.**
+ *
+ * ★ **서버에 있는 것은 「장학」뿐이다**(`/masters/scholarship-masters`, 2026-10-26 실측
+ *   — 전 지점 공통 5종). 형제 할인·재등록·조기납부·쿠폰은 **개념 자체가 서버에 없다.**
+ *   만들어 보여주면 담당자가 「왜 형제 할인이 청구에 안 붙지」를 찾게 된다.
+ *
+ * ★ **등록·수정은 기초 관리에서 한다.** 같은 것을 두 화면에서 고치게 하면 어긋난다 —
+ *   여기서는 **읽기만** 하고 어디서 고치는지 알려준다.
+ *
+ * ★★ **화면이 할인을 곱하지 않는다.** 예전에는 정가(`BASE_PRICE` — 이것도 지어낸 값이다)에
+ *   화면이 순서대로 할인을 적용해 최종 금액을 보여줬다. 그런데 **서버 단가표가 할인율별
+ *   금액을 이미 계산해서 준다**(`/tuition/fee-table`) — 게다가 **독서실비에는 할인이
+ *   붙지 않는다.** 화면이 따로 곱하면 그 규칙을 놓쳐 **조용히 틀린 금액**이 나온다.
+ *   그래서 계산기 자리를 **서버 단가표를 그대로 보여주는 자리**로 바꿨다.
  */
-function calcDiscount(base: number, kind: Kind, picked: string[]): { steps: CalcStep[]; final: number } {
-  const steps: CalcStep[] = []
-  let cur = base
-  let exclusiveUsed = false
 
-  for (const d of [...DISCOUNTS].sort((a, b) => a.order - b.order)) {
-    if (!picked.includes(d.id)) continue
 
-    let reason: string | undefined
-    if (!d.active) reason = '중지된 정책'
-    else if (!d.targets.includes(kind)) reason = `적용 대상 아님 (${d.targets.join('·')})`
-    else if (exclusiveUsed) reason = '중복 불가 할인이 이미 적용됨'
-
-    if (reason) {
-      steps.push({ d, applied: false, reason, cut: 0, after: cur })
-      continue
-    }
-
-    const cut = d.method === 'RATE' ? Math.round((cur * d.value) / 100) : Math.min(cur, d.value)
-    cur -= cut
-    if (!d.stackable) exclusiveUsed = true
-    steps.push({ d, applied: true, cut, after: cur })
-  }
-
-  return { steps, final: Math.max(0, cur) }
-}
-
-const BASE_PRICE: Record<Kind, number> = {
-  등록비: 500000,
-  교습비: 1_450_000,
-  특강비: 320000,
-  급식비: 117000,
-}
-
-const DISCOUNT_COLUMNS: Column<Discount>[] = [
-  { key: 'order', header: '순서', width: '58px', align: 'center', sortable: true, value: (r) => r.order },
+const DISCOUNT_COLUMNS: Column<ScholarshipMaster>[] = [
+  {
+    key: 'sortOrder',
+    header: '순서',
+    width: '58px',
+    align: 'center',
+    sortable: true,
+    value: (r) => r.sortOrder ?? 0,
+    render: (r) => (r.sortOrder === null ? '-' : r.sortOrder),
+  },
   {
     key: 'code',
     header: '코드',
     width: '124px',
-    value: (r) => r.code,
-    render: (_r, v) => <code style={{ fontSize: 10.5 }}>{v}</code>,
-  },
-  { key: 'name', header: '할인명', sortable: true, value: (r) => r.name },
-  {
-    key: 'kind',
-    header: '유형',
-    width: '82px',
-    align: 'center',
     sortable: true,
-    value: (r) => r.kind,
-    render: (r) => <span className={`mk ${DKIND_TONE[r.kind]}`}>{r.kind}</span>,
+    value: (r) => r.code,
+    render: (r) => <code style={{ fontSize: 10.5 }}>{r.code}</code>,
   },
-  { key: 'targets', header: '적용 대상', width: '132px', value: (r) => r.targets.join(' · ') },
+  { key: 'name', header: '장학명', sortable: true, value: (r) => r.name },
   {
-    key: 'value',
-    header: '할인',
-    width: '96px',
+    key: 'discountRate',
+    header: '할인율',
+    width: '92px',
     align: 'right',
     sortable: true,
-    value: (r) => r.value,
-    render: (r) => <b>{r.method === 'RATE' ? `${r.value}%` : won(r.value)}</b>,
+    value: (r) => r.discountRate,
+    render: (r) => <b>{r.discountRate}%</b>,
   },
   {
-    key: 'stackable',
-    header: '중복',
-    width: '76px',
+    key: 'scope',
+    header: '적용 범위',
+    width: '104px',
     align: 'center',
-    value: (r) => (r.stackable ? '허용' : '불가'),
+    sortable: true,
+    /* ★ `academyId` 가 null 이면 **전 지점 공통**이다. 지점 것과 섞어 보여주면
+         어느 것을 고치는지 알 수 없다 */
+    value: (r) => (r.academyId === null ? '전 지점' : '이 지점'),
     render: (r) => (
-      <span className={`mk ${r.stackable ? 'supplement' : 'brandnew'}`}>{r.stackable ? '허용' : '단독'}</span>
+      <span className={`mk ${r.academyId === null ? 'verified' : 'supplement'}`}>
+        {r.academyId === null ? '전 지점' : '이 지점'}
+      </span>
     ),
   },
-  { key: 'period', header: '유효기간', width: '164px', value: (r) => `${r.from} ~ ${r.to}` },
   {
     key: 'active',
-    header: '상태',
-    width: '72px',
+    header: '사용',
+    width: '80px',
     align: 'center',
     sortable: true,
     value: (r) => (r.active ? '사용' : '중지'),
-    render: (r) => <span className={`mk ${r.active ? 'verified' : 'brandnew'}`}>{r.active ? '사용' : '중지'}</span>,
-  },
-  {
-    key: 'act',
-    header: '',
-    width: '108px',
-    align: 'center',
-    value: () => '',
-    render: () => (
-      <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled data-soon title="준비 중입니다">
-          수정
-        </button>
-        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5, color: 'var(--red)' }} disabled data-soon title="준비 중입니다">
-          삭제
-        </button>
-      </div>
+    render: (r) => (
+      <span className={`mk ${r.active ? 'verified' : 'brandnew'}`}>{r.active ? '사용' : '중지'}</span>
     ),
   },
+  { key: 'memo', header: '메모', value: (r) => r.memo ?? '-' },
 ]
 
-/**
- * 일할 계산 근거 (1016 피드백 2-4).
- *
- * ★★ **월 전체면 나눗셈 식을 쓰지 않는다.** 월 전체는 **정액**이라 단가 × 일수와 값이
- *   다르다(660,000 vs 22,758×29 = 659,982 — **18원이 어긋난다**). 그 식을 적으면 결과가
- *   청구액과 달라 **데스크가 「계산이 틀렸다」로 읽는다.** 서버도 월 전체에서는 단가를
- *   `null` 로 내려 화면이 못 쓰게 해 뒀다.
- * ★ **절사 규칙을 적는다.** 디랩이 실제 정산과 대조하려면 「원 단위 버림」이 보여야 한다.
- */
 function BreakdownBox({ b }: { b: TuitionBreakdown }) {
   const line = (label: string, expr: string, amount: number) => (
     <tr>
@@ -615,11 +521,15 @@ function Content() {
   const [masked, setMasked] = useState(true)
   const [tab, setTab] = useState('all')
 
-  /* 할인 계산기 */
-  const [calcKind, setCalcKind] = useState<Kind>('교습비')
-  const [calcBase, setCalcBase] = useState(BASE_PRICE['교습비'])
-  const [picked, setPicked] = useState<string[]>(['d3', 'd4', 'd5'])
-  const calc = useMemo(() => calcDiscount(calcBase, calcKind, picked), [calcBase, calcKind, picked])
+  /* 단가표 조회 — 할인율별 금액을 **서버가 계산해서 준다**. 화면이 곱하지 않는다 */
+  const [calcGrade, setCalcGrade] = useState<GradeType>('HIGH3')
+  const [calcSeat, setCalcSeat] = useState<SeatType>('GENERAL')
+  const [calcMonth, setCalcMonth] = useState(() => new Date().toISOString().slice(0, 7))
+  const [calcFee, setCalcFee] = useState<FeeTableRow[] | null>(null)
+  const [calcErr, setCalcErr] = useState<string | null>(null)
+  const [calcBusy, setCalcBusy] = useState(false)
+  const [schols, setSchols] = useState<ScholarshipMaster[] | null>(null)
+  const [scholErr, setScholErr] = useState<string | null>(null)
 
   /* ── 실연동: 수납현황 ── */
   const { academyId } = useAcademy()
@@ -679,6 +589,56 @@ function Content() {
   useEffect(() => {
     void load()
   }, [load])
+
+  /* 장학 종류 — ★ **연도 단위다.** `academyId` 를 안 넘기면 전 지점 공통이 온다.
+     지점 전용 장학이 따로 있을 수 있어 둘을 합쳐 보여준다(화면에서 범위를 구분해 찍는다) */
+  useEffect(() => {
+    if (tab !== 'discount') return
+    let cancelled = false
+    const year = Number(calcMonth.slice(0, 4)) || new Date().getFullYear()
+    void (async () => {
+      try {
+        const common = await listScholarshipMasters(year)
+        const mine = academyId === null ? [] : await listScholarshipMasters(year, academyId)
+        if (cancelled) return
+        /* 같은 id 가 양쪽에 오면 한 번만 쓴다 */
+        const seen = new Map<number, ScholarshipMaster>()
+        for (const x of [...common, ...mine]) seen.set(x.id, x)
+        setSchols([...seen.values()])
+        setScholErr(null)
+      } catch (e) {
+        if (!cancelled) setScholErr(e instanceof ApiError ? e.message : '장학 종류를 불러오지 못했습니다.')
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [tab, academyId, calcMonth])
+
+  /* 단가표 — ★ 할인율별 금액을 **서버가 계산해서 준다.** 화면이 곱하지 않는다.
+     ★ 독서실비에는 할인이 안 붙는다(tuition.ts 주석) — 그 규칙도 서버 쪽에 있다 */
+  useEffect(() => {
+    if (tab !== 'discount' || calcMonth === '') return
+    let cancelled = false
+    setCalcBusy(true)
+    void (async () => {
+      try {
+        const r = await getFeeTable(calcMonth, calcGrade, calcSeat, academyId ?? undefined)
+        if (cancelled) return
+        setCalcFee(r)
+        setCalcErr(null)
+      } catch (e) {
+        if (cancelled) return
+        setCalcFee(null)
+        setCalcErr(e instanceof ApiError ? e.message : '단가표를 불러오지 못했습니다.')
+      } finally {
+        if (!cancelled) setCalcBusy(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [tab, calcMonth, calcGrade, calcSeat, academyId])
 
   // 미납은 서버 조건(unpaidOnly)이 있지만, 같은 조회 결과에서 걸러도 값이 같다.
   // 요청을 하나 아끼려고 여기서 거른다 — unpaid 는 서버가 계산해준 값이다.
@@ -1073,6 +1033,20 @@ function Content() {
   /* 미납자 표의 체크박스. DataTable 은 selectable 만으로는 못 켜진다 —
      selected/onSelectedChange 를 안 주면 값이 undefined 로 고정돼 **눌러도 안 찍힌다** */
   const [unpaidSel, setUnpaidSel] = useState<string[]>([])
+  /* ★ 체크한 행만 보낸다. `rowKey` 가 `billingId` 라 그 값으로 되찾는다.
+       **고른 게 없으면 전원에게 보내지 않는다** — 그런 실수는 되돌릴 수 없다 */
+  const unpaidTargets: UnpaidTarget[] = useMemo(() => {
+    const picked = new Set(unpaidSel)
+    return unpaid
+      .filter((r) => picked.has(String(r.billingId)))
+      .map((r) => ({
+        billingId: r.billingId,
+        studentNo: r.studentNo,
+        studentName: r.studentName,
+        serviceMonth: r.serviceMonth,
+        unpaid: r.unpaid,
+      }))
+  }, [unpaid, unpaidSel])
   const [fee, setFee] = useState<FeeTableRow[] | null>(null)
   const [feeErr, setFeeErr] = useState<string | null>(null)
   /* 입학금은 남은 교습일수로 일할 계산된다. 화면이 달력으로 세지 않는다 — 휴일이 지점마다 다르다.
@@ -1608,7 +1582,9 @@ function Content() {
             /* ★ **이 탭이 없으면 가상계좌 환불이 영원히 안 끝난다.** 우리가 이체하는 게
                아니라 사람이 은행에서 보내고 여기에 찍어야 목록이 줄어든다 */
             { key: 'transfer', label: '환불 이체 대기', count: transfers.length },
-            { key: 'discount', label: '할인 정책 · 청구액 계산', count: DISCOUNTS.filter((d) => d.active).length },
+            /* ★ 숫자를 붙이지 않는다. 장학은 **탭을 열어야 읽는데**, 열기 전에는 0 이라
+                 「장학이 없다」로 읽힌다. 게다가 처리할 일이 쌓이는 축도 아니다 */
+            { key: 'discount', label: '장학 · 단가표' },
           ]}
           active={tab}
           onChange={setTab}
@@ -1640,7 +1616,7 @@ function Content() {
 
           {tab === 'discount' && (
             <>
-              {/* 할인 정책 API 가 아직 없다 — 이 탭만 목업 그대로다(docs/API_GAPS.md 6-3) */}
+              {/* ★ 이 경고는 **아직 사실이다** — 결제창에 정가가 넘어간다(PG 실가맹점 전환 대기) */}
               <div className="blocked-note">
                 <div className="ic">
                   <Icon name="triangle-alert" size={17} />
@@ -1648,170 +1624,169 @@ function Content() {
                 <div>
                   <div className="tt">지금은 온라인 결제에 할인이 반영되지 않습니다</div>
                   <div className="tx">
-                    결제 연동 자체는 끝났지만, <b>할인 전 정가가 그대로 결제창에 넘어가고</b> 있습니다.
-                    학생·학부모 결제창에 정가가 뜨고 할인은 나중에 수기 환불로 메꾸는 상태입니다.
+                    <b>할인 전 정가가 그대로 결제창에 넘어가고</b> 있습니다. 학생·학부모 결제창에
+                    정가가 뜨고 할인은 나중에 수기 환불로 메꾸는 상태입니다.
                     <br />
-                    결제 요청을 만들기 <b>전에</b> 아래 정책으로 <b>실제 청구액을 산출하는 단계</b>가 들어가야 합니다.
+                    결제 요청을 만들기 <b>전에</b> 아래 장학으로 <b>실제 청구액을 산출하는 단계</b>가
+                    들어가야 합니다.
                   </div>
                 </div>
               </div>
 
               <div className="split-3-2">
                 <div>
+                  {scholErr !== null && (
+                    <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+                      {scholErr}
+                    </div>
+                  )}
                   <DataTable
                     nowrap
                     columns={DISCOUNT_COLUMNS}
-                    rows={DISCOUNTS}
-                    rowKey={(r) => r.id}
+                    rows={schols ?? []}
+                    rowKey={(r) => String(r.id)}
                     masked={false}
+                    loading={schols === null && scholErr === null}
                     pageSize={10}
+                    emptyText={`${Number(calcMonth.slice(0, 4)) || ''}년에 등록된 장학이 없습니다. 기초 관리에서 먼저 등록해야 합니다.`}
                     countLabel={
                       <>
-                        할인 정책 <b>{DISCOUNTS.length}</b>건 · 사용{' '}
-                        <b>{DISCOUNTS.filter((d) => d.active).length}</b>건
+                        장학 <b>{(schols ?? []).length}</b>종 · 사용{' '}
+                        <b>{(schols ?? []).filter((d) => d.active).length}</b>종
                       </>
                     }
                     toolbar={
-                      <>
-                        <ExcelButton filename="할인정책" columns={DISCOUNT_COLUMNS} rows={DISCOUNTS} masked={false} />
-                        <button className="btn pri" disabled data-soon title="준비 중입니다">
-                          <Icon name="plus" size={14} /> 할인 정책 등록
-                        </button>
-                      </>
+                      <ExcelButton
+                        filename={`장학종류_${calcMonth.slice(0, 4)}`}
+                        columns={DISCOUNT_COLUMNS}
+                        rows={schols ?? []}
+                        masked={false}
+                      />
                     }
                   />
+
+                  {/* ★ **등록 버튼을 여기 두지 않는다.** 같은 것을 두 화면에서 고치면 어긋난다 —
+                         어디서 고치는지만 알려준다 */}
+                  <div className="note-box" style={{ marginTop: 14 }}>
+                    <div>
+                      장학 종류는 <b>기초 관리</b>에서 등록·수정합니다. 할인율을 바꾸면{' '}
+                      <b>이미 발행된 청구는 그대로</b>이고, 다음 발행부터 반영됩니다.
+                    </div>
+                  </div>
 
                   <div className="note-box plain" style={{ marginTop: 14, marginBottom: 0 }}>
                     <div className="ic">
                       <Icon name="git-compare" size={17} />
                     </div>
                     <div>
-                      <div className="tt">적용 순서가 최종 금액을 바꿉니다</div>
+                      <div className="tt">서버에 있는 할인은 장학뿐입니다</div>
                       <div className="tx">
-                        100만원에 <b>10% 할인</b>과 <b>3만원 할인</b>을 적용할 때, 정률 먼저면{' '}
-                        <b>870,000원</b>이고 정액 먼저면 <b>873,000원</b>입니다. 그래서 정책마다{' '}
-                        <b>순서(order)</b>를 못박고 그 순서대로만 계산합니다.
-                        <br />
-                        <b>단독(중복 불가)</b> 할인이 하나 적용되면 그 뒤 정책은 전부 막힙니다 — 장학 100%에 형제 할인이
-                        또 붙는 일을 막기 위해서입니다.
+                        형제 할인·재등록 할인·조기납부·쿠폰은 <b>아직 시스템에 없습니다.</b> 그런
+                        할인을 주기로 했다면 지금은 <b>청구를 만들 때 금액으로 직접 깎아야</b> 합니다 —
+                        장학으로 등록하면 성적 기준으로 판정되는 쪽에 섞입니다.
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* ── 청구액 계산기 ── */}
-                <div className="card-sec" style={{ marginBottom: 0 }}>
-                  <div className="card-sec-h">
-                    <div className="t">
-                      <span className="ico">
-                        <Icon name="percent" size={15} />
-                      </span>
-                      청구액 계산
-                    </div>
-                    <div className="r">
-                      <span className="mk supplement">결제 금액 미리보기</span>
-                    </div>
-                  </div>
-                  <div className="card-sec-b">
-                    <div className="frow">
-                      <label className="req">청구 항목</label>
-                      <div className="type-picks">
-                        {KINDS.map((k) => (
-                          <button
-                            type="button"
-                            key={k}
-                            className={`type-pick${calcKind === k ? ' on' : ''}`}
-                            onClick={() => {
-                              setCalcKind(k)
-                              setCalcBase(BASE_PRICE[k])
-                            }}
-                          >
-                            {k}
-                          </button>
-                        ))}
+                <div>
+                  <div className="card-sec" style={{ marginBottom: 0 }}>
+                    <div className="card-sec-h">
+                      <div className="t">
+                        <span className="ico">
+                          <Icon name="calculator" size={15} />
+                        </span>
+                        할인율별 단가
                       </div>
                     </div>
-
-                    <div className="frow">
-                      <label className="req">정가</label>
-                      <input
-                        className="inp"
-                        type="number"
-                        /* ⚠️ `step` 을 걸지 않는다 — 445,000 처럼 배수가 아닌 정가는
-                           **브라우저가 제출을 막아** 저장이 안 되는 것처럼 보인다 */
-                        value={calcBase}
-                        onChange={(e) => setCalcBase(Number(e.target.value))}
-                      />
-                    </div>
-
-                    <div className="frow">
-                      <label>적용 할인</label>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 4 }}>
-                        {DISCOUNTS.map((d) => (
-                          <label
-                            key={d.id}
-                            style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, cursor: 'pointer' }}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={picked.includes(d.id)}
-                              onChange={() =>
-                                setPicked((p) => (p.includes(d.id) ? p.filter((x) => x !== d.id) : [...p, d.id]))
-                              }
-                            />
-                            <span style={{ flex: 1 }}>{d.name}</span>
-                            <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>
-                              {d.method === 'RATE' ? `${d.value}%` : won(d.value)}
-                            </span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* 계산 과정 */}
-                    <div className="calc-box">
-                      <div className="crow base">
-                        <span>정가</span>
-                        <b>{won(calcBase)}</b>
-                      </div>
-                      {calc.steps.length === 0 && (
-                        <div className="crow none">적용할 할인을 선택하세요</div>
-                      )}
-                      {calc.steps.map((s) => (
-                        <div className={`crow${s.applied ? '' : ' skip'}`} key={s.d.id}>
-                          <span>
-                            <em>{s.d.order}</em> {s.d.name}
-                            {!s.applied && <i> — {s.reason}</i>}
-                          </span>
-                          {s.applied ? <b className="cut">-{won(s.cut)}</b> : <b className="zero">적용 안 됨</b>}
+                    <div className="card-sec-b">
+                      {/* ★★ **화면이 할인을 곱하지 않는다.** 서버 단가표가 할인율별 금액을
+                             이미 계산해서 준다 — 독서실비에 할인이 안 붙는 규칙도 거기 들어 있다.
+                             화면이 따로 곱하면 그 규칙을 놓쳐 조용히 틀린 금액이 나온다 */}
+                      <div className="frow">
+                        <label>대상월</label>
+                        <div>
+                          <input
+                            className="inp"
+                            type="month"
+                            value={calcMonth}
+                            onChange={(e) => setCalcMonth(e.target.value)}
+                          />
                         </div>
-                      ))}
-                      <div className="crow final">
-                        <span>실제 청구액</span>
-                        <b>{won(calc.final)}</b>
                       </div>
-                      {calcBase > 0 && (
-                        <div className="crow sub">
-                          <span>총 할인</span>
-                          <b>
-                            {won(calcBase - calc.final)} ({Math.round(((calcBase - calc.final) / calcBase) * 100)}%)
-                          </b>
+                      <div className="frow">
+                        <label>학년</label>
+                        <div>
+                          <select
+                            className="inp"
+                            value={calcGrade}
+                            onChange={(e) => setCalcGrade(e.target.value as GradeType)}
+                          >
+                            {(['HIGH2', 'HIGH3', 'N_SU'] as GradeType[]).map((g) => (
+                              <option key={g} value={g}>
+                                {GRADE_LABEL[g]}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="frow">
+                        <label>좌석</label>
+                        <div>
+                          <select
+                            className="inp"
+                            value={calcSeat}
+                            onChange={(e) => setCalcSeat(e.target.value as SeatType)}
+                          >
+                            {(['GENERAL', 'SINGLE'] as SeatType[]).map((t) => (
+                              <option key={t} value={t}>
+                                {SEAT_TYPE_LABEL[t]}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {calcErr !== null && (
+                        <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+                          {calcErr}
                         </div>
                       )}
-                    </div>
 
-                    <div className="blocked-note" style={{ marginTop: 14, marginBottom: 0 }}>
-                      <div className="ic">
-                        <Icon name="shield" size={16} />
-                      </div>
-                      <div>
-                        {/* ★ 이 화면에서 계산한 값을 그대로 결제에 넘기면 결제 금액을 조작할 수 있다.
-                               서버가 같은 정책으로 재계산해 금액이 일치할 때만 결제창을 띄우고,
-                               승인 결과도 서버가 검증해야 한다(menu.internal 보안 항목). */}
-                        <div className="tt">실제 결제 금액은 결제할 때 다시 계산됩니다</div>
-                        <div className="tx">
-                          이 화면은 할인 정책을 입력하고 청구액을 <b>미리 계산해 보는 곳</b>입니다. 결제할 때 같은 정책으로
-                          다시 계산해 <b>금액이 맞을 때만 결제창이 뜹니다.</b>
+                      <table className="dt nowrap" style={{ width: '100%' }}>
+                        <thead>
+                          <tr>
+                            <th style={{ width: 72 }}>할인율</th>
+                            <th>교습비(월)</th>
+                            <th>독서실비(월)</th>
+                            <th>합계</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(calcFee ?? []).map((f) => (
+                            <tr key={f.discountRate}>
+                              <td>
+                                <b>{f.discountRate}%</b>
+                              </td>
+                              <td>{wonOf(f.monthlyTuition)}</td>
+                              <td>{wonOf(f.monthlyStudyRoom)}</td>
+                              <td>
+                                <b>{wonOf(f.monthlyTotal)}</b>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {(calcFee === null || calcFee.length === 0) && (
+                        <div className="dt-empty">
+                          {calcBusy ? '불러오는 중…' : '이 달 단가표가 등록되지 않았습니다.'}
+                        </div>
+                      )}
+
+                      <div className="note-box" style={{ marginTop: 12, marginBottom: 0 }}>
+                        <div>
+                          금액은 <b>서버 단가표 그대로</b>입니다. <b>독서실비에는 할인이 붙지 않아</b>{' '}
+                          어느 줄이든 정가입니다. 일할 계산은 청구를 만들 때 교습일수로 다시 셉니다.
                         </div>
                       </div>
                     </div>
@@ -1897,9 +1872,16 @@ function Content() {
               }
               toolbar={
                 <>
-                  <button className="btn" disabled data-soon title="준비 중입니다">
-                    <Icon name="bell" size={14} /> 미납자 일괄 알림톡
-                  </button>
+                  <UnpaidNoticeButton
+                    academyId={academyId}
+                    targets={unpaidTargets}
+                    onSent={() => {
+                      /* 발송 이력이 수납 숫자를 바꾸지는 않지만, 고른 상태는 비운다 —
+                         남겨 두면 **같은 사람에게 또 보내기 쉽다** */
+                      setUnpaidSel([])
+                      void load()
+                    }}
+                  />
                   <MaskToggle masked={masked} onChange={setMasked} />
                   <ExcelButton filename="미납자_명단" columns={UNPAID_COLUMNS} rows={unpaid} masked={masked} />
                 </>

@@ -16,6 +16,7 @@ import {
   SEAT_STYLE_LABEL,
 } from '../../api/facility'
 import { searchStudents, type Student } from '../../api/students'
+import { SeatImportButton } from './SeatImportButton'
 import { studentNoText } from '../../lib/studentNo'
 import { SeatSetup } from './SeatSetup'
 import type { Mockup } from './types'
@@ -715,6 +716,15 @@ function Content() {
           emptyText="배정된 좌석이 없습니다."
           toolbar={
             <>
+              {/* ★ **지점 전체에 넣는다.** 지금 보고 있는 구역만 받으면 담당자가 구역마다
+                     나눠 붙여넣어야 하는데, 실배치 명단은 지점 단위로 온다 */}
+              <SeatImportButton
+                academyId={academyId}
+                onDone={() => {
+                  void loadLayout()
+                  setPicked([])
+                }}
+              />
               <button
                 className="btn"
                 disabled={busy || picked.length === 0}

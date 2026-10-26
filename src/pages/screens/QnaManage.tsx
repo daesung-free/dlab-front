@@ -177,6 +177,11 @@ function Content() {
   /* ★ 15분이 현재 운영값이다(클라이언트 회신, 파일 상단 주석). 초기값이 30이라 격자는 15분인데
        상단 카드만 '30분 간격'이라고 말하고 있었다. 상수로 박지 않는 이유도 위 주석에 있다. */
   const [interval, setIntervalMin] = useState(15)
+  /* ★★ 예전에는 `defaultValue` 라 **고쳐도 아무 데도 안 쓰였다.** 폼에는 19:00 이라고
+       적어 놓고 실제 개설은 늘 18:00~20:00 으로 나갔다(`openDay` 에 하드코딩) —
+       오류가 안 나고 **시각만 조용히 달라져서** 알아채기 어렵다. */
+  const [openAt, setOpenAt] = useState(fmt(OPEN_MIN))
+  const [closeAt, setCloseAt] = useState(fmt(CLOSE_MIN))
   /* 시각·간격·정원을 골라 여는 모달. 그리드의 '하루 열기' 는 운영 기본값으로 바로 연다 */
   const [opening, setOpening] = useState<{
     date: string
@@ -350,8 +355,8 @@ function Content() {
         academyId,
         year: Number(date.slice(0, 4)),
         date,
-        from: '18:00',
-        to: '20:00',
+        from: openAt,
+        to: closeAt,
         intervalMinutes: interval,
         capacity: 1,
       })
@@ -853,8 +858,18 @@ function Content() {
                   <div className="frow">
                     <label className="req">운영 시간</label>
                     <div className="two">
-                      <input className="inp" type="time" defaultValue={fmt(OPEN_MIN)} />
-                      <input className="inp" type="time" defaultValue={fmt(CLOSE_MIN)} />
+                      <input
+                        className="inp"
+                        type="time"
+                        value={openAt}
+                        onChange={(e) => setOpenAt(e.target.value)}
+                      />
+                      <input
+                        className="inp"
+                        type="time"
+                        value={closeAt}
+                        onChange={(e) => setCloseAt(e.target.value)}
+                      />
                     </div>
                   </div>
 
@@ -864,7 +879,7 @@ function Content() {
                       <b style={{ fontSize: 14 }}>하루 {times.length}타임</b>
                       <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>
                         {' '}
-                        · {fmt(OPEN_MIN)} ~ {fmt(CLOSE_MIN)}
+                        · {openAt} ~ {closeAt}
                       </span>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 9 }}>
                         {times.map((t) => (
@@ -886,11 +901,15 @@ function Content() {
                     </div>
                   </div>
 
-                  <div className="frow">
-                    <label>&nbsp;</label>
-                    <button className="btn pri" disabled data-soon title="준비 중입니다">
-                      <Icon name="save" size={14} /> 설정 저장
-                    </button>
+                  {/* ★★ 「설정 저장」 버튼을 뺐다(2026-10-26). **저장할 곳이 서버에 없다** —
+                         질의응답은 정책을 보관하지 않고 **날짜마다 타임을 연다.**
+                         저장 버튼을 두면 담당자가 눌러 놓고 **저장됐다고 믿는데**, 실제로는
+                         아무 데도 안 남고 다음에 열 때 기본값으로 돌아간다. */}
+                  <div className="note-box" style={{ marginBottom: 14 }}>
+                    <div>
+                      여기 값은 <b>타임을 열 때 쓰입니다.</b> 따로 저장되지는 않으므로, 날짜마다
+                      <b> 「타임 열기」</b>를 눌러 그날 분을 만들어 주시기 바랍니다.
+                    </div>
                   </div>
 
                   <div className="blocked-note" style={{ marginBottom: 0 }}>

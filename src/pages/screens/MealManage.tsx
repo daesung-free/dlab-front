@@ -37,7 +37,6 @@ import {
   type MealPolicy,
 } from '../../api/meals'
 import { studentNoText } from '../../lib/studentNo'
-import { MOCK_STUDENTS } from './mockStudents'
 import type { Mockup } from './types'
 import { createScreenSignal } from './screenSignal'
 import '../../styles/forms.css'
@@ -232,14 +231,16 @@ interface Device {
   todayCount: number
 }
 
-const DEVICES: Device[] = [
-  { id: 'SCAN-1', name: 'QR 스캐너 A', place: '배식대 A 입구', role: '학생 QR 스캐너', online: true, lastTagAt: '12:41:08', todayCount: 142 },
-  { id: 'SCAN-2', name: 'QR 스캐너 B', place: '배식대 B 입구', role: '학생 QR 스캐너', online: false, lastTagAt: '11:12:30', todayCount: 18 },
-  { id: 'PAD-ADMIN', name: '관리자 태블릿', place: '배식대 데스크', role: '관리자 확인 단말', online: true, lastTagAt: '12:40:55', todayCount: 36 },
-]
-
-const SCANNERS = DEVICES.filter((d) => d.role === '학생 QR 스캐너')
-const ONLINE_SCANNERS = SCANNERS.filter((d) => d.online)
+/* ★★ **예시 단말 3대를 지웠다**(2026-10-26).
+ *
+ *   「QR 스캐너 A · 마지막 처리 12:41:08 · 금일 142건」처럼 **연결 상태와 처리 건수까지
+ *   지어내고 있었다.** 한 대는 일부러 오프라인으로 그려 뒀는데, 그걸 보고 현장에
+ *   전화하면 멀쩡한 단말이다. 서버에 배식 단말이라는 개념 자체가 없다.
+ *
+ *   ⚠️ 키오스크(지점당 1대, 출결용)와는 **다른 장비**다 — 그쪽은 `/branch-configs` 로
+ *     상태를 받지만 배식 스캐너는 서버가 모른다.
+ */
+const DEVICES: Device[] = []
 
 interface TagLog {
   id: string
@@ -256,31 +257,22 @@ interface TagLog {
   handledBy?: string
 }
 
-const STAFF = ['담임 E', '정하람', '담임 D']
-
-const TAG_LOGS: TagLog[] = MOCK_STUDENTS.filter((s) => s.status === '재원')
-  .slice(0, 38)
-  .map((s, i) => {
-    const result: TagResult =
-      i % 19 === 18 ? 'FAIL' : i % 13 === 12 ? 'NOORDER' : i % 11 === 10 ? 'DUP' : i % 7 === 6 ? 'MANUAL' : 'OK'
-    const failing = result === 'FAIL' || result === 'MANUAL'
-    const scanner = ONLINE_SCANNERS[i % Math.max(1, ONLINE_SCANNERS.length)]
-    return {
-      id: `tag-${i + 1}`,
-      at: `12:${String(2 + Math.floor(i * 1.1)).padStart(2, '0')}:${String((i * 23) % 60).padStart(2, '0')}`,
-      studentNo: s.studentNo,
-      name: s.name,
-      classNo: s.classNo,
-      device: result === 'MANUAL' ? '관리자 태블릿' : (scanner?.name ?? 'QR 스캐너 A'),
-      method: result === 'MANUAL' ? '수기' : 'QR',
-      result,
-      reason: failing ? FAIL_REASONS[i % FAIL_REASONS.length] : undefined,
-      handledBy: result === 'MANUAL' ? STAFF[i % STAFF.length] : undefined,
-    }
-  })
-
-/** 아직 처리되지 않은 태깅 실패 — 관리자가 눌러서 통과시켜야 하는 큐 */
-const PENDING = TAG_LOGS.filter((t) => t.result === 'FAIL')
+/* ★★ **예시 태깅 로그 38건을 지웠다**(2026-10-26).
+ *
+ *   위에 「준비 중」 상자를 띄워 뒀는데 **그 아래 표가 38행 차 있었다** — 학번·이름·
+ *   시각·실패 사유까지 들어 있어 **실제 배식 기록으로 읽힌다.** 결제 관리에서 걷어낸
+ *   것과 같은 종류다. 안내 상자는 숫자와 표보다 늦게 읽힌다.
+ *
+ *   ★ 요약 칸도 예시를 센 것이었다(「금일 신청 231」은 **상수**였고 날짜는 2026-05-28
+ *     로 굳어 있었다). 표를 비우면서 **숫자도 같이 지운다** — 표는 비었는데 위에
+ *     숫자가 남으면 그게 제일 나쁘다.
+ *
+ *   ⚠️ 관리자용 태깅 로그 조회 경로가 서버에 없다. 키오스크 쪽 `getMealApplyYN` 만 있어
+ *     「누가 실제로 먹었는가」를 관리자가 되짚을 수 없다(API_GAPS 6-7). 화면 구성·컬럼은
+ *     **지우지 않고 둔다**(CLAUDE.md 1) — 지우면 요청해야 할 것이 조용히 사라진다.
+ */
+const TAG_LOGS: TagLog[] = []
+const PENDING: TagLog[] = []
 
 const TAG_COLUMNS: Column<TagLog>[] = [
   { key: 'at', header: '시각', width: '96px', align: 'center', sortable: true, value: (r) => r.at },
@@ -690,14 +682,16 @@ function Content() {
   const check = useMemo(() => {
     const ok = TAG_LOGS.filter((t) => t.result === 'OK').length
     const manual = TAG_LOGS.filter((t) => t.result === 'MANUAL').length
-    const ordered = 231
+    /* ★ 예전에는 `const ordered = 231` 이었다 — **지어낸 숫자**다. 신청 인원은 이 탭이
+         아니라 「일자별 명단」이 서버에서 받아온다. 여기서는 세지 않는다 */
+    const ordered = 0
     return {
       ordered,
       ok,
       manual,
       /** QR + 수기 = 실제 배식 확인 인원 */
       confirmed: ok + manual,
-      missing: ordered - ok - manual,
+      missing: Math.max(0, ordered - ok - manual),
       pending: PENDING.length,
       rejected: TAG_LOGS.filter((t) => t.result === 'DUP' || t.result === 'NOORDER').length,
     }
@@ -1296,6 +1290,15 @@ function Content() {
               </div>
             )}
 
+            {DEVICES.length === 0 && (
+              <div className="note-box" style={{ marginBottom: 14 }}>
+                <div>
+                  배식대 단말의 연결 상태는 아직 표시되지 않습니다. 단말이 멈추면 그 줄은{' '}
+                  <b>수기 확인으로 처리</b>해 주시기 바랍니다.
+                </div>
+              </div>
+            )}
+
             <div className="dev-grid">
               {DEVICES.map((d) => (
                 <div className={`dev${d.online ? '' : ' off'}`} key={d.id}>
@@ -1323,51 +1326,45 @@ function Content() {
               ))}
             </div>
 
+            {/* ★★ **0 을 숫자로 띄우지 않는다.** 조회 경로가 없어 못 센 것인데 0 으로 찍으면
+                   「오늘 아무도 안 먹었다」로 읽힌다 — 그게 예시 숫자보다 나을 것이 없다.
+                   ★ 날짜도 `2026-05-28` 로 굳어 있었다. 못 세는 칸에 날짜를 붙이면
+                     그 날짜 집계가 있는 것처럼 보인다 */}
             <div className="stat-strip" style={{ marginBottom: 16 }}>
               <div className="stat">
                 <div className="l">
                   <Icon name="utensils" size={13} /> 금일 신청
                 </div>
-                <div className="v">{check.ordered}</div>
-                <div className="d">2026-05-28</div>
+                <div className="v">-</div>
+                <div className="d">일자별 명단에서 확인합니다</div>
               </div>
               <div className="stat">
                 <div className="l">
                   <Icon name="qr-code" size={13} /> QR 확인
                 </div>
-                <div className="v" style={{ color: 'var(--green)' }}>
-                  {check.ok}
-                </div>
-                <div className="d up">학생 본인 태깅</div>
+                <div className="v">-</div>
+                <div className="d">집계 준비 중</div>
               </div>
               <div className="stat">
                 <div className="l">
                   <Icon name="pencil" size={13} /> 수기 확인
                 </div>
-                <div className="v" style={{ color: 'var(--blue)' }}>
-                  {check.manual}
-                </div>
-                <div className="d">
-                  전체 확인의 {Math.round((check.manual / Math.max(1, check.confirmed)) * 100)}%
-                </div>
+                <div className="v">-</div>
+                <div className="d">집계 준비 중</div>
               </div>
               <div className="stat">
                 <div className="l">
                   <Icon name="user-x" size={13} /> 미체크
                 </div>
-                <div className="v" style={{ color: 'var(--red)' }}>
-                  {check.missing}
-                </div>
-                <div className="d down">신청했으나 미방문</div>
+                <div className="v">-</div>
+                <div className="d">신청했으나 미방문</div>
               </div>
               <div className="stat">
                 <div className="l">
                   <Icon name="shield-off" size={13} /> 거부
                 </div>
-                <div className="v" style={{ color: 'var(--amber)' }}>
-                  {check.rejected}
-                </div>
-                <div className="d warn">중복 · 미신청</div>
+                <div className="v">-</div>
+                <div className="d">중복 · 미신청</div>
               </div>
             </div>
 
@@ -1377,11 +1374,8 @@ function Content() {
               rowKey={(r) => r.id}
               masked={masked}
               pageSize={12}
-              countLabel={
-                <>
-                  금일 태깅 <b>{TAG_LOGS.length}</b>건 · 배식시간 11:50~13:10
-                </>
-              }
+              emptyText="배식 확인 내역은 아직 제공되지 않습니다. 배식대에서 확인하는 것은 그대로 됩니다."
+              countLabel={<>금일 태깅 <b>{TAG_LOGS.length}</b>건</>}
               toolbar={
                 <>
                   <button className="btn" disabled data-soon title="준비 중입니다">
@@ -1649,9 +1643,11 @@ export const mealMockup: Mockup = {
   actions: (
     <>
       <MonthMenu />
-      <button className="btn" disabled data-soon title="준비 중입니다">
-        <Icon name="utensils" size={14} /> 식수 마감
-      </button>
+      {/* ★ 「식수 마감」을 뺐다. **이미 되는 기능이다** — 「급식 일정 관리」 탭의 달력에서
+             날짜를 눌러 중단일로 등록하면 서버가 신청까지 취소해 준다. 헤더에 같은 이름의
+             눌리지 않는 버튼을 두면 **그 기능이 아직 안 되는 것처럼** 읽힌다.
+             헤더는 본문과 상태를 공유하지 못해(CLAUDE.md 5-1) 탭을 열어 줄 수도 없다.
+          ★ 「데스크 당일 신청」은 그대로 둔다 — 주문 생성 경로가 서버에 없다(조회만 있다). */}
       <button className="btn pri" disabled data-soon title="준비 중입니다">
         <Icon name="plus" size={14} /> 데스크 당일 신청
       </button>

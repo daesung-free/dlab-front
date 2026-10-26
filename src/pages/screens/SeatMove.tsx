@@ -3,7 +3,6 @@ import {
   DataTable,
   ExcelButton,
   MaskToggle,
-  MockNotice,
   SearchForm,
   Unfilled,
   useServerData,
@@ -15,7 +14,9 @@ import {
 import { Tabs } from '../../components/Tabs'
 import { Icon } from '../../components/Icon'
 import { useAcademy } from '../../auth/AcademyContext'
+import { useAuth } from '../../auth/AuthContext'
 import { ApiError } from '../../api/client'
+import { listBranchConfigs, type BranchConfig } from '../../api/branchConfigs'
 import { listClasses } from '../../api/classes'
 import { getSeatLayout, listSeatAreas, type SeatArea, type SeatCell } from '../../api/facility'
 import {
@@ -39,7 +40,11 @@ import './seat.css'
  *     ★ presence 는 이탈을 모른다 — 이탈해도 출결로는 재실이다. 이탈 축이 따로 온다(2026-09-25)
  *     ★ 그래서 /seat-leaves/current 를 따로 부르지 않는다. 두 번 부르면 배치와 이탈이
  *       서로 다른 시점이 되어 좌석표에서만 깜빡인다
- *   · 키오스크 관리 탭 = 아직 서버에 없다. 예시 값 그대로 두고 탭 안에 표시한다
+ *   · 키오스크 관리 탭 = 지점 설정(/branch-configs)의 kioskLastSeenAt·kioskOnline 을 쓴다
+ *     (2026-10-26 연동). ★ 지점당 1대라 **행이 단말이 아니라 지점**이다 — 요청에 단말
+ *     식별자가 없어 단말을 세울 수 없다. 전에 있던 예시 6대(펌웨어·금일 수신)는 서버에
+ *     개념 자체가 없어 **붙일 것이 아니라 지울 것**이었다
+ *     ★ 최고관리자 전용 경로다. 지점 계정은 자기 지점도 403 이라 탭 안에서 권한으로 가른다
  *
  * ⚠ 이탈 위치(강의실·화장실·공용공간·교과실)는 아직 정해지지 않았다(I-16). 위치별 칸·필터는
  *   지우지 않고 <Unfilled/> · data-soon 으로 둔다 — 정해지면 바로 채운다.
@@ -55,8 +60,10 @@ import './seat.css'
  *     좌석표의 빈 자리는 '미신고 이탈'이 아니라 '데이터 없음'으로 읽어야 한다.
  *
  * ⚠ 키오스크 관리자 페이지를 이 관리자 화면 안에 내장한다.
- *   별도 키오스크 관리 콘솔로 나가지 않고, 여기서 단말을 등록·모니터링하며
- *   좌석 이탈 정보도 그 단말들에서 수신한다(단일 진입점). */
+ *   별도 키오스크 관리 콘솔로 나가지 않고, 여기서 통신 상태를 보며 좌석 이탈 정보도
+ *   그 단말들에서 수신한다(단일 진입점).
+ *   ★ 단말 **등록·설정·재시작·펌웨어 배포는 우리 범위가 아니다.** 키오스크 레포 담당이고
+ *     서버에 경로가 없다 — 버튼으로 두면 「눌러도 아무 일이 없다」가 된다. 상태만 본다. */
 
 /** 이탈 위치 — 구분값이 아직 정해지지 않았다(I-16). 정해지면 이 목록으로 칸과 필터를 채운다 */
 const AWAY_LOCATIONS = ['강의실', '화장실', '공용공간', '교과실'] as const
@@ -103,102 +110,134 @@ function one(v: unknown): string | undefined {
   return undefined
 }
 
-/* ── 키오스크 단말 관리 — 별도 콘솔 없이 이 화면에 내장한다 ──
- * 서버에 단말 관리가 없다(API_GAPS 2부). 아래는 예시 값이고 탭 안에 MockNotice 로 알린다. */
+/* ── 키오스크 통신 상태 — 별도 콘솔 없이 이 화면에서 본다 ──
+ *
+ * ★ **「단말 목록」이 아니라 「지점별 통신 상태」다.** 지점당 키오스크가 1대이고 요청에
+ *   단말 식별자가 없어(2026-10-26 확인) 단말을 행으로 세울 수가 없다. 그래서 행은 지점이다.
+ *   예전에는 `KIOSK-A1 · 펌웨어 v2.4.1 · 금일 86건` 같은 예시 6대를 세워 뒀는데,
+ *   **서버에 그 개념 자체가 없어** 연동할 것이 아니라 지울 것이었다.
+ *
+ * ★ **마지막 통신은 하트비트가 아니다.** 학생이 태깅해서 `/kiosk/**` 요청이 들어올 때만
+ *   갱신되고 그것도 1분 간격이다 — **한산한 시간대에는 멀쩡한 단말도 오래 전으로 보인다.**
+ *   그 말을 화면이 하지 않으면 「키오스크가 죽었다」는 오해로 현장에 전화가 간다.
+ *
+ * ★ **온라인/오프라인 판정을 프론트에서 다시 계산하지 않는다.** 기준(10분)은 서버가 쥐고
+ *   `kioskOnline` 으로 내려준다. 여기서 또 재면 기준이 갈리는 날 같은 화면의 숫자와 딱지가
+ *   서로 다른 말을 한다.
+ *
+ * ⚠️ **이 경로는 최고관리자 전용이다**(`branchConfigs.ts` 주석). 지점 계정은 자기 지점도
+ *   403 이라 탭 자체를 권한으로 가른다 — 열어 두면 빈 표가 고장으로 읽힌다.
+ */
 
-interface Kiosk {
-  id: string
-  place: string
-  /** 이 단말이 처리하는 기능 */
-  uses: string[]
-  online: boolean
-  firmware: string
-  lastSyncAt: string
-  /** 금일 이 단말에서 수신한 좌석 이탈·복귀 건수 */
-  todayEvents: number
+/** 마지막 통신이 이보다 오래됐으면 시각을 주황으로 둔다. 서버 판정(10분)보다 넉넉하게 본다 */
+const KIOSK_STALE_MIN = 30
+
+/* ★ 위쪽 `minutesSince` 와 **따로 둔다.** 그쪽은 이탈 시각이 없으면 0분으로 뭉개는데,
+   키오스크는 「한 번도 통신이 없었다」와 「방금 통신했다」를 반드시 갈라야 한다 —
+   뭉개면 자격증명조차 없는 지점이 「방금」으로 보인다. */
+function kioskIdleMin(iso: string | null): number | null {
+  if (iso === null || iso === '') return null
+  const t = new Date(iso).getTime()
+  if (Number.isNaN(t)) return null
+  return Math.floor((Date.now() - t) / 60000)
 }
 
-const KIOSKS: Kiosk[] = [
-  { id: 'KIOSK-A1', place: 'A실 입구', uses: ['좌석 이탈·복귀', '출결'], online: true, firmware: 'v2.4.1', lastSyncAt: '2026-05-28 14:22:10', todayEvents: 86 },
-  { id: 'KIOSK-A2', place: 'A실 후면', uses: ['좌석 이탈·복귀'], online: true, firmware: 'v2.4.1', lastSyncAt: '2026-05-28 14:21:44', todayEvents: 41 },
-  { id: 'KIOSK-B1', place: 'B실 입구', uses: ['좌석 이탈·복귀', '출결'], online: true, firmware: 'v2.4.1', lastSyncAt: '2026-05-28 14:22:03', todayEvents: 63 },
-  { id: 'KIOSK-B2', place: 'B실 후면', uses: ['좌석 이탈·복귀'], online: false, firmware: 'v2.3.0', lastSyncAt: '2026-05-28 09:41:18', todayEvents: 7 },
-  { id: 'KIOSK-3F', place: '3층 복도', uses: ['좌석 이탈·복귀'], online: true, firmware: 'v2.4.1', lastSyncAt: '2026-05-28 14:20:57', todayEvents: 29 },
-  { id: 'KIOSK-4F', place: '4층 복도', uses: ['좌석 이탈·복귀'], online: true, firmware: 'v2.4.1', lastSyncAt: '2026-05-28 14:19:32', todayEvents: 18 },
-]
+/** 「3분 전」처럼 읽히게. 담당자가 보는 것은 절대 시각보다 **얼마나 됐는지**다 */
+function sinceLabel(min: number | null): string {
+  if (min === null) return '기록 없음'
+  if (min < 1) return '방금'
+  if (min < 60) return `${min}분 전`
+  if (min < 60 * 24) return `${Math.floor(min / 60)}시간 전`
+  return `${Math.floor(min / (60 * 24))}일 전`
+}
 
-const KIOSK_COLUMNS: Column<Kiosk>[] = [
+const KIOSK_COLUMNS: Column<BranchConfig>[] = [
   {
-    key: 'id',
-    header: '단말 ID',
-    width: '118px',
+    key: 'academyName',
+    header: '지점',
+    width: '110px',
     sortable: true,
-    value: (r) => r.id,
-    render: (_r, v) => <code style={{ fontSize: 10.5 }}>{v}</code>,
-  },
-  { key: 'place', header: '설치 위치', width: '110px', sortable: true, value: (r) => r.place },
-  {
-    key: 'uses',
-    header: '사용 기능',
-    value: (r) => r.uses.join(' · '),
-    render: (r) => (
-      <span style={{ display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
-        {r.uses.map((u) => (
-          <span key={u} className="mk supplement">
-            {u}
-          </span>
-        ))}
-      </span>
-    ),
+    value: (r) => r.academyName,
+    render: (r) => <b>{r.academyName}</b>,
   },
   {
     key: 'online',
     header: '연결',
-    width: '86px',
+    width: '96px',
     align: 'center',
     sortable: true,
-    value: (r) => (r.online ? '온라인' : '오프라인'),
-    render: (r) => <span className={`mk ${r.online ? 'verified' : 'brandnew'}`}>{r.online ? '온라인' : '오프라인'}</span>,
-  },
-  {
-    key: 'firmware',
-    header: '펌웨어',
-    width: '86px',
-    align: 'center',
-    sortable: true,
-    value: (r) => r.firmware,
+    /* ★ 정렬은 **오프라인이 위로** 와야 한다. 봐야 할 것이 그쪽이다 */
+    value: (r) => (r.kioskOnline ? 1 : 0),
     render: (r) => (
-      <span style={{ fontSize: 11.5, color: r.firmware === 'v2.4.1' ? 'var(--ink-2)' : 'var(--amber)', fontWeight: 700 }}>
-        {r.firmware}
+      <span
+        className={`mk ${r.kioskOnline ? 'verified' : 'brandnew'}`}
+        title={
+          r.kioskOnline
+            ? '최근 10분 안에 키오스크 요청이 들어왔습니다'
+            : '최근 10분 동안 요청이 없었습니다. 한산한 시간대에도 이렇게 보입니다'
+        }
+      >
+        {r.kioskOnline ? '온라인' : '오프라인'}
       </span>
     ),
   },
-  { key: 'lastSyncAt', header: '최종 수신', width: '160px', sortable: true, value: (r) => r.lastSyncAt },
   {
-    key: 'todayEvents',
-    header: '금일 수신',
-    width: '92px',
-    align: 'right',
+    key: 'lastSeen',
+    header: '마지막 통신',
+    width: '112px',
+    align: 'center',
     sortable: true,
-    value: (r) => r.todayEvents,
-    render: (r) => <b>{r.todayEvents}건</b>,
+    /* ★ 정렬 키는 분(오래된 것이 큰 값)이다. 「3분 전」 글자로 정렬하면 사전순이 된다 */
+    value: (r) => kioskIdleMin(r.kioskLastSeenAt) ?? Number.MAX_SAFE_INTEGER,
+    render: (r) => {
+      const min = kioskIdleMin(r.kioskLastSeenAt)
+      if (min === null) return <span style={{ color: 'var(--ink-3)' }}>기록 없음</span>
+      return (
+        <span
+          style={{
+            fontWeight: 700,
+            fontSize: 11.5,
+            color: min >= KIOSK_STALE_MIN ? 'var(--amber)' : 'var(--ink-2)',
+          }}
+        >
+          {sinceLabel(min)}
+        </span>
+      )
+    },
   },
   {
-    key: 'act',
-    header: '',
-    width: '128px',
+    key: 'lastSeenAt',
+    header: '최종 수신 시각',
+    width: '150px',
+    sortable: true,
+    value: (r) => (r.kioskLastSeenAt === null ? '-' : dateTime(r.kioskLastSeenAt)),
+  },
+  {
+    key: 'acadCd',
+    header: '지점 코드',
+    width: '90px',
     align: 'center',
-    value: () => '',
-    render: () => (
-      <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled data-soon title="준비 중입니다">
-          설정
-        </button>
-        <button className="btn" style={{ padding: '4px 9px', fontSize: 11.5 }} disabled data-soon title="준비 중입니다">
-          재시작
-        </button>
-      </div>
-    ),
+    sortable: true,
+    value: (r) => r.acadCd ?? '-',
+    render: (r) => <code style={{ fontSize: 10.5 }}>{r.acadCd ?? '-'}</code>,
+  },
+  {
+    key: 'clientId',
+    header: '키오스크 계정',
+    sortable: true,
+    value: (r) => r.kioskClientId ?? '',
+    render: (r) =>
+      r.kioskClientId === null || r.kioskClientId === '' ? (
+        /* ★ 자격증명이 없으면 **연결될 수가 없다.** 오프라인의 이유가 단말이 아니라 설정이다 */
+        <span
+          className="mk brandnew"
+          title="계정이 없어 단말이 접속할 수 없습니다. 기초 관리 화면에서 발급합니다"
+        >
+          미발급
+        </span>
+      ) : (
+        <code style={{ fontSize: 10.5 }}>{r.kioskClientId}</code>
+      ),
   },
 ]
 
@@ -497,15 +536,7 @@ function Content() {
             <div className="d">이탈 위치</div>
           </div>
         ))}
-        <div className="stat">
-          <div className="l">
-            <Icon name="monitor" size={13} /> 키오스크
-          </div>
-          <div className="v">
-            <Unfilled reason="키오스크 단말 상태가 서버에 없다" />
-          </div>
-          <div className="d">온라인 / 전체</div>
-        </div>
+        <KioskStat />
       </div>
 
       <Tabs
@@ -640,71 +671,198 @@ function Content() {
 
       {tab === 'log' && <LeaveLog academyId={academyId} />}
 
-      {tab === 'kiosk' && (
-        <>
-          {/* ★ **지점당 키오스크는 1대다**(2026-10-26 확인). 그래서 단말 목록이 필요 없고,
-                 지점 설정에 `kioskLastSeenAt`·`kioskOnline` 두 칸만 생기면 이 탭이 산다 —
-                 백엔드가 계획에 넣었다(착수 시점은 앱 심사·알림톡 뒤).
-              ⚠️ 하트비트가 없어 **`/kiosk/**` 를 마지막으로 부른 시각**을 쓴다. 한산한
-                 시간대에 끊긴 것처럼 보일 수 있어 **「오프라인」 단정은 서버 기준**을 따른다. */}
-          <MockNotice reason="키오스크 단말 상태(마지막 통신 시각) 경로가 아직 없다 — 만들기로 했다" />
-
-          <div className="note-box plain">
-            <div className="ic">
-              <Icon name="monitor" size={17} />
-            </div>
-            <div>
-              <div className="tt">키오스크 관리자 페이지를 이 화면 안에 넣었습니다</div>
-              <div className="tx">
-                별도 키오스크 콘솔로 나가지 않고 <b>여기서 단말을 등록·모니터링</b>하며, 좌석 이탈·복귀 정보도 이 단말들에서
-                수신합니다. 단말이 오프라인이면 그 구역의 이탈 정보가 <b>비는 것이지 0이 되는 게 아니므로</b>, 좌석표를 읽기
-                전에 이 탭에서 연결 상태를 먼저 확인해야 합니다.
-              </div>
-            </div>
-          </div>
-
-          <div className="blocked-note">
-            <div className="ic">
-              <Icon name="triangle-alert" size={17} />
-            </div>
-            <div>
-              <div className="tt">자리를 비운 것이 모두 기록되지는 않습니다</div>
-              <div className="tx">
-                기록에 남는 것은 <b>학생이 키오스크에 태깅한 경우</b>입니다.
-                아무 것도 하지 않고 자리를 비우면 남지 않으므로, 좌석표의 빈 자리는
-                <b> &lsquo;자리를 비웠다&rsquo;가 아니라 &lsquo;기록이 없다&rsquo;</b>로 보셔야 합니다.
-              </div>
-            </div>
-          </div>
-
-          <DataTable
-            columns={KIOSK_COLUMNS}
-            rows={KIOSKS}
-            rowKey={(r) => r.id}
-            masked={false}
-            pageSize={10}
-            countLabel={
-              <>
-                등록 단말 <b>{KIOSKS.length}</b>대
-              </>
-            }
-            toolbar={
-              <>
-                <button className="btn" disabled data-soon title="준비 중입니다">
-                  <Icon name="refresh-cw" size={14} /> 전체 동기화
-                </button>
-                <button className="btn" disabled data-soon title="준비 중입니다">
-                  <Icon name="upload" size={14} /> 펌웨어 배포
-                </button>
-                <button className="btn pri" disabled data-soon title="준비 중입니다">
-                  <Icon name="plus" size={14} /> 단말 등록
-                </button>
-              </>
-            }
-          />
-        </>
-      )}
+      {tab === 'kiosk' && <KioskStatus />}
     </div>
+  )
+}
+
+/* 상단 요약 칸. 탭을 열지 않고도 **몇 곳이 멈췄는지**는 보여야 한다 —
+ * 좌석표를 읽기 전에 그 수를 알아야 빈 자리를 어떻게 해석할지가 정해진다.
+ *
+ * ★ 지점 계정은 이 경로가 403 이다. 그때 빨간 오류를 띄우면 고장으로 읽히므로
+ *   **조용히 「본사 전용」으로** 둔다 — 지점 담당자가 할 수 있는 일이 없다. */
+function KioskStat() {
+  const { principal, me } = useAuth()
+  const isSuper = (me?.roles ?? principal?.roles ?? []).some((r) => r === 'SUPER_ADMIN')
+  const params = useMemo(() => ({}), [])
+  const rows = useServerData({ fetcher: listBranchConfigs, params, enabled: isSuper })
+
+  const list = rows.data ?? []
+  const online = list.filter((r) => r.kioskOnline).length
+
+  return (
+    <div className="stat">
+      <div className="l">
+        <Icon name="monitor" size={13} /> 키오스크
+      </div>
+      <div className="v">
+        {!isSuper ? (
+          <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>본사 전용</span>
+        ) : rows.loading && rows.data === null ? (
+          <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>…</span>
+        ) : rows.error !== null ? (
+          <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>-</span>
+        ) : (
+          <span style={{ color: online === 0 && list.length > 0 ? 'var(--amber)' : undefined }}>
+            {online} / {list.length}
+          </span>
+        )}
+      </div>
+      <div className="d">온라인 / 전체</div>
+    </div>
+  )
+}
+
+/* ── 키오스크 통신 상태 탭 ──
+ *
+ * ★ **지점 선택과 무관하게 전 지점을 보여준다.** 이 경로가 최고관리자 전용이고 응답이
+ *   전 지점이라, 한 지점만 추려 보여주면 「다른 지점은 괜찮은가」를 알 수 없다 —
+ *   한 대가 죽은 것과 전 지점이 죽은 것(서버 쪽 사고)을 가르는 것이 이 표의 일이다.
+ */
+function KioskStatus() {
+  const { principal, me } = useAuth()
+  const isSuper = (me?.roles ?? principal?.roles ?? []).some((r) => r === 'SUPER_ADMIN')
+
+  const params = useMemo(() => ({}), [])
+  const rows = useServerData({
+    fetcher: listBranchConfigs,
+    params,
+    enabled: isSuper,
+    errorMessage: '키오스크 통신 상태를 불러오지 못했습니다.',
+  })
+
+  if (!isSuper) {
+    return (
+      <div className="note-box">
+        <div className="ic">
+          <Icon name="triangle-alert" size={17} />
+        </div>
+        <div>
+          <div className="tt">본사 관리자만 볼 수 있습니다</div>
+          <div className="tx">
+            키오스크 설정은 전 지점 단위로 관리해 지점 계정으로는 열리지 않습니다. 단말이 응답하지
+            않으면 <b>본사에 알려 주시기 바랍니다.</b> 좌석표와 이동 신청 내역은 그대로 보입니다.
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const list = rows.data ?? []
+  const offline = list.filter((r) => !r.kioskOnline)
+  /* ★ **「한 번도 통신이 없었다」와 「통신하던 것이 멈췄다」를 가른다.** 둘 다 오프라인으로
+       보이는데 담당자가 할 일이 정반대다 — 전자는 설치·연동이 아직 안 된 것이고,
+       후자는 지금 장애다. 뭉개서 「서버 쪽 문제」라고 쓰면 설치 전인데 장애로 신고된다. */
+  const neverSeen = list.every((r) => r.kioskLastSeenAt === null)
+  const noCredential = list.filter((r) => r.kioskClientId === null || r.kioskClientId === '')
+
+  return (
+    <>
+      <div className="note-box plain">
+        <div className="ic">
+          <Icon name="monitor" size={17} />
+        </div>
+        <div>
+          <div className="tt">마지막 통신은 학생이 태깅할 때만 갱신됩니다</div>
+          <div className="tx">
+            키오스크가 스스로 신호를 보내지 않아 <b>학생이 태깅해 요청이 들어온 시각</b>을
+            표시합니다. 한산한 시간대에는 정상 단말도 「오프라인」으로 보이므로,{' '}
+            <b>영업 시간 중에 오래 멈춘 지점</b>만 확인 대상입니다. 갱신 간격은 1분입니다.
+          </div>
+        </div>
+      </div>
+
+      {rows.error !== null && (
+        <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+          {rows.error}
+        </div>
+      )}
+
+      {list.length > 0 && neverSeen && (
+        /* 설치·연동 전. 장애가 아니므로 붉은 경고가 아니어야 한다 */
+        <div className="note-box">
+          <div className="ic">
+            <Icon name="monitor" size={17} />
+          </div>
+          <div>
+            <div className="tt">아직 키오스크 통신 기록이 없습니다</div>
+            <div className="tx">
+              지점 {list.length}곳 모두 <b>한 번도 태깅 요청이 들어오지 않은 상태</b>입니다.
+              {noCredential.length === list.length ? (
+                <>
+                  {' '}
+                  키오스크 계정이 전 지점 미발급이라 <b>아직 연동 전입니다</b> — 장애가 아닙니다.
+                  단말은 계정을 받아야 접속할 수 있으므로, <b>기초 관리 화면</b>에서 지점별로 발급한
+                  뒤 그 값을 키오스크 쪽 설정에 넣어야 이 표가 채워집니다.
+                </>
+              ) : noCredential.length > 0 ? (
+                <>
+                  {' '}
+                  이 가운데 <b>{noCredential.length}곳</b>은 키오스크 계정이 아직 없습니다. 계정이
+                  없으면 단말이 접속 자체를 할 수 없으므로 <b>기초 관리 화면</b>에서 먼저 발급해야
+                  합니다.
+                </>
+              ) : (
+                <> 단말이 연결되면 이 표에 마지막 통신 시각이 채워집니다.</>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {list.length > 0 && !neverSeen && offline.length === list.length && (
+        /* ★ **통신하던 전 지점이 동시에 멈춘 것은 단말 문제가 아니다.** 한 지점씩 전화하게 되는
+             자리라, 서버·네트워크를 먼저 보라고 화면이 말한다. 주말 서버 점검 중에도 이렇게 뜬다 */
+        <div className="blocked-note">
+          <div className="ic">
+            <Icon name="triangle-alert" size={17} />
+          </div>
+          <div>
+            <div className="tt">전 지점이 오프라인입니다</div>
+            <div className="tx">
+              통신하던 지점 {list.length}곳이 모두 멈춘 것이라{' '}
+              <b>단말 고장이 아니라 서버·네트워크 쪽</b>일 가능성이 큽니다. 지점에 연락하기 전에
+              담당자에게 확인해 주시기 바랍니다. 키오스크 서버 점검 중에도 이렇게 표시됩니다.
+            </div>
+          </div>
+        </div>
+      )}
+
+      <DataTable
+        columns={KIOSK_COLUMNS}
+        rows={list}
+        rowKey={(r) => String(r.academyId)}
+        masked={false}
+        loading={rows.loading}
+        pageSize={15}
+        emptyText="등록된 지점이 없습니다."
+        countLabel={
+          <>
+            지점 <b>{list.length}</b>곳 · 오프라인 <b>{offline.length}</b>곳
+          </>
+        }
+        toolbar={
+          <button className="btn" onClick={rows.reload} disabled={rows.loading}>
+            <Icon name="refresh-cw" size={14} /> 새로 읽기
+          </button>
+        }
+      />
+
+      <div className="blocked-note">
+        <div className="ic">
+          <Icon name="triangle-alert" size={17} />
+        </div>
+        <div>
+          <div className="tt">자리를 비운 것이 모두 기록되지는 않습니다</div>
+          <div className="tx">
+            기록에 남는 것은 <b>학생이 키오스크에 태깅한 경우</b>입니다. 아무 것도 하지 않고 자리를
+            비우면 남지 않으므로, 좌석표의 빈 자리는
+            <b> 「자리를 비웠다」가 아니라 「기록이 없다」</b>로 보셔야 합니다. 단말이 멈춘 구역은
+            이탈 정보가 <b>비는 것이지 0이 되는 것이 아닙니다.</b>
+          </div>
+        </div>
+      </div>
+    </>
   )
 }
 
@@ -712,10 +870,10 @@ export const seatMoveMockup: Mockup = {
   Content,
   actions: (
     <>
+      {/* ★ 헤더의 「키오스크 관리」 버튼을 뺐다. 탭으로 실제 화면이 생겨서
+             준비 중 버튼이 그 탭과 중복되는데, 눌리지 않아 **탭이 안 되는 것처럼** 읽힌다.
+             헤더는 본문과 상태를 공유하지 못해(CLAUDE.md 5-1) 탭을 열어 줄 수도 없다. */}
       <button className="btn" disabled data-soon title="준비 중입니다">호실 선택 ▾</button>
-      <button className="btn" disabled data-soon title="준비 중입니다">
-        <Icon name="monitor" size={14} /> 키오스크 관리
-      </button>
     </>
   ),
 }
