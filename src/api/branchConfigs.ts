@@ -24,10 +24,31 @@ export interface BranchConfig {
   /** ★ 마찬가지로 가려져서 온다. 화면에서 또 가리지 않는다 */
   pgMerchantCodeMasked: string | null
   nebulaDeviceId: string | null
+  /** Nebula 사이트 ID(응답에 함께 온다). 방화벽 해제에서 장비 ID 와 짝으로 쓴다 */
+  nebulaSiteId: string | null
+  /**
+   * 그 지점 키오스크가 `/kiosk/**` 를 마지막으로 부른 시각(2026-10-26 추가).
+   *
+   * ★ **하트비트가 아니다.** 단말이 스스로 "살아 있다"고 보내는 게 아니라, 학생이 태깅해서
+   *   요청이 들어올 때만 갱신된다 — 그것도 **1분 간격으로만** 쓴다(매 요청마다 쓰면 DB 가 상한다).
+   *   그래서 **한산한 시간대에는 멀쩡한 단말도 오래 전으로 보인다.** 화면이 이 말을 해야
+   *   "키오스크가 죽었다"는 오해가 안 생긴다.
+   */
+  kioskLastSeenAt: string | null
+  /**
+   * 지금 온라인으로 보는가. **기준(10분)은 서버가 정한다** — 프론트에서 다시 계산하지 않는다.
+   * 둘이 어긋나면 같은 화면에서 숫자와 딱지가 서로 다른 말을 한다.
+   */
+  kioskOnline: boolean
   /** 자유 형식 문자열 맵. 키가 확정되지 않아 화면은 **읽기만** 한다 */
   policy: Record<string, string>
 }
 
+/**
+ * ★ **지점 하나에 키오스크 1대 전제다**(2026-10-26 확인). 요청에 단말 식별자가 없어
+ *   한 지점에 2대를 두면 **둘의 통신이 한 칸에 겹쳐 쓰여 구분되지 않는다.** 단말 목록을
+ *   만들 수 없는 이유이기도 하다 — 증설하면 서버가 먼저 바뀌어야 한다.
+ */
 export function listBranchConfigs(): Promise<BranchConfig[]> {
   return request<BranchConfig[]>('/api/v1/admin/branch-configs')
 }

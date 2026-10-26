@@ -404,7 +404,7 @@ ApiResponse.success(page) → { data: { content:[...], number, totalElements, ..
 | F-C-2 학원생 현황 | `/statistics` | 전체 개요만. 화면은 **반별 집계**(정원/재원/휴원/충원율) — 축이 다름 |
 | F-C-3 시간표 | `/periods`, `/masters/curriculums` | **이동수업(이동반·강의실·담당) 없음** |
 | F-C-6 앱 운영 | `/app-config` | 약관·설정만. **푸시 발송 이력·배너 클릭수 없음** |
-| F-4.11-8 좌석 이탈 | `/seats/layout` | 좌석·재실은 있음. **키오스크 단말 관리(펌웨어·최종수신) 없음** — `/branch-configs`에 식별자만 |
+| F-4.11-8 좌석 이탈 | `/seats/layout` | ✅ 키오스크 **통신 상태**는 `/branch-configs` 의 `kioskLastSeenAt`·`kioskOnline` 으로 채워졌다(2026-10-26). 단말 **등록·펌웨어·재시작은 서버에 없고 만들지도 않는다** — 키오스크 레포 담당이라 상태만 본다 |
 
 ## 2-3. 그대로 붙는 화면 (2개)
 

@@ -60,6 +60,30 @@ const EDIT_META: Record<EditKind, { title: string; label: string; hint: string; 
   },
 }
 
+/** 발급 값 복사. ★ 클립보드가 막힌 환경(권한 거부·비보안 출처)에서도 **칸을 직접 긁어
+ *  복사할 수 있어야** 한다 — 그래서 input 은 그대로 두고 버튼만 보탠다 */
+function CopyButton({ value }: { value: string }) {
+  const [done, setDone] = useState(false)
+  return (
+    <button
+      type="button"
+      className="btn"
+      style={{ padding: '4px 9px', fontSize: 11.5 }}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(value)
+          setDone(true)
+          window.setTimeout(() => setDone(false), 1600)
+        } catch {
+          /* 클립보드 권한 거부 — 칸을 직접 복사하면 된다 */
+        }
+      }}
+    >
+      <Icon name={done ? 'check' : 'clipboard-list'} size={14} /> {done ? '복사됨' : '복사'}
+    </button>
+  )
+}
+
 function Content() {
   const { principal, me } = useAuth()
   const isSuper = (me?.roles ?? principal?.roles ?? []).some((r) => r === 'SUPER_ADMIN')
@@ -288,17 +312,31 @@ function Content() {
             >
               장비 ID 변경
             </button>
+            {/* ★ **처음 발급과 재발급은 위험도가 정반대다**(2026-10-26 백엔드 확인).
+                   경로는 같지만 — 값이 없을 때는 깨뜨릴 것이 없어 안전하고, 값이 있을 때는
+                   누르는 즉시 그 지점 키오스크가 전부 인증에 실패한다.
+                   같은 말·같은 빨간색으로 두면 **컷오버 때 11지점을 발급해야 하는 사람이
+                   무서워서 못 누르고**, 반대로 운영 중에 무심코 누르면 현장이 멈춘다. */}
             <button
               className="btn"
-              style={{ padding: '4px 8px', fontSize: 11.5, whiteSpace: 'nowrap', color: 'var(--red)' }}
+              style={{
+                padding: '4px 8px',
+                fontSize: 11.5,
+                whiteSpace: 'nowrap',
+                color: r.kioskClientId === null ? undefined : 'var(--red)',
+              }}
               disabled={busy !== null}
-              title="키오스크 자격증명을 새로 발급합니다"
+              title={
+                r.kioskClientId === null
+                  ? '이 지점 키오스크가 쓸 자격증명을 처음 발급합니다'
+                  : '새 값으로 바꿉니다. 지금 쓰는 단말이 즉시 인증에 실패합니다'
+              }
               onClick={() => {
                 setModalErr(null)
                 setReissue(r)
               }}
             >
-              키오스크 재발급
+              {r.kioskClientId === null ? '키오스크 발급' : '키오스크 재발급'}
             </button>
             <button
               className="btn"
@@ -552,28 +590,50 @@ function Content() {
       {/* ── 키오스크 재발급 ── */}
       {reissue && (
         <Modal
-          title={`${reissue.academyName} 키오스크 자격증명을 새로 발급할까요?`}
-          sub="되돌릴 수 없습니다."
-          confirmLabel="재발급"
-          danger
+          title={
+            reissue.kioskClientId === null
+              ? `${reissue.academyName} 키오스크 자격증명을 발급할까요?`
+              : `${reissue.academyName} 키오스크 자격증명을 새 값으로 바꿀까요?`
+          }
+          sub={
+            reissue.kioskClientId === null
+              ? '비밀값은 발급 직후 한 번만 보입니다.'
+              : '되돌릴 수 없습니다.'
+          }
+          confirmLabel={reissue.kioskClientId === null ? '발급' : '재발급'}
+          danger={reissue.kioskClientId !== null}
           busy={busy === reissue.academyId}
           error={modalErr}
           onConfirm={() => void doReissue().then((ok) => ok && setReissue(null))}
           onClose={() => setReissue(null)}
         >
-          <div className="note-box" style={{ borderColor: 'var(--red)' }}>
-            <div>
-              발급하는 <b>즉시 이 지점 키오스크가 인증에 실패합니다.</b> 키오스크 쪽 설정까지 새 값으로
-              바꿔야 다시 동작합니다. 현장에 사람이 있는 시간에는 누르지 마세요.
-              <br />
-              새 비밀값은 <b>이 창에서 한 번만</b> 보여집니다.
+          {reissue.kioskClientId === null ? (
+            <div className="note-box">
+              <div>
+                이 지점은 아직 자격증명이 없어 <b>지금 눌러도 멈출 단말이 없습니다.</b> 발급한 값을
+                키오스크 쪽 설정에 넣으면 그때부터 연결됩니다.
+                <br />새 비밀값은 <b>다음 창에서 한 번만</b> 보이므로, 옮겨 적을 곳을 먼저 열어
+                두시기 바랍니다.
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="note-box" style={{ borderColor: 'var(--red)' }}>
+              <div>
+                바꾸는 <b>즉시 이 지점 키오스크가 인증에 실패합니다.</b> 키오스크 쪽 설정까지 새 값으로
+                바꿔야 다시 동작합니다. 현장에 사람이 있는 시간에는 누르지 마세요.
+                <br />
+                새 비밀값은 <b>이 창에서 한 번만</b> 보여집니다.
+              </div>
+            </div>
+          )}
         </Modal>
       )}
 
       {/* ── 발급 결과 (한 번만 보인다) ── */}
       {issued && (
+        /* ★ **여기서 놓치면 재발급밖에 없다.** 조회는 언제나 마스킹이라 서버에서 다시
+             받아올 방법이 없고, 재발급하면 이미 연결된 단말이 끊긴다. 그래서 손으로
+             옮겨 적게 두지 않고 복사 버튼을 붙인다 — 긴 임의 문자열이라 오타가 난다. */
         <Modal
           title={`${issued.name} 키오스크 자격증명`}
           sub="이 창을 닫으면 비밀값을 다시 확인할 수 없습니다. 지금 저장하세요."
@@ -586,13 +646,25 @@ function Content() {
             <label>Client ID</label>
             <div>
               <input className="inp mono" readOnly value={issued.clientId} onFocus={(e) => e.target.select()} />
+              <div style={{ marginTop: 7 }}>
+                <CopyButton value={issued.clientId} />
+              </div>
             </div>
           </div>
           <div className="frow">
             <label>Secret</label>
             <div>
               <input className="inp mono" readOnly value={issued.secret} onFocus={(e) => e.target.select()} />
-              <div className="hint">키오스크 쪽 설정에 이 값을 넣어야 다시 연결됩니다.</div>
+              <div style={{ marginTop: 7 }}>
+                <CopyButton value={issued.secret} />
+              </div>
+              <div className="hint">키오스크 쪽 설정에 이 값을 넣어야 연결됩니다.</div>
+            </div>
+          </div>
+          <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
+            <div>
+              이 창을 닫으면 <b>비밀값을 다시 볼 수 없습니다.</b> 조회할 때는 언제나 가려져서 오고,
+              다시 받으려면 재발급해야 하는데 그때는 <b>이미 연결된 단말이 끊깁니다.</b>
             </div>
           </div>
         </Modal>
