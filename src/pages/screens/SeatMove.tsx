@@ -229,7 +229,10 @@ const KIOSK_COLUMNS: Column<BranchConfig>[] = [
     render: (r) =>
       r.kioskClientId === null || r.kioskClientId === '' ? (
         /* ★ 자격증명이 없으면 **연결될 수가 없다.** 오프라인의 이유가 단말이 아니라 설정이다 */
-        <span className="mk brandnew" title="이 지점은 키오스크 자격증명이 발급되지 않았습니다">
+        <span
+          className="mk brandnew"
+          title="계정이 없어 단말이 접속할 수 없습니다. 기초 관리 화면에서 발급합니다"
+        >
           미발급
         </span>
       ) : (
@@ -788,7 +791,16 @@ function KioskStatus() {
               {noCredential.length === list.length ? (
                 <>
                   {' '}
-                  키오스크 계정도 전 지점 미발급이라 <b>연동 전으로 보입니다</b> — 장애가 아닙니다.
+                  키오스크 계정이 전 지점 미발급이라 <b>아직 연동 전입니다</b> — 장애가 아닙니다.
+                  단말은 계정을 받아야 접속할 수 있으므로, <b>기초 관리 화면</b>에서 지점별로 발급한
+                  뒤 그 값을 키오스크 쪽 설정에 넣어야 이 표가 채워집니다.
+                </>
+              ) : noCredential.length > 0 ? (
+                <>
+                  {' '}
+                  이 가운데 <b>{noCredential.length}곳</b>은 키오스크 계정이 아직 없습니다. 계정이
+                  없으면 단말이 접속 자체를 할 수 없으므로 <b>기초 관리 화면</b>에서 먼저 발급해야
+                  합니다.
                 </>
               ) : (
                 <> 단말이 연결되면 이 표에 마지막 통신 시각이 채워집니다.</>
