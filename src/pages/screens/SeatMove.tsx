@@ -642,7 +642,12 @@ function Content() {
 
       {tab === 'kiosk' && (
         <>
-          <MockNotice reason="키오스크 단말 등록·상태·펌웨어를 관리하는 API가 없다" />
+          {/* ★ **지점당 키오스크는 1대다**(2026-10-26 확인). 그래서 단말 목록이 필요 없고,
+                 지점 설정에 `kioskLastSeenAt`·`kioskOnline` 두 칸만 생기면 이 탭이 산다 —
+                 백엔드가 계획에 넣었다(착수 시점은 앱 심사·알림톡 뒤).
+              ⚠️ 하트비트가 없어 **`/kiosk/**` 를 마지막으로 부른 시각**을 쓴다. 한산한
+                 시간대에 끊긴 것처럼 보일 수 있어 **「오프라인」 단정은 서버 기준**을 따른다. */}
+          <MockNotice reason="키오스크 단말 상태(마지막 통신 시각) 경로가 아직 없다 — 만들기로 했다" />
 
           <div className="note-box plain">
             <div className="ic">
