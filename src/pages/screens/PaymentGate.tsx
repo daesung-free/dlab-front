@@ -3,14 +3,23 @@ import {
   DataTable,
   ExcelButton,
   MaskToggle,
+  Modal,
   SearchForm,
+  useServerData,
   type Column,
   type Field,
   type SearchValues,
 } from '../../components/common'
+import { ApiError } from '../../api/client'
+import {
+  PG_CHANNEL_LABEL,
+  PG_PURPOSE_LABEL,
+  listPgSites,
+  setPgSiteActive,
+  type PgSite,
+} from '../../api/pgSites'
 import { Icon } from '../../components/Icon'
 import { Tabs } from '../../components/Tabs'
-import { MOCK_STUDENTS } from './mockStudents'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
 
@@ -45,20 +54,6 @@ const STATUS_META: Record<PayStatus, { label: string; cls: string }> = {
 type Method = '카드' | '가상계좌' | '간편결제'
 type Item = '교습비' | '급식비' | '특강비' | '등록비'
 
-const PG_OF: Record<Item, string> = {
-  교습비: '준비 중',
-  등록비: '준비 중',
-  급식비: '준비 중',
-  특강비: '준비 중',
-}
-
-const AMOUNTS: Record<Item, number> = {
-  교습비: 1320000,
-  급식비: 176000,
-  특강비: 340000,
-  등록비: 500000,
-}
-
 interface PayRow {
   id: string
   at: string
@@ -76,41 +71,6 @@ interface PayRow {
 
 const ITEMS: Item[] = ['교습비', '급식비', '특강비', '등록비']
 const METHODS: Method[] = ['카드', '가상계좌', '간편결제']
-
-const ROWS: PayRow[] = MOCK_STUDENTS.flatMap((s, i) =>
-  ITEMS.slice(0, (i % 3) + 1).map((item, j) => {
-    const seed = i * 7 + j * 3
-    const method = METHODS[seed % METHODS.length]
-    const status: PayStatus =
-      method === '가상계좌' && seed % 9 === 4
-        ? 'READY'
-        : method === '가상계좌' && seed % 23 === 7
-          ? 'EXPIRED'
-          : seed % 19 === 5
-            ? 'PARTIAL'
-            : seed % 29 === 11
-              ? 'REFUNDED'
-              : seed % 31 === 13
-                ? 'CANCELED'
-                : seed % 37 === 17
-                  ? 'FAILED'
-                  : 'PAID'
-    const base = AMOUNTS[item]
-    return {
-      id: `pay-${s.id}-${item}`,
-      at: `2026-05-${String(20 + (seed % 9)).padStart(2, '0')} ${String(9 + (seed % 12)).padStart(2, '0')}:${String(seed % 60).padStart(2, '0')}`,
-      txId: `TX${2026}${String(100000 + seed * 137).slice(0, 6)}`,
-      studentNo: s.studentNo,
-      name: s.name,
-      item,
-      method,
-      amount: status === 'PARTIAL' ? Math.round(base * 0.6) : base,
-      status,
-      channel: seed % 4 === 0 ? '데스크' : '앱',
-      dueAt: method === '가상계좌' ? `2026-05-${String(24 + (seed % 6)).padStart(2, '0')} 23:59` : undefined,
-    }
-  }),
-)
 
 const won = (n: number) => `${n.toLocaleString('ko-KR')}원`
 
@@ -189,75 +149,129 @@ const COLUMNS: Column<PayRow>[] = [
   },
 ]
 
-function matches(r: PayRow, q: SearchValues): boolean {
-  const kw = String(q.keyword ?? '').trim()
-  if (kw && !`${r.name}${r.studentNo}${r.txId}`.includes(kw)) return false
-  if (typeof q.item === 'string' && q.item && r.item !== q.item) return false
-  if (Array.isArray(q.method) && q.method.length > 0 && !q.method.includes(r.method)) return false
-  if (Array.isArray(q.status) && q.status.length > 0 && !q.status.includes(r.status)) return false
-  if (typeof q.channel === 'string' && q.channel && r.channel !== q.channel) return false
-  return true
-}
-
 function Content() {
   const [tab, setTab] = useState('all')
+  /* 검색 조건은 받아 두되 **아직 쓰이지 않는다** — 목록 경로가 없다.
+     ★ 칸을 지우지 않는다. 지우면 「원래 없던 기능」으로 보여 백엔드에 요청할 것이
+       조용히 사라진다(CLAUDE.md 4) */
   const [query, setQuery] = useState<SearchValues>({})
+  void query
   const [masked, setMasked] = useState(true)
   /* selectable 만으로는 체크박스가 안 눌린다 — DataTable 이 제어 컴포넌트다 */
   const [sel, setSel] = useState<string[]>([])
 
-  const base = useMemo(() => ROWS.filter((r) => matches(r, query)), [query])
+  /* ── PG 연동 설정 — **이 탭만 실연동이다** ──────────────────────────
+     ★ 나머지 탭은 **붙일 경로가 없다.** 결제 목록이 `billingId` 단위라 전체를 훑을 수
+       없다 — 결제 기록은 수납현황의 **청구 한 건**에서 본다(API_GAPS 42부). */
+  const pg = useServerData({
+    fetcher: listPgSites,
+    params: useMemo(() => ({}), []),
+    errorMessage: 'PG 연동 설정을 불러오지 못했습니다.',
+  })
+  const [pgBusy, setPgBusy] = useState(false)
+  const [pgErr, setPgErr] = useState<string | null>(null)
+  /** 중지는 되돌릴 수 있지만 **그동안 결제가 안 만들어진다** — 한 번 더 묻는다 */
+  const [toggling, setToggling] = useState<PgSite | null>(null)
 
-  const rows = useMemo(() => {
-    if (tab === 'vbank') return base.filter((r) => r.method === '가상계좌')
-    if (tab === 'refund') return base.filter((r) => ['CANCELED', 'REFUNDED', 'PARTIAL'].includes(r.status))
-    return base
-  }, [base, tab])
+  async function runToggle(site: PgSite) {
+    setPgBusy(true)
+    setPgErr(null)
+    try {
+      await setPgSiteActive(site.id, !site.active)
+      pg.reload()
+      setToggling(null)
+    } catch (e) {
+      setPgErr(e instanceof ApiError ? e.message : '바꾸지 못했습니다.')
+    } finally {
+      setPgBusy(false)
+    }
+  }
 
-  const sum = (list: PayRow[]) => list.reduce((n, r) => n + r.amount, 0)
-  const paid = base.filter((r) => r.status === 'PAID')
-  const ready = base.filter((r) => r.status === 'READY')
-  const refunds = base.filter((r) => ['REFUNDED', 'PARTIAL', 'CANCELED'].includes(r.status))
-  const failed = base.filter((r) => ['FAILED', 'EXPIRED'].includes(r.status))
+  const PG_COLUMNS: Column<PgSite>[] = [
+    { key: 'academy', header: '지점', width: '92px', value: (r) => r.academyName ?? '전 지점' },
+    {
+      key: 'purpose',
+      header: '용도',
+      width: '80px',
+      align: 'center',
+      value: (r) => PG_PURPOSE_LABEL[r.purpose] ?? r.purpose,
+    },
+    {
+      key: 'channel',
+      header: '결제 방식',
+      width: '100px',
+      align: 'center',
+      value: (r) => PG_CHANNEL_LABEL[r.channel] ?? r.channel,
+    },
+    { key: 'displayName', header: '이름', value: (r) => r.displayName },
+    { key: 'siteCd', header: '상점 코드', width: '130px', value: (r) => r.siteCd },
+    { key: 'vendor', header: 'PG사', width: '90px', value: (r) => r.vendorName ?? '-' },
+    {
+      key: 'ready',
+      header: '상태',
+      width: '104px',
+      align: 'center',
+      value: (r) => (!r.active ? '중지' : r.ready ? '연동 완료' : '연동 대기'),
+      /* ★★ **「사용」과 「지금 결제가 되는가」는 다르다.** 등록만 해두고 인증키가 안 들어온
+         상태가 있어서, 하나로 보여주면 **되는 줄 알고 링크를 보낸다** */
+      render: (r) =>
+        !r.active ? (
+          <span className="mk">중지</span>
+        ) : r.ready ? (
+          <span className="mk verified">연동 완료</span>
+        ) : (
+          <span className="mk brandnew">연동 대기</span>
+        ),
+    },
+    {
+      key: 'act',
+      header: '',
+      width: '76px',
+      align: 'center',
+      value: () => '',
+      render: (r) => (
+        <button
+          className="btn"
+          style={{ padding: '4px 9px', fontSize: 11.5 }}
+          disabled={pgBusy}
+          onClick={() => setToggling(r)}
+        >
+          {r.active ? '중지' : '사용'}
+        </button>
+      ),
+    },
+  ]
+
+  /* ★★ **예시 데이터를 화면에 흘리지 않는다.** 표는 비워 뒀는데 **엑셀 버튼에는 그
+     예시가 그대로 물려 있었다** — 눌러서 받으면 거래번호·금액이 든 파일이 나온다.
+     받은 사람은 그게 실제 결제 내역인 줄 안다. 목록 경로가 생길 때까지 빈 배열이다. */
+  const rows: PayRow[] = []
+
 
   return (
     <>
+      {/* ★★ **숫자를 지어내지 않는다.** 전에는 예시 데이터를 합쳐 「결제 완료 55,472,000원
+             · 70건」을 띄우고 있었다 — 아래 표는 비어 있는데 위에는 돈이 찍혀 있어
+             **실제 집계로 읽힌다.** 상단 안내를 읽기 전에 숫자가 먼저 눈에 들어온다.
+             ★ 집계 경로가 생기면 그때 값을 채운다. 그 전에는 **'-'** 다 */}
       <div className="stat-strip">
-        <div className="stat">
-          <div className="l">
-            <Icon name="wallet" size={13} /> 결제 완료
+        {(
+          [
+            ['wallet', '결제 완료'],
+            ['banknote', '입금 대기'],
+            ['refresh-cw', '취소 · 환불'],
+            ['triangle-alert', '실패 · 만료'],
+            ['smartphone', '앱 결제 비중'],
+          ] as const
+        ).map(([icon, label]) => (
+          <div className="stat" key={label}>
+            <div className="l">
+              <Icon name={icon} size={13} /> {label}
+            </div>
+            <div className="v">-</div>
+            <div className="d">집계 준비 중</div>
           </div>
-          <div className="v">{won(sum(paid))}</div>
-          <div className="d up">{paid.length}건</div>
-        </div>
-        <div className="stat">
-          <div className="l">
-            <Icon name="banknote" size={13} /> 입금 대기
-          </div>
-          <div className="v">{won(sum(ready))}</div>
-          <div className="d warn">가상계좌 {ready.length}건</div>
-        </div>
-        <div className="stat">
-          <div className="l">
-            <Icon name="refresh-cw" size={13} /> 취소 · 환불
-          </div>
-          <div className="v">{won(sum(refunds))}</div>
-          <div className="d down">{refunds.length}건</div>
-        </div>
-        <div className="stat">
-          <div className="l">
-            <Icon name="triangle-alert" size={13} /> 실패 · 만료
-          </div>
-          <div className="v">{failed.length}</div>
-          <div className="d down">재결제 안내 대상</div>
-        </div>
-        <div className="stat">
-          <div className="l">
-            <Icon name="smartphone" size={13} /> 앱 결제 비중
-          </div>
-          <div className="v">{base.length ? Math.round((base.filter((r) => r.channel === '앱').length / base.length) * 100) : 0}%</div>
-          <div className="d">데스크 결제 대비</div>
-        </div>
+        ))}
       </div>
 
       <div className="blocked-note">
@@ -286,9 +300,11 @@ function Content() {
 
       <Tabs
         items={[
-          { key: 'all', label: '전체 결제', count: base.length },
-          { key: 'vbank', label: '가상계좌', count: base.filter((r) => r.method === '가상계좌').length },
-          { key: 'refund', label: '취소 · 환불', count: refunds.length },
+          /* ★ 탭 숫자도 **예시 데이터를 센 것**이었다. 표가 빈 채로 「전체 결제 93」이
+             붙어 있으면 **93건이 어딘가 있다고 읽는다** */
+          { key: 'all', label: '전체 결제' },
+          { key: 'vbank', label: '가상계좌' },
+          { key: 'refund', label: '취소 · 환불' },
           { key: 'pg', label: 'PG 연동 설정' },
         ]}
         active={tab}
@@ -309,10 +325,15 @@ function Content() {
           onSelectedChange={setSel}
           masked={masked}
           pageSize={15}
-          emptyText="결제 기록이 없습니다 — PG 연동이 아직 준비되지 않았습니다."
+          /* ★★ **두 사정을 섞지 않는다.** 여기가 빈 것은 PG 연동 때문이 아니라
+             **전체를 훑는 경로가 없기 때문**이다 — 결제 조회가 청구 한 건 단위다.
+             「연동이 안 됐다」고 적어 두면 **인증키가 와도 같은 문구가 남아** 담당자가
+             계속 연동 문제로 읽는다(2026-10-26 서버 확인) */
+          emptyText="전체 결제 목록은 아직 제공되지 않습니다. 수납현황에서 청구 건별로 확인해 주세요."
           countLabel={<>결제 <b>0</b>건</>}
           toolbar={
             <>
+              {/* 둘 다 **목록이 있어야 쓸 수 있는 것**이다. 목록 경로가 생기면 같이 풀린다 */}
               {tab === 'vbank' && (
                 <button className="btn" disabled data-soon title="준비 중입니다">
                   <Icon name="send" size={14} /> 입금 안내 재발송
@@ -330,6 +351,23 @@ function Content() {
         />
       )}
 
+      {toggling !== null && (
+        <Modal
+          title={`${toggling.displayName} 를 ${toggling.active ? '중지' : '사용'}할까요?`}
+          sub={
+            toggling.active
+              ? '중지하면 이 지점·용도·방식으로는 결제를 만들 수 없습니다. 이미 받은 결제는 그대로 남습니다.'
+              : '다시 사용하면 이 방식으로 결제를 만들 수 있습니다.'
+          }
+          confirmLabel={toggling.active ? '중지' : '사용'}
+          danger={toggling.active}
+          busy={pgBusy}
+          error={pgErr}
+          onConfirm={() => void runToggle(toggling)}
+          onClose={() => setToggling(null)}
+        />
+      )}
+
       {tab === 'pg' && (
         <div className="card-sec">
           <div className="card-sec-h">
@@ -340,44 +378,38 @@ function Content() {
               PG 연동 설정
             </div>
             <div className="r">
-              <span className="mk brandnew">연동정보 수급 전 · 편집 불가</span>
+              <span className="mk supplement">
+                {(pg.data ?? []).filter((x) => x.ready).length} / {(pg.data ?? []).length} 연동 완료
+              </span>
             </div>
           </div>
-          <div className="card-sec-b" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {(['급식비', '교습비'] as Item[]).map((item) => (
-              <div key={item} className="link-box" style={{ display: 'block' }}>
-                <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 7 }}>
-                  {item === '급식비' ? '급식 결제' : '교습비 · 특강비 · 등록비 결제'}
-                </div>
-                <div className="kv">
-                  <div className="row">
-                    <span className="k">PG사</span>
-                    <span className="v">{PG_OF[item]}</span>
-                  </div>
-                  <div className="row">
-                    <span className="k">지원 수단</span>
-                    <span className="v">카드 · 가상계좌{item === '급식비' ? ' · 간편결제' : ''}</span>
-                  </div>
-                  <div className="row">
-                    <span className="k">취소 정책</span>
-                    <span className="v">
-                      {item === '급식비'
-                        ? '앱 3일 전 취소 시 PG 자동환불 / 관리자 취소는 즉시 처리'
-                        : '환불 기준은 청구기준 관리(관리자 > 수납관리)에서 정의'}
-                    </span>
-                  </div>
-                  <div className="row">
-                    <span className="k">미확정</span>
-                    <span className="v" style={{ color: 'var(--amber)', fontWeight: 700 }}>
-                      {'연동 준비 중'}
-                    </span>
-                  </div>
-                </div>
+          <div className="card-sec-b">
+            {/* ★ 담당자가 할 수 있는 일만 적는다. 인증서·개인키는 서버가 갖고 있고
+                화면에 보일 이유가 없다 — 보이면 캡처하는 순간 새어 나간다 */}
+            <div className="note-box">
+              <div>
+                지점·용도·결제 방식마다 상점이 따로입니다. <b>「연동 대기」</b>는 등록은 됐지만 아직
+                결제가 되지 않는 상태입니다.
               </div>
-            ))}
+            </div>
+            <DataTable
+              columns={PG_COLUMNS}
+              rows={pg.data ?? []}
+              rowKey={(r) => String(r.id)}
+              loading={pg.loading}
+              /* ⚠️ 운영은 지금 0건이다(MID 를 받아 두고 아직 넣지 않았다). 「없다」로만
+                 끝내면 담당자가 **화면 고장으로 읽는다** */
+              emptyText={pg.error ?? '등록된 상점이 없습니다. 결제 대행사에서 받은 상점 정보를 먼저 등록해야 합니다.'}
+              countLabel={
+                <>
+                  상점 <b>{(pg.data ?? []).length}</b>건
+                </>
+              }
+            />
           </div>
         </div>
       )}
+
     </>
   )
 }
