@@ -20,7 +20,6 @@ import {
 } from '../../api/pgSites'
 import { Icon } from '../../components/Icon'
 import { Tabs } from '../../components/Tabs'
-import { MOCK_STUDENTS } from './mockStudents'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
 
@@ -55,13 +54,6 @@ const STATUS_META: Record<PayStatus, { label: string; cls: string }> = {
 type Method = '카드' | '가상계좌' | '간편결제'
 type Item = '교습비' | '급식비' | '특강비' | '등록비'
 
-const AMOUNTS: Record<Item, number> = {
-  교습비: 1320000,
-  급식비: 176000,
-  특강비: 340000,
-  등록비: 500000,
-}
-
 interface PayRow {
   id: string
   at: string
@@ -79,41 +71,6 @@ interface PayRow {
 
 const ITEMS: Item[] = ['교습비', '급식비', '특강비', '등록비']
 const METHODS: Method[] = ['카드', '가상계좌', '간편결제']
-
-const ROWS: PayRow[] = MOCK_STUDENTS.flatMap((s, i) =>
-  ITEMS.slice(0, (i % 3) + 1).map((item, j) => {
-    const seed = i * 7 + j * 3
-    const method = METHODS[seed % METHODS.length]
-    const status: PayStatus =
-      method === '가상계좌' && seed % 9 === 4
-        ? 'READY'
-        : method === '가상계좌' && seed % 23 === 7
-          ? 'EXPIRED'
-          : seed % 19 === 5
-            ? 'PARTIAL'
-            : seed % 29 === 11
-              ? 'REFUNDED'
-              : seed % 31 === 13
-                ? 'CANCELED'
-                : seed % 37 === 17
-                  ? 'FAILED'
-                  : 'PAID'
-    const base = AMOUNTS[item]
-    return {
-      id: `pay-${s.id}-${item}`,
-      at: `2026-05-${String(20 + (seed % 9)).padStart(2, '0')} ${String(9 + (seed % 12)).padStart(2, '0')}:${String(seed % 60).padStart(2, '0')}`,
-      txId: `TX${2026}${String(100000 + seed * 137).slice(0, 6)}`,
-      studentNo: s.studentNo,
-      name: s.name,
-      item,
-      method,
-      amount: status === 'PARTIAL' ? Math.round(base * 0.6) : base,
-      status,
-      channel: seed % 4 === 0 ? '데스크' : '앱',
-      dueAt: method === '가상계좌' ? `2026-05-${String(24 + (seed % 6)).padStart(2, '0')} 23:59` : undefined,
-    }
-  }),
-)
 
 const won = (n: number) => `${n.toLocaleString('ko-KR')}원`
 
@@ -192,19 +149,13 @@ const COLUMNS: Column<PayRow>[] = [
   },
 ]
 
-function matches(r: PayRow, q: SearchValues): boolean {
-  const kw = String(q.keyword ?? '').trim()
-  if (kw && !`${r.name}${r.studentNo}${r.txId}`.includes(kw)) return false
-  if (typeof q.item === 'string' && q.item && r.item !== q.item) return false
-  if (Array.isArray(q.method) && q.method.length > 0 && !q.method.includes(r.method)) return false
-  if (Array.isArray(q.status) && q.status.length > 0 && !q.status.includes(r.status)) return false
-  if (typeof q.channel === 'string' && q.channel && r.channel !== q.channel) return false
-  return true
-}
-
 function Content() {
   const [tab, setTab] = useState('all')
+  /* 검색 조건은 받아 두되 **아직 쓰이지 않는다** — 목록 경로가 없다.
+     ★ 칸을 지우지 않는다. 지우면 「원래 없던 기능」으로 보여 백엔드에 요청할 것이
+       조용히 사라진다(CLAUDE.md 4) */
   const [query, setQuery] = useState<SearchValues>({})
+  void query
   const [masked, setMasked] = useState(true)
   /* selectable 만으로는 체크박스가 안 눌린다 — DataTable 이 제어 컴포넌트다 */
   const [sel, setSel] = useState<string[]>([])
@@ -291,58 +242,36 @@ function Content() {
     },
   ]
 
-  const base = useMemo(() => ROWS.filter((r) => matches(r, query)), [query])
+  /* ★★ **예시 데이터를 화면에 흘리지 않는다.** 표는 비워 뒀는데 **엑셀 버튼에는 그
+     예시가 그대로 물려 있었다** — 눌러서 받으면 거래번호·금액이 든 파일이 나온다.
+     받은 사람은 그게 실제 결제 내역인 줄 안다. 목록 경로가 생길 때까지 빈 배열이다. */
+  const rows: PayRow[] = []
 
-  const rows = useMemo(() => {
-    if (tab === 'vbank') return base.filter((r) => r.method === '가상계좌')
-    if (tab === 'refund') return base.filter((r) => ['CANCELED', 'REFUNDED', 'PARTIAL'].includes(r.status))
-    return base
-  }, [base, tab])
-
-  const sum = (list: PayRow[]) => list.reduce((n, r) => n + r.amount, 0)
-  const paid = base.filter((r) => r.status === 'PAID')
-  const ready = base.filter((r) => r.status === 'READY')
-  const refunds = base.filter((r) => ['REFUNDED', 'PARTIAL', 'CANCELED'].includes(r.status))
-  const failed = base.filter((r) => ['FAILED', 'EXPIRED'].includes(r.status))
 
   return (
     <>
+      {/* ★★ **숫자를 지어내지 않는다.** 전에는 예시 데이터를 합쳐 「결제 완료 55,472,000원
+             · 70건」을 띄우고 있었다 — 아래 표는 비어 있는데 위에는 돈이 찍혀 있어
+             **실제 집계로 읽힌다.** 상단 안내를 읽기 전에 숫자가 먼저 눈에 들어온다.
+             ★ 집계 경로가 생기면 그때 값을 채운다. 그 전에는 **'-'** 다 */}
       <div className="stat-strip">
-        <div className="stat">
-          <div className="l">
-            <Icon name="wallet" size={13} /> 결제 완료
+        {(
+          [
+            ['wallet', '결제 완료'],
+            ['banknote', '입금 대기'],
+            ['refresh-cw', '취소 · 환불'],
+            ['triangle-alert', '실패 · 만료'],
+            ['smartphone', '앱 결제 비중'],
+          ] as const
+        ).map(([icon, label]) => (
+          <div className="stat" key={label}>
+            <div className="l">
+              <Icon name={icon} size={13} /> {label}
+            </div>
+            <div className="v">-</div>
+            <div className="d">집계 준비 중</div>
           </div>
-          <div className="v">{won(sum(paid))}</div>
-          <div className="d up">{paid.length}건</div>
-        </div>
-        <div className="stat">
-          <div className="l">
-            <Icon name="banknote" size={13} /> 입금 대기
-          </div>
-          <div className="v">{won(sum(ready))}</div>
-          <div className="d warn">가상계좌 {ready.length}건</div>
-        </div>
-        <div className="stat">
-          <div className="l">
-            <Icon name="refresh-cw" size={13} /> 취소 · 환불
-          </div>
-          <div className="v">{won(sum(refunds))}</div>
-          <div className="d down">{refunds.length}건</div>
-        </div>
-        <div className="stat">
-          <div className="l">
-            <Icon name="triangle-alert" size={13} /> 실패 · 만료
-          </div>
-          <div className="v">{failed.length}</div>
-          <div className="d down">재결제 안내 대상</div>
-        </div>
-        <div className="stat">
-          <div className="l">
-            <Icon name="smartphone" size={13} /> 앱 결제 비중
-          </div>
-          <div className="v">{base.length ? Math.round((base.filter((r) => r.channel === '앱').length / base.length) * 100) : 0}%</div>
-          <div className="d">데스크 결제 대비</div>
-        </div>
+        ))}
       </div>
 
       <div className="blocked-note">
@@ -371,9 +300,11 @@ function Content() {
 
       <Tabs
         items={[
-          { key: 'all', label: '전체 결제', count: base.length },
-          { key: 'vbank', label: '가상계좌', count: base.filter((r) => r.method === '가상계좌').length },
-          { key: 'refund', label: '취소 · 환불', count: refunds.length },
+          /* ★ 탭 숫자도 **예시 데이터를 센 것**이었다. 표가 빈 채로 「전체 결제 93」이
+             붙어 있으면 **93건이 어딘가 있다고 읽는다** */
+          { key: 'all', label: '전체 결제' },
+          { key: 'vbank', label: '가상계좌' },
+          { key: 'refund', label: '취소 · 환불' },
           { key: 'pg', label: 'PG 연동 설정' },
         ]}
         active={tab}
