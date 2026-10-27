@@ -121,14 +121,35 @@ const AREAS: Area[] = [
   { name: '교무 명단 출력', perms: { SUPER_ADMIN: 'full', BRANCH_ADMIN: 'full', TEACHER: 'own', STAFF: 'read', READONLY: 'read' } },
   { name: '상담 일지·리포트', perms: { SUPER_ADMIN: 'full', BRANCH_ADMIN: 'full', TEACHER: 'own', STAFF: 'none', READONLY: 'none' } },
   {
+    /* ★★ **이 행이 아예 없었다.** 그래서 표를 봐도 「대기자 관리가 조회 전용에 열리는가」를
+           알 수 없었고, 담당자가 메뉴에서 체크했다가 403 을 봤다(2026-10-27 문의).
+       ★ 조회 전용은 **조회 5개만**(목록·중복찾기·상세·상태이력·메모) 열려 있다 —
+         상태 변경·메모 작성·공유는 막힌다(dlab-api #294). */
+    name: '대기자 관리',
+    note: '입학 상담 예약',
+    perms: { SUPER_ADMIN: 'full', BRANCH_ADMIN: 'full', TEACHER: 'full', STAFF: 'full', READONLY: 'read' },
+  },
+  {
+    /* ★ **전환만 따로 뗀다.** 담임은 대기자를 다 쓸 수 있는데 **전환만 못 한다** — 한 칸에
+           뭉치면 어느 쪽으로 적어도 틀리고, 「담임 없음」으로 적으면 **담임이 쓸 수 있는데
+           표에 없다**는 반대 방향 문의가 온다. 이 표는 원래 민감한 동작을 따로 떼어
+           왔다(상벌점 부여 · 개인정보 항목 · 할인 정책 설정이 그렇다). */
+    name: '대기자 → 원생 전환',
+    note: '학번이 채번돼 되돌릴 수 없다',
+    perms: { SUPER_ADMIN: 'full', BRANCH_ADMIN: 'full', TEACHER: 'none', STAFF: 'full', READONLY: 'none' },
+  },
+  {
     name: '질의응답 타임 관리',
     note: '노출 설정 · 간격',
     perms: { SUPER_ADMIN: 'full', BRANCH_ADMIN: 'full', TEACHER: 'own', STAFF: 'read', READONLY: 'none' },
   },
   {
-    name: '키오스크 단말 관리',
-    note: '등록 · 재시작 · 펌웨어',
-    perms: { SUPER_ADMIN: 'full', BRANCH_ADMIN: 'own', TEACHER: 'none', STAFF: 'read', READONLY: 'none' },
+    /* ★ 「등록·재시작·펌웨어」는 **만들지 않기로 했다**(2026-10-26) — 키오스크 레포 담당이고
+           서버에 경로가 없다. 우리 화면은 **통신 상태만** 본다(좌석 이탈/복귀 탭).
+       ★ 그 경로가 최고관리자 전용이라 지점 관리자도 403 이다 — 'own' 이 아니라 'none' 이다. */
+    name: '키오스크 통신 상태',
+    note: '최고관리자만 · 단말 설정은 범위 밖',
+    perms: { SUPER_ADMIN: 'read', BRANCH_ADMIN: 'none', TEACHER: 'none', STAFF: 'none', READONLY: 'none' },
   },
   { name: '기초 설정', perms: { SUPER_ADMIN: 'full', BRANCH_ADMIN: 'read', TEACHER: 'none', STAFF: 'none', READONLY: 'none' } },
   { name: '사용자·권한 관리', perms: { SUPER_ADMIN: 'full', BRANCH_ADMIN: 'own', TEACHER: 'none', STAFF: 'none', READONLY: 'none' } },
@@ -933,7 +954,7 @@ function Content() {
           sub={
             confirm.kind === 'withdraw'
               ? `${confirm.row.name ?? '-'} · 되돌릴 수 없습니다.`
-              : '기존 비밀번호는 즉시 쓸 수 없게 됩니다. 새 비밀번호는 한 번만 보여집니다.'
+              : '새 비밀번호는 한 번만 보여집니다.'
           }
           confirmLabel={confirm.kind === 'withdraw' ? '탈퇴 처리' : '발급'}
           danger
@@ -946,7 +967,29 @@ function Content() {
             void p.then((ok) => ok && setConfirm(null))
           }}
           onClose={() => { setModalErr(null); setConfirm(null) }}
-        />
+        >
+          {/* ★★ **「막으면 바로 끊긴다」가 아니다.** 서버가 매 요청마다 계정 상태를 보지
+                 않아, 이미 로그인한 사람은 **토큰이 만료될 때까지** 그대로 쓴다
+                 (운영 만료 1시간 · 2026-10-27 백엔드 확인).
+             ★ 이 말을 안 쓰면 담당자는 **누르고 끝난 줄 안다** — 급해서 막는 상황인데
+               그 사람이 한 시간 더 쓰고 있다. 급하면 다른 수단이 필요하다는 것을 알려야 한다. */}
+          <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
+            <div>
+              {confirm.kind === 'withdraw' ? (
+                <>
+                  새로 로그인하는 것은 <b>바로 막힙니다.</b> 다만 <b>이미 로그인해 있는 사람은
+                  최대 1시간까지</b> 그대로 쓸 수 있습니다 — 급한 상황이면 본인에게 알리거나
+                  담당자에게 문의해 주시기 바랍니다.
+                </>
+              ) : (
+                <>
+                  <b>새 비밀번호로만 로그인할 수 있습니다.</b> 다만 <b>이미 로그인해 있는 사람은
+                  최대 1시간까지</b> 그대로 쓸 수 있습니다.
+                </>
+              )}
+            </div>
+          </div>
+        </Modal>
       )}
 
       <div className="stat-strip">
@@ -1336,8 +1379,16 @@ function Content() {
                 <Icon name="info" size={17} />
               </div>
               <div>
-                이 표는 <b>역할별 기본값을 설명하는 자료</b>이며 수정할 수 없습니다. 실제 권한은{' '}
-                <b>계정 목록</b> 탭에서 계정마다 <b>메뉴</b> 버튼으로 지정합니다.
+                이 표는 <b>역할별 기본값을 설명하는 자료</b>이며 수정할 수 없습니다.
+                {/* ★★ 전에 여기 「실제 권한은 메뉴 버튼으로 지정합니다」라고 적혀 있었는데
+                       **그게 지금 혼란의 원인이다.** 메뉴 지정은 **보이는 것을 줄이는** 기능이지
+                       권한을 늘리지 못한다 — 역할에 없는 화면을 체크하면 **메뉴는 보이는데
+                       들어가면 403** 이다(조회 전용 계정 + 대기자 관리에서 실제로 났다).
+                       ★ 「지정한다」는 말이 **권한까지 지정된다**로 읽힌다 */}
+                <br />
+                ★ <b>메뉴 지정은 보이는 것을 줄이는 기능</b>입니다 — 이 표에 없는 권한을
+                메뉴로 열 수는 없습니다. 역할에 없는 화면을 체크하면 <b>메뉴는 보이지만
+                들어갔을 때 열리지 않습니다.</b> 권한 자체를 바꾸려면 <b>역할</b>을 바꿔야 합니다.
                 <br />
                 <button
                   type="button"
