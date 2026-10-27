@@ -356,7 +356,7 @@ const MASTERS: MasterDef[] = [
     // roomNo 가 필수다. 등록 모달이 이름과 함께 받아 두 번째 인자로 넘긴다
     create: async (academyId, _y, name, extra) => {
       const roomNo = (extra?.roomNo ?? '').trim()
-      if (!roomNo) throw new Error('호실 번호를 입력하세요.')
+      if (!roomNo) throw new Error('호실 번호를 입력해 주세요.')
       return createRoom({ academyId, roomNo, name })
     },
     createExtra: [{ key: 'roomNo', label: '호실 번호', placeholder: '201', required: true }],
@@ -442,8 +442,8 @@ const MASTERS: MasterDef[] = [
     create: async (academyId, year, name, extra) => {
       const code = (extra?.code ?? '').trim()
       const rate = (extra?.discountRate ?? '').trim()
-      if (!code) throw new Error('코드를 입력하세요.')
-      if (!Number.isFinite(Number(rate))) throw new Error('할인율을 숫자로 입력하세요.')
+      if (!code) throw new Error('코드를 입력해 주세요.')
+      if (!Number.isFinite(Number(rate))) throw new Error('할인율을 숫자로 입력합니다.')
       return createScholarshipMaster({ academyId, year, code, name, discountRate: Number(rate) })
     },
     createExtra: [
@@ -509,9 +509,9 @@ const MASTERS: MasterDef[] = [
       const rows = Number(extra?.rows ?? '')
       const columns = Number(extra?.columns ?? '')
       const prefix = (extra?.seatCdPrefix ?? '').trim()
-      if (!areaCd) throw new Error('구역 코드를 입력하세요.')
-      if (!Number.isInteger(rows) || rows < 1) throw new Error('행 수를 1 이상으로 입력하세요.')
-      if (!Number.isInteger(columns) || columns < 1) throw new Error('열 수를 1 이상으로 입력하세요.')
+      if (!areaCd) throw new Error('구역 코드를 입력해 주세요.')
+      if (!Number.isInteger(rows) || rows < 1) throw new Error('행 수를 1 이상으로 입력합니다.')
+      if (!Number.isInteger(columns) || columns < 1) throw new Error('열 수를 1 이상으로 입력합니다.')
       const area = await createSeatArea({ academyId, areaCd, areaNm: name })
       try {
         await createSeatGrid({
@@ -552,7 +552,7 @@ const MASTERS: MasterDef[] = [
       }
       if (failed > 0) {
         throw new Error(
-          `좌석 ${seats.length}개 중 ${failed}개를 지우지 못해 구역을 삭제하지 않았습니다. 배정된 학생이 있는지 확인해 주세요.`,
+          `좌석 ${seats.length}개 중 ${failed}개를 지우지 못해 구역을 삭제하지 않았습니다. 배정된 학생이 있는지 확인합니다.`,
         )
       }
       return deleteSeatArea(id)
@@ -583,10 +583,10 @@ const MASTERS: MasterDef[] = [
     },
     create: async (academyId, year, name, extra) => {
       const no = Number(extra?.periodNo ?? '')
-      if (!Number.isInteger(no) || no < 1) throw new Error('교시 번호를 1 이상으로 입력하세요.')
+      if (!Number.isInteger(no) || no < 1) throw new Error('교시 번호를 1 이상으로 입력합니다.')
       const startTime = (extra?.startTime ?? '').trim()
       const endTime = (extra?.endTime ?? '').trim()
-      if (!startTime || !endTime) throw new Error('시작·종료 시각을 입력하세요.')
+      if (!startTime || !endTime) throw new Error('시작·종료 시각을 입력해 주세요.')
       /* 겹침은 서버가 409 로 막는다(PERIOD_TIME_OVERLAPPED). 화면이 다시 계산하지 않는다 */
       return createPeriod({
         academyId,
@@ -643,7 +643,7 @@ const MASTERS: MasterDef[] = [
       width: '200px',
       value: (r) => (r as { periodText?: string }).periodText ?? '-',
     },
-    note: '식사·휴식으로 등록한 시간은 순공시간에서 빠집니다. 시각이 아니라 이 종류가 기준입니다. 시간이 겹치면 등록되지 않습니다.',
+    note: '식사·휴식으로 등록한 시간은 순공시간에서 제외됩니다. 시각이 아니라 이 종류가 기준입니다. 시간이 겹치면 등록되지 않습니다.',
   },
   {
     key: 'absence_category',
@@ -866,7 +866,7 @@ function Content() {
   function add() {
     if (!active.create) return
     if (academyId === null && !active.global) {
-      setNotice('먼저 지점을 고르세요.')
+      setNotice('먼저 지점을 선택해 주세요.')
       return
     }
     setAddErr(null)
@@ -897,7 +897,7 @@ function Content() {
       await active.setActive(r.id, !r.active)
       setNotice(
         r.active
-          ? `'${r.name}' 을(를) 중지했습니다. 새로 고를 때 목록에서 빠지고, 이미 쓰인 곳은 그대로입니다.`
+          ? `'${r.name}' 을(를) 중지했습니다. 새로 선택할 때 목록에서 빠지고, 이미 쓰인 곳은 그대로입니다.`
           : `'${r.name}' 을(를) 다시 쓸 수 있게 했습니다.`,
       )
       await load()
@@ -914,7 +914,7 @@ function Content() {
    */
   function copyYear() {
     if (academyId === null) {
-      setNotice('먼저 지점을 고르세요.')
+      setNotice('먼저 지점을 선택해 주세요.')
       return
     }
     const from = year - 1
@@ -1001,7 +1001,7 @@ function Content() {
                 className="btn"
                 style={{ padding: '4px 9px', fontSize: 11.5, whiteSpace: 'nowrap' }}
                 disabled={busy || locked}
-                title={locked ? SUPER_ONLY : r.active ? '새로 고를 때 목록에서 빠집니다. 이미 쓰인 곳은 그대로입니다' : '다시 고를 수 있게 합니다'}
+                title={locked ? SUPER_ONLY : r.active ? '새로 선택할 때 목록에서 제외됩니다. 이미 사용된 곳은 유지됩니다' : '다시 선택할 수 있게 합니다'}
                 onClick={() => void toggleActive(r)}
               >
                 {r.active ? '중지' : '다시 사용'}
@@ -1057,7 +1057,7 @@ function Content() {
     <>
       {copying && (
         <Modal
-          title={`${year - 1}년 기초 데이터를 ${year}년으로 복사할까요?`}
+          title={`${year - 1}년 기초 데이터를 ${year}년으로 복사하시겠습니까?`}
           sub={`되돌릴 수 없습니다. ${year}년에 이미 자료가 있으면 복사되지 않습니다.`}
           confirmLabel="복사"
           danger
@@ -1154,7 +1154,7 @@ function Content() {
                 ))}
               </select>
               {roomFor.rooms !== null && roomFor.rooms.length === 0 && (
-                <div className="hint">이 지점에 등록된 강의실이 없습니다. 왼쪽 목록의 &lsquo;강의실&rsquo;에서 먼저 등록하세요.</div>
+                <div className="hint">이 지점에 등록된 강의실이 없습니다. 왼쪽 목록의 &lsquo;강의실&rsquo;에서 먼저 등록합니다.</div>
               )}
             </div>
           </div>
@@ -1163,7 +1163,7 @@ function Content() {
 
       {removing && (
         <Modal
-          title={`${removing.name} 을 삭제할까요?`}
+          title={`${removing.name} 항목을 삭제하시겠습니까?`}
           sub="삭제하면 되돌릴 수 없습니다. 이미 사용 중이면 삭제되지 않습니다."
           confirmLabel="삭제"
           danger
@@ -1234,7 +1234,7 @@ function Content() {
           <Icon name="history" size={17} />
         </div>
         <div>
-          <div className="tt">전년도 복사는 이 순서를 지켜 넘어갑니다</div>
+          <div className="tt">전년도 복사는 이 순서를 지켜 이관됩니다</div>
           <div className="tx">
             {MASTERS.filter((m) => m.copyOrder)
               .sort((a, b) => a.copyOrder! - b.copyOrder!)
@@ -1245,7 +1245,7 @@ function Content() {
                 </span>
               ))}
             <br />
-            앞 단계가 만든 새 연도 항목을 뒤 단계가 참조하므로 순서가 바뀌면 연결이 끊깁니다.
+            앞 단계가 만든 새 연도 항목을 뒤 단계가 참조하므로 순서가 바뀌면 연결이 해제됩니다.
             <b> 복사는 되돌릴 수 없습니다</b> — 다만 그 해에 이미 데이터가 있으면 복사되지 않습니다.
           </div>
         </div>
@@ -1253,7 +1253,7 @@ function Content() {
 
       {academyId === null && academyReady && !active.global && (
         <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
-          위에서 지점을 먼저 고르세요. 기초 데이터는 지점마다 따로 관리합니다.
+          위에서 지점을 먼저 선택해 주세요. 기초 데이터는 지점마다 따로 관리합니다.
         </div>
       )}
       {active.note && (

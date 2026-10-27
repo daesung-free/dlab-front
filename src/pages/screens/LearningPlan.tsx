@@ -540,7 +540,7 @@ function Content() {
           <section className="panel">
             <div className="panel-h">
               <div className="t">
-                {selected ? (masked ? maskName(selected.studentName) : selected.studentName) : '학생을 선택하세요'}
+                {selected ? (masked ? maskName(selected.studentName) : selected.studentName) : '선택된 학생이 없습니다'}
                 {selected?.className && <span className="cls"> {selected.className}</span>}
               </div>
               <div className="c">
@@ -671,7 +671,7 @@ function Content() {
               {dates[0]} ~ {weekEnd} · <b>{board.totalElements}</b>명
             </>
           }
-          emptyText={academyId === null ? '지점을 먼저 선택하세요.' : '대상 학생이 없습니다.'}
+          emptyText={academyId === null ? '지점을 먼저 선택해 주세요.' : '대상 학생이 없습니다.'}
           toolbar={
             <>
               <select
@@ -774,7 +774,7 @@ function Content() {
               <button
                 className="btn pri"
                 disabled={academyId === null}
-                title={academyId === null ? '지점을 먼저 선택하세요' : undefined}
+                title={academyId === null ? '지점을 먼저 선택해 주세요' : undefined}
                 onClick={() => setNewOpt({ optionType: 'SUBJECT', label: '' })}
               >
                 <Icon name="plus" size={14} /> 항목 추가

@@ -75,7 +75,7 @@ export function ScreenPage() {
       {checking && <div className="note-box"><div>화면을 여는 중입니다…</div></div>}
       {!blocked && !checking && selectable && academyId === null && !mockup.allBranches && (
         <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
-          <b>위에서 지점을 먼저 고르세요.</b> 고르기 전에는 이 화면이 조회를 시작하지 않습니다 —
+          <b>위에서 지점을 먼저 선택해 주세요.</b> 고르기 전에는 이 화면이 조회를 시작하지 않습니다 —
           지금 보이는 값은 실제 데이터가 아닐 수 있습니다.
         </div>
       )}

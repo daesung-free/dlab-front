@@ -315,7 +315,7 @@ function Content() {
                       style={{ marginLeft: 4 }}
                       title={
                         e.returnState === 'NO_RETURN_RECORD'
-                          ? '복귀 태깅이 빠졌습니다. 고쳐야 순공시간이 맞습니다'
+                          ? '복귀 태깅이 빠졌습니다. 수정해야 순공시간이 맞습니다'
                           : e.returnState === 'PENDING'
                             ? '아직 돌아오지 않았습니다'
                             : undefined
@@ -324,7 +324,7 @@ function Content() {
                       {RETURN_STATE_LABEL[e.returnState]}
                     </span>
                   )}
-                  {/* ★ 사유가 null 이면 **비운다.** 「사유 없음」이라고 쓰면 없는 사실을 만든다 —
+                  {/* ★ 사유가 null 이면 **비운다.** 「사유 없음」이라고 사용하면 없는 사실을 만든다 —
                          사유신청을 안 한 것이지 사유가 없다는 뜻이 아니다.
                          ★ 조퇴에도 사유가 붙을 수 있어 타입으로 숨기지 않는다 */}
                   {e.reason && <span style={{ color: 'var(--muted)' }}> · {e.reason}</span>}
@@ -568,7 +568,7 @@ function Content() {
             <Icon name="users" size={13} /> 조회 대상
           </div>
           <div className="v">{summary?.total ?? 0}</div>
-          {/* 기간 조회면 학생 수가 아니라 학생 × 날짜 합이다 — 그대로 '재원생 기준'이라 쓰면 틀린 말이 된다 */}
+          {/* 기간 조회면 학생 수가 아니라 학생 × 날짜 합이다 — 그대로 '재원생 기준'이라 사용하면 틀린 말이 된다 */}
           <div className="d">{ranged ? '학생 × 일수 합계' : '재원생 기준'}</div>
         </button>
         {statusChips.length > 0 &&
@@ -613,7 +613,7 @@ function Content() {
       />
 
       {academyId === null && academyReady && (
-        <div className="note-box">지점을 먼저 선택하세요. 출결은 지점 단위로 조회합니다.</div>
+        <div className="note-box">지점을 먼저 선택해 주세요. 출결은 지점 단위로 조회합니다.</div>
       )}
 
       {board.error && (
@@ -695,7 +695,7 @@ export const attendanceMockup: Mockup = {
   Content,
   actions: (
     // 출결 알림(등원·하원·지각)도 알림 템플릿 중 하나다 — 따로 두지 않고 그 화면으로 보낸다
-    <Link className="btn" to="/s/message-send?tab=tpl" title="등원·하원·지각 알림 문구는 알림 발송의 템플릿 관리에서 고칩니다">
+    <Link className="btn" to="/s/message-send?tab=tpl" title="등원·하원·지각 알림 문구는 알림 발송의 템플릿 관리에서 수정합니다">
       <Icon name="bell" size={14} /> 출결 알림 템플릿
     </Link>
   ),

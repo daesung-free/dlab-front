@@ -409,8 +409,8 @@ function EnrollForm() {
                     onChange={(e) => setNext((n) => ({ ...n, classId: e.target.value }))}
                   >
                     <option value="">반 선택</option>
-                    {/* ★ **시험용 반 번호가 없는 반은 고를 수 없다.** 학번을 만들 앞자리가 없어
-                           서버가 400 으로 막는다 — 고를 수 있게 두면 **눌러 보고서야** 안다 */}
+                    {/* ★ **시험용 반 번호가 없는 반은 선택할 수 없다.** 학번을 만들 앞자리가 없어
+                           서버가 400 으로 막는다 — 선택할 수 있게 두면 **눌러 보고서야** 안다 */}
                     {classes.map((c) => (
                       <option key={c.id} value={String(c.id)} disabled={c.examClassNo == null}>
                         {c.name}
@@ -429,7 +429,7 @@ function EnrollForm() {
                 </div>
                 {classes.some((c) => c.examClassNo == null) && (
                   <div className="hint" style={{ color: 'var(--amber)' }}>
-                    시험용 반 번호가 없는 반은 고를 수 없습니다 — 반 배정 화면에서 번호를 먼저 넣어 주세요.
+                    시험용 반 번호가 없는 반은 선택할 수 없습니다 — 반 배정 화면에서 번호를 먼저 넣어 주세요.
                   </div>
                 )}
                 <div className="hint">
@@ -630,7 +630,7 @@ function EnrollForm() {
               <label className="req">지점 · 연도</label>
               <div className="two">
                 {/* 지점은 상단 지점 선택을 따른다. 여기서 또 고르게 하면 두 값이 어긋난다 */}
-                <input className="inp" value={academyName ?? '지점을 먼저 선택하세요'} readOnly />
+                <input className="inp" value={academyName ?? '지점을 먼저 선택해 주세요'} readOnly />
                 <select className="sel" value={form.year} onChange={(e) => set('year', e.target.value)}>
                   {[0, 1].map((d) => {
                     const y = new Date().getFullYear() - d
@@ -710,7 +710,7 @@ function EnrollForm() {
                   type="date"
                   value={form.admissionDate}
                   onChange={(e) => set('admissionDate', e.target.value)}
-                  title="비우면 등록일로 잡힙니다"
+                  title="비우면 등록일로 반영됩니다"
                 />
               </div>
             </div>
@@ -1031,7 +1031,7 @@ function ImportButton() {
       <button
         className="btn"
         disabled={academyId === null}
-        title={academyId === null ? '지점을 먼저 선택하세요' : undefined}
+        title={academyId === null ? '지점을 먼저 선택해 주세요' : undefined}
         onClick={() => {
           setOpen(true)
           setFile(null)
@@ -1081,7 +1081,7 @@ function ImportButton() {
                 }}
               />
               <div className="hint">
-                첫 줄에 칸 이름을 적습니다. <b>이름 · 학년</b>은 꼭 있어야 하고, 연락처 · 계열 · 생년월일 · 성별 ·
+                첫 줄에 칸 이름을 입력합니다. <b>이름 · 학년</b>은 꼭 있어야 하고, 연락처 · 계열 · 생년월일 · 성별 ·
                 출신학교는 있으면 함께 들어갑니다. 칸 순서는 상관없습니다.
               </div>
             </div>
@@ -1099,7 +1099,7 @@ function ImportButton() {
                   전체 {r.totalRows}행 · 정상 <b>{r.validRows}</b>행(새 학생 {newCount} · 기존 학생 갱신{' '}
                   {r.validRows - newCount}) · 오류{' '}
                   <b style={{ color: r.errorRows ? 'var(--red)' : undefined }}>{r.errorRows}</b>행
-                  {applied && r.errorRows > 0 && ' — 오류 행은 등록하지 않았습니다. 고쳐서 그 행만 다시 올리세요.'}
+                  {applied && r.errorRows > 0 && ' — 오류 행은 등록하지 않았습니다. 수정해서 그 행만 다시 올리세요.'}
                 </div>
               </div>
               {r.errors.length > 0 && (

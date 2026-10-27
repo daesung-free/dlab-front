@@ -160,8 +160,8 @@ function Content() {
   /* ★ **`academyId` 를 반드시 넘긴다.** `/students` 는 안 넘겨도 400 이 아니라서
      조용히 **전 지점이 섞여 온다**(CLAUDE.md 3-1). 그러면 본사 계정에서
      **일산 학생을 분당 사물함에 앉히려다** 「다른 지점 사물함에는 배정할 수 없습니다」로
-     막힌다 — 목록에 보여 놓고 고른 뒤에 막는 꼴이라 왜 안 되는지 알 수가 없다.
-     실제로 그랬다(2026-10-16). 자동 채우기도 같은 목록을 쓰므로 함께 고쳐진다. */
+     막힌다 — 목록에 보여 놓고 선택한 뒤에 막는 꼴이라 왜 안 되는지 알 수가 없다.
+     실제로 그랬다(2026-10-16). 자동 채우기도 같은 목록을 쓰므로 함께 수정해진다. */
   const params = useMemo(
     () =>
       kind === 'locker'
@@ -326,7 +326,7 @@ function Content() {
             <Icon name="git-compare" size={17} />
           </div>
           <div>
-            <div className="tt">독서실은 좌석배치표(출결/자습/독서실)와 같은 좌석 마스터를 씁니다</div>
+            <div className="tt">독서실은 좌석배치표(출결/자습/독서실)와 같은 좌석 마스터를 사용합니다</div>
             <div className="tx">
               <b>여기</b>는 <b>명단 → 좌석</b>(누구에게 어느 자리를 줄 것인가), <b>좌석배치표</b>는{' '}
               <b>도면 → 사람</b>(지금 이 실이 어떤 상태인가)입니다. 여기서 배정한 결과가 곧 좌석배치표의 배정 축이므로{' '}
@@ -375,11 +375,11 @@ function Content() {
             <button className="btn pri" disabled={selected.length === 0 || busy} onClick={() => void assignSelected()}>
               <Icon name="check" size={14} /> {busy ? '처리 중…' : `앞에서부터 ${unit} 채우기`}
             </button>
-            {/* ★ **자리를 고를 수 있다는 걸 모르면 못 쓴다**(C-1). 한 명만 골랐을 때만 말한다 —
-                늘 띄우면 여러 명을 고른 사람에게 안 되는 방법을 알려주는 꼴이다 */}
+            {/* ★ **자리를 선택할 수 있다는 걸 모르면 못 쓴다**(C-1). 한 명만 골랐을 때만 말한다 —
+                늘 띄우면 여러 명을 선택한 사람에게 안 되는 방법을 알려주는 꼴이다 */}
             {selected.length === 1 && (
               <span style={{ fontSize: 12, color: 'var(--mint)', fontWeight: 600 }}>
-                아래에서 자리를 눌러 직접 고를 수 있습니다
+                아래에서 자리를 눌러 직접 선택할 수 있습니다
               </span>
             )}
           </div>
@@ -436,7 +436,7 @@ function Content() {
             </span>
             <span style={{ marginLeft: 'auto', color: 'var(--muted)' }}>
               {/* ★ 화면 코드(F-4.2)는 우리 문서 번호다. 행정 선생님이 읽을 이유가 없다(CLAUDE.md 1-1) */}
-              독서실 좌석은 <b>대기자 관리</b> · <b>독서실 좌석배치</b>와 같은 좌석표를 씁니다.
+              독서실 좌석은 <b>대기자 관리</b> · <b>독서실 좌석배치</b>와 같은 좌석표를 사용합니다.
             </span>
           </div>
         </div>

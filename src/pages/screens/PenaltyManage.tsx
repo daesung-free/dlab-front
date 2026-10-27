@@ -141,7 +141,7 @@ function Content() {
   })
 
   /* 헤더의 항목 관리에서 항목이 바뀌면 부여 드롭다운을 다시 읽는다.
-     첫 렌더의 0 은 건너뛴다 — 방금 읽은 것을 한 번 더 읽을 이유가 없다 */
+     첫 렌더의 0 은 제외한다 — 방금 읽은 것을 한 번 더 읽을 이유가 없다 */
   const itemsVer = itemsSignal.useVersion()
   const reloadItems = items.reload
   useEffect(() => {
@@ -390,7 +390,7 @@ function Content() {
     <>
       {confirming && (
         <Modal
-          title="이 부여를 취소할까요?"
+          title="이 상벌점 부여를 취소하시겠습니까?"
           sub={`${confirming.name} · ${PENALTY_CATEGORY_LABEL[confirming.category]} ${
             confirming.point > 0 ? `+${confirming.point}` : confirming.point
           }점 (${confirming.itemName}) · 되돌릴 수 없습니다.`}
@@ -451,7 +451,7 @@ function Content() {
       <SearchForm fields={fields} onSearch={setQuery} presetKey="PENALTY" />
 
       {academyId === null && academyReady && (
-        <div className="note-box">지점을 먼저 선택하세요. 상벌점은 지점 단위로 조회합니다.</div>
+        <div className="note-box">지점을 먼저 선택해 주세요. 상벌점은 지점 단위로 조회합니다.</div>
       )}
 
       {board.error && (
@@ -478,7 +478,7 @@ function Content() {
             </div>
           </div>
           <div className="card-sec-b">
-            {/* ★ 학생을 직접 고르는 자리. 내역에서 고른 학생이 있으면 그 위에 더해진다 */}
+            {/* ★ 학생을 직접 고르는 자리. 내역에서 선택한 학생이 있으면 그 위에 더해진다 */}
             <div className="frow">
               <label className="req">학생</label>
               <div>
@@ -529,8 +529,8 @@ function Content() {
                 </div>
                 <div className="hint">
                   {selectedEnrollments.length > 0
-                    ? `아래 내역에서 고른 ${selectedEnrollments.length}명이 함께 들어갑니다.`
-                    : '이름을 쳐서 찾은 뒤 체크하세요. 재원생만 나옵니다.'}
+                    ? `아래 내역에서 선택한 ${selectedEnrollments.length}명이 함께 들어갑니다.`
+                    : '이름을 쳐서 찾은 뒤 체크합니다. 재원생만 나옵니다.'}
                 </div>
               </div>
             </div>
@@ -602,7 +602,7 @@ function Content() {
         }
         toolbar={
           <>
-            {/* 내역이 0건인 지점에서도 눌려야 한다 — 예전에는 표에서 고른 것이 있어야만
+            {/* 내역이 0건인 지점에서도 눌려야 한다 — 예전에는 표에서 선택한 것이 있어야만
                 열려서, 첫 부여를 할 방법이 아예 없었다 */}
             <button className="btn" disabled={academyId === null} onClick={() => setGrantOpen(true)}>
               <Icon name="plus" size={14} /> 점수 부여
@@ -975,7 +975,7 @@ function PenaltyActions() {
                   onChange={(e) => setDraft({ ...draft, point: e.target.value })}
                 />
               </div>
-              <div className="hint">점수는 부호 없이 적습니다. 벌점은 깎이는 점수로 들어갑니다.</div>
+              <div className="hint">점수는 부호 없이 입력합니다. 벌점은 깎이는 점수로 들어갑니다.</div>
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 14, marginBottom: 14 }}>
@@ -1111,7 +1111,7 @@ function PenaltyActions() {
         >
           {/* 라벨이 없으면 .frow 를 쓰지 않는다 — 2열 그리드라 글이 112px 칸에 갇힌다 */}
           <div className="hint">
-            이름이 같은 항목은 건너뜁니다. 여러 번 눌러도 같은 항목이 두 벌 생기지 않습니다.
+            이름이 같은 항목은 제외됩니다. 여러 번 눌러도 같은 항목이 두 벌 생기지 않습니다.
           </div>
           {copyMsg && <div className="hint" style={{ marginTop: 10 }}>{copyMsg}</div>}
         </Modal>

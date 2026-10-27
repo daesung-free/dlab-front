@@ -449,7 +449,7 @@ function Content() {
       {newRoutine && (
         <Modal
           title="루틴 추가"
-          sub={`${month} 루틴을 만듭니다. 이 지점 재원생 전원에게 생깁니다.`}
+          sub={`${month} 루틴을 만듭니다. 이 지점 재원생 전원에게 생성됩니다.`}
           confirmLabel="추가"
           busy={routineBusy}
           error={routineErr}
@@ -692,7 +692,7 @@ function Content() {
               }
               emptyText={
                 academyId === null
-                  ? '지점을 먼저 선택하세요.'
+                  ? '지점을 먼저 선택해 주세요.'
                   : routines.length === 0
                     ? `${month}에 등록된 루틴이 없습니다.`
                     : '이 날짜의 결과가 없습니다.'
@@ -708,7 +708,7 @@ function Content() {
                   />
                   <MaskToggle masked={masked} onChange={setMasked} />
                   <ExcelButton filename="데일리루틴_결과" columns={columns} rows={matrix} masked={masked} />
-                  <span style={{ fontSize: 12, color: 'var(--muted)' }}>입력은 위에서 루틴을 고르세요</span>
+                  <span style={{ fontSize: 12, color: 'var(--muted)' }}>입력은 위에서 루틴을 선택해 주세요</span>
                 </>
               }
             />
@@ -726,7 +726,7 @@ function Content() {
                   {month} 루틴 <b>{routines.length}</b>건
                 </>
               }
-              emptyText={academyId === null ? '지점을 먼저 선택하세요.' : '등록된 루틴이 없습니다.'}
+              emptyText={academyId === null ? '지점을 먼저 선택해 주세요.' : '등록된 루틴이 없습니다.'}
               toolbar={
                 <>
                   <input
@@ -739,7 +739,7 @@ function Content() {
                   <button
                     className="btn"
                     disabled={academyId === null || copying}
-                    title={academyId === null ? '지점을 먼저 선택하세요' : undefined}
+                    title={academyId === null ? '지점을 먼저 선택해 주세요' : undefined}
                     onClick={() => setCopyAsk(true)}
                   >
                     <Icon name="copy" size={14} /> {copying ? '가져오는 중…' : '전월 복사'}
@@ -747,7 +747,7 @@ function Content() {
                   <button
                     className="btn pri"
                     disabled={academyId === null}
-                    title={academyId === null ? '지점을 먼저 선택하세요' : undefined}
+                    title={academyId === null ? '지점을 먼저 선택해 주세요' : undefined}
                     onClick={() => setNewRoutine({ name: '', subject: '', maxScore: '' })}
                   >
                     <Icon name="plus" size={14} /> 루틴 추가

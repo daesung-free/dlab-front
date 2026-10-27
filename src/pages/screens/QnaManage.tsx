@@ -441,7 +441,7 @@ function Content() {
           <div className="note-box">
             <div>
               타임마다 따로 보내므로 <b>중간에 실패하면 일부만 지정됩니다</b> — 그때는 몇 개가 됐는지
-              알려 드립니다.
+              알립니다.
             </div>
           </div>
           <div className="frow">
@@ -461,7 +461,7 @@ function Content() {
               </select>
               <div className="hint">
                 {teachers.length === 0
-                  ? '이 지점에 등록된 선생님이 없습니다. 사용자 관리에서 구분을 「선생님」으로 등록하세요.'
+                  ? '이 지점에 등록된 선생님이 없습니다. 사용자 관리에서 구분을 「선생님」으로 등록합니다.'
                   : '질의응답을 맡을 선생님입니다.'}
               </div>
             </div>
@@ -482,7 +482,7 @@ function Content() {
 
       {cancelAsk && (
         <Modal
-          title={`${cancelAsk.r.studentName} 학생의 예약을 취소할까요?`}
+          title={`${cancelAsk.r.studentName} 학생의 예약을 취소하시겠습니까?`}
           sub={[cancelAsk.slot.teacherName, cancelAsk.slot.room].filter(Boolean).join(' · ') || undefined}
           confirmLabel="예약 취소"
           danger
@@ -708,7 +708,7 @@ function Content() {
                 <button
                   className="btn"
                   disabled={academyId === null}
-                  title={academyId === null ? '지점을 먼저 선택하세요' : undefined}
+                  title={academyId === null ? '지점을 먼저 선택해 주세요' : undefined}
                   onClick={() => openSlotModal()}
                 >
                   <Icon name="plus" size={14} /> 타임 일괄 개설
@@ -850,7 +850,7 @@ function Content() {
                         ))}
                       </div>
                       <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 6 }}>
-                        현재 운영값은 <b>15분</b>으로 확정됐습니다. 변경은 아래 유의사항을 확인한 뒤 진행하세요.
+                        현재 운영값은 <b>15분</b>으로 확정됐습니다. 변경은 아래 유의사항을 확인한 뒤 진행합니다.
                       </div>
                     </div>
                   </div>
@@ -908,7 +908,7 @@ function Content() {
                   <div className="note-box" style={{ marginBottom: 14 }}>
                     <div>
                       여기 값은 <b>타임을 열 때 쓰입니다.</b> 따로 저장되지는 않으므로, 날짜마다
-                      <b> 「타임 열기」</b>를 눌러 그날 분을 만들어 주시기 바랍니다.
+                      <b> 「타임 열기」</b>로 그날 분을 만듭니다.
                     </div>
                   </div>
 
@@ -970,8 +970,8 @@ function Content() {
                   onChange={(e) => setOpening({ ...opening, to: e.target.value })}
                 />
               </div>
-              {/* 이미 있는 시각은 서버가 건너뛴다 — 오전을 연 뒤 오후를 더하는 흐름이 있다 */}
-              <div className="hint">이미 열어 둔 시각은 건드리지 않고 넘어갑니다.</div>
+              {/* 이미 있는 시각은 서버가 제외한다 — 오전을 연 뒤 오후를 더하는 흐름이 있다 */}
+              <div className="hint">이미 열어 둔 시각은 건드리지 않고 이관됩니다.</div>
             </div>
           </div>
           <div className="frow">

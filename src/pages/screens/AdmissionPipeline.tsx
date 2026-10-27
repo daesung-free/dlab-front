@@ -327,7 +327,7 @@ function Detail({
 
   async function submitStatus() {
     if (status === row.status && !reason.trim()) {
-      setErr('바꿀 상태를 고르거나 이유를 적어 주세요.')
+      setErr('바꿀 상태를 고르거나 이유를 입력해 주세요.')
       return
     }
     setBusy(true)
@@ -490,7 +490,7 @@ function Detail({
           <div>
             <input
               className="inp"
-              placeholder={REASON_EXPECTED.includes(status) ? '왜 그렇게 됐는지 적어 주세요' : '선택'}
+              placeholder={REASON_EXPECTED.includes(status) ? '왜 그렇게 됐는지 입력해 주세요' : '선택'}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
             />
@@ -507,7 +507,7 @@ function Detail({
           <div>
             {row.converted ? (
               /* ★ 학번은 **반 배정 때** 생긴다 — 전환 직후에는 없다(2026-10-13 채번 변경).
-                 「학번 - 으로 전환이 끝났습니다」로 쓰면 **등록이 잘못된 줄 알고 다시 접수**한다 */
+                 「학번 - 으로 전환이 끝났습니다」로 사용하면 **등록이 잘못된 줄 알고 다시 접수**한다 */
               <div>
                 {row.studentNo ? (
                   <>
@@ -611,7 +611,7 @@ function Detail({
                   </a>
                 </div>
                 <div className="hint">
-                  답은 <b>한 번만</b> 할 수 있습니다. 바꾸려면 전화를 받아 이 화면에서 고칩니다.
+                  답은 <b>한 번만</b> 할 수 있습니다. 바꾸려면 전화를 받아 이 화면에서 수정합니다.
                 </div>
               </>
             )}
@@ -678,7 +678,7 @@ function ConvertModal({ row, onClose, onDone }: { row: ReservationRow; onClose: 
 
   async function submit() {
     if (!date) {
-      setErr('등원일을 선택하세요.')
+      setErr('등원일을 선택합니다.')
       return
     }
     setBusy(true)

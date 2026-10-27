@@ -142,9 +142,9 @@ function Content() {
           title: i.title.trim(),
           place: i.place.trim() || undefined,
         }))
-      if (items.length === 0) throw new Error('일정을 한 줄 이상 적어 주세요.')
+      if (items.length === 0) throw new Error('일정을 한 줄 이상 입력해 주세요.')
       if (edit.scheduleId === null) {
-        if (edit.enrollmentId === '') throw new Error('학생을 고르세요.')
+        if (edit.enrollmentId === '') throw new Error('학생을 선택해 주세요.')
         await submitSchedule(Number(edit.enrollmentId), { month, items })
         setDone('정기일정을 등록했습니다. 담임이 대신 낸 일정은 바로 인정됩니다.')
       } else {
@@ -304,7 +304,7 @@ function Content() {
       </div>
 
       {academyId === null && academyReady && (
-        <div className="note-box">지점을 먼저 선택하세요. 정기일정은 지점 단위로 조회합니다.</div>
+        <div className="note-box">지점을 먼저 선택해 주세요. 정기일정은 지점 단위로 조회합니다.</div>
       )}
 
       {error && (
@@ -349,7 +349,7 @@ function Content() {
             <button
               className="btn pri"
               disabled={academyId === null}
-              title={academyId === null ? '지점을 먼저 선택하세요' : undefined}
+              title={academyId === null ? '지점을 먼저 선택해 주세요' : undefined}
               onClick={() => {
                 setEditErr(null)
                 setEdit({ scheduleId: null, enrollmentId: '', items: [{ ...EMPTY_ITEM }] })
@@ -370,7 +370,7 @@ function Content() {
           sub={
             edit.scheduleId === null
               ? `${month} 일정으로 등록합니다. 담임이 낸 일정은 바로 인정됩니다.`
-              : '적어 둔 줄 전체가 그대로 저장됩니다.'
+              : '입력한 줄 전체가 그대로 저장됩니다.'
           }
           wide
           busy={busy}
@@ -396,7 +396,7 @@ function Content() {
             </div>
           )}
 
-          {/* ★ 통째 교체라 화면에 보이는 줄이 곧 저장될 전부다. 그 사실을 적어 둔다 —
+          {/* ★ 통째 교체라 화면에 보이는 줄이 곧 저장될 전부다. 그 사실을 입력한다 —
                  한 줄만 고치는 줄 알고 나머지를 지우면 조용히 사라진다 */}
           {edit.scheduleId !== null && (
             <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
@@ -553,13 +553,13 @@ function Content() {
               <div className="hint">그날 일정을 지켰는지 보고, 안 지켰으면 벌점을 줍니다.</div>
             </div>
           </div>
-          {/* ★ 규칙이 꺼져 있으면 아무 일도 안 일어난다. 안 적으면 "눌러도 반응이 없다"가 된다 */}
+          {/* ★ 규칙이 꺼져 있으면 아무 일도 안 일어난다. 안 입력하면 "눌러도 반응이 없다"가 된다 */}
           <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
             <div className="ic">
               <Icon name="triangle-alert" size={17} />
             </div>
             <div>
-              <div className="tt">상벌점 규칙이 켜져 있어야 점수가 붙습니다</div>
+              <div className="tt">상벌점 규칙이 켜져 있어야 점수가 등록됩니다</div>
               <div className="tx">
                 상벌점 관리의 <b>자동 부여 규칙</b>에서 「정기 일정 · 미인정」이 꺼져 있으면 판정만 돌고
                 점수는 붙지 않습니다. 여러 번 눌러도 중복으로 붙지는 않습니다.

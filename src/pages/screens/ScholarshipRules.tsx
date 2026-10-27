@@ -169,7 +169,7 @@ function Content() {
       listScholarshipRules({ year }),
       /* ★ `/scholarship-masters?academyId=8` 은 **그 지점이 직접 만든 것만** 준다 —
            전 지점 공통 장학이 빠져서 실측 0건이었다. `/selectable` 이 "그 지점에서
-           고를 수 있는" 목록이고 공통까지 포함한다. 드롭다운은 이쪽을 쓴다. */
+           선택할 수 있는" 목록이고 공통까지 포함한다. 드롭다운은 이쪽을 쓴다. */
       listSelectableScholarships(year, academyId),
       listScholarshipReviews({ academyId, year }),
     ])
@@ -234,7 +234,7 @@ function Content() {
     setDraftErr(null)
     try {
       const n = Number(draft.threshold)
-      if (!Number.isFinite(n)) throw new Error('기준값을 숫자로 입력하세요.')
+      if (!Number.isFinite(n)) throw new Error('기준값을 숫자로 입력합니다.')
       const body: ScholarshipRuleBody = {
         academyId,
         year,
@@ -325,7 +325,7 @@ function Content() {
     try {
       await judgeScholarships({ academyId, year })
       await load()
-      setDone('판정을 마쳤습니다. 아래 목록에서 건별로 확정해 주세요 — 아직 취소된 것은 없습니다.')
+      setDone('판정을 마쳤습니다. 아래 목록에서 건별로 확정합니다 — 아직 취소된 것은 없습니다.')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '판정하지 못했습니다.')
     } finally {
@@ -435,10 +435,10 @@ function Content() {
         </div>
       </div>
 
-      {/* 지점을 못 고른 상태를 먼저 말한다. 다른 화면과 같은 문구를 쓴다 —
+      {/* 지점을 못 선택한 상태를 먼저 말한다. 다른 화면과 같은 문구를 쓴다 —
           이 상태에서는 목록이 비는 것이 정상이고, 버튼이 잠긴 것도 그래서다 */}
       {academyId === null && academyReady && (
-        <div className="note-box">지점을 먼저 선택하세요. 장학 기준은 지점 단위로 관리합니다.</div>
+        <div className="note-box">지점을 먼저 선택해 주세요. 장학 기준은 지점 단위로 관리합니다.</div>
       )}
 
       {error && (
@@ -490,7 +490,7 @@ function Content() {
                   <button
                     className="btn pri"
                     disabled={academyId === null}
-                    title={academyId === null ? '지점을 먼저 선택하세요' : undefined}
+                    title={academyId === null ? '지점을 먼저 선택해 주세요' : undefined}
                     onClick={() => {
                       setDraftErr(null)
                       setDraft(EMPTY_RULE)
@@ -515,7 +515,7 @@ function Content() {
                     <div className="tt">아직 취소 기준이 없습니다</div>
                     <div className="tx">
                       기준을 만들어 두면 학기마다 <b>판정 실행</b>으로 대상을 찾을 수 있습니다.
-                      보통 이렇게 씁니다 —
+                      보통 이렇게 사용합니다 —
                       <br />
                       <b>벌점 누적</b> 40점을 넘으면 · <b>등급합</b>이 기준을 넘으면 ·{' '}
                       <b>모의고사</b>를 몇 회 결시하면
@@ -644,7 +644,7 @@ function Content() {
                   <button
                     className="btn pri"
                     disabled={busy || academyId === null}
-                    title={academyId === null ? '지점을 먼저 선택하세요' : undefined}
+                    title={academyId === null ? '지점을 먼저 선택해 주세요' : undefined}
                     onClick={() => void runJudge()}
                   >
                     <Icon name="scan-line" size={14} /> 판정 실행
@@ -684,7 +684,7 @@ function Content() {
                   </option>
                 ))}
               </select>
-              <div className="hint">등급합만 과목·회차를 씁니다. 벌점·결시는 숫자 하나로 끝납니다.</div>
+              <div className="hint">등급합만 과목·회차를 사용합니다. 벌점·결시는 숫자 하나로 끝납니다.</div>
             </div>
           </div>
 
@@ -824,7 +824,7 @@ function Content() {
               <Icon name="alert-triangle" size={17} />
             </div>
             <div>
-              <div className="tt">같은 장학에 대안이 남아 있는지 확인하세요</div>
+              <div className="tt">같은 장학에 대안이 남아 있는지 확인합니다</div>
               <div className="tx">
                 대안 중 하나만 지우면 <b>남은 조건만으로 판정</b>됩니다. 기준이 조용히 좁아집니다.
               </div>

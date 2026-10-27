@@ -210,7 +210,7 @@ export function SeatSetup({ onChanged }: Props) {
           }}
           onToggle={(b) => act(() => updateBuilding(b.id, { active: !b.active }))}
           onDelete={(b) =>
-            setDelAsk({ title: `${b.name}을 삭제할까요?`, sub: '삭제 후에는 되돌릴 수 없습니다. 하위 구역이 남아 있으면 삭제가 진행되지 않습니다.', run: () => deleteBuilding(b.id) })
+            setDelAsk({ title: `${b.name} 관을 삭제하시겠습니까?`, sub: '삭제 후에는 되돌릴 수 없습니다. 하위 구역이 남아 있으면 삭제가 진행되지 않습니다.', run: () => deleteBuilding(b.id) })
           }
         />
       )}
@@ -227,7 +227,7 @@ export function SeatSetup({ onChanged }: Props) {
           }}
           onToggle={(a) => act(() => updateSeatArea(a.id, { active: !a.active }))}
           onDelete={(a) =>
-            setDelAsk({ title: `${a.buildingName} ${a.areaCd} 구역을 삭제할까요?`, sub: '삭제 후에는 되돌릴 수 없습니다. 좌석이 남아 있으면 삭제가 진행되지 않습니다.', run: () => deleteSeatArea(a.id) })
+            setDelAsk({ title: `${a.buildingName} ${a.areaCd} 구역을 삭제하시겠습니까?`, sub: '삭제 후에는 되돌릴 수 없습니다. 좌석이 남아 있으면 삭제가 진행되지 않습니다.', run: () => deleteSeatArea(a.id) })
           }
         />
       )}
@@ -255,7 +255,7 @@ export function SeatSetup({ onChanged }: Props) {
           }}
           onDelete={(s) =>
             setDelAsk({
-              title: `${s.seatCd} 좌석을 삭제할까요?`,
+              title: `${s.seatCd} 좌석을 삭제하시겠습니까?`,
               sub: '삭제 후에는 되돌릴 수 없습니다. 배치도에서 해당 자리는 빈칸으로 표시됩니다.',
               run: () => deleteSeatMaster(s.id),
             })
@@ -326,7 +326,7 @@ export function SeatSetup({ onChanged }: Props) {
               setNotice(
                 changed > 0
                   ? `${changed}석의 형태를 바꿨습니다.`
-                  : '바뀐 좌석이 없습니다. 번호 범위가 이 구역의 좌석번호와 맞는지 확인해 주세요.',
+                  : '바뀐 좌석이 없습니다. 번호 범위가 이 구역의 좌석번호와 맞는지 확인합니다.',
               )
             })
           }
@@ -440,7 +440,7 @@ function BuildingTab({
           rowKey={(b) => String(b.id)}
           loading={loading}
           masked={false}
-          emptyText="관이 없습니다. 먼저 등록하세요."
+          emptyText="관이 없습니다. 먼저 등록합니다."
         />
       </div>
     </div>
@@ -535,7 +535,7 @@ function BuildingModal({
                 <>
                   <br />
                   <b style={{ color: 'var(--red)' }}>
-                    {taken.name}이(가) 사용 중인 번호대입니다. 다른 번호대를 입력하세요.
+                    {taken.name}이(가) 사용 중인 번호대입니다. 다른 번호대가 필요합니다.
                   </b>
                 </>
               )}
@@ -638,7 +638,7 @@ function AreaTab({
           rowKey={(a) => String(a.id)}
           loading={loading}
           masked={false}
-          emptyText={canAdd ? '구역이 없습니다.' : '관을 먼저 등록하세요.'}
+          emptyText={canAdd ? '구역이 없습니다.' : '관을 먼저 등록합니다.'}
         />
       </div>
     </div>
@@ -837,7 +837,7 @@ function SeatTab({
             disabled={picked.length === 0 || busy}
             onClick={() => {
               onBulkDelete(
-                `선택한 좌석 ${picked.length}개를 삭제할까요?`,
+                `선택한 좌석 ${picked.length}개를 삭제하시겠습니까?`,
                 '삭제 후에는 되돌릴 수 없습니다. 선택한 좌석 중 배정된 좌석이 하나라도 있으면 삭제가 진행되지 않습니다.',
                 picked.map(Number),
               )
@@ -853,7 +853,7 @@ function SeatTab({
             disabled={areaId === null || seats.length === 0 || busy}
             onClick={() => {
               onBulkDelete(
-                `${area?.areaNm ?? '이 구역'}의 좌석 ${seats.length}개를 모두 삭제할까요?`,
+                `${area?.areaNm ?? '이 구역'}의 좌석 ${seats.length}개를 모두 삭제하시겠습니까?`,
                 '삭제 후에는 되돌릴 수 없습니다. 배정된 좌석이 하나라도 있으면 삭제가 진행되지 않습니다.',
                 [],
               )
@@ -887,7 +887,7 @@ function SeatTab({
           selectable
           selected={picked}
           onSelectedChange={setPicked}
-          emptyText={areaId === null ? '구역을 먼저 등록하세요.' : '좌석이 없습니다. 격자로 만드세요.'}
+          emptyText={areaId === null ? '구역을 먼저 등록합니다.' : '좌석이 없습니다. 격자로 만드세요.'}
         />
       </div>
     </div>
@@ -1145,14 +1145,14 @@ function StyleModal({
             value={defaultStyle}
             onChange={(e) => setDefaultStyle(e.target.value as SeatStyle | '')}
           >
-            <option value="">그대로 둡니다</option>
+            <option value="">유지됩니다</option>
             {(Object.keys(SEAT_STYLE_LABEL) as SeatStyle[]).map((k) => (
               <option key={k} value={k}>
                 {SEAT_STYLE_LABEL[k]} 으로 바꿉니다
               </option>
             ))}
           </select>
-          <div className="hint">범위에 없는 좌석을 어떻게 할지 고릅니다.</div>
+          <div className="hint">범위에 없는 좌석을 어떻게 할지 선택합니다.</div>
         </div>
       </div>
       <div className="note-box">

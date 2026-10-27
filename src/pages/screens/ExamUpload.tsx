@@ -674,7 +674,7 @@ function Content() {
                 value={reg.examName}
                 onChange={(e) => setReg({ ...reg, examName: e.target.value })}
               />
-              <div className="hint">학생 앱과 신상기록부에 이 이름 그대로 나갑니다.</div>
+              <div className="hint">학생 앱과 신상기록부에 이 이름 그대로 발송됩니다.</div>
             </div>
           </div>
           <div className="frow">
@@ -706,7 +706,7 @@ function Content() {
                       </span>
                     ))}
                   </div>
-                  <div className="hint">{template.from}을 그대로 씁니다.</div>
+                  <div className="hint">{template.from}을 그대로 사용합니다.</div>
                 </>
               ) : (
                 <div className="hint" style={{ color: 'var(--red)' }}>

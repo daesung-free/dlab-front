@@ -135,9 +135,9 @@ const KINDS: Survey['kind'][] = ['가채점', '만족도', '수요조사', '기�
 /* ★ 예전에는 여기에 `['전체 재원생','자연계열','인문계열','급식 신청자','1반'…'4반']` 이
      **박혀 있었다.** 고르든 말든 전부 지점 전체(BRANCH)로 나갔고, 실제 반 이름과도 달랐다
      (대구에는 '테스트_N수1반' 하나뿐인데 1~4반이 떴다. 2026-09-27 실테스트).
-     지금은 지점 전체 + **그 지점의 진짜 반**을 읽어서 보여주고, 고른 값이 실제로 나간다.
+     지금은 지점 전체 + **그 지점의 진짜 반**을 읽어서 보여주고, 선택한 값이 실제로 나간다.
    ★ 계열·급식 신청자는 서버에 그 범위가 없다(scope 는 ALL·BRANCH·CLASS 셋뿐) —
-     고를 수 없게 두되 지우지는 않는다. 생기면 여기에 붙인다. */
+     선택할 수 없게 두되 지우지는 않는다. 생기면 여기에 붙인다. */
 const BRANCH_TARGET = '전체 재원생'
 const UNSUPPORTED_TARGETS = ['자연계열', '인문계열', '급식 신청자']
 
@@ -146,11 +146,11 @@ function q(id: string, type: QType, title: string, options: string[] = [], requi
 }
 
 const GRADING_QUESTIONS: Question[] = [
-  q('g1', 'subject', '과목별 원점수를 입력하세요', SUBJECT_OPTIONS),
+  q('g1', 'subject', '과목별 원점수', SUBJECT_OPTIONS),
   q('g2', 'single', '탐구1 응시 과목', ['물리Ⅰ', '물리Ⅱ', '화학Ⅰ', '생명과학Ⅰ', '지구과학Ⅰ']),
   q('g3', 'single', '탐구2 응시 과목', ['물리Ⅰ', '화학Ⅰ', '생명과학Ⅰ', '지구과학Ⅰ', '지구과학Ⅱ']),
   q('g4', 'single', '체감 난이도', ['매우 쉬움', '쉬움', '보통', '어려움', '매우 어려움']),
-  q('g5', 'text', '가장 어려웠던 단원·유형을 적어주세요', [], false),
+  q('g5', 'text', '가장 어려웠던 단원·유형', [], false),
 ]
 
 /* ★★ **예시 설문 5건을 지웠다**(2026-10-26). 상단 카드가 이걸 세고 있었는데, 아래 표에는
@@ -442,7 +442,7 @@ function stamp(v: string | null | undefined): string {
   const [partsErr, setPartsErr] = useState<string | null>(null)
   /* ★ 요구사항 1-5 는 **「지점 → 반 → 학생 개별」** 3단계다. 지점은 상단에서 고르고
      학생은 체크로 고르는데, **가운데(반)가 빠져 있었다** — 그 지점 학생 200명을 통째로
-     띄우면 **고를 수가 없다**(반이 섞여 있어 누가 누군지 모른다) */
+     띄우면 **선택할 수가 없다**(반이 섞여 있어 누가 누군지 모른다) */
   const [picking, setPicking] = useState<{
     rows: Student[] | null
     selected: string[]
@@ -563,13 +563,13 @@ function stamp(v: string | null | undefined): string {
   /** 설문 저장. 문항 순서는 배열 순서가 곧 순서라 번호를 보내지 않는다 */
   async function saveSurvey(d: Draft) {
     if (academyId === null) {
-      setApiError('지점을 먼저 선택하세요.')
+      setApiError('지점을 먼저 선택해 주세요.')
       return
     }
     const opensAt = toInstant(d.opensAt)
     const closesAt = toInstant(d.closesAt)
     if (!opensAt || !closesAt) {
-      setApiError('응답 기간을 시작·마감 둘 다 입력하세요.')
+      setApiError('응답 기간의 시작·마감을 모두 입력해 주세요.')
       return
     }
 
@@ -687,7 +687,7 @@ function stamp(v: string | null | undefined): string {
     const opensAt = toInstant(editing.opensAt)
     const closesAt = toInstant(editing.closesAt)
     if (!opensAt || !closesAt) {
-      setApiError('응답 기간을 시작·마감 둘 다 입력하세요.')
+      setApiError('응답 기간의 시작·마감을 모두 입력해 주세요.')
       return
     }
     setRowBusy(true)
@@ -750,7 +750,7 @@ function stamp(v: string | null | undefined): string {
       setDup(null)
       setEditing(null)
       /* ★ 대상자는 안 따라온다 — 그걸 안 알리면 **아무에게도 안 간 설문**을 배포한 줄 안다 */
-      setApiNotice('복제했습니다. 대상자는 따라오지 않으니 다시 지정하세요.')
+      setApiNotice('복제했습니다. 대상자는 복제되지 않으니 다시 지정합니다.')
       await loadSurveys()
     } catch (err) {
       setDup((v) =>
@@ -866,7 +866,7 @@ function stamp(v: string | null | undefined): string {
                     qErr: null,
                   })
                 }
-                title="제목·기간을 고칩니다. 문항은 제출이 들어오기 전까지 바꿀 수 있습니다"
+                title="제목·기간을 수정합니다. 문항은 제출이 들어오기 전까지 바꿀 수 있습니다"
               >
                 수정
               </button>
@@ -920,7 +920,7 @@ function stamp(v: string | null | undefined): string {
         value: () => '',
         render: (r) => (
           /* ★ 목록 버튼만 막고 **템플릿 탭을 빠뜨렸었다**(2026-09-28) — 여기로 들어가면
-                담임도 설문을 만들고 문항을 고칠 수 있었다. 같은 판단을 건다 */
+                담임도 설문을 만들고 문항을 수정할 수 있었다. 같은 판단을 건다 */
           <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
             {teacherOnly ? (
               <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>보기 전용</span>
@@ -1002,7 +1002,7 @@ function stamp(v: string | null | undefined): string {
                   <div className="tt">응답이 등록된 설문은 문항을 수정할 수 없습니다</div>
                   <div className="tx">
                     문항을 수정하면 <b>수정 전후 응답의 의미가 달라져</b> 집계가 어긋납니다. 제목·마감일만 수정할 수
-                    있으며, 문항을 수정하려면 <b>설문을 복제하여 새로 배포</b>하세요.
+                    있으며, 문항을 수정하려면 <b>설문을 복제하여 새로 배포</b>합니다.
                   </div>
                 </div>
               </div>
@@ -1116,7 +1116,7 @@ function stamp(v: string | null | undefined): string {
             {draft.questions.length === 0 && (
               <div className="mock-stub" style={{ marginTop: 14, padding: '34px 20px' }}>
                 <div className="t">문항이 없습니다</div>
-                <div className="x">위에서 문항 유형을 눌러 추가하거나, 템플릿 탭에서 &lsquo;설문 생성&rsquo;으로 시작하세요.</div>
+                <div className="x">위에서 문항 유형을 눌러 추가하거나, 템플릿 탭에서 &lsquo;설문 생성&rsquo;으로 시작합니다.</div>
               </div>
             )}
 
@@ -1212,7 +1212,7 @@ function stamp(v: string | null | undefined): string {
                     <input
                       className="inp"
                       value={qq.title}
-                      placeholder="질문을 입력하세요"
+                      placeholder="질문 입력"
                       disabled={draft.locked}
                       onChange={(e) => updateQuestion(qq.id, { title: e.target.value })}
                     />
@@ -1274,7 +1274,7 @@ function stamp(v: string | null | undefined): string {
           /* ★ 문항 편집기가 들어가는 모달이라 **좁으면 가로 스크롤이 생긴다** */
           wide
           title="설문 수정"
-          sub="문항은 응답이 등록되기 전까지 수정할 수 있습니다. 대상은 설문을 복제하여 새로 생성하세요."
+          sub="문항은 응답이 등록되기 전까지 수정할 수 있습니다. 대상은 설문을 복제하여 새로 생성합니다."
           confirmLabel="저장"
           busy={rowBusy}
           confirmDisabled={editing.title.trim() === ''}
@@ -1329,7 +1329,7 @@ function stamp(v: string | null | undefined): string {
                   <div className="note-box">
                     <div>
                       응답이 등록된 설문은 문항을 수정할 수 없습니다. 수정이 필요한 경우 설문을 복제하여
-                      새로 생성하세요.
+                      새로 생성합니다.
                     </div>
                   </div>
 
@@ -1383,10 +1383,10 @@ function stamp(v: string | null | undefined): string {
                       <input
                         className="inp"
                         value={q.title}
-                        placeholder="질문을 입력하세요"
+                        placeholder="질문 입력"
                         onChange={(e) => patchQ(q.key, { title: e.target.value })}
                       />
-                      {/* ★ 화면에서 고칠 수는 없지만 **걸려 있다는 것은 보여준다.**
+                      {/* ★ 화면에서 수정할 수는 없지만 **걸려 있다는 것은 보여준다.**
                           안 보이면 기준 문항을 지우고도 모른다 — 그러면 조건이 깨진다 */}
                       {q.showIfQuestionIndex !== null && (
                         <div className="q-cond">
@@ -1394,7 +1394,7 @@ function stamp(v: string | null | undefined): string {
                           <span>
                             <b>{q.showIfQuestionIndex}번</b> 문항에서{' '}
                             <b>{q.showIfOptionIndex !== null ? `${q.showIfOptionIndex}번 보기` : '특정 보기'}</b>를
-                            고른 사람에게만 보입니다
+                            선택한 사람에게만 보입니다
                           </span>
                         </div>
                       )}
@@ -1410,7 +1410,7 @@ function stamp(v: string | null | undefined): string {
                         <input
                           className="inp"
                           value={q.options.join(', ')}
-                          placeholder="보기를 쉼표로 구분해 입력하세요 — 예: 예, 아니오"
+                          placeholder="보기를 쉼표로 구분 — 예: 예, 아니오"
                           onChange={(e) => patchQ(q.key, { options: e.target.value.split(',').map((x) => x.trim()) })}
                         />
                       )}
@@ -1494,7 +1494,7 @@ function stamp(v: string | null | undefined): string {
           <div className="note-box">
             <div>
               설문 문항과 범위(전체·지점·반)는 유지되며, 대상자와 응답 내역은 복제되지 않습니다. 복제 후
-              대상자를 다시 선택하세요.
+              대상자를 다시 선택합니다.
             </div>
           </div>
           <div className="frow">
@@ -1514,7 +1514,7 @@ function stamp(v: string | null | undefined): string {
 
       {removing && (
         <Modal
-          title={`${removing.title} 설문을 삭제할까요?`}
+          title={`${removing.title} 설문을 삭제하시겠습니까?`}
           sub="되돌릴 수 없습니다."
           confirmLabel="삭제"
           danger
@@ -1524,7 +1524,7 @@ function stamp(v: string | null | undefined): string {
         >
           <div className="note-box">
             <div>
-              응답이 등록된 설문은 삭제할 수 없습니다. 더 이상 응답을 받지 않으려면 <b>마감</b>을 선택하세요.
+              응답이 등록된 설문은 삭제할 수 없습니다. 더 이상 응답을 받지 않으려면 <b>마감</b>을 선택합니다.
             </div>
           </div>
         </Modal>
@@ -1663,7 +1663,7 @@ function stamp(v: string | null | undefined): string {
                   <div className="tt">템플릿 → 설문 인스턴스화</div>
                   <div className="tx">
                     템플릿으로 설문을 만들면 <b>그 시점의 문항이 그대로 복사</b>됩니다.
-                    그래서 나중에 템플릿을 고쳐도 <b>이미 배포한 설문은 바뀌지 않습니다</b> —
+                    그래서 나중에 템플릿을 수정해도 <b>이미 배포한 설문은 바뀌지 않습니다</b> —
                     응답을 받는 도중에 문항이 달라지면 결과를 신뢰할 수 없기 때문입니다.
                   </div>
                 </div>
@@ -1678,7 +1678,7 @@ function stamp(v: string | null | undefined): string {
                   <span className="ico">
                     <Icon name="bar-chart-3" size={15} />
                   </span>
-                  {result ? `${result.survey.title} — 응답 ${result.responseCount}건` : '설문을 선택하세요'}
+                  {result ? `${result.survey.title} — 응답 ${result.responseCount}건` : '선택된 설문이 없습니다'}
                 </div>
                 <div className="r">
                   <select
@@ -1822,7 +1822,7 @@ function stamp(v: string | null | undefined): string {
                 </div>
               </div>
               <div className="card-sec-b">
-                {/* ★ 두 설문의 목록 뜻이 다르다. 안 적으면 「왜 미제출이 안 보이지」가 된다 */}
+                {/* ★ 두 설문의 목록 뜻이 다르다. 안 입력하면 「왜 미제출이 안 보이지」가 된다 */}
                 <div className="note-box">
                   <div>
                     대상자를 지정한 설문은 <b>안 낸 사람도 표에 나옵니다.</b> 지정하지 않은 설문은 낸 사람만
@@ -1859,7 +1859,7 @@ function stamp(v: string | null | undefined): string {
                   rowKey={(r) => String(r.enrollmentId)}
                   loading={targetId !== null && parts === null}
                   pageSize={20}
-                  emptyText={targetId === null ? '설문을 고르세요.' : '대상자가 없습니다.'}
+                  emptyText={targetId === null ? '설문을 선택해 주세요.' : '대상자가 없습니다.'}
                 />
               </div>
             </div>
@@ -1867,12 +1867,12 @@ function stamp(v: string | null | undefined): string {
         </div>
       </div>
 
-      {/* 대상자 지정 — 고른 학생을 이 설문의 대상자로 만든다 */}
+      {/* 대상자 지정 — 선택한 학생을 이 설문의 대상자로 만든다 */}
       {picking && (
         <Modal
           title="대상자 지정"
           /* ★ **「발송」이 아니다.** 이 호출은 대상자 행을 만들 뿐 **아무것도 보내지 않는다** —
-             학생은 앱을 열어 설문 목록에서 본다. 「발송됩니다」라고 쓰면 담당자가
+             학생은 앱을 열어 설문 목록에서 본다. 「발송됩니다」라고 사용하면 담당자가
              **학생에게 알림이 간 줄 안다**(디랩이 실제로 그렇게 읽고 물어 왔다).
              알림 이벤트는 서버에 생겼지만 **문구가 미확정이라 아직 안 나간다** */
           sub="선택한 학생은 앱에서 이 설문을 확인할 수 있습니다. 별도 알림은 발송되지 않습니다."
@@ -1898,8 +1898,8 @@ function stamp(v: string | null | undefined): string {
           }}
           onClose={() => setPicking(null)}
         >
-          {/* ★ 반으로 먼저 좁힌다. **고른 사람은 반을 바꿔도 그대로 남는다** — 반을 옮겨 가며
-                 여러 반에서 고를 수 있어야 한다(필터는 보이는 것만 거른다) */}
+          {/* ★ 반으로 먼저 좁힌다. **선택한 사람은 반을 바꿔도 그대로 남는다** — 반을 옮겨 가며
+                 여러 반에서 선택할 수 있어야 한다(필터는 보이는 것만 거른다) */}
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8 }}>
             <select
               className="sel"
@@ -1916,7 +1916,7 @@ function stamp(v: string | null | undefined): string {
             </select>
             <span className="hint" style={{ margin: 0 }}>
               {picking.selected.length}명 선택
-              {picking.classFilter !== '' && ' · 고른 사람은 반을 바꿔도 남습니다'}
+              {picking.classFilter !== '' && ' · 선택한 사람은 반을 바꿔도 남습니다'}
             </span>
           </div>
           <DataTable

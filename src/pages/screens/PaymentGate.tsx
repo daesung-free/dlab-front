@@ -304,7 +304,7 @@ function Content() {
   const { academyId, ready: academyReady } = useAcademy()
 
   /* ★ **연도가 필수다.** 안 보내면 400 이라 화면이 빈 것처럼 보인다.
-       검색에서 고른 기간의 **시작 연도**를 쓴다 — 기간을 안 고르면 올해다. */
+       검색에서 선택한 기간의 **시작 연도**를 쓴다 — 기간을 안 고르면 올해다. */
   const dateFrom = one((query as Record<string, unknown>).date_from ?? (query as Record<string, unknown>).dateFrom)
   const dateTo = one((query as Record<string, unknown>).date_to ?? (query as Record<string, unknown>).dateTo)
   const year = Number((dateFrom ?? '').slice(0, 4)) || new Date().getFullYear()
@@ -544,7 +544,7 @@ function Content() {
       />
 
       {academyId === null && academyReady && (
-        <div className="note-box">지점을 먼저 선택하세요. 결제 내역은 지점 단위로 조회합니다.</div>
+        <div className="note-box">지점을 먼저 선택해 주세요. 결제 내역은 지점 단위로 조회합니다.</div>
       )}
 
       {(receipts.error !== null || refunds.error !== null) && (
@@ -560,7 +560,7 @@ function Content() {
         <div className="note-box">
           <div>
             <b>입금이 확인된 가상계좌</b>만 표시됩니다. 발급 후 아직 입금되지 않은 건은 수납현황에서
-            청구별로 확인해 주시기 바랍니다.
+            청구별로 확인합니다.
           </div>
         </div>
       )}
@@ -644,7 +644,7 @@ function Content() {
 
       {toggling !== null && (
         <Modal
-          title={`${toggling.displayName} 를 ${toggling.active ? '중지' : '사용'}할까요?`}
+          title={`${toggling.displayName} 상점을 ${toggling.active ? '중지' : '사용'}하시겠습니까?`}
           sub={
             toggling.active
               ? '중지하면 이 지점·용도·방식으로는 결제를 만들 수 없습니다. 이미 받은 결제는 그대로 남습니다.'

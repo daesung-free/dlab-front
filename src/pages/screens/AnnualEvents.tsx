@@ -130,7 +130,7 @@ function Content() {
   async function copyYear() {
     // 헤더 버튼은 지점을 안 골라도 창을 연다 — 조용히 멈추면 '복사'가 안 먹는 것처럼 보인다
     if (academyId === null) {
-      setResult('먼저 위에서 지점을 고르세요.')
+      setResult('먼저 위에서 지점을 선택해 주세요.')
       setCopyAsk(false)
       return
     }
@@ -142,7 +142,7 @@ function Content() {
           ? `새로 옮길 행사가 없습니다${r.skipped ? ` — ${year - 1}년 행사 ${r.skipped}건은 이미 ${year}년에 있습니다` : ` — ${year - 1}년에 등록된 행사가 없습니다`}.`
           : `${year - 1}년 행사를 ${year}년으로 옮겼습니다 — ${r.copied}건 복사` +
               (r.skipped ? ` · ${r.skipped}건은 이미 있어 건너뜀` : '') +
-              '. 날짜가 한 해 뒤로 밀렸으니 요일이 바뀐 행사는 확인하세요.',
+              '. 날짜가 한 해 뒤로 밀렸으니 요일이 바뀐 행사는 확인합니다.',
       )
       setCopyAsk(false)
       await load()
@@ -249,7 +249,7 @@ function Content() {
     const t = row.kind === 'holiday' ? f : editing.to || f
     if (t < f) return setEditing({ ...editing, error: '시작일이 종료일보다 뒤입니다.' })
     if (f.slice(0, 4) !== row.from.slice(0, 4) || t.slice(0, 4) !== row.from.slice(0, 4)) {
-      return setEditing({ ...editing, error: `${row.from.slice(0, 4)}년 안에서만 고칠 수 있습니다. 다른 해로 옮기려면 지우고 새로 등록하세요.` })
+      return setEditing({ ...editing, error: `${row.from.slice(0, 4)}년 안에서만 수정할 수 있습니다. 다른 해로 옮기려면 지우고 새로 등록합니다.` })
     }
     setBusy(true)
     try {
@@ -469,7 +469,7 @@ function Content() {
               style={{ padding: '4px 9px', fontSize: 11.5 }}
               disabled={busy}
               onClick={() => openEdit(r)}
-              title="이름·날짜·유형을 고칩니다"
+              title="이름·날짜·유형을 수정합니다"
             >
               수정
             </button>
@@ -503,8 +503,8 @@ function Content() {
     <>
       {copyAsk && (
         <Modal
-          title={`${year - 1}년 행사를 ${year}년으로 복사할까요?`}
-          sub="날짜는 한 해 뒤로 밀립니다. 같은 이름·시작일의 행사가 이미 있으면 건너뜁니다."
+          title={`${year - 1}년 행사를 ${year}년으로 복제하시겠습니까?`}
+          sub="날짜는 한 해 뒤로 밀립니다. 같은 이름·시작일의 행사가 이미 있으면 제외됩니다."
           confirmLabel="복사"
           busy={busy}
           onConfirm={() => void copyYear()}
@@ -513,7 +513,7 @@ function Content() {
           <div className="note-box">
             <div>
               <b>행사</b>(시험·학원 행사 등)만 옮깁니다. 공휴일·학원 휴원 같은 <b>쉬는 날은 옮기지 않습니다</b> — 해마다 날짜가
-              달라 새로 등록하세요. 위에서 고른 시즌({year})이 옮겨 갈 연도입니다.
+              달라 새로 등록합니다. 위에서 선택한 시즌({year})이 옮겨 갈 연도입니다.
             </div>
           </div>
         </Modal>
@@ -567,11 +567,11 @@ function Content() {
 
       {removing && (
         <Modal
-          title={`${removing.name} 을 삭제할까요?`}
+          title={`${removing.name} 행사를 삭제하시겠습니까?`}
           sub={
             removing.kind === 'holiday'
               ? `${removing.from} · 삭제하면 되돌릴 수 없습니다.`
-              : `${removing.from}${removing.to !== removing.from ? ` ~ ${removing.to}` : ''} · 목록과 학생 달력에서 빠집니다.`
+              : `${removing.from}${removing.to !== removing.from ? ` ~ ${removing.to}` : ''} · 목록과 학생 달력에서 삭제됩니다.`
           }
           confirmLabel="삭제"
           danger
@@ -661,7 +661,7 @@ function Content() {
                 </div>
               </div>
 
-              {/* 쉬는 날과 행사는 하는 일이 다르다 — 고를 때 헷갈리지 않게 미리 적는다 */}
+              {/* 쉬는 날과 행사는 하는 일이 다르다 — 선택할 때 헷갈리지 않게 미리 적는다 */}
               <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
                 <div className="ic">
                   <Icon name="triangle-alert" size={17} />
@@ -893,7 +893,7 @@ export const annualEventsMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" onClick={() => copySignal.bump()} title="작년 행사를 올해로 옮깁니다. 같은 행사는 건너뜁니다">
+      <button className="btn" onClick={() => copySignal.bump()} title="작년 행사를 올해로 옮깁니다. 같은 행사는 제외됩니다">
         <Icon name="history" size={14} /> 전년도 복사
       </button>
     </>

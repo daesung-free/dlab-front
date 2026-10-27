@@ -327,7 +327,7 @@ function Content() {
         }
       }
       if (attachFailed > 0) {
-        setError(`공지는 보냈지만 첨부 ${attachFailed}개가 붙지 않았습니다. 공지를 열어 다시 올려주세요.`)
+        setError(`공지는 보냈지만 첨부 ${attachFailed}개가 붙지 않았습니다. 공지를 열어 다시 등록합니다.`)
       }
       setTitle('')
       setContent('')
@@ -361,7 +361,7 @@ function Content() {
     /* ★ 개수는 **화면이 정한 값**이다(서버에도 같은 값을 건다). 많이 붙이면 학부모 폰에서
        아래로 길게 늘어진다 — 읽을 안내문이 파일 목록에 밀린다 */
     if (files.length + picked.length > 5) {
-      setError(`첨부는 5개까지 올릴 수 있습니다. 지금 ${files.length}개를 올려 두었습니다.`)
+      setError(`첨부는 5개까지 첨부할 수 있습니다. 지금 ${files.length}개를 올려 두었습니다.`)
       return
     }
     const tooBig = picked.find((f) => f.size > 10 * 1024 * 1024)
@@ -372,7 +372,7 @@ function Content() {
     const already = files.reduce((n, f) => n + f.size, 0)
     const total = picked.reduce((n, f) => n + f.size, already)
     if (total > 50 * 1024 * 1024) {
-      setError('첨부는 모두 합쳐 50MB까지 올릴 수 있습니다. 파일을 줄여 주세요.')
+      setError('첨부는 모두 합쳐 50MB까지 첨부할 수 있습니다. 파일을 줄여 주세요.')
       return
     }
     setUpBusy(true)
@@ -385,7 +385,7 @@ function Content() {
     } catch (e) {
       /* ★ 「파일 저장소가 설정되지 않았습니다」는 **우리 사정**이다 — 담당자가 할 수 있는
          일이 없는데 그대로 보여주면 무엇을 잘못했나 찾는다(CLAUDE.md 1-1).
-         「이미지·PDF 만」처럼 **담당자가 고칠 수 있는** 문구는 그대로 쓴다 */
+         「이미지·PDF 만」처럼 **담당자가 수정할 수 있는** 문구는 그대로 쓴다 */
       setError(
         e instanceof ApiError
           ? e.code === 'FILE_STORAGE_NOT_CONFIGURED'
@@ -507,8 +507,8 @@ function Content() {
 
       {removing && (
         <Modal
-          title={`'${removing.title}' 공지를 삭제할까요?`}
-          sub="학생·학부모 앱에서도 빠집니다. 되돌릴 수 없습니다."
+          title={`'${removing.title}' 공지를 삭제하시겠습니까?`}
+          sub="학생·학부모 앱에서도 삭제됩니다. 삭제 후에는 되돌릴 수 없습니다."
           confirmLabel="삭제"
           danger
           onConfirm={() => void remove(removing.id)}
@@ -641,7 +641,7 @@ function Content() {
                     )}
 
                     {/* ★ **공지는 한 건**이고 대상자만 여럿이다. 사람 수만큼 보내면 목록에 같은 글이
-                           N개 뜨고, 오타 하나를 N번 고쳐야 하며, 「읽음 몇 명」이 N개로 쪼개진다 */}
+                           N개 뜨고, 오타 하나를 N번 수정해야 하며, 「읽음 몇 명」이 N개로 쪼개진다 */}
                     {scope === 'SELECTED' && (
                       <div className="frow">
                         <label className="req">학생</label>
@@ -716,13 +716,13 @@ function Content() {
                           </div>
 
                           <div className="hint">
-                            <b>{picked.length}명 선택</b> · 고른 학생과 그 학부모에게만 갑니다.
-                            {/* ★ 반을 바꿔도 고른 사람은 남는다 — 여러 반에서 골라 한 번에 보내야 한다 */}
-                            {pickClass !== '' && ' 반을 바꿔도 고른 사람은 남습니다.'}
+                            <b>{picked.length}명 선택</b> · 선택한 학생과 그 학부모에게만 갑니다.
+                            {/* ★ 반을 바꿔도 선택한 사람은 남는다 — 여러 반에서 선택해 한 번에 보내야 한다 */}
+                            {pickClass !== '' && ' 반을 바꿔도 선택한 사람은 남습니다.'}
                           </div>
                           {/* ⚠️ 담임이 남의 반 학생을 **하나라도** 섞으면 서버가 **전체를 거절**한다.
                                  그래서 애초에 자기 반만 보여준다 — 고르고 나서 거절당하면 왜인지 모른다 */}
-                          {teacherOnly && <div className="hint">맡은 반 학생만 고를 수 있습니다.</div>}
+                          {teacherOnly && <div className="hint">맡은 반 학생만 선택할 수 있습니다.</div>}
                         </div>
                       </div>
                     )}
@@ -739,7 +739,7 @@ function Content() {
                     <div className="frow">
                       <label>첨부</label>
                       <div>
-                        {/* ★ 서버가 **이미지·PDF 만** 받는다. 안 적으면 고르고 나서야
+                        {/* ★ 서버가 **이미지·PDF 만** 받는다. 안 입력하면 고르고 나서야
                             거절당한다 — `accept` 로 **고르는 단계에서** 걸러낸다 */}
                         <input
                           type="file"
@@ -770,7 +770,7 @@ function Content() {
                         )}
                         <div className="hint">
                           이미지(JPG·PNG·GIF)와 PDF 파일만 첨부할 수 있습니다. 최대 5개, 파일 하나는 10MB,
-                          모두 합쳐 50MB까지 올릴 수 있습니다. [보내기]를 선택해야 공지에 등록됩니다.
+                          모두 합쳐 50MB까지 첨부할 수 있습니다. [보내기]를 선택해야 공지에 등록됩니다.
                         </div>
                       </div>
                     </div>
@@ -886,8 +886,8 @@ function Content() {
                   <div className="tt">행정 요청 접수함은 준비 중입니다</div>
                   <div className="tx">
                     재학증명서 발급·좌석 변경처럼 <b>학생이 앱으로 넣는 요청</b>을 모아 보는
-                    자리입니다. 지금은 접수 경로가 없어 <b>전화·데스크로 받은 것을 각 화면에서
-                    직접 처리</b>해 주시기 바랍니다. 사유 신청은 「사유 신청 관리」에서 그대로
+                    자리입니다. 지금은 접수 경로가 없어 <b>전화·데스크로 받은 요청은 각 화면에서
+                    직접 처리</b>합니다. 사유 신청은 「사유 신청 관리」에서 그대로
                     처리됩니다.
                   </div>
                 </div>
