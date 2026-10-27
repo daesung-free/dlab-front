@@ -190,8 +190,8 @@ function Content() {
         loading={list.loading}
         pageSize={20}
         /* ★ 지점을 고르기 전에는 **아직 안 읽은 것**이지 「요청이 없는」 것이 아니다 —
-           그렇게 쓰면 담당자가 그날 요청이 없었다고 읽는다 */
-        emptyText={academyId === null ? '지점을 먼저 고르세요.' : '그 기간에 요청이 없습니다.'}
+           그렇게 사용하면 담당자가 그날 요청이 없었다고 읽는다 */
+        emptyText={academyId === null ? '지점을 먼저 선택해 주세요.' : '그 기간에 요청이 없습니다.'}
       />
     </>
   )

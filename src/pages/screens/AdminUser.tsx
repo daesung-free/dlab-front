@@ -121,14 +121,35 @@ const AREAS: Area[] = [
   { name: '교무 명단 출력', perms: { SUPER_ADMIN: 'full', BRANCH_ADMIN: 'full', TEACHER: 'own', STAFF: 'read', READONLY: 'read' } },
   { name: '상담 일지·리포트', perms: { SUPER_ADMIN: 'full', BRANCH_ADMIN: 'full', TEACHER: 'own', STAFF: 'none', READONLY: 'none' } },
   {
+    /* ★★ **이 행이 아예 없었다.** 그래서 표를 봐도 「대기자 관리가 조회 전용에 열리는가」를
+           알 수 없었고, 담당자가 메뉴에서 체크했다가 403 을 봤다(2026-10-27 문의).
+       ★ 조회 전용은 **조회 5개만**(목록·중복찾기·상세·상태이력·메모) 열려 있다 —
+         상태 변경·메모 작성·공유는 막힌다(dlab-api #294). */
+    name: '대기자 관리',
+    note: '입학 상담 예약',
+    perms: { SUPER_ADMIN: 'full', BRANCH_ADMIN: 'full', TEACHER: 'full', STAFF: 'full', READONLY: 'read' },
+  },
+  {
+    /* ★ **전환만 따로 뗀다.** 담임은 대기자를 다 쓸 수 있는데 **전환만 못 한다** — 한 칸에
+           뭉치면 어느 쪽으로 적어도 틀리고, 「담임 없음」으로 입력하면 **담임이 쓸 수 있는데
+           표에 없다**는 반대 방향 문의가 온다. 이 표는 원래 민감한 동작을 따로 떼어
+           왔다(상벌점 부여 · 개인정보 항목 · 할인 정책 설정이 그렇다). */
+    name: '대기자 → 원생 전환',
+    note: '학번이 채번돼 되돌릴 수 없다',
+    perms: { SUPER_ADMIN: 'full', BRANCH_ADMIN: 'full', TEACHER: 'none', STAFF: 'full', READONLY: 'none' },
+  },
+  {
     name: '질의응답 타임 관리',
     note: '노출 설정 · 간격',
     perms: { SUPER_ADMIN: 'full', BRANCH_ADMIN: 'full', TEACHER: 'own', STAFF: 'read', READONLY: 'none' },
   },
   {
-    name: '키오스크 단말 관리',
-    note: '등록 · 재시작 · 펌웨어',
-    perms: { SUPER_ADMIN: 'full', BRANCH_ADMIN: 'own', TEACHER: 'none', STAFF: 'read', READONLY: 'none' },
+    /* ★ 「등록·재시작·펌웨어」는 **만들지 않기로 했다**(2026-10-26) — 키오스크 레포 담당이고
+           서버에 경로가 없다. 우리 화면은 **통신 상태만** 본다(좌석 이탈/복귀 탭).
+       ★ 그 경로가 최고관리자 전용이라 지점 관리자도 403 이다 — 'own' 이 아니라 'none' 이다. */
+    name: '키오스크 통신 상태',
+    note: '최고관리자만 · 단말 설정은 범위 밖',
+    perms: { SUPER_ADMIN: 'read', BRANCH_ADMIN: 'none', TEACHER: 'none', STAFF: 'none', READONLY: 'none' },
   },
   { name: '기초 설정', perms: { SUPER_ADMIN: 'full', BRANCH_ADMIN: 'read', TEACHER: 'none', STAFF: 'none', READONLY: 'none' } },
   { name: '사용자·권한 관리', perms: { SUPER_ADMIN: 'full', BRANCH_ADMIN: 'own', TEACHER: 'none', STAFF: 'none', READONLY: 'none' } },
@@ -239,7 +260,7 @@ function MenuModal({ row, onClose, onSaved }: { row: AccountRow; onClose: () => 
     /* 서버도 400 으로 막지만, 눌러서 오류를 보기 전에 알려준다 —
        "아무것도 못 보게" 는 계정 정지로 할 일이다 */
     if (useOwn && codes.length === 0) {
-      setErr('메뉴를 하나 이상 고르세요. 아무것도 보여주지 않으려면 계정을 정지해 주세요.')
+      setErr('메뉴를 하나 이상 선택해 주세요. 아무것도 보여주지 않으려면 계정을 정지합니다.')
       return false
     }
     setSaving(true)
@@ -267,7 +288,7 @@ function MenuModal({ row, onClose, onSaved }: { row: AccountRow; onClose: () => 
       sub={
         restricted
           ? '이 계정에만 따로 정해 둔 상태입니다. 체크한 것만 보입니다 — 권한 기본값보다 우선합니다.'
-          : '지금은 권한 기본값대로 보입니다(아래 체크된 것). 바꾸려면 아래에서 「이 계정만 직접 지정」을 고르세요.'
+          : '지금은 권한 기본값대로 보입니다(아래 체크된 것). 바꾸려면 아래에서 「이 계정만 직접 지정」을 선택해 주세요.'
       }
       confirmLabel="저장"
       busy={saving}
@@ -505,9 +526,9 @@ function Content() {
     setFormErr(null)
 
     const academyId = Number(form.academyId)
-    if (!academyId) return setFormErr('지점을 고르세요.')
-    if (!form.loginId.trim()) return setFormErr('로그인 아이디를 입력하세요.')
-    if (!form.name.trim()) return setFormErr('이름을 입력하세요.')
+    if (!academyId) return setFormErr('지점을 선택해 주세요.')
+    if (!form.loginId.trim()) return setFormErr('로그인 아이디를 입력해 주세요.')
+    if (!form.name.trim()) return setFormErr('이름을 입력해 주세요.')
 
     setSaving(true)
     try {
@@ -718,18 +739,18 @@ function Content() {
               className="btn"
               style={{ padding: '4px 9px', fontSize: 11.5, whiteSpace: 'nowrap' }}
               disabled={busy === r.accountId || !isSuper || r.status === 'WITHDRAWN'}
-              title={isSuper ? '이 계정에 보여줄 메뉴를 고릅니다' : '최고관리자만 설정할 수 있습니다'}
+              title={isSuper ? '이 계정에 보여줄 메뉴를 선택합니다' : '최고관리자만 설정할 수 있습니다'}
               onClick={() => setMenuEdit(r)}
             >
               메뉴
             </button>
-            {/* ★ 계정을 만든 뒤 이름·연락처·부서를 고칠 자리가 없었다(2026-09-27 실테스트 P2).
+            {/* ★ 계정을 만든 뒤 이름·연락처·부서를 수정할 자리가 없었다(2026-09-27 실테스트 P2).
                    로그인 아이디는 서버가 막는다 — 바꾸면 감사 로그의 주체가 끊긴다 */}
             <button
               className="btn"
               style={{ padding: '4px 9px', fontSize: 11.5, whiteSpace: 'nowrap' }}
               disabled={busy === r.accountId || r.personId === null || r.status === 'WITHDRAWN'}
-              title={r.personId === null ? '인적사항이 없는 계정입니다' : '이름·연락처·부서를 고칩니다'}
+              title={r.personId === null ? '인적사항이 없는 계정입니다' : '이름·연락처·부서를 수정합니다'}
               onClick={() =>
                 setInfoEdit({
                   row: r,
@@ -927,13 +948,13 @@ function Content() {
         <Modal
           title={
             confirm.kind === 'withdraw'
-              ? `${confirm.row.loginId} 를 탈퇴 처리할까요?`
-              : `${confirm.row.loginId} 의 비밀번호를 새로 발급할까요?`
+              ? `${confirm.row.loginId} 계정을 탈퇴 처리하시겠습니까?`
+              : `${confirm.row.loginId} 계정의 비밀번호를 재발급하시겠습니까?`
           }
           sub={
             confirm.kind === 'withdraw'
               ? `${confirm.row.name ?? '-'} · 되돌릴 수 없습니다.`
-              : '기존 비밀번호는 즉시 쓸 수 없게 됩니다. 새 비밀번호는 한 번만 보여집니다.'
+              : '새 비밀번호는 한 번만 보여집니다.'
           }
           confirmLabel={confirm.kind === 'withdraw' ? '탈퇴 처리' : '발급'}
           danger
@@ -946,7 +967,37 @@ function Content() {
             void p.then((ok) => ok && setConfirm(null))
           }}
           onClose={() => { setModalErr(null); setConfirm(null) }}
-        />
+        >
+          {/* ★★ **「막으면 바로 끊긴다」가 아니다.** 서버가 매 요청마다 계정 상태를 보지
+                 않아, 이미 로그인한 사람은 **토큰이 만료될 때까지** 그대로 쓴다
+                 (운영 만료 1시간 · 2026-10-27 백엔드 확인).
+             ★ 이 말을 안 쓰면 담당자는 **누르고 끝난 줄 안다** — 급해서 막는 상황인데
+               그 사람이 한 시간 더 쓰고 있다. 급하면 다른 수단이 필요하다는 것을 알려야 한다.
+
+             ⚠️⚠️ **세션 컷오프(dlab-api #295)가 배포되면 이 상자를 바꿔야 한다.**
+               계정 단위 컷오프가 들어가면 **중지·재발급 즉시 끊긴다** — 그러면 아래 문구는
+               **사실이 아니게 되고, 담당자가 멀쩡히 끊긴 사람을 한 시간 기다린다.**
+               바꿀 것: 탈퇴 → 「중지하면 바로 로그아웃됩니다」 한 줄. 「급한 상황이면…」은 뺀다.
+                       재발급 → 「기존 비밀번호는 즉시 쓸 수 없게 됩니다」로 되돌린다
+                               (그게 원래 문구였고, 컷오프가 들어가면 그 말이 맞아진다).
+               ★ **배포 전에 먼저 바꾸면 반대로 거짓말이 된다.** 머지가 아니라 **배포** 기준이다. */}
+          <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
+            <div>
+              {confirm.kind === 'withdraw' ? (
+                <>
+                  신규 로그인은 <b>즉시 차단됩니다.</b> 다만 <b>이미 로그인해 있는 사람은
+                  최대 1시간까지</b> 그대로 사용할 수 있습니다 — 급한 경우 본인에게 알리거나 담당자에게
+                  문의해 주세요.
+                </>
+              ) : (
+                <>
+                  <b>새 비밀번호로만 로그인할 수 있습니다.</b> 다만 <b>이미 로그인해 있는 사람은
+                  최대 1시간까지</b> 그대로 사용할 수 있습니다.
+                </>
+              )}
+            </div>
+          </div>
+        </Modal>
       )}
 
       <div className="stat-strip">
@@ -1023,7 +1074,7 @@ function Content() {
                 />
                 <div className="link-box" style={{ alignItems: 'center' }}>
                   <div>
-                    <b>닫으면 다시 볼 수 없습니다.</b> 지금 본인에게 전달하세요.
+                    <b>닫으면 다시 볼 수 없습니다.</b> 지금 본인에게 전달합니다.
                     <br />
                     기존 비밀번호는 더 이상 쓸 수 없습니다.
                   </div>
@@ -1070,7 +1121,7 @@ function Content() {
                 />
                 <div className="link-box" style={{ alignItems: 'center' }}>
                   <div>
-                    <b>닫으면 다시 볼 수 없습니다.</b> 지금 본인에게 전달하세요.
+                    <b>닫으면 다시 볼 수 없습니다.</b> 지금 본인에게 전달합니다.
                     놓쳤다면 목록의 <b>비밀번호</b> 버튼으로 다시 발급하면 됩니다.
                   </div>
                 </div>
@@ -1113,7 +1164,7 @@ function Content() {
             <div className="note-box">
               <div>
                 비밀번호는 <b>저장할 때 자동으로 만들어집니다.</b> 등록이 끝나면 화면에 한 번 보여드리니
-                그때 본인에게 전달하세요. <b>로그인 아이디는 나중에 바꿀 수 없습니다.</b>
+                그때 본인에게 전달합니다. <b>로그인 아이디는 나중에 바꿀 수 없습니다.</b>
               </div>
             </div>
 
@@ -1132,7 +1183,7 @@ function Content() {
                   <option value="TEACHER">선생님</option>
                 </select>
                 <div className="hint">
-                  수업을 맡는 분은 <b>선생님</b>으로 등록하세요. 그래야 특강·상담의 담당자로 고를 수 있습니다.
+                  수업을 맡는 분은 <b>선생님</b>으로 등록합니다. 그래야 특강·상담의 담당자로 선택할 수 있습니다.
                 </div>
               </div>
             </div>
@@ -1336,8 +1387,16 @@ function Content() {
                 <Icon name="info" size={17} />
               </div>
               <div>
-                이 표는 <b>역할별 기본값을 설명하는 자료</b>이며 수정할 수 없습니다. 실제 권한은{' '}
-                <b>계정 목록</b> 탭에서 계정마다 <b>메뉴</b> 버튼으로 지정합니다.
+                이 표는 <b>역할별 기본값을 설명하는 자료</b>이며 수정할 수 없습니다.
+                {/* ★★ 전에 여기 「실제 권한은 메뉴 버튼으로 지정합니다」라고 적혀 있었는데
+                       **그게 지금 혼란의 원인이다.** 메뉴 지정은 **보이는 것을 줄이는** 기능이지
+                       권한을 늘리지 못한다 — 역할에 없는 화면을 체크하면 **메뉴는 보이는데
+                       들어가면 403** 이다(조회 전용 계정 + 대기자 관리에서 실제로 났다).
+                       ★ 「지정한다」는 말이 **권한까지 지정된다**로 읽힌다 */}
+                <br />
+                ★ <b>메뉴 지정은 보이는 것을 줄이는 기능</b>입니다 — 이 표에 없는 권한을
+                메뉴로 열 수는 없습니다. 역할에 없는 화면을 체크하면 <b>메뉴는 보이지만
+                들어갔을 때 열리지 않습니다.</b> 권한 자체를 바꾸려면 <b>역할</b>을 바꿔야 합니다.
                 <br />
                 <button
                   type="button"
@@ -1395,9 +1454,9 @@ function Content() {
               <span>
                 <span className="pm p-none">없음</span> 메뉴 미노출
               </span>
-              {/* 서버에 역할 × 기능영역 권한이 아직 없다. "이 표대로 제한된다"고 쓰면
+              {/* 서버에 역할 × 기능영역 권한이 아직 없다. "이 표대로 제한된다"고 사용하면
                   화면이 거짓말을 하게 된다 — 확정 전이라는 것을 그대로 적는다.
-                  ★ 계정별 메뉴 노출은 따로 생겼다. 안 적으면 "아직 아무것도 안 된다" 로 읽힌다 */}
+                  ★ 계정별 메뉴 노출은 따로 생겼다. 안 입력하면 "아직 아무것도 안 된다" 로 읽힌다 */}
               <span style={{ marginLeft: 'auto', color: 'var(--muted)' }}>
                 역할별 기본값 설명입니다
               </span>

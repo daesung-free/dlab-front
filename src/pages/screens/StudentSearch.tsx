@@ -59,6 +59,7 @@ import {
   type ClassGroup,
 } from '../../api/classes'
 import { studentNoText } from '../../lib/studentNo'
+import { GuardianBlock } from './GuardianBlock'
 import type { Mockup } from './types'
 import '../../styles/forms.css'
 
@@ -516,7 +517,7 @@ function Content() {
       const r = await issueAppTemporaryPassword(a.accountId)
       setAcct({
         busyId: null,
-        msg: `${who} 임시 비밀번호: ${r.temporaryPassword} — 이 자리에서만 보입니다. 본인에게 전달하세요.`,
+        msg: `${who} 임시 비밀번호: ${r.temporaryPassword} — 이 자리에서만 보입니다. 본인에게 전달합니다.`,
         err: null,
       })
       if (infoEdit) {
@@ -773,7 +774,7 @@ function Content() {
       table.reload()
       setStatusEdit(null)
       /* ★ 상태를 바꾸면 그 학생이 **목록에서 사라진다** — 이 화면 기본 조건이 「재원」이라서다.
-            디랩이 「재원생을 퇴원으로 바꾼 뒤 퇴원생 조회가 되지 않는다」고 적은 것이 이것이다
+            디랩이 「재원생을 퇴원으로 바꾼 뒤 퇴원생 조회가 되지 않는다」고 입력한 것이 이것이다
             (조회 자체는 된다 — 조건을 안 바꾸면 안 보일 뿐이다). 어디로 갔는지 말해 준다. */
       if (next !== 'ENROLLED') {
         setInfoDone(
@@ -825,7 +826,7 @@ function Content() {
             >
               <option value="">선택</option>
               {/* ★ 지금과 같은 상태는 빼둔다. 서버가 "이미 같은 상태입니다"로 거절하는데,
-                     고를 수 있게 두면 그 오류를 보고서야 안다. */}
+                     선택할 수 있게 두면 그 오류를 보고서야 안다. */}
               {(['ENROLLED', 'LEAVE', 'WITHDRAWN', 'EXPELLED', 'GRADUATED'] as EnrollmentStatus[])
                 .filter((v) => v !== statusEdit.row.enrollmentStatus)
                 .map((v) => (
@@ -848,7 +849,7 @@ function Content() {
             </div>
           </div>
 
-          {/* ★ 되돌릴 수 없다는 것을 고른 뒤에 알린다. 퇴원·제적은 서버가 재원 복귀를 막고,
+          {/* ★ 되돌릴 수 없다는 것을 선택한 뒤에 알린다. 퇴원·제적은 서버가 재원 복귀를 막고,
                  재등록하면 학번이 새로 매겨져 원래 학번이 사라진다. */}
           {(statusEdit.next === 'WITHDRAWN' || statusEdit.next === 'EXPELLED') && (
             <div className="note-box risk">
@@ -1162,6 +1163,10 @@ function Content() {
               </div>
               )}
 
+              {/* ★ 보호자 연락처 — 앱 계정 **바로 위**에 둔다. 알림톡이 계정을 거쳐 나가므로
+                     「번호를 넣었는데 왜 안 가지」의 답이 바로 아래 칸에 있어야 한다 */}
+              <GuardianBlock enrollmentId={infoEdit.row.enrollmentId} />
+
               {/* ★ 앱 계정. **학생이 비밀번호를 5회 틀리면 잠기고 저절로 안 풀린다** —
                      풀어 줄 자리가 없어서 그 학생은 앱을 못 썼다(2026-09-27 실테스트).
                   ★ '가입 안 함' 과 '잠김' 은 다른 상태다. 가입 안 한 학생은 계정 자체가 없다. */}
@@ -1195,7 +1200,7 @@ function Content() {
               </div>
 
               {/* ★ 상담 일지와 다르다 — 그쪽은 면담 한 건이 양식과 함께 남고, 이쪽은 그때그때
-                     적어 두는 것이다. 섞어 쓰면 상담 통계가 틀린다.
+                     적어 두는 것이다. 섞어 사용하면 상담 통계가 틀린다.
                   ★ **고치는 길은 두지 않는다.** 서버에 수정 경로가 없고, 메모는 「그때 그 사람이
                      그렇게 적었다」가 값이라 고치면 그게 사라진다. */}
               <div className="frow">
@@ -1327,7 +1332,7 @@ function Content() {
               <button
                 className="btn"
                 disabled={academyId === null}
-                title={academyId === null ? '지점을 먼저 선택하세요' : undefined}
+                title={academyId === null ? '지점을 먼저 선택해 주세요' : undefined}
                 onClick={() => {
                   setAssignErr(null)
                   setAssign({ classId: String(classes[0]?.id ?? '') })
@@ -1383,14 +1388,14 @@ function Content() {
                 ))}
               </select>
               {/* 서버가 정원 초과를 막지 않는다. 미리 알려 두면 결과 화면에서 덜 놀란다 */}
-              <div className="hint">정원을 넘겨도 배정됩니다. 넘기면 결과에 알려 드립니다.</div>
+              <div className="hint">정원을 넘겨도 배정됩니다. 넘기면 결과에 알립니다.</div>
             </div>
           </div>
         </Modal>
       )}
 
       {/* ── 배정 결과 ── */}
-      {/* ★ 건별 결과를 그대로 보여준다. "3명 배정" 만 쓰면 못 들어간 학생을 모른 채
+      {/* ★ 건별 결과를 그대로 보여준다. "3명 배정" 만 사용하면 못 들어간 학생을 모른 채
              다시 눌러 이미 들어간 학생을 또 넣으려 한다 */}
       {assignResult && (
         <Modal

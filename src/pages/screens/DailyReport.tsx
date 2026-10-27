@@ -309,11 +309,11 @@ function Content() {
           <div className="v" style={{ color: missing > 0 ? 'var(--amber)' : undefined }}>
             {missing}
           </div>
-          <div className="d">{missing > 0 ? '순공시간이 적게 잡힙니다' : '없음'}</div>
+          <div className="d">{missing > 0 ? '순공시간이 적게 반영됩니다' : '없음'}</div>
         </div>
       </div>
 
-      {/* ★ 0 과 빈칸을 가르는 안내. 안 적으면 「공부 안 한 학생」으로 읽는다 */}
+      {/* ★ 0 과 빈칸을 가르는 안내. 안 입력하면 「공부 안 한 학생」으로 읽는다 */}
       <div className="note-box">
         <div>
           하원 태깅이 없는 날은 <b>집계하지 않습니다</b> — 0분이 아니라 빈칸입니다. 출결 관리에서 하원 시각을

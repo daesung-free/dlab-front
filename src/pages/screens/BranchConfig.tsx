@@ -50,7 +50,7 @@ const EDIT_META: Record<EditKind, { title: string; label: string; hint: string; 
     title: 'PG 가맹점 코드',
     label: '가맹점 코드',
     hint: '결제 대행사에서 지점마다 발급한 코드입니다.',
-    warn: '결제가 이 값으로 나갑니다. 틀리면 그 지점 결제가 통째로 실패합니다.',
+    warn: '결제가 이 값으로 처리됩니다. 틀리면 그 지점 결제가 통째로 실패합니다.',
   },
   nebula: {
     title: '와이파이 장비 ID',
@@ -97,7 +97,7 @@ function Content() {
   /* clear 면 '값 비우기' — value 에 지금 값을 다시 받는다(서버가 그 값과 같아야 지운다) */
   const [edit, setEdit] = useState<{ row: Row; kind: EditKind; value: string; clear?: boolean } | null>(null)
   /* 지점 자체(이름·정식명·등원 기준 시각). 설정값과 다른 축이라 모달을 따로 둔다 —
-     ★ **등원 기준 시각이 지각 판정 기준이다**(2026-09-27 P2. 고칠 자리가 없었다) */
+     ★ **등원 기준 시각이 지각 판정 기준이다**(2026-09-27 P2. 수정할 자리가 없었다) */
   const [acadEdit, setAcadEdit] = useState<{
     row: Row
     acadNm: string
@@ -389,7 +389,7 @@ function Content() {
           <div className="tt">본사 관리자만 볼 수 있는 화면입니다</div>
           <div className="tx">
             결제·방화벽·키오스크 설정이라 지점 계정으로는 열리지 않습니다. 값을 바꿔야 하면 본사에
-            요청하세요.
+            요청이 필요합니다.
           </div>
         </div>
       </div>
@@ -491,7 +491,7 @@ function Content() {
           <div className="tx">
             결제는 <b>PG 가맹점 코드</b>로 나가고, 인강 방화벽 해제는 <b>장비 ID</b>가 가리키는 기기로
             갑니다. 틀리면 그 지점 결제가 전부 실패하거나 <b>다른 지점 와이파이가 열립니다.</b>
-            바꾸기 전에 지점을 한 번 더 확인하세요.
+            바꾸기 전에 지점을 한 번 더 확인합니다.
           </div>
         </div>
       </div>
@@ -552,7 +552,7 @@ function Content() {
                 {edit.clear ? (
                   <>
                     실수로 지우지 않도록 <b>지금 값을 그대로</b> 적어야 지워집니다.
-                    {edit.kind === 'pg' && ' 화면에는 가려져 표시되므로 발급받은 코드를 확인해 입력하세요.'}
+                    {edit.kind === 'pg' && ' 화면에는 가려져 표시되므로 발급받은 코드를 확인해 입력합니다.'}
                   </>
                 ) : (
                   EDIT_META[edit.kind].hint
@@ -592,8 +592,8 @@ function Content() {
         <Modal
           title={
             reissue.kioskClientId === null
-              ? `${reissue.academyName} 키오스크 자격증명을 발급할까요?`
-              : `${reissue.academyName} 키오스크 자격증명을 새 값으로 바꿀까요?`
+              ? `${reissue.academyName} 키오스크 자격증명을 발급하시겠습니까?`
+              : `${reissue.academyName} 키오스크 자격증명을 재발급하시겠습니까?`
           }
           sub={
             reissue.kioskClientId === null
@@ -636,7 +636,7 @@ function Content() {
              옮겨 적게 두지 않고 복사 버튼을 붙인다 — 긴 임의 문자열이라 오타가 난다. */
         <Modal
           title={`${issued.name} 키오스크 자격증명`}
-          sub="이 창을 닫으면 비밀값을 다시 확인할 수 없습니다. 지금 저장하세요."
+          sub="이 창을 닫으면 비밀값을 다시 확인할 수 없습니다. 지금 저장해 주세요."
           hideCancel
           confirmLabel="옮겨 적었습니다"
           onConfirm={() => setIssued(null)}
@@ -664,7 +664,7 @@ function Content() {
           <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
             <div>
               이 창을 닫으면 <b>비밀값을 다시 볼 수 없습니다.</b> 조회할 때는 언제나 가려져서 오고,
-              다시 받으려면 재발급해야 하는데 그때는 <b>이미 연결된 단말이 끊깁니다.</b>
+              다시 받으려면 재발급해야 하는데 그때는 <b>이미 연결된 단말이 해제됩니다.</b>
             </div>
           </div>
         </Modal>

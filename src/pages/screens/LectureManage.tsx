@@ -198,7 +198,7 @@ const APPLICANT_COLUMNS: Column<ApplicantRow>[] = [
     align: 'center',
     // 특강비 수납 여부는 청구(F-4.8) 쪽 데이터다. 신청자 응답에는 없다
     value: () => '',
-    render: () => <Unfilled reason="수납 현황은 수납 화면에서 확인하세요" />,
+    render: () => <Unfilled reason="수납 현황은 수납 화면에서 확인합니다" />,
   },
 ]
 
@@ -207,7 +207,7 @@ const APPLICANT_COLUMNS: Column<ApplicantRow>[] = [
 /* ══ 특강 개설 ══ */
 
 /* ★ 강의실은 **지점마다 다르다.** 예전에는 이 다섯 개가 화면에 박혀 있어서, 없는 호실이
-     선택지로 뜨고 실제 호실은 고를 수 없었다(2026-09-27 실테스트). 기초 관리의 강의실을 읽는다 */
+     선택지로 뜨고 실제 호실은 선택할 수 없었다(2026-09-27 실테스트). 기초 관리의 강의실을 읽는다 */
 const TRACK_TARGETS = ['전체', '자연계열', '인문계열']
 /* ★ **요일 번호를 라벨과 함께 적어 둔다.** 전에는 `['월'…'토']` 의 인덱스+1 을 번호로
    썼는데, 회차 생성은 `Date.getDay()`(일=0) 로 비교한다 — **일요일을 배열에 더하면
@@ -427,7 +427,7 @@ function Content() {
         }
         try {
           /* 서버는 특강비 중복을 막지 않는다 — 두 번 누르거나 같은 학생을 다시 고르면 두 건이 된다.
-             학생별 청구(취소분 제외)에 같은 이름의 특강비가 있으면 건너뛴다 */
+             학생별 청구(취소분 제외)에 같은 이름의 특강비가 있으면 제외한다 */
           const existing = await listStudentBillings(enrollmentId)
           if (existing.some((b) => b.billingType === 'LECTURE' && b.name.trim() === billing.name.trim())) {
             results.push({ name: r.studentName, ok: false, msg: '같은 이름의 특강비 청구가 이미 있어 건너뛰었습니다' })
@@ -765,7 +765,7 @@ function Content() {
    * 특강 삭제.
    *
    * ★ 신청자가 있으면 400 이다. 서버 메시지가 "신청자가 있는 특강은 삭제할 수 없습니다(5명).
-   *   접수를 마감하거나 취소해 주세요." 처럼 **무엇을 해야 하는지까지** 말해주므로 그대로 띄운다.
+   *   접수를 마감하거나 취소합니다." 처럼 **무엇을 해야 하는지까지** 말해주므로 그대로 띄운다.
    * ★ 회차는 함께 지워진다 — 회차만 남는 일은 없다.
    */
   async function removeLecture() {
@@ -881,7 +881,7 @@ function Content() {
         setDetailErr(
           `특강 정보는 저장했지만 수강 대상·대기 상한은 저장하지 못했습니다. ${
             err instanceof ApiError ? err.message : ''
-          } 대상만 다시 지정해 주세요.`,
+          } 대상만 다시 지정합니다.`,
         )
         return
       }
@@ -939,7 +939,7 @@ function Content() {
   async function addSession() {
     if (!newSession || lectureId === null) return
     if (!newSession.date) {
-      setSessionErr('수업 날짜를 고르세요.')
+      setSessionErr('수업 날짜를 선택해 주세요.')
       return
     }
     setSessionBusy(true)
@@ -1017,9 +1017,9 @@ function Content() {
     draft !== null && draft.name.trim().length > 0 && sessions.length > 0 && academyId !== null
   const saveBlockReason =
     academyId === null
-      ? '지점을 먼저 선택하세요'
+      ? '지점을 먼저 선택해 주세요'
       : draft && draft.name.trim().length === 0
-        ? '특강명을 입력하세요'
+        ? '특강명 입력'
         : sessions.length === 0
           ? '수업 요일과 기간을 정해 회차를 1건 이상 만들어 주세요'
           : undefined
@@ -1110,7 +1110,7 @@ function Content() {
                   </select>
                   {rooms.length === 0 && (
                     <div className="hint">
-                      이 지점에 등록된 강의실이 없습니다. 기초 관리 → 강의실에서 먼저 등록하세요.
+                      이 지점에 등록된 강의실이 없습니다. 기초 관리 → 강의실에서 먼저 등록합니다.
                     </div>
                   )}
                 </div>
@@ -1234,7 +1234,7 @@ function Content() {
                 {sessions.length === 0 ? (
                   <div className="mock-stub" style={{ padding: '28px 18px' }}>
                     <div className="t">회차가 생성되지 않았습니다</div>
-                    <div className="x">수업 기간과 요일을 확인하세요. 회차가 없으면 출석부를 만들 수 없어 개설할 수 없습니다.</div>
+                    <div className="x">수업 기간과 요일을 확인합니다. 회차가 없으면 출석부를 만들 수 없어 개설할 수 없습니다.</div>
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -1291,7 +1291,7 @@ function Content() {
                     <div className="tx">
                       <b>① 특강</b> · <b>② 회차 {sessions.length}건</b>(출석부의 열).
                       <br />
-                      회차 없이는 출석부를 만들 수 없어 <b>개설 자체가 막힙니다.</b>
+                      회차 없이는 출석부를 만들 수 없어 <b>특강을 개설할 수 없습니다.</b>
                       <br />
                       <b>특강비 청구는 따로 만듭니다</b> — 수납 관리의 청구 기준에서 등록합니다.
                       <br />
@@ -1309,7 +1309,7 @@ function Content() {
                     <div className="tt">강의실 중복 확인이 필요합니다</div>
                     <div className="tx">
                       같은 시간대에 <b>{draft.room}</b>이 반 시간표(고정수업·이동수업)에 이미 배정돼 있을 수 있습니다.
-                      개설하기 전에 같은 요일·교시에 이 강의실이 비어 있는지 확인하세요.
+                      개설하기 전에 같은 요일·교시에 이 강의실이 비어 있는지 확인합니다.
                     </div>
                   </div>
                 </div>
@@ -1353,7 +1353,7 @@ function Content() {
           </div>
           {/* 수납 여부는 청구 도메인이라 특강 응답에 없다 */}
           <div className="v" style={{ fontSize: 14, paddingTop: 8 }}>
-            <Unfilled reason="수납 현황은 수납 화면에서 확인하세요" />
+            <Unfilled reason="수납 현황은 수납 화면에서 확인합니다" />
           </div>
           <div className="d">수납현황 화면에서 확인</div>
         </div>
@@ -1419,7 +1419,7 @@ function Content() {
                 setEditing(null)
                 setDetail(r)
               }}
-              emptyText={academyId === null ? '지점을 먼저 선택하세요.' : '등록된 특강이 없습니다.'}
+              emptyText={academyId === null ? '지점을 먼저 선택해 주세요.' : '등록된 특강이 없습니다.'}
               countLabel={
                 <>
                   {lectureYear}년 {briefingOnly ? '설명회' : '특강'}{' '}
@@ -1453,12 +1453,12 @@ function Content() {
               onSelectedChange={tab === 'apply' ? setSelectedApply : setSelectedWait}
               masked={masked}
               pageSize={12}
-              emptyText={selectedLecture ? '해당하는 인원이 없습니다.' : '특강 목록에서 특강을 먼저 선택하세요.'}
+              emptyText={selectedLecture ? '해당하는 인원이 없습니다.' : '특강 목록에서 특강을 먼저 선택합니다.'}
               countLabel={
                 <>
                   {selectedLecture?.name ?? '특강 미선택'} · {tab === 'apply' ? '신청자' : '대기자'}{' '}
                   <b>{(tab === 'apply' ? applied : waiting).length}</b>명
-                  {/* 취소분은 명단에 남지만 세지 않는다 — 안 적으면 "아까 그 학생 어디 갔냐"가 된다 */}
+                  {/* 취소분은 명단에 남지만 세지 않는다 — 안 입력하면 "아까 그 학생 어디 갔냐"가 된다 */}
                   {canceled.length > 0 && (
                     <span style={{ color: 'var(--muted)' }}> · 취소 {canceled.length}명</span>
                   )}
@@ -1478,7 +1478,7 @@ function Content() {
                   <button
                     className="btn"
                     disabled={tab !== 'apply' || selectedApply.length === 0 || !selectedLecture}
-                    title={tab === 'apply' ? '고른 신청자에게 특강비 청구를 만듭니다' : '신청자 탭에서 사용합니다'}
+                    title={tab === 'apply' ? '선택한 신청자에게 특강비 청구를 만듭니다' : '신청자 탭에서 사용합니다'}
                     onClick={() =>
                       selectedLecture &&
                       setBilling({
@@ -1583,7 +1583,7 @@ function Content() {
                           className="btn"
                           style={{ padding: '2px 8px' }}
                           disabled={selectedLecture === null}
-                          title={selectedLecture === null ? '특강을 먼저 고르세요' : '수업 회차를 추가합니다'}
+                          title={selectedLecture === null ? '특강을 먼저 선택해 주세요' : '수업 회차를 추가합니다'}
                           onClick={() => {
                             setSessionErr(null)
                             setNewSession({ date: '', start: '', end: '', room: '' })
@@ -1605,14 +1605,14 @@ function Content() {
                       <tr>
                         <td colSpan={sessionList.length + 5} className="al-center" style={{ padding: '26px 12px' }}>
                           {selectedLecture === null ? (
-                            <span style={{ color: 'var(--muted)' }}>위 목록에서 특강을 먼저 고르세요.</span>
+                            <span style={{ color: 'var(--muted)' }}>위 목록에서 특강을 먼저 선택해 주세요.</span>
                           ) : sessionList.length === 0 ? (
                             <span style={{ color: 'var(--muted)' }}>
                               이 특강에 수업 회차가 없습니다. 회차를 만들어야 출석을 찍을 수 있습니다.
                             </span>
                           ) : (
                             <span style={{ color: 'var(--muted)' }}>
-                              확정된 신청자가 없습니다. <b>신청자</b> 탭에서 확정하면 여기에 줄이 생깁니다.
+                              확정된 신청자가 없습니다. <b>신청자</b> 탭에서 확정하면 여기에 표시됩니다.
                             </span>
                           )}
                         </td>
@@ -1687,10 +1687,10 @@ function Content() {
               <div className="tt">되돌릴 수 없습니다</div>
               <div className="tx">
                 {canceling.waitlisted ? (
-                  <>대기 명단에서 빠집니다.</>
+                  <>대기 명단에서 제외됩니다.</>
                 ) : (
                   <>
-                    확정 인원이 하나 줄고 <b>출석부에서도 빠집니다.</b> 자리가 비면 대기자가 자동으로
+                    확정 인원이 하나 줄고 <b>출석부에서도 제외됩니다.</b> 자리가 비면 대기자가 자동으로
                     올라올 수 있습니다.
                   </>
                 )}
@@ -1858,7 +1858,7 @@ function Content() {
                       ))}
                     </div>
                     {/* ★ 「전체」라는 칩을 두지 않는다 — 「전체」와 「전부 선택」이 같은 뜻인데
-                        데이터가 두 가지로 갈린다. 아무것도 안 고른 것이 곧 제한 없음이다 */}
+                        데이터가 두 가지로 갈린다. 아무것도 안 선택한 것이 곧 제한 없음이다 */}
                     <div className="hint">
                       {editing.tracks.length === 0 && editing.grades.length === 0
                         ? '아무것도 선택하지 않으면 모든 학생이 신청할 수 있습니다.'
@@ -1885,7 +1885,7 @@ function Content() {
                 {/* ★ 회차는 여기서 못 고친다. 기간·요일을 바꿔도 이미 만들어진 회차는 그대로다 —
                        출결이 그 회차에 붙어 있기 때문이다. 회차는 출석부에서 하나씩 고치거나 지운다. */}
                 <div className="hint">
-                  수업 기간을 바꿔도 이미 만들어진 회차는 그대로입니다. 회차 날짜는 출석부에서 고칩니다.
+                  수업 기간을 바꿔도 이미 만들어진 회차는 그대로입니다. 회차 날짜는 출석부에서 수정합니다.
                 </div>
               </>
             ) : (
@@ -2034,7 +2034,7 @@ function Content() {
         >
           <div className="note-box">
             <div>
-              회차 번호는 <b>저장할 때 자동으로 매겨집니다.</b> 추가한 회차는 출석부에 칸으로 생깁니다.
+              회차 번호는 <b>저장할 때 자동으로 매겨집니다.</b> 추가한 회차는 출석부에 칸으로 추가됩니다.
             </div>
           </div>
           <div className="frow">
@@ -2141,7 +2141,7 @@ function Content() {
                 onChange={(e) => setEditSession({ ...editSession, fee: e.target.value })}
               />
               <div className="hint">
-                비워 두면 특강 전체 금액을 따릅니다. 회차마다 금액이 다를 때만 입력하세요.
+                비워 두면 특강 전체 금액을 따릅니다. 회차마다 금액이 다를 때만 입력합니다.
               </div>
             </div>
           </div>
@@ -2212,7 +2212,7 @@ function Content() {
       {billing && (
         <Modal
           title={billing.results ? '수납청구 결과' : `특강비 청구 — ${billing.rows.length}명`}
-          sub={billing.results ? undefined : '학생마다 청구가 하나씩 만들어집니다. 수납현황의 미납자 관리에 바로 잡힙니다.'}
+          sub={billing.results ? undefined : '학생마다 청구가 하나씩 만들어집니다. 수납현황의 미납자 관리에 바로 반영됩니다.'}
           confirmLabel={billing.results ? '닫기' : '청구'}
           busy={billBusy}
           confirmDisabled={!billing.results && (billing.name.trim() === '' || !(Number(billing.amount) > 0))}
@@ -2227,7 +2227,7 @@ function Content() {
                   <b style={{ color: billing.results.some((x) => !x.ok) ? 'var(--red)' : undefined }}>
                     {billing.results.filter((x) => !x.ok).length}명
                   </b>
-                  {billing.results.some((x) => !x.ok) && ' — 실패한 학생은 청구되지 않았습니다. 이유를 확인하고 다시 청구하세요.'}
+                  {billing.results.some((x) => !x.ok) && ' — 실패한 학생은 청구되지 않았습니다. 이유를 확인하고 다시 청구합니다.'}
                 </div>
               </div>
               <div style={{ maxHeight: 260, overflow: 'auto' }}>

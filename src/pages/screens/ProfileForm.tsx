@@ -242,7 +242,7 @@ function Content() {
         list.map((u) => (u.key === row.key ? { ...u, certificateFileId: up.id, certificateFileName: up.fileName } : u)),
       )
       /* ★ 올리기만 하면 **붙지 않은 파일**이 남는다 — 저장해야 신상기록부에 붙는다 */
-      setNotice('합격증을 올렸습니다. 아래 「저장」을 눌러야 기록부에 붙습니다.')
+      setNotice('합격증을 올렸습니다. 아래 「저장」을 눌러야 기록부에 등록됩니다.')
     } catch (e) {
       setError(e instanceof ApiError ? e.message : '합격증을 올리지 못했습니다.')
     } finally {
@@ -277,7 +277,7 @@ function Content() {
           selected={selectedId}
           onSelect={setSelectedId}
           loading={listLoading}
-          emptyText={academyId === null ? '지점을 먼저 고르세요.' : '학생이 없습니다.'}
+          emptyText={academyId === null ? '지점을 먼저 선택해 주세요.' : '학생이 없습니다.'}
           belowFilters={
             <>
               <select className="sel" style={{ width: 118 }} value={classFilter} onChange={(e) => setClassFilter(e.target.value)}>
@@ -317,7 +317,7 @@ function Content() {
                 <span className="ico">
                   <Icon name="file-text" size={15} />
                 </span>
-                {student ? `${masked ? '***' : student.name} · 신상기록부` : '학생을 고르세요'}
+                {student ? `${masked ? '***' : student.name} · 신상기록부` : '학생을 선택해 주세요'}
                 {unwritten && (
                   <span className="mk brandnew" style={{ marginLeft: 6 }}>
                     아직 작성 전입니다
@@ -363,7 +363,7 @@ function Content() {
                         value={healthNote}
                         onChange={(e) => setHealthNote(e.target.value)}
                       />
-                      <div className="hint">응급 상황에 바로 보는 칸입니다. 2000자까지 쓸 수 있습니다.</div>
+                      <div className="hint">응급 상황에 바로 보는 칸입니다. 2000자까지 사용할 수 있습니다.</div>
                     </div>
                   </div>
 
@@ -386,7 +386,7 @@ function Content() {
                   <div className="frow">
                     <label>목표대학</label>
                     <div>
-                      {unis.length === 0 && <div className="hint">아직 적은 목표대학이 없습니다.</div>}
+                      {unis.length === 0 && <div className="hint">아직 입력한 목표대학이 없습니다.</div>}
                       {unis.map((u) => (
                         <div
                           key={u.key}
@@ -498,7 +498,7 @@ function Content() {
                         <Icon name="plus" size={13} /> 목표대학 추가
                       </button>
                       <div className="hint">
-                        합격증을 올린 뒤 <b>저장을 눌러야</b> 기록부에 붙습니다. 수시 6 · 정시 3까지 적습니다.
+                        합격증을 올린 뒤 <b>저장을 눌러야</b> 기록부에 등록됩니다. 수시 6 · 정시 3까지 입력합니다.
                       </div>
                     </div>
                   </div>

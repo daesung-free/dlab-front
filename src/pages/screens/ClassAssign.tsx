@@ -81,7 +81,7 @@ function Content() {
      **담임을 붙일 자리가 없어 사유 승인·상담·반 공지가 통째로 막혀 있었다**(2026-09-27 실테스트) */
   const [editing, setEditing] = useState<ClassGroup | null>(null)
   /* 반 명단. **이 화면 표는 미배정 학생만 보여준다** — 그런데 「배정 해제」가 있어서
-     뺄 학생을 고를 수가 없었다(디랩 피드백 1013, 5-2 계열). 여기서 보고 뺀다 */
+     뺄 학생을 선택할 수가 없었다(디랩 피드백 1013, 5-2 계열). 여기서 보고 뺀다 */
   const [members, setMembers] = useState<{ cls: ClassGroup; rows: ClassMember[] | null } | null>(null)
   const [memberSel, setMemberSel] = useState<string[]>([])
   const [memberErr, setMemberErr] = useState<string | null>(null)
@@ -358,7 +358,7 @@ function Content() {
         </div>
       </div>
 
-      {/* 지점을 안 고른 전 지점 계정만 섞여 온다 — 고르면 학생·반 양쪽이 그 지점으로 좁혀진다 */}
+      {/* 지점을 안 선택한 전 지점 계정만 섞여 온다 — 고르면 학생·반 양쪽이 그 지점으로 좁혀진다 */}
       {academies.length > 1 && academyId === null && (
         <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
           <div className="ic">
@@ -390,7 +390,7 @@ function Content() {
         <Modal
           wide
           title={`${members.cls.name} 명단`}
-          sub={`${members.rows?.length ?? 0}명 — 고른 학생을 이 반에서 뺍니다.`}
+          sub={`${members.rows?.length ?? 0}명 — 선택한 학생을 이 반에서 뺍니다.`}
           confirmLabel={memberSel.length > 0 ? `${memberSel.length}명 빼기` : '닫기'}
           danger={memberSel.length > 0}
           busy={busy}
@@ -427,7 +427,7 @@ function Content() {
       {editing && (
         <Modal
           title={`${editing.name} 반 관리`}
-          sub="이름·정원·담임을 고칩니다. 담임은 강사로 등록된 분만 고를 수 있습니다."
+          sub="이름·정원·담임을 수정합니다. 담임은 강사로 등록된 분만 선택할 수 있습니다."
           confirmLabel="저장"
           busy={editBusy}
           error={editErr}
@@ -495,7 +495,7 @@ function Content() {
               </select>
               <div className="hint">
                 {teachers.length === 0
-                  ? '이 지점에 등록된 강사가 없습니다. 사용자 관리에서 구분을 「선생님」으로 등록하세요.'
+                  ? '이 지점에 등록된 강사가 없습니다. 사용자 관리에서 구분을 「선생님」으로 등록합니다.'
                   : '담임은 사유 승인·상담·반 공지를 맡습니다. 해제는 다른 담임으로 바꾸는 것으로 합니다.'}
               </div>
             </div>
@@ -521,7 +521,7 @@ function Content() {
 
       {removing && (
         <Modal
-          title={`${removing.name} 반을 삭제할까요?`}
+          title={`${removing.name} 반을 삭제하시겠습니까?`}
           sub="되돌릴 수 없습니다."
           confirmLabel="삭제"
           danger
@@ -532,7 +532,7 @@ function Content() {
         >
           <div className="note-box">
             <div>
-              배정된 학생이 있으면 지워지지 않습니다. 먼저 <b>배정 해제</b>를 해 주세요.
+              배정된 학생이 있으면 지워지지 않습니다. 먼저 <b>배정 해제</b>를 합니다.
             </div>
           </div>
         </Modal>
@@ -662,7 +662,7 @@ function Content() {
               className="btn"
               disabled={selected.length === 0 || target === null || busy}
               onClick={() => void release()}
-              title="선택한 학생을 위에 고른 반에서 뺍니다"
+              title="선택한 학생을 위에 선택한 반에서 뺍니다"
             >
               배정 해제
             </button>
@@ -838,7 +838,7 @@ function ClassActions() {
       <button
         className="btn"
         disabled={busy || academyId === null}
-        title={academyId === null ? '지점을 먼저 선택하세요' : `${year - 1}년 자료를 ${year}년으로 복사합니다`}
+        title={academyId === null ? '지점을 먼저 선택해 주세요' : `${year - 1}년 자료를 ${year}년으로 복사합니다`}
         onClick={() => {
           setErr(null)
           setCopyOpen(true)
@@ -849,7 +849,7 @@ function ClassActions() {
       <button
         className="btn pri"
         disabled={academyId === null}
-        title={academyId === null ? '지점을 먼저 선택하세요' : undefined}
+        title={academyId === null ? '지점을 먼저 선택해 주세요' : undefined}
         onClick={() => {
           setErr(null)
           setDraft({ name: '', classType: 'FIXED', capacity: '', examClassNo: '' })
@@ -860,7 +860,7 @@ function ClassActions() {
 
       {copyOpen && (
         <Modal
-          title={`${year - 1}년 자료를 ${year}년으로 복사할까요?`}
+          title={`${year - 1}년 자료를 ${year}년으로 복제하시겠습니까?`}
           sub={`되돌릴 수 없습니다. ${year}년에 이미 자료가 있으면 복사되지 않습니다.`}
           confirmLabel="복사"
           danger
@@ -870,13 +870,13 @@ function ClassActions() {
           onClose={() => setCopyOpen(false)}
         >
           {/* ★ 이름은 '반 구성 복사' 지만 실제로는 기초 자료가 통째로 넘어간다.
-                 안 적으면 반만 생길 줄 알고 누른다 */}
+                 안 입력하면 반만 생길 줄 알고 누른다 */}
           <div className="note-box">
             {/* ★ `.note-box` 는 flex 다. 글자와 <b> 를 나란히 두면 **각각이 칸이 되어**
                    가운데가 세로로 눌린다(.frow 와 같은 함정) — 한 칸에 묶는다 */}
             <div className="tx">
-              반만 따로 복사할 수는 없습니다. <b>학과 · 과정 · 반 · 교시 · 상벌점 항목 · 교습비</b>가
-              함께 넘어갑니다. 무엇이 몇 건 넘어갔는지는 복사한 뒤 알려드립니다.
+              반만 따로 복제할 수는 없습니다. <b>학과 · 과정 · 반 · 교시 · 상벌점 항목 · 교습비</b>가
+              함께 복제됩니다. 항목별 복제 건수는 복제 완료 후 표시됩니다.
             </div>
           </div>
         </Modal>

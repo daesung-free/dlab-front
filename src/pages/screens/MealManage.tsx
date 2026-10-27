@@ -406,7 +406,7 @@ function Content() {
   const [billBusy, setBillBusy] = useState(false)
   /* ★ **납기일을 비우고 발행하면 통합 매출장에서 기간으로 좁힐 때 안 보인다**
      (`dueDate IS NULL` 이라 기간 필터에 안 걸린다 — 2026-10-16 서버 확인).
-     기본값을 그 달 말일로 채워 둔다 — 비워 두는 쪽이 기본이면 매번 안 보이는 청구가 생긴다 */
+     기본값을 그 달 말일로 자동 입력된다 — 비워 두는 쪽이 기본이면 매번 안 보이는 청구가 생긴다 */
   const [billDue, setBillDue] = useState('')
   const [billResult, setBillResult] = useState<MealBillingResult | null>(null)
   const [billErr, setBillErr] = useState<string | null>(null)
@@ -490,7 +490,7 @@ function Content() {
       }
       if (win.from !== savedWin.from || win.to !== savedWin.to) {
         if (win.from === '' || win.to === '') {
-          throw new ApiError(0, 'INVALID', '접수 시작일과 종료일을 모두 정해 주세요.')
+          throw new ApiError(0, 'INVALID', '접수 시작일과 종료일을 모두 정합니다.')
         }
         const saved = await setMealOrderWindow({
           academyId,
@@ -651,7 +651,7 @@ function Content() {
       const saved = await createMealClosure(academyId, date, reason)
       setClosureNote(
         saved.canceledCount > 0
-          ? `${date} 을 중단일로 등록했습니다 — 신청 ${saved.canceledCount}건이 취소됐습니다. 결제된 건은 환불해 주세요.`
+          ? `${date} 을 중단일로 등록했습니다 — 신청 ${saved.canceledCount}건이 취소됐습니다. 결제된 건은 환불합니다.`
           : `${date} 을 중단일로 등록했습니다. 취소된 신청은 없습니다.`,
       )
       setClosureAsk(null)
@@ -735,7 +735,7 @@ function Content() {
           </div>
           <div className="d up">
             {stats.revenue.toLocaleString()}원
-            {/* ★ 금액을 모르는 주문은 안 더했다. **안 적으면 합계가 조용히 모자란다** */}
+            {/* ★ 금액을 모르는 주문은 안 더했다. **안 입력하면 합계가 조용히 모자란다** */}
             {stats.unpriced > 0 && (
               <span style={{ color: 'var(--red)', marginLeft: 6 }}>· 단가 미등록 {stats.unpriced}건 제외</span>
             )}
@@ -791,7 +791,7 @@ function Content() {
 
       {closureAsk && (
         <Modal
-          title={`${closureAsk.date} 급식을 중단할까요?`}
+          title={`${closureAsk.date} 급식을 중단하시겠습니까?`}
           sub={`사유: ${reason}`}
           confirmLabel="중단일로 등록"
           danger
@@ -818,7 +818,7 @@ function Content() {
 
       {canceling && (
         <Modal
-          title={`${canceling.studentName} 님의 급식을 취소할까요?`}
+          title={`${canceling.studentName} 학생의 급식 신청을 취소하시겠습니까?`}
           sub={`${canceling.targetMonth} · 주문번호 ${canceling.orderNo}`}
           confirmLabel={`${cancelPick.length}끼니 취소`}
           danger
@@ -873,7 +873,7 @@ function Content() {
         {/* ═══ 월별 신청 현황 ═══ */}
         {tab === 'roster' && (
           <div style={{ padding: 14 }}>
-            {/* ★ 대조 화면을 만들지 않은 이유를 적어 둔다 — 안 적으면 「왜 먹은 사람이 없냐」가 된다 */}
+            {/* ★ 대조 화면을 만들지 않은 이유를 입력한다 — 안 입력하면 「왜 먹은 사람이 없냐」가 된다 */}
             <div className="note-box">
               <div>
                 그날 <b>신청한 사람</b>의 명단입니다. 실제로 받아 갔는지는 키오스크에서 넘어오는 값이 없어
@@ -1015,12 +1015,12 @@ function Content() {
                 <Icon name="calendar-days" size={17} />
               </div>
               <div>
-                <div className="tt">중단일로 등록하면 그날은 앱·데스크 모두 신청이 막힙니다</div>
+                <div className="tt">중단일로 등록하면 그날은 앱·데스크 모두 신청이 차단됩니다</div>
                 <div className="tx">
                   날짜를 눌러 <b>운영 ↔ 중단</b>을 전환합니다. 주말·공휴일은 정책상 이미 제외돼 있어 손댈 수 없습니다.
                   <br />
                   <b>중단일로 등록하면 그날 신청이 바로 취소</b>되고, 결제된 건은 환불 대상이 됩니다. 등록 전에 건수를
-                  한 번 더 보여 드립니다. 중단을 풀어도 취소된 신청은 되살아나지 않습니다.
+                  한 번 더 보여줍니다. 중단을 풀어도 취소된 신청은 되살아나지 않습니다.
                 </div>
               </div>
             </div>
@@ -1186,7 +1186,7 @@ function Content() {
                 className="btn pri"
                 disabled={savingPolicy || academyId === null || !dirty}
                 title={
-                  academyId === null ? '지점을 먼저 선택하세요' : !dirty ? '바뀐 것이 없습니다' : undefined
+                  academyId === null ? '지점을 먼저 선택해 주세요' : !dirty ? '바뀐 것이 없습니다' : undefined
                 }
                 onClick={() => void savePolicy()}
               >
@@ -1229,7 +1229,7 @@ function Content() {
                   배식대 입구에서 <b>학생이 앱에서 QR을 꺼내 스캐너에 태깅</b>하면 스캐너 화면과 관리자 태블릿에 즉시 결과가
                   뜹니다. 관리자는 옆에서 <b>통과 / 거부를 확인</b>하는 역할입니다.
                   <br />
-                  <b>태깅이 안 되는 경우가 반드시 생깁니다</b> — 앱 미설치, 휴대폰 미소지, QR 만료, 인식 실패, 단말 오프라인.
+                  <b>태깅이 실패하는 경우가 반드시 발생합니다</b> — 앱 미설치, 휴대폰 미소지, QR 만료, 인식 실패, 단말 오프라인.
                   배식 줄을 세워둘 수 없으므로 관리자가 <b>학번으로 조회해 수기 확인</b>으로 즉시 통과시키고, 사유와 확인자를
                   기록으로 남깁니다.
                 </div>
@@ -1294,7 +1294,7 @@ function Content() {
               <div className="note-box" style={{ marginBottom: 14 }}>
                 <div>
                   배식대 단말의 연결 상태는 아직 표시되지 않습니다. 단말이 멈추면 그 줄은{' '}
-                  <b>수기 확인으로 처리</b>해 주시기 바랍니다.
+                  <b>수기 확인으로 처리</b>합니다.
                 </div>
               </div>
             )}
@@ -1398,7 +1398,7 @@ function Content() {
           <div style={{ padding: 14 }}>
             {/* ★ **이게 없어서 급식비가 통합 매출장에 안 들어오고 있었다**(1016 피드백 1-3).
                 서버에 로직은 다 있었는데 컨트롤러에 안 붙어 있었다 — 2026-10-16 에 열렸다.
-                ★ 두 번 눌러도 안전하다. 이미 발행된 주문은 건너뛴다 */}
+                ★ 두 번 눌러도 안전하다. 이미 발행된 주문은 제외한다 */}
             <div className="frow" style={{ marginBottom: 12 }}>
               <label>급식비 청구</label>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1432,7 +1432,7 @@ function Content() {
               masked={masked}
               loading={loading}
               pageSize={12}
-              emptyText={academyId === null ? '지점을 먼저 선택하세요.' : '해당 월 주문이 없습니다.'}
+              emptyText={academyId === null ? '지점을 먼저 선택해 주세요.' : '해당 월 주문이 없습니다.'}
               countLabel={
                 <>
                   {month} 주문 <b>{orders.length}</b>건

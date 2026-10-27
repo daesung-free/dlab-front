@@ -17,6 +17,7 @@ import {
   updateTemplateContent,
   type NotificationTemplate,
   listManualTemplates,
+  isTemporaryBlock,
   previewManualSend,
   sendManual,
   type ManualPreview,
@@ -382,7 +383,7 @@ function Content() {
   const picked = rows.find((r) => r.id === pickedId) ?? null
 
   /* 목록을 다시 불러오면 편집 중이던 문구가 서버 값으로 덮이면 안 되므로,
-     행을 고를 때만 초안을 채운다 */
+     행을 선택할 때만 초안을 채운다 */
   function pickApiTemplate(t: NotificationTemplate) {
     setPickedId(t.id)
     setTitle(t.titleTemplate ?? '')
@@ -419,7 +420,7 @@ function Content() {
   const scopeMeta = SCOPES.find((s) => s.key === scope)!
 
   /* ★ **발송 대상을 지점 → 반 → 학생 3단계로 좁힌다**(디랩 9/28 요청, 1016 알림톡 3-1).
-     ★ 「전체」는 **본사 계정에서도 상단바에서 고른 지점**이다. 전 지점 발송은 사고가
+     ★ 「전체」는 **본사 계정에서도 상단바에서 선택한 지점**이다. 전 지점 발송은 사고가
        너무 크다 — 정말 전 지점으로 보내려면 서버가 그 경로를 따로 줘야 한다.
      ★ 숫자는 `totalElements` 를 그대로 쓴다. **화면이 세면 2페이지부터 틀린다.** */
   const [pickedClassId, setPickedClassId] = useState<number | null>(null)
@@ -475,9 +476,9 @@ function Content() {
   const target = { ...scopeMeta, count: targetCount }
 
   /* ★★ **직원 발송.** 템플릿은 **서버가 가려 준다**(`manual=true`) — 화면이 이벤트 이름으로
-     추측하면 새 템플릿이 생길 때마다 화면을 고쳐야 한다.
+     추측하면 새 템플릿이 생길 때마다 화면을 수정해야 한다.
      ⚠️ 경로가 아직 없는 동안에는 404 가 온다. 그때는 **전체 템플릿으로 떨어뜨리지 않는다** —
-        자동 발송 전용 템플릿까지 고를 수 있게 되면 **보냈는데 안 나간다** */
+        자동 발송 전용 템플릿까지 선택할 수 있게 되면 **보냈는데 안 나간다** */
   const [manualRows, setManualRows] = useState<NotificationTemplate[] | null>(null)
   const [manualSoon, setManualSoon] = useState(false)
   useEffect(() => {
@@ -505,7 +506,7 @@ function Content() {
   const [confirming, setConfirming] = useState(false)
 
   /* ★ 드롭다운이 서버 템플릿이 됐으므로 **아래 미리보기도 그 값을 따라가야 한다.**
-     따로 두면 「고른 것과 보이는 내용이 다른」 화면이 된다 */
+     따로 두면 「선택한 것과 보이는 내용이 다른」 화면이 된다 */
   const sendRows = manualRows ?? []
   const sendPick = sendRows.find((r) => r.id === pickedId) ?? null
   /** 템플릿이 요구하는 변수 목록 */
@@ -562,7 +563,7 @@ function Content() {
       const r = await sendManual(prev.previewId)
       setSent(
         r.skipped > 0
-          ? `${r.requested}명에게 발송했습니다. ${r.skipped}명은 보내지 못했습니다 — 발송 이력에서 확인하세요.`
+          ? `${r.requested}명에게 발송했습니다. ${r.skipped}명은 보내지 못했습니다 — 발송 이력에서 확인합니다.`
           : `${r.requested}명에게 발송했습니다.`,
       )
       /* ★ 보낸 미리보기는 **다시 쓸 수 없다**(서버가 한 번만 받는다). 화면에서도 지워
@@ -621,7 +622,7 @@ function Content() {
       {codeInput && (
         <Modal
           title="카카오 템플릿 코드"
-          sub="카카오에 등록할 때 발급받은 코드를 그대로 입력하세요."
+          sub="카카오에 등록할 때 발급받은 코드를 그대로 입력합니다."
           confirmLabel="심사 제출"
           busy={busy}
           confirmDisabled={codeInput.code.trim() === ''}
@@ -648,7 +649,7 @@ function Content() {
       {rejectNote && (
         <Modal
           title="심사 반려 기록"
-          sub="카카오가 알려준 반려 사유를 적어 두면 다음에 고칠 때 참고할 수 있습니다."
+          sub="카카오가 알려준 반려 사유를 적어 두면 다음에 수정할 때 참고할 수 있습니다."
           confirmLabel="기록"
           busy={busy}
           error={modalErr}
@@ -741,8 +742,8 @@ function Content() {
           <div>
             <div className="tt">직접 발송은 준비 중입니다</div>
             <div className="tx">
-              알림은 등원·승인·상담 같은 사건이 일어날 때 <b>자동으로</b> 나갑니다. 직원이 때를 골라
-              보내는 기능은 <b>준비 중</b>입니다.
+              알림은 등원·승인·상담 등의 사건이 발생할 때 <b>자동으로</b> 발송됩니다. 직원이 시점을
+              선택하여 발송하는 기능은 <b>준비 중</b>입니다.
               {/* ★ 발송 이력은 **실연동됐다** — 「기록되지 않는다」고 적어 두면 진짜 기록을 예시로 읽는다 */}
               <br />
               템플릿은 <b>「템플릿 관리」 탭의 실제 값</b>이고, <b>「발송 이력」도 실제 기록</b>입니다.
@@ -815,7 +816,7 @@ function Content() {
                 </div>
               )}
 
-              {/* ★ 3단계 — 학생. 「개별」일 때만. **한 명씩 고른 사람에게만** 나간다 */}
+              {/* ★ 3단계 — 학생. 「개별」일 때만. **한 명씩 선택한 사람에게만** 나간다 */}
               {scope === 'INDIVIDUAL' && (
                 <div className="frow">
                   <label className="req">학생</label>
@@ -873,7 +874,7 @@ function Content() {
                 <label>발송 대상</label>
                 <div style={{ paddingTop: 9 }}>
                   {scope === 'CLASS' && pickedClassId === null ? (
-                    <span style={{ fontSize: 12.5, color: 'var(--muted)' }}>반을 먼저 고르세요.</span>
+                    <span style={{ fontSize: 12.5, color: 'var(--muted)' }}>반을 먼저 선택해 주세요.</span>
                   ) : targets.loading ? (
                     <span style={{ fontSize: 12.5, color: 'var(--muted)' }}>세는 중…</span>
                   ) : targets.error ? (
@@ -914,7 +915,7 @@ function Content() {
                     <div className="hint">
                       {manualSoon
                         ? '직접 발송은 준비 중입니다.'
-                        : '직접 보낼 수 있는 템플릿이 없습니다. 대부분의 알림은 사건이 일어날 때 자동으로 나갑니다.'}
+                        : '직접 보낼 수 있는 템플릿이 없습니다. 대부분의 알림은 사건이 일어날 때 자동으로 발송됩니다.'}
                     </div>
                   )}
                 </div>
@@ -950,7 +951,7 @@ function Content() {
                       </div>
                     )}
                     <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 5 }}>
-                      템플릿에 정해져 있습니다. 바꾸려면 「템플릿 관리」 탭에서 고칩니다.
+                      템플릿에 정해져 있습니다. 바꾸려면 「템플릿 관리」 탭에서 수정합니다.
                     </div>
                   </div>
                 </div>
@@ -986,7 +987,7 @@ function Content() {
                   />
                   {true && (
                     <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 6 }}>
-                      문구는 <b>「템플릿 관리」 탭</b>에서 고칩니다. 알림톡은 <b>승인된 문안만</b> 나가므로
+                      문구는 <b>「템플릿 관리」 탭</b>에서 수정합니다. 알림톡은 <b>승인된 문안만</b> 발송되므로
                       고친 뒤 재심사를 받아야 합니다.
                     </div>
                   )}
@@ -1046,12 +1047,12 @@ function Content() {
                   )}
                   {blocked ? (
                     <span style={{ fontSize: 11.5, color: 'var(--red)', fontWeight: 700 }}>
-                      {sendPick ? '아직 발송할 수 있는 상태가 아닙니다' : '템플릿을 먼저 고르세요'}
+                      {sendPick ? '아직 발송할 수 있는 상태가 아닙니다' : '템플릿을 먼저 선택해 주세요'}
                     </span>
                   ) : (
                     target.count === 0 && (
                       <span style={{ fontSize: 11.5, color: 'var(--red)', fontWeight: 700 }}>
-                        {scope === 'INDIVIDUAL' ? '학생을 고르세요' : '보낼 대상이 없습니다'}
+                        {scope === 'INDIVIDUAL' ? '학생을 선택해 주세요' : '보낼 대상이 없습니다'}
                       </span>
                     )
                   )}
@@ -1111,7 +1112,7 @@ function Content() {
                 <>
                   <div className="note-box" style={{ marginTop: 12 }}>
                     <div>
-                      <b>{prev.targetCount.toLocaleString()}명</b>에게 나갑니다. 위 문장 그대로 발송됩니다.
+                      <b>{prev.targetCount.toLocaleString()}명</b>에게 발송됩니다. 위 문장 그대로 발송됩니다.
                       {sendPick?.studentSpecific === false && (
                         <div style={{ marginTop: 4 }}>
                           자녀가 둘인 학부모는 <b>한 번만</b> 셉니다. 그래서 학생 수보다 적을 수 있습니다.
@@ -1122,24 +1123,57 @@ function Content() {
 
                   {/* ★★ **빠지는 사람을 반드시 보여준다.** 「30명」이라고 했는데 28명에게
                          가면 담당자는 영영 모른다. 사유는 서버 문장을 그대로 쓴다 */}
-                  {prev.blocked.length > 0 && (
-                    <div className="note-box risk" style={{ marginTop: 10 }}>
-                      <div className="ic">
-                        <Icon name="triangle-alert" size={17} />
-                      </div>
-                      <div>
-                        <div className="tt">{prev.blocked.length}명에게는 가지 않습니다</div>
-                        <div className="tx">
-                          {prev.blocked.slice(0, 8).map((b) => (
-                            <div key={`${b.studentName}-${b.reason}`}>
-                              {b.studentName} — {b.message}
+                  {prev.blocked.length > 0 &&
+                    (() => {
+                      /* ★ 두 종류를 갈라 보여준다 — 담당자가 할 일이 다르다.
+                           설정 때문에 빠진 것은 **수정할 데이터가 없다.** */
+                      const held = prev.blocked.filter((b) => isTemporaryBlock(b.reason))
+                      const real = prev.blocked.filter((b) => !isTemporaryBlock(b.reason))
+                      return (
+                        <>
+                          {held.length > 0 && (
+                            <div className="note-box" style={{ marginTop: 10, borderColor: 'var(--amber)' }}>
+                              <div className="ic">
+                                <Icon name="shield" size={17} />
+                              </div>
+                              <div>
+                                <div className="tt">{held.length}명은 지금 설정 때문에 보류됩니다</div>
+                                <div className="tx">
+                                  이관 기간이라 <b>허용한 번호로만</b> 발송됩니다. 학생 정보에는 문제가
+                                  없으니 <b>고치실 것은 없습니다.</b> 설정이 풀리면 그대로 발송됩니다.
+                                  <div style={{ marginTop: 6 }}>
+                                    {held.slice(0, 6).map((b) => (
+                                      <span key={b.studentName} style={{ marginRight: 8 }}>
+                                        {b.studentName}
+                                      </span>
+                                    ))}
+                                    {held.length > 6 && <span>그 밖 {held.length - 6}명</span>}
+                                  </div>
+                                </div>
+                              </div>
                             </div>
-                          ))}
-                          {prev.blocked.length > 8 && <div>그 밖 {prev.blocked.length - 8}명</div>}
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                          )}
+                          {real.length > 0 && (
+                            <div className="note-box risk" style={{ marginTop: 10 }}>
+                              <div className="ic">
+                                <Icon name="triangle-alert" size={17} />
+                              </div>
+                              <div>
+                                <div className="tt">{real.length}명에게는 가지 않습니다</div>
+                                <div className="tx">
+                                  {real.slice(0, 8).map((b) => (
+                                    <div key={`${b.studentName}-${b.reason}`}>
+                                      {b.studentName} — {b.message}
+                                    </div>
+                                  ))}
+                                  {real.length > 8 && <div>그 밖 {real.length - 8}명</div>}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )
+                    })()}
 
                   {prev.missingVariables.length > 0 && (
                     <div className="note-box risk" style={{ marginTop: 10 }}>
@@ -1158,7 +1192,7 @@ function Content() {
                 <div>
                   <div className="tt">SMS 발송은 제공하지 않습니다</div>
                   <div className="tx">
-                    발송 채널은 <b>알림톡 · 푸시 2종</b>입니다. 알림톡은 승인 문안만 나가므로 <b>자유 문안은 푸시로만</b>{' '}
+                    발송 채널은 <b>알림톡 · 푸시 2종</b>입니다. 알림톡은 승인 문안만 발송되므로 <b>자유 문안은 푸시로만</b>{' '}
                     발송됩니다. 즉 <b>앱 미설치 학생에게 템플릿에 없는 내용</b>을 보낼 수단은 없으므로, 공지성 문안은
                     템플릿으로 미리 등록해 두는 운영이 필요합니다.
                   </div>
@@ -1173,7 +1207,7 @@ function Content() {
              **몇 명에게 나가는지**를 버튼 문구에 그대로 쓴다 */}
       {confirming && prev !== null && (
         <Modal
-          title={`${prev.targetCount.toLocaleString()}명에게 발송할까요?`}
+          title={`${prev.targetCount.toLocaleString()}명에게 발송하시겠습니까?`}
           sub="보내면 되돌릴 수 없습니다."
           confirmLabel={`${prev.targetCount.toLocaleString()}명에게 발송`}
           busy={prevBusy}
@@ -1184,7 +1218,7 @@ function Content() {
             <div style={{ whiteSpace: 'pre-wrap' }}>{prev.rendered.body}</div>
           </div>
           {prev.blocked.length > 0 && (
-            <div className="hint">{prev.blocked.length}명은 번호가 없거나 수신을 거부해 빠집니다.</div>
+            <div className="hint">{prev.blocked.length}명은 연락처가 없거나 수신을 거부하여 제외됩니다.</div>
           )}
         </Modal>
       )}
@@ -1224,7 +1258,7 @@ function Content() {
                     {blockedSummary.pushReady > 0 && (
                       <div style={{ marginTop: 4 }}>
                         이 중 <b>앱 푸시 {blockedSummary.pushReady}종</b>은 심사가 없어 <b>문구만 들어오면</b>{' '}
-                        바로 나갑니다.
+                        즉시 발송됩니다.
                       </div>
                     )}
                     {blockedSummary.missingAttendance && (
@@ -1271,7 +1305,7 @@ function Content() {
                 <span className="ico">
                   <Icon name="pencil" size={15} />
                 </span>
-                {picked ? (EVENT_LABEL[picked.event] ?? picked.event) : '템플릿을 고르세요'}
+                {picked ? (EVENT_LABEL[picked.event] ?? picked.event) : '템플릿을 선택해 주세요'}
               </div>
               <div className="r">
                 {picked && picked.reviewStatus !== 'NOT_REQUIRED' && (
@@ -1323,7 +1357,7 @@ function Content() {
                   <div style={{ paddingTop: 9 }}>
                     <code style={{ fontSize: 11 }}>{picked.event}</code>
                     <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
-                      이 사건이 일어나면 자동으로 나갑니다. 코드는 바뀌지 않습니다.
+                      이 사건이 일어나면 자동으로 발송됩니다. 코드는 바뀌지 않습니다.
                     </div>
                   </div>
                 </div>
@@ -1378,7 +1412,7 @@ function Content() {
                       whiteSpace: 'pre-wrap',
                     }}
                   >
-                    {preview(body) || <span style={{ color: 'var(--muted)' }}>문안을 입력하세요.</span>}
+                    {preview(body) || <span style={{ color: 'var(--muted)' }}>문안이 필요합니다.</span>}
                   </div>
                 </div>
 
@@ -1482,7 +1516,7 @@ function Content() {
                     <div>
                       <div className="tt">문안을 고치면 심사를 다시 받아야 합니다</div>
                       <div className="tx">
-                        카카오는 <b>승인받은 문안 그대로만</b> 발송을 허용합니다. 오타 하나를 고쳐도 심사가
+                        카카오는 <b>승인받은 문안 그대로만</b> 발송을 허용합니다. 오타 하나를 수정해도 심사가
                         미제출로 돌아가고, 다시 승인될 때까지 이 템플릿은 나가지 않습니다.
                       </div>
                     </div>
@@ -1497,12 +1531,12 @@ function Content() {
       {/* ═══ 발송 이력 ═══ */}
       {tab === 'log' && (
         <>
-          {/* 사람이 골라 보내는 발송이 아직 없다는 것을 여기서 한 번 짚는다 —
+          {/* 사람이 선택해 보내는 발송이 아직 없다는 것을 여기서 한 번 짚는다 —
               표에 '발송자: 자동'만 늘어서면 "내가 보낸 건 왜 없지" 가 된다 */}
           <div className="note-box">
             <div className="tx">
               등원·승인·상담 같은 <b>사건이 일어날 때 자동으로 나간 알림</b>이 날짜·사유별로 묶여
-              있습니다. 보류는 카카오 템플릿 심사가 끝나지 않은 건으로, 심사가 통과되면 그대로 나갑니다.
+              있습니다. 보류는 카카오 템플릿 심사가 끝나지 않은 건으로, 심사가 통과되면 그대로 발송됩니다.
             </div>
           </div>
 

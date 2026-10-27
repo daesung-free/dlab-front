@@ -305,7 +305,7 @@ function Content() {
       </div>
 
       {academyId === null && academyReady && (
-        <div className="note-box">지점을 먼저 선택하세요. 직원 카드는 지점 단위로 관리합니다.</div>
+        <div className="note-box">지점을 먼저 선택해 주세요. 직원 카드는 지점 단위로 관리합니다.</div>
       )}
 
       {error && (
@@ -355,7 +355,7 @@ function Content() {
                   <button
                     className="btn pri"
                     disabled={academyId === null}
-                    title={academyId === null ? '지점을 먼저 선택하세요' : undefined}
+                    title={academyId === null ? '지점을 먼저 선택해 주세요' : undefined}
                     onClick={() => {
                       setModalErr(null)
                       setAdding({ name: '', phone: '', rfidNo: '' })
@@ -391,7 +391,7 @@ function Content() {
                 toolbar={<MaskToggle masked={masked} onChange={setMasked} />}
                 emptyText="이 기간에 찍힌 기록이 없습니다."
               />
-              {/* ★ 근무시간·지각을 화면이 계산하지 않는 이유를 적어 둔다. 안 적으면
+              {/* ★ 근무시간·지각을 화면이 계산하지 않는 이유를 입력한다. 안 입력하면
                      "왜 근무시간이 없냐"는 요청이 반복해서 들어온다 */}
               <div className="hint" style={{ marginTop: 10 }}>
                 찍힌 시각을 그대로 보여줍니다. 근무시간과 지각 여부는 판정하지 않습니다.
@@ -467,7 +467,7 @@ function Content() {
               <div>
                 <div className="tt">이전 카드는 쓸 수 없게 됩니다</div>
                 <div className="tx">
-                  지금 카드 <b>{carding.row.rfidNo}</b> 대신 새 번호를 씁니다. 분실한 카드는 이렇게
+                  지금 카드 <b>{carding.row.rfidNo}</b> 대신 새 번호를 사용합니다. 분실한 카드는 이렇게
                   무효로 만듭니다.
                 </div>
               </div>

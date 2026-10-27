@@ -381,7 +381,7 @@ function Content() {
                   · {selected.className ?? '반 미배정'} · <b>담임</b> {selected.homeroomTeacher ?? '미지정'}
                 </>
               ) : (
-                '학생을 선택하세요'
+                '선택된 학생이 없습니다'
               )
             }
             right={
@@ -404,7 +404,7 @@ function Content() {
               </div>
               <div>
                 입학 전 성적은 <b>학생이 앱에서 직접 입력</b>하고, <b>수정은 직원이</b> 합니다.
-                장학 판정이 이 등급을 근거로 하므로, 직원이 고친 값에는 아래에 수정 표시가 붙습니다.
+                장학 판정이 이 등급을 근거로 하므로, 직원이 고친 값에는 아래에 수정 표시가 등록됩니다.
               </div>
             </div>
 
@@ -510,7 +510,7 @@ function Content() {
                       국수탐
                       <br />
                       {/* 어느 과목을 더했는지 적는다. 학년마다 탐구 과목이 달라서
-                             '국수탐'만 쓰면 무엇이 들어갔는지 알 수 없다 */}
+                             '국수탐'만 사용하면 무엇이 들어갔는지 알 수 없다 */}
                       <small style={{ fontWeight: 500, color: 'var(--muted)' }}>
                         {subjects.filter((s) => SUM_CODES.includes(s.subjectCode)).length > 0
                           ? subjects

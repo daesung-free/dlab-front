@@ -68,7 +68,7 @@ export function SpecPage() {
                 <span className="ico">
                   <Icon name="triangle-alert" size={15} />
                 </span>
-                잠정 결정 {assumptions.length}건 — 확정되면 화면을 고쳐야 함
+                잠정 결정 {assumptions.length}건 — 확정되면 화면을 수정해야 함
               </h3>
               <div className="kv">
                 {assumptions.map((a) => (

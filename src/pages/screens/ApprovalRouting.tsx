@@ -340,7 +340,7 @@ function FirewallSection({ academyId }: { academyId: number | null }) {
 
       {confirm && (
         <Modal
-          title={`${confirm.studentName} 을(를) 위반으로 남길까요?`}
+          title={`${confirm.studentName} 학생을 위반으로 기록하시겠습니까?`}
           sub="해제를 받아놓고 인강 외 용도로 쓴 것을 기록합니다."
           confirmLabel="위반 기록"
           danger
@@ -672,7 +672,7 @@ function Content() {
                           void apply(it, { timeoutMinutes: e.target.value === '' ? null : Number(e.target.value) })
                         }
                       >
-                        {/* ★ 서버 값이 후보에 없으면 `<select>` 는 **아무것도 안 고른 상태**가 되어
+                        {/* ★ 서버 값이 후보에 없으면 `<select>` 는 **아무것도 안 선택한 상태**가 되어
                                '없음' 으로 보인다 — 실제로는 10분이 걸려 있는데 안 걸린 것처럼 읽혔다
                                (와이파이 해제·정기일정이 10분이라 두 줄이 그랬다, 2026-09-21).
                                지금 값을 후보에 섞어서 **서버에 있는 것은 반드시 보이게** 한다 */}
@@ -710,7 +710,7 @@ function Content() {
               <span className="pm p-read">학부모</span> 앱 알림 → 승인
             </span>
             <span style={{ color: 'var(--amber)', fontWeight: 700 }}>
-              * 정해진 시간 안에 답이 없으면 다음 사람에게 자동으로 넘어갑니다
+              * 지정한 시간 내에 응답이 없으면 승인 권한이 다음 담당자에게 자동으로 이관됩니다
             </span>
           </div>
         </div>
@@ -915,7 +915,7 @@ function HistoryButton() {
       <button
         className="btn"
         disabled={academyId === null}
-        title={academyId === null ? '지점을 먼저 선택하세요' : undefined}
+        title={academyId === null ? '지점을 먼저 선택해 주세요' : undefined}
         onClick={() => setOpen(true)}
       >
         <Icon name="history" size={14} /> 승인 이력

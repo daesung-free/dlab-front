@@ -3,6 +3,7 @@ import { Modal } from '../../components/common'
 import { Icon } from '../../components/Icon'
 import { ApiError } from '../../api/client'
 import {
+  isTemporaryBlock,
   listManualTemplates,
   previewManualSend,
   sendManual,
@@ -31,10 +32,10 @@ import { searchStudents, type Student } from '../../api/students'
  * ⚠️ **테스트 모드가 꺼져 있어 실제로 나가고 과금된다**(2026-10-26). 그래서 보내기 전에
  *   한 번 더 묻고, 미리보기를 거치지 않으면 버튼이 열리지 않는다.
  *
- * ★★ **「학원생 화면에서 보호자 연락처를 등록하세요」라고 쓰지 않는다.** 그렇게 적었다가
- *   확인해 보니 **`StudentUpdate` 에 보호자 번호 칸이 없다**(2026-10-26 스펙 확인) —
- *   관리자가 넣을 경로가 아예 없으니 **안내가 거짓말이 된다.** 담당자는 그 화면을 뒤지다
- *   못 찾고 우리에게 묻는다. 경로가 생기면 그때 문구를 되돌린다.
+ * ★★ **「연락처를 등록하면 나간다」고 쓰지 않는다.** 학부모 대상 발송은 번호가 아니라
+ *   **보호자 연락처**로 수신자를 찾는다 — 앱 계정이 없어도 번호가 있으면 발송된다
+ *   (dlab-api #290 · 2026-10-26 배포). 그래서 **연락처가 없는 학생만** 제외된다.
+ *   ⚠️ 앱 출시 전까지는 **수신 허용목록**이 걸려 있어 목록에 있는 번호로만 실제 발송된다.
  */
 
 /** 서버가 쓰는 미납 안내 이벤트 */
@@ -144,7 +145,7 @@ export function UnpaidNoticeButton({
       const map = byNo ?? new Map<string, Student>()
       const ids = people.map((p) => map.get(p.studentNo)?.enrollmentId).filter((v): v is number => v !== undefined)
       if (ids.length === 0) {
-        setErr('보낼 수 있는 학생이 없습니다. 고른 건의 학번을 확인해 주세요.')
+        setErr('보낼 수 있는 학생이 없습니다. 선택한 건의 학번을 확인해 주세요.')
         return
       }
       setPrev(
@@ -159,14 +160,14 @@ export function UnpaidNoticeButton({
     } catch (e) {
       /* 404 는 우리 사정이다 — 「경로를 찾을 수 없습니다」를 담당자에게 띄우지 않는다 */
       /* ★★ `MANUAL_SEND_NO_TARGET`(「발송 대상이 없습니다」)은 **그대로 띄우면 안 된다.**
-           고른 학생이 분명히 있는데 그 말만 나오면 담당자는 화면 고장으로 읽는다.
+           선택한 학생이 분명히 있는데 그 말만 나오면 담당자는 화면 고장으로 읽는다.
            실제 이유는 거의 **보호자 번호가 없어서**다 — 무엇을 채워야 하는지까지 적는다 */
       const noTarget = e instanceof ApiError && /대상이 없습니다|NO_TARGET/.test(`${e.message}`)
       setErr(
         e instanceof ApiError && e.status === 404
           ? '미납 안내 발송은 준비 중입니다.'
           : noTarget
-            ? '보낼 수 있는 보호자가 없습니다. 이 안내는 보호자 번호로만 나가는데, 등록된 번호가 없습니다.'
+            ? '보낼 수 있는 보호자가 없습니다. 보호자 연락처를 먼저 등록해 주세요.'
             : e instanceof ApiError
               ? e.message
               : '미리보기를 불러오지 못했습니다.',
@@ -184,7 +185,7 @@ export function UnpaidNoticeButton({
       const r = await sendManual(prev.previewId)
       setSent(
         r.skipped > 0
-          ? `${r.requested}명에게 보냈습니다. ${r.skipped}명은 보내지 못했습니다 — 발송 이력에서 확인해 주세요.`
+          ? `${r.requested}명에게 보냈습니다. ${r.skipped}명은 보내지 못했습니다 — 발송 이력에서 확인할 수 있습니다.`
           : `${r.requested}명에게 보냈습니다.`,
       )
       /* ★ 보낸 미리보기는 다시 못 쓴다(서버가 한 번만 받는다). 화면에서도 지워
@@ -217,7 +218,7 @@ export function UnpaidNoticeButton({
       <button
         className="btn"
         disabled={targets.length === 0}
-        title={targets.length === 0 ? '보낼 미납 건을 먼저 고르세요' : `${targets.length}건에 안내를 보냅니다`}
+        title={targets.length === 0 ? '보낼 미납 건을 먼저 선택해 주세요' : `${targets.length}건에 안내를 보냅니다`}
         onClick={() => setOpen(true)}
       >
         <Icon name="bell" size={14} /> 미납 안내 보내기
@@ -245,18 +246,18 @@ export function UnpaidNoticeButton({
             <>
               <div className="note-box">
                 <div>
-                  고른 <b>{targets.length}건</b>을 학생으로 묶어 <b>{people.length}명</b>에게 보냅니다.
+                  선택한 <b>{targets.length}건</b>을 학생으로 묶어 <b>{people.length}명</b>에게 보냅니다.
                   미납 합계 <b>{won(totalUnpaid)}</b>.
                   {targets.length !== people.length && (
                     <>
                       {' '}
-                      같은 학생의 여러 달 미납은 <b>한 통으로 묶입니다.</b>
+                      같은 학생의 여러 달 미납은 <b>한 통으로 통합됩니다.</b>
                     </>
                   )}
                   {noStudentNo > 0 && (
                     <>
                       {' '}
-                      <b style={{ color: 'var(--red)' }}>학번이 없는 {noStudentNo}건은 빠집니다.</b>
+                      <b style={{ color: 'var(--red)' }}>학번이 없는 {noStudentNo}건은 제외됩니다.</b>
                     </>
                   )}
                 </div>
@@ -268,16 +269,17 @@ export function UnpaidNoticeButton({
                   <div>
                     {allMissing ? (
                       <>
-                        고른 <b>{people.length}명</b> 모두 <b>보호자 연락처가 없습니다.</b> 이 안내는
-                        보호자에게만 나가므로 <b>지금은 한 통도 보낼 수 없습니다.</b> 보호자 연락처를 채우는
-                        일은 <b>준비 중</b>입니다.
+                        선택한 <b>{people.length}명</b> 모두 <b>보호자 연락처가 없습니다.</b> 이
+                        안내는 보호자에게만 발송되므로 <b>현재 발송 대상이 없습니다.</b> 연락처는
+                        학원생 화면에서 등록할 수 있으나, 알림톡은{' '}
+                        <b>보호자 앱 가입 이후부터 발송</b>됩니다.
                       </>
                     ) : (
                       <>
-                        <b>{noGuardian.length}명</b>은 보호자 연락처가 없어 빠집니다 (
+                        <b>{noGuardian.length}명</b>은 보호자 연락처가 없어 제외됩니다 (
                         {noGuardian.slice(0, 4).map((x) => x.studentName).join(' · ')}
                         {noGuardian.length > 4 && ` 외 ${noGuardian.length - 4}명`}). 나머지{' '}
-                        <b>{people.length - noGuardian.length}명</b>에게만 나갑니다.
+                        <b>{people.length - noGuardian.length}명</b>에게만 발송됩니다.
                       </>
                     )}
                   </div>
@@ -288,7 +290,7 @@ export function UnpaidNoticeButton({
                 <div className="note-box" style={{ borderColor: 'var(--red)' }}>
                   <div>
                     미납 안내 문구가 <b>아직 발송할 수 없는 상태</b>입니다. 문자 발송 화면의 「템플릿
-                    관리」에서 상태를 확인해 주세요.
+                    관리」에서 상태를 확인합니다.
                   </div>
                 </div>
               )}
@@ -301,7 +303,7 @@ export function UnpaidNoticeButton({
                     <input className="inp" readOnly value={month === '' ? '-' : monthLabel(month)} />
                   ) : (
                     <select className="inp" value={month} onChange={(e) => setMonth(e.target.value)}>
-                      <option value="">고르세요</option>
+                      <option value="">선택해 주세요</option>
                       {months.map((m) => (
                         <option key={m} value={m}>
                           {monthLabel(m)}
@@ -312,7 +314,7 @@ export function UnpaidNoticeButton({
                   <div className="hint">
                     {months.length > 1 ? (
                       <>
-                        고른 건의 대상월이 <b>{months.length}가지</b>라 한 달만 들어갑니다. 달마다
+                        선택한 건의 대상월이 <b>{months.length}가지</b>라 한 달만 들어갑니다. 달마다
                         따로 보내야 합니다.
                       </>
                     ) : (
@@ -334,7 +336,7 @@ export function UnpaidNoticeButton({
                   </div>
                   {/* ★★ 금액이 안 들어간다는 말을 **보내기 전에** 해야 한다 */}
                   <div className="hint">
-                    학생 이름은 받는 사람마다 채워집니다. <b>미납 금액은 안내문에 들어가지 않습니다</b> —
+                    학생 이름은 받는 사람마다 자동 입력됩니다. <b>미납 금액은 안내문에 들어가지 않습니다</b> —
                     문구를 바꾸려면 재심사를 받아야 합니다.
                   </div>
                 </div>
@@ -343,19 +345,32 @@ export function UnpaidNoticeButton({
               {prev !== null && (
                 <div className="note-box" role="status" style={{ borderColor: 'var(--amber)' }}>
                   <div>
-                    <b>{prev.targetCount}명</b>에게 나갑니다. 아직 보내지 않았습니다 — 「보내기」를
+                    <b>{prev.targetCount}명</b>에게 발송됩니다. 아직 보내지 않았습니다 — 「보내기」를
                     누르면 <b>실제로 발송되고 비용이 발생합니다.</b>
                     {prev.blocked.length > 0 && (
                       <>
                         {' '}
-                        <b style={{ color: 'var(--red)' }}>{prev.blocked.length}명은 빠집니다.</b>
+                        <b style={{ color: 'var(--red)' }}>{prev.blocked.length}명은 제외됩니다.</b>
                       </>
                     )}
                   </div>
                 </div>
               )}
 
-              {prev !== null && prev.blocked.length > 0 && (
+              {prev !== null && prev.blocked.some((b) => isTemporaryBlock(b.reason)) && (
+                /* ★ 설정 때문에 보류된 것은 **고칠 데이터가 없다.** 빨간 표에 섞으면
+                     담당자가 번호가 없는 줄 알고 학생 정보를 뒤진다 */
+                <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
+                  <div>
+                    이 가운데{' '}
+                    <b>{prev.blocked.filter((b) => isTemporaryBlock(b.reason)).length}명</b>은 이관
+                    기간이라 <b>허용한 번호로만 나가서 보류</b>됩니다. 학생 정보에는 문제가 없으니
+                    고치실 것은 없습니다.
+                  </div>
+                </div>
+              )}
+
+              {prev !== null && prev.blocked.some((b) => !isTemporaryBlock(b.reason)) && (
                 <div style={{ maxHeight: 150, overflow: 'auto', marginBottom: 10 }}>
                   <table className="dt" style={{ width: '100%' }}>
                     <thead>
@@ -365,12 +380,14 @@ export function UnpaidNoticeButton({
                       </tr>
                     </thead>
                     <tbody>
-                      {prev.blocked.map((b, i) => (
-                        <tr key={i}>
-                          <td>{b.studentName}</td>
-                          <td style={{ color: 'var(--red)' }}>{b.message}</td>
-                        </tr>
-                      ))}
+                      {prev.blocked
+                        .filter((b) => !isTemporaryBlock(b.reason))
+                        .map((b, i) => (
+                          <tr key={i}>
+                            <td>{b.studentName}</td>
+                            <td style={{ color: 'var(--red)' }}>{b.message}</td>
+                          </tr>
+                        ))}
                     </tbody>
                   </table>
                 </div>
@@ -413,7 +430,7 @@ export function UnpaidNoticeButton({
 
       {confirming && prev !== null && (
         <Modal
-          title={`${prev.targetCount}명에게 미납 안내를 보낼까요?`}
+          title={`${prev.targetCount}명에게 미납 안내를 발송하시겠습니까?`}
           sub="되돌릴 수 없습니다."
           confirmLabel="보내기"
           danger

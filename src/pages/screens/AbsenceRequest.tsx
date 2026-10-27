@@ -278,7 +278,7 @@ function Content() {
           <div className="note-box">
             <div>
               되돌리면 그 시간은 다시 <b>무단</b>이 됩니다. 벌점이 붙는지는 사유에 따라 갈리므로
-              나중에 판단할 수 있게 적어 주세요.
+              나중에 판단할 수 있게 입력해 주세요.
             </div>
           </div>
           <div className="frow" style={{ marginTop: 10 }}>
@@ -357,7 +357,7 @@ function Content() {
           </div>
           {/* ★ 이 타일은 유지한다(2026-09-02 백엔드 회신). 요구사항 F-4.1-6·A-6 에
               "벌점 확정 후 승인 불가"가 박혀 있고 앱도 is_penalty_finalized 로 버튼을 막는다.
-              미정인 것은 **확정 시점(I-10)** 하나뿐이라 목업을 고칠 건이 아니다.
+              미정인 것은 **확정 시점(I-10)** 하나뿐이라 목업을 수정할 건이 아니다.
               서버는 그때까지 penaltyConflictUnavailable 로 "판정 못 함"을 명시한다 */}
           <div className="v" style={{ fontSize: 15, paddingTop: 8 }}>
             <Unfilled reason="아직 표시할 수 없는 값입니다" />
@@ -367,7 +367,7 @@ function Content() {
       </div>
 
       {academyId === null && academyReady && (
-        <div className="note-box">지점을 먼저 선택하세요. 사유 신청은 지점 단위로 조회합니다.</div>
+        <div className="note-box">지점을 먼저 선택해 주세요. 사유 신청은 지점 단위로 조회합니다.</div>
       )}
 
       {board.error && (
@@ -475,7 +475,7 @@ function RegisterButton() {
       setErr(
         e instanceof ApiError
           ? e.message.startsWith('승인 정책이 없습니다')
-            ? '이 지점에 사유 신청 승인 설정이 없습니다. 승인 라우팅 화면에서 먼저 정해 주세요.'
+            ? '이 지점에 사유 신청 승인 설정이 없습니다. 승인 라우팅 화면에서 먼저 정합니다.'
             : e.message
           : '등록하지 못했습니다.',
       )
@@ -486,7 +486,7 @@ function RegisterButton() {
 
   return (
     <>
-      <button className="btn pri" disabled={academyId === null} onClick={openIt} title={academyId === null ? '지점을 먼저 선택하세요' : undefined}>
+      <button className="btn pri" disabled={academyId === null} onClick={openIt} title={academyId === null ? '지점을 먼저 선택해 주세요' : undefined}>
         <Icon name="plus" size={14} /> 관리자 직접 등록
       </button>
       {done && !open && (

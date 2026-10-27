@@ -216,7 +216,7 @@ export function Dashboard() {
         <div className="note-box">
           {/* ★ note-box 는 flex 다 — 글자와 <b> 를 형제로 두면 각각이 칸이 되어 눌린다 */}
           <div>
-            오늘({today}) 출결이 <b>아직 집계되지 않았습니다.</b> 등원 태깅이 들어오면 채워집니다.
+            오늘({today}) 출결이 <b>아직 집계되지 않았습니다.</b> 등원 태깅이 들어오면 자동 입력됩니다.
           </div>
         </div>
       )}

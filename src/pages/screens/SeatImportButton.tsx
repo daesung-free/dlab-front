@@ -119,7 +119,7 @@ export function SeatImportButton({
     if (academyId === null) return
     const parsed = parse(text)
     if (parsed.length === 0) {
-      setErr('읽을 내용이 없습니다. 엑셀에서 학번과 좌석번호 두 칸을 복사해 붙여넣어 주세요.')
+      setErr('읽을 내용이 없습니다. 엑셀에서 학번과 좌석번호 두 칸을 복사해 붙여넣습니다.')
       return
     }
     setBusy(true)
@@ -176,7 +176,7 @@ export function SeatImportButton({
           return {
             ...base,
             studentName: student.name,
-            error: `${r.seatCd}번이 여러 곳에 있습니다(${where}). 관·구역을 함께 적어 주세요.`,
+            error: `${r.seatCd}번이 여러 곳에 있습니다(${where}). 관·구역을 함께 입력해 주세요.`,
           }
         }
         const seat = cands[0]
@@ -229,7 +229,7 @@ export function SeatImportButton({
       <button
         className="btn"
         disabled={academyId === null}
-        title={academyId === null ? '지점을 먼저 선택하세요' : undefined}
+        title={academyId === null ? '지점을 먼저 선택해 주세요' : undefined}
         onClick={() => {
           reset()
           setOpen(true)
@@ -244,7 +244,7 @@ export function SeatImportButton({
           title="좌석 일괄 배정"
           sub={
             applied === null
-              ? '엑셀에서 학번과 좌석번호를 복사해 붙여넣으면 먼저 맞춰 보여드립니다.'
+              ? '엑셀에서 학번과 좌석번호를 복사해 붙여넣으면 먼저 맞춰 봅니다.'
               : '반영했습니다.'
           }
           confirmLabel={applied === null ? '배정' : '닫기'}
@@ -271,11 +271,11 @@ export function SeatImportButton({
                     }}
                   />
                   <div className="hint">
-                    한 줄에 한 명씩 <b>학번 · 좌석번호</b> 순서로 적습니다. 엑셀에서 두 칸을 긁어
-                    붙여넣으면 그대로 읽힙니다. 첫 줄 머리글은 건너뜁니다.
+                    한 줄에 한 명씩 <b>학번 · 좌석번호</b> 순서로 입력합니다. 엑셀에서 두 칸을 긁어
+                    붙여넣으면 그대로 읽힙니다. 첫 줄 머리글은 제외됩니다.
                     <br />
                     같은 좌석번호가 <b>본관과 별관에 모두 있는 지점</b>이 있습니다 — 그때는{' '}
-                    <b>관·구역을 같은 줄에 함께</b> 적어 주세요(예: <code>2026-0002 본관 A구역 1</code>).
+                    <b>관·구역을 같은 줄에 함께</b> 입력합니다(예: <code>2026-0002 본관 A구역 1</code>).
                   </div>
                 </div>
               </div>
@@ -304,7 +304,7 @@ export function SeatImportButton({
                       {hasError && (
                         <>
                           {' '}
-                          — <b>오류를 고쳐야 배정할 수 있습니다.</b> 좌석 배정은 중간에 끊기면
+                          — <b>오류를 수정해야 배정할 수 있습니다.</b> 좌석 배정은 중간에 끊기면
                           되돌릴 기준이 없어 <b>한 줄이라도 틀리면 전부 보내지 않습니다.</b>
                         </>
                       )}
