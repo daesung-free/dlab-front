@@ -299,7 +299,7 @@ function Content() {
       return
     }
     const who = PLATFORM_LABEL[c.platform] ?? c.platform
-    void run(`${who} 점검 모드를 껐습니다. 지금부터 다시 앱을 쓸 수 있습니다.`, `${who} 점검 모드를 끄지 못했습니다.`, () =>
+    void run(`${who} 점검 모드를 껐습니다. 지금부터 다시 앱을 사용할 수 있습니다.`, `${who} 점검 모드를 끄지 못했습니다.`, () =>
       setMaintenance(c.platform, { maintenance: false }),
     )
   }
@@ -428,7 +428,7 @@ function Content() {
           sub={
             verEdit.field === 'minVersion'
               ? '이보다 낮은 버전을 쓰는 학생·학부모는 저장 즉시 앱을 쓸 수 없고, 업데이트하라는 안내를 받습니다.'
-              : '스토어에 올라간 최신 버전을 적습니다. 낮은 버전 사용자에게 업데이트를 권하지만 막지는 않습니다.'
+              : '스토어에 올라간 최신 버전을 입력합니다. 낮은 버전 사용자에게 업데이트를 권하지만 막지는 않습니다.'
           }
           confirmLabel="저장"
           confirmDisabled={verEdit.value.trim() === ''}
@@ -440,7 +440,7 @@ function Content() {
             const v = e.value.trim()
             const done =
               e.field === 'minVersion'
-                ? `${who} 최소 지원 버전을 ${v}(으)로 바꿨습니다. 지금부터 ${v}보다 낮은 버전은 업데이트해야 앱을 쓸 수 있습니다.`
+                ? `${who} 최소 지원 버전을 ${v}(으)로 바꿨습니다. 지금부터 ${v}보다 낮은 버전은 업데이트해야 앱을 사용할 수 있습니다.`
                 : `${who} 최신 버전을 ${v}(으)로 바꿨습니다. 낮은 버전 사용자에게 업데이트를 권합니다.`
             void run(done, `${who} ${label}을 바꾸지 못했습니다.`, () =>
               updateAppVersions(e.c.platform, { [e.field]: e.value.trim() }),
@@ -463,7 +463,7 @@ function Content() {
 
       {maintEdit && (
         <Modal
-          title={`${PLATFORM_LABEL[maintEdit.c.platform]} 점검 모드를 켤까요?`}
+          title={`${PLATFORM_LABEL[maintEdit.c.platform]} 점검 모드를 켜시겠습니까?`}
           sub="켜는 즉시 이 플랫폼 사용자 전원이 앱을 쓸 수 없습니다."
           confirmLabel="점검 모드 켜기"
           danger
@@ -629,7 +629,7 @@ function Content() {
             <div>
               <div className="tt">아래 내용은 예시입니다 — 실제로 발송되거나 기록되지 않습니다</div>
               <div className="tx">
-                푸시는 등원·승인·상담 같은 사건이 일어날 때 <b>자동으로</b> 나갑니다. 사람이 직접 골라 보내는 기능과
+                푸시는 등원·승인·상담 같은 사건이 일어날 때 <b>자동으로</b> 발송됩니다. 사람이 직접 선택해 보내는 기능과
                 발송 기록은 아직 준비되지 않았습니다.
               </div>
             </div>

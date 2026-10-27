@@ -145,7 +145,7 @@ export function UnpaidNoticeButton({
       const map = byNo ?? new Map<string, Student>()
       const ids = people.map((p) => map.get(p.studentNo)?.enrollmentId).filter((v): v is number => v !== undefined)
       if (ids.length === 0) {
-        setErr('보낼 수 있는 학생이 없습니다. 고른 건의 학번을 확인해 주세요.')
+        setErr('보낼 수 있는 학생이 없습니다. 선택한 건의 학번을 확인해 주세요.')
         return
       }
       setPrev(
@@ -160,7 +160,7 @@ export function UnpaidNoticeButton({
     } catch (e) {
       /* 404 는 우리 사정이다 — 「경로를 찾을 수 없습니다」를 담당자에게 띄우지 않는다 */
       /* ★★ `MANUAL_SEND_NO_TARGET`(「발송 대상이 없습니다」)은 **그대로 띄우면 안 된다.**
-           고른 학생이 분명히 있는데 그 말만 나오면 담당자는 화면 고장으로 읽는다.
+           선택한 학생이 분명히 있는데 그 말만 나오면 담당자는 화면 고장으로 읽는다.
            실제 이유는 거의 **보호자 번호가 없어서**다 — 무엇을 채워야 하는지까지 적는다 */
       const noTarget = e instanceof ApiError && /대상이 없습니다|NO_TARGET/.test(`${e.message}`)
       setErr(
@@ -185,7 +185,7 @@ export function UnpaidNoticeButton({
       const r = await sendManual(prev.previewId)
       setSent(
         r.skipped > 0
-          ? `${r.requested}명에게 보냈습니다. ${r.skipped}명은 보내지 못했습니다 — 발송 이력에서 확인해 주세요.`
+          ? `${r.requested}명에게 보냈습니다. ${r.skipped}명은 보내지 못했습니다 — 발송 이력에서 확인할 수 있습니다.`
           : `${r.requested}명에게 보냈습니다.`,
       )
       /* ★ 보낸 미리보기는 다시 못 쓴다(서버가 한 번만 받는다). 화면에서도 지워
@@ -218,7 +218,7 @@ export function UnpaidNoticeButton({
       <button
         className="btn"
         disabled={targets.length === 0}
-        title={targets.length === 0 ? '보낼 미납 건을 먼저 고르세요' : `${targets.length}건에 안내를 보냅니다`}
+        title={targets.length === 0 ? '보낼 미납 건을 먼저 선택해 주세요' : `${targets.length}건에 안내를 보냅니다`}
         onClick={() => setOpen(true)}
       >
         <Icon name="bell" size={14} /> 미납 안내 보내기
@@ -246,18 +246,18 @@ export function UnpaidNoticeButton({
             <>
               <div className="note-box">
                 <div>
-                  고른 <b>{targets.length}건</b>을 학생으로 묶어 <b>{people.length}명</b>에게 보냅니다.
+                  선택한 <b>{targets.length}건</b>을 학생으로 묶어 <b>{people.length}명</b>에게 보냅니다.
                   미납 합계 <b>{won(totalUnpaid)}</b>.
                   {targets.length !== people.length && (
                     <>
                       {' '}
-                      같은 학생의 여러 달 미납은 <b>한 통으로 묶입니다.</b>
+                      같은 학생의 여러 달 미납은 <b>한 통으로 통합됩니다.</b>
                     </>
                   )}
                   {noStudentNo > 0 && (
                     <>
                       {' '}
-                      <b style={{ color: 'var(--red)' }}>학번이 없는 {noStudentNo}건은 빠집니다.</b>
+                      <b style={{ color: 'var(--red)' }}>학번이 없는 {noStudentNo}건은 제외됩니다.</b>
                     </>
                   )}
                 </div>
@@ -269,16 +269,17 @@ export function UnpaidNoticeButton({
                   <div>
                     {allMissing ? (
                       <>
-                        고른 <b>{people.length}명</b> 모두 <b>보호자 연락처가 없습니다.</b> 이 안내는
-                        보호자에게만 나가므로 <b>지금은 한 통도 보낼 수 없습니다.</b> 연락처는 학원생 화면에서
-                        등록할 수 있지만, 알림톡은 <b>학부모가 앱에 가입한 뒤에</b> 나갑니다.
+                        선택한 <b>{people.length}명</b> 모두 <b>보호자 연락처가 없습니다.</b> 이
+                        안내는 보호자에게만 발송되므로 <b>현재 발송 대상이 없습니다.</b> 연락처는
+                        학원생 화면에서 등록할 수 있으나, 알림톡은{' '}
+                        <b>보호자 앱 가입 이후부터 발송</b>됩니다.
                       </>
                     ) : (
                       <>
-                        <b>{noGuardian.length}명</b>은 보호자 연락처가 없어 빠집니다 (
+                        <b>{noGuardian.length}명</b>은 보호자 연락처가 없어 제외됩니다 (
                         {noGuardian.slice(0, 4).map((x) => x.studentName).join(' · ')}
                         {noGuardian.length > 4 && ` 외 ${noGuardian.length - 4}명`}). 나머지{' '}
-                        <b>{people.length - noGuardian.length}명</b>에게만 나갑니다.
+                        <b>{people.length - noGuardian.length}명</b>에게만 발송됩니다.
                       </>
                     )}
                   </div>
@@ -289,7 +290,7 @@ export function UnpaidNoticeButton({
                 <div className="note-box" style={{ borderColor: 'var(--red)' }}>
                   <div>
                     미납 안내 문구가 <b>아직 발송할 수 없는 상태</b>입니다. 문자 발송 화면의 「템플릿
-                    관리」에서 상태를 확인해 주세요.
+                    관리」에서 상태를 확인합니다.
                   </div>
                 </div>
               )}
@@ -302,7 +303,7 @@ export function UnpaidNoticeButton({
                     <input className="inp" readOnly value={month === '' ? '-' : monthLabel(month)} />
                   ) : (
                     <select className="inp" value={month} onChange={(e) => setMonth(e.target.value)}>
-                      <option value="">고르세요</option>
+                      <option value="">선택해 주세요</option>
                       {months.map((m) => (
                         <option key={m} value={m}>
                           {monthLabel(m)}
@@ -313,7 +314,7 @@ export function UnpaidNoticeButton({
                   <div className="hint">
                     {months.length > 1 ? (
                       <>
-                        고른 건의 대상월이 <b>{months.length}가지</b>라 한 달만 들어갑니다. 달마다
+                        선택한 건의 대상월이 <b>{months.length}가지</b>라 한 달만 들어갑니다. 달마다
                         따로 보내야 합니다.
                       </>
                     ) : (
@@ -335,7 +336,7 @@ export function UnpaidNoticeButton({
                   </div>
                   {/* ★★ 금액이 안 들어간다는 말을 **보내기 전에** 해야 한다 */}
                   <div className="hint">
-                    학생 이름은 받는 사람마다 채워집니다. <b>미납 금액은 안내문에 들어가지 않습니다</b> —
+                    학생 이름은 받는 사람마다 자동 입력됩니다. <b>미납 금액은 안내문에 들어가지 않습니다</b> —
                     문구를 바꾸려면 재심사를 받아야 합니다.
                   </div>
                 </div>
@@ -344,12 +345,12 @@ export function UnpaidNoticeButton({
               {prev !== null && (
                 <div className="note-box" role="status" style={{ borderColor: 'var(--amber)' }}>
                   <div>
-                    <b>{prev.targetCount}명</b>에게 나갑니다. 아직 보내지 않았습니다 — 「보내기」를
+                    <b>{prev.targetCount}명</b>에게 발송됩니다. 아직 보내지 않았습니다 — 「보내기」를
                     누르면 <b>실제로 발송되고 비용이 발생합니다.</b>
                     {prev.blocked.length > 0 && (
                       <>
                         {' '}
-                        <b style={{ color: 'var(--red)' }}>{prev.blocked.length}명은 빠집니다.</b>
+                        <b style={{ color: 'var(--red)' }}>{prev.blocked.length}명은 제외됩니다.</b>
                       </>
                     )}
                   </div>
@@ -429,7 +430,7 @@ export function UnpaidNoticeButton({
 
       {confirming && prev !== null && (
         <Modal
-          title={`${prev.targetCount}명에게 미납 안내를 보낼까요?`}
+          title={`${prev.targetCount}명에게 미납 안내를 발송하시겠습니까?`}
           sub="되돌릴 수 없습니다."
           confirmLabel="보내기"
           danger

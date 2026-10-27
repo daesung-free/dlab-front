@@ -63,7 +63,7 @@ export function GuardianBlock({ enrollmentId }: { enrollmentId: number }) {
     const n = name.trim()
     const p = phone.trim()
     if (n === '' || p === '') {
-      setErr('이름과 연락처를 모두 적어 주세요.')
+      setErr('이름과 연락처를 모두 입력해 주세요.')
       return
     }
     /* ★★ 가려진 값을 보내면 400 이다. 더 나쁜 것은 **저장돼 버린 경우** — 화면에는
@@ -95,7 +95,7 @@ export function GuardianBlock({ enrollmentId }: { enrollmentId: number }) {
     try {
       await removeGuardian(enrollmentId, g.guardianId)
       setRemoving(null)
-      setMsg('이 학생과의 연결을 끊었습니다.')
+      setMsg('보호자 연결을 해제했습니다.')
       await load()
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : '해제하지 못했습니다.')
@@ -125,14 +125,14 @@ export function GuardianBlock({ enrollmentId }: { enrollmentId: number }) {
           >
             <Icon name="user" size={14} />
             <b style={{ fontSize: 12.5 }}>{g.name}</b>
-            {/* ★ 학생이 가입하며 **번호만** 적으면 이름이 「학부모」로 들어간다 — 학생은
+            {/* ★ 학생이 가입하며 **번호만** 입력하면 이름이 「학부모」로 들어간다 — 학생은
                    보호자 이름을 적지 않기 때문이다. 이상한 값이 아니라는 것을 그 자리에서
                    말한다. 안 그러면 담당자가 잘못 들어간 값으로 보고 고치려 한다 */}
             {g.name === '학부모' && (
               <span
                 className="mk supplement"
                 style={{ fontSize: 10.5 }}
-                title="학생이 가입할 때 번호만 적어 이름이 비어 있습니다. 학부모가 앱에 가입하면 본인 이름으로 채워집니다"
+                title="학생이 가입하며 번호만 입력해 이름이 비어 있습니다. 보호자 앱 가입 시 본인 이름으로 대체됩니다"
               >
                 이름 미입력
               </span>
@@ -167,8 +167,8 @@ export function GuardianBlock({ enrollmentId }: { enrollmentId: number }) {
                대신 **그 자리에서** 한 번 더 묻는다 */
           <div className="note-box" style={{ borderColor: 'var(--red)', marginTop: 8 }}>
             <div>
-              <b>{removing.name}</b> 을(를) 이 학생에서 뗄까요? 다른 자녀에게 연결돼 있으면
-              그쪽은 그대로 남습니다.
+              <b>{removing.name}</b> 님과 이 학생의 연결을 해제하시겠습니까? 다른 자녀와의 연결은
+              유지됩니다.
               <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                 <button type="button" className="btn" disabled={busy} onClick={() => setRemoving(null)}>
                   취소
@@ -213,14 +213,17 @@ export function GuardianBlock({ enrollmentId }: { enrollmentId: number }) {
         {/* ★★ **지금은 등록해도 알림톡이 나가지 않는다.** 그 말을 안 하면 번호를 넣어 두고
                「왜 안 오지」를 찾는다 — 찾아도 원인이 화면에 없다 */}
         <div className="hint">
-          번호를 등록해 두면 <b>학부모가 앱에 가입한 뒤부터</b> 알림톡이 나갑니다. 앱 출시
-          전이라 <b>지금은 발송되지 않습니다</b> — 미리 채워 두셔도 됩니다.
+          알림톡은 <b>보호자 앱 계정</b>으로 발송됩니다. 번호만 등록된 상태에서는 발송 대상에
+          포함되지 않습니다. 앱 출시 전이라 <b>현재는 전원 발송 대상에서 제외</b>되며, 번호는
+          미리 등록해 두어도 됩니다.
           <br />
-          이름이 <b>「학부모」</b>로 보이면 학생이 가입할 때 <b>번호만 적은 것</b>입니다.
-          학부모가 앱에 가입하면 본인 이름으로 채워집니다.
+          부·모 <b>여러 명을 등록할 수 있고 전원에게 발송</b>됩니다.
           <br />
-          형제가 같은 번호를 쓰면 <b>한 사람으로 묶입니다</b> — 이름은 먼저 등록된 쪽이 남고,
-          여기서 고칠 수 없습니다.
+          이름이 <b>「학부모」</b>인 경우는 학생이 가입하며 번호만 입력한 것입니다. 보호자 앱
+          가입 시 본인 이름으로 대체됩니다.
+          <br />
+          형제가 같은 번호를 쓰는 경우 <b>한 명으로 통합됩니다.</b> 이름은 먼저 등록된 값이
+          유지되며 이 화면에서 수정할 수 없습니다.
         </div>
 
         {msg !== null && (

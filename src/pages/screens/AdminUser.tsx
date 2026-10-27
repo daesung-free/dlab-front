@@ -131,7 +131,7 @@ const AREAS: Area[] = [
   },
   {
     /* ★ **전환만 따로 뗀다.** 담임은 대기자를 다 쓸 수 있는데 **전환만 못 한다** — 한 칸에
-           뭉치면 어느 쪽으로 적어도 틀리고, 「담임 없음」으로 적으면 **담임이 쓸 수 있는데
+           뭉치면 어느 쪽으로 적어도 틀리고, 「담임 없음」으로 입력하면 **담임이 쓸 수 있는데
            표에 없다**는 반대 방향 문의가 온다. 이 표는 원래 민감한 동작을 따로 떼어
            왔다(상벌점 부여 · 개인정보 항목 · 할인 정책 설정이 그렇다). */
     name: '대기자 → 원생 전환',
@@ -260,7 +260,7 @@ function MenuModal({ row, onClose, onSaved }: { row: AccountRow; onClose: () => 
     /* 서버도 400 으로 막지만, 눌러서 오류를 보기 전에 알려준다 —
        "아무것도 못 보게" 는 계정 정지로 할 일이다 */
     if (useOwn && codes.length === 0) {
-      setErr('메뉴를 하나 이상 고르세요. 아무것도 보여주지 않으려면 계정을 정지해 주세요.')
+      setErr('메뉴를 하나 이상 선택해 주세요. 아무것도 보여주지 않으려면 계정을 정지합니다.')
       return false
     }
     setSaving(true)
@@ -288,7 +288,7 @@ function MenuModal({ row, onClose, onSaved }: { row: AccountRow; onClose: () => 
       sub={
         restricted
           ? '이 계정에만 따로 정해 둔 상태입니다. 체크한 것만 보입니다 — 권한 기본값보다 우선합니다.'
-          : '지금은 권한 기본값대로 보입니다(아래 체크된 것). 바꾸려면 아래에서 「이 계정만 직접 지정」을 고르세요.'
+          : '지금은 권한 기본값대로 보입니다(아래 체크된 것). 바꾸려면 아래에서 「이 계정만 직접 지정」을 선택해 주세요.'
       }
       confirmLabel="저장"
       busy={saving}
@@ -526,9 +526,9 @@ function Content() {
     setFormErr(null)
 
     const academyId = Number(form.academyId)
-    if (!academyId) return setFormErr('지점을 고르세요.')
-    if (!form.loginId.trim()) return setFormErr('로그인 아이디를 입력하세요.')
-    if (!form.name.trim()) return setFormErr('이름을 입력하세요.')
+    if (!academyId) return setFormErr('지점을 선택해 주세요.')
+    if (!form.loginId.trim()) return setFormErr('로그인 아이디를 입력해 주세요.')
+    if (!form.name.trim()) return setFormErr('이름을 입력해 주세요.')
 
     setSaving(true)
     try {
@@ -739,18 +739,18 @@ function Content() {
               className="btn"
               style={{ padding: '4px 9px', fontSize: 11.5, whiteSpace: 'nowrap' }}
               disabled={busy === r.accountId || !isSuper || r.status === 'WITHDRAWN'}
-              title={isSuper ? '이 계정에 보여줄 메뉴를 고릅니다' : '최고관리자만 설정할 수 있습니다'}
+              title={isSuper ? '이 계정에 보여줄 메뉴를 선택합니다' : '최고관리자만 설정할 수 있습니다'}
               onClick={() => setMenuEdit(r)}
             >
               메뉴
             </button>
-            {/* ★ 계정을 만든 뒤 이름·연락처·부서를 고칠 자리가 없었다(2026-09-27 실테스트 P2).
+            {/* ★ 계정을 만든 뒤 이름·연락처·부서를 수정할 자리가 없었다(2026-09-27 실테스트 P2).
                    로그인 아이디는 서버가 막는다 — 바꾸면 감사 로그의 주체가 끊긴다 */}
             <button
               className="btn"
               style={{ padding: '4px 9px', fontSize: 11.5, whiteSpace: 'nowrap' }}
               disabled={busy === r.accountId || r.personId === null || r.status === 'WITHDRAWN'}
-              title={r.personId === null ? '인적사항이 없는 계정입니다' : '이름·연락처·부서를 고칩니다'}
+              title={r.personId === null ? '인적사항이 없는 계정입니다' : '이름·연락처·부서를 수정합니다'}
               onClick={() =>
                 setInfoEdit({
                   row: r,
@@ -948,8 +948,8 @@ function Content() {
         <Modal
           title={
             confirm.kind === 'withdraw'
-              ? `${confirm.row.loginId} 를 탈퇴 처리할까요?`
-              : `${confirm.row.loginId} 의 비밀번호를 새로 발급할까요?`
+              ? `${confirm.row.loginId} 계정을 탈퇴 처리하시겠습니까?`
+              : `${confirm.row.loginId} 계정의 비밀번호를 재발급하시겠습니까?`
           }
           sub={
             confirm.kind === 'withdraw'
@@ -971,20 +971,20 @@ function Content() {
           {/* ★★ **「막으면 바로 끊긴다」가 아니다.** 서버가 매 요청마다 계정 상태를 보지
                  않아, 이미 로그인한 사람은 **토큰이 만료될 때까지** 그대로 쓴다
                  (운영 만료 1시간 · 2026-10-27 백엔드 확인).
-             ★ 이 말을 안 쓰면 담당자는 **누르고 끝난 줄 안다** — 급해서 막는 상황인데
+             ★ 이 말을 안 사용하면 담당자는 **누르고 끝난 줄 안다** — 급해서 막는 상황인데
                그 사람이 한 시간 더 쓰고 있다. 급하면 다른 수단이 필요하다는 것을 알려야 한다. */}
           <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
             <div>
               {confirm.kind === 'withdraw' ? (
                 <>
-                  새로 로그인하는 것은 <b>바로 막힙니다.</b> 다만 <b>이미 로그인해 있는 사람은
-                  최대 1시간까지</b> 그대로 쓸 수 있습니다 — 급한 상황이면 본인에게 알리거나
-                  담당자에게 문의해 주시기 바랍니다.
+                  신규 로그인은 <b>즉시 차단됩니다.</b> 다만 <b>이미 로그인해 있는 사람은
+                  최대 1시간까지</b> 그대로 사용할 수 있습니다 — 급한 경우 본인에게 알리거나 담당자에게
+                  문의해 주세요.
                 </>
               ) : (
                 <>
                   <b>새 비밀번호로만 로그인할 수 있습니다.</b> 다만 <b>이미 로그인해 있는 사람은
-                  최대 1시간까지</b> 그대로 쓸 수 있습니다.
+                  최대 1시간까지</b> 그대로 사용할 수 있습니다.
                 </>
               )}
             </div>
@@ -1066,7 +1066,7 @@ function Content() {
                 />
                 <div className="link-box" style={{ alignItems: 'center' }}>
                   <div>
-                    <b>닫으면 다시 볼 수 없습니다.</b> 지금 본인에게 전달하세요.
+                    <b>닫으면 다시 볼 수 없습니다.</b> 지금 본인에게 전달합니다.
                     <br />
                     기존 비밀번호는 더 이상 쓸 수 없습니다.
                   </div>
@@ -1113,7 +1113,7 @@ function Content() {
                 />
                 <div className="link-box" style={{ alignItems: 'center' }}>
                   <div>
-                    <b>닫으면 다시 볼 수 없습니다.</b> 지금 본인에게 전달하세요.
+                    <b>닫으면 다시 볼 수 없습니다.</b> 지금 본인에게 전달합니다.
                     놓쳤다면 목록의 <b>비밀번호</b> 버튼으로 다시 발급하면 됩니다.
                   </div>
                 </div>
@@ -1156,7 +1156,7 @@ function Content() {
             <div className="note-box">
               <div>
                 비밀번호는 <b>저장할 때 자동으로 만들어집니다.</b> 등록이 끝나면 화면에 한 번 보여드리니
-                그때 본인에게 전달하세요. <b>로그인 아이디는 나중에 바꿀 수 없습니다.</b>
+                그때 본인에게 전달합니다. <b>로그인 아이디는 나중에 바꿀 수 없습니다.</b>
               </div>
             </div>
 
@@ -1175,7 +1175,7 @@ function Content() {
                   <option value="TEACHER">선생님</option>
                 </select>
                 <div className="hint">
-                  수업을 맡는 분은 <b>선생님</b>으로 등록하세요. 그래야 특강·상담의 담당자로 고를 수 있습니다.
+                  수업을 맡는 분은 <b>선생님</b>으로 등록합니다. 그래야 특강·상담의 담당자로 선택할 수 있습니다.
                 </div>
               </div>
             </div>
@@ -1446,9 +1446,9 @@ function Content() {
               <span>
                 <span className="pm p-none">없음</span> 메뉴 미노출
               </span>
-              {/* 서버에 역할 × 기능영역 권한이 아직 없다. "이 표대로 제한된다"고 쓰면
+              {/* 서버에 역할 × 기능영역 권한이 아직 없다. "이 표대로 제한된다"고 사용하면
                   화면이 거짓말을 하게 된다 — 확정 전이라는 것을 그대로 적는다.
-                  ★ 계정별 메뉴 노출은 따로 생겼다. 안 적으면 "아직 아무것도 안 된다" 로 읽힌다 */}
+                  ★ 계정별 메뉴 노출은 따로 생겼다. 안 입력하면 "아직 아무것도 안 된다" 로 읽힌다 */}
               <span style={{ marginLeft: 'auto', color: 'var(--muted)' }}>
                 역할별 기본값 설명입니다
               </span>

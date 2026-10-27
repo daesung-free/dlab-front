@@ -188,7 +188,7 @@ function Content() {
   const [branchId, setBranchId] = useState<number | null>(null)
   /* ★ 연도를 고를 수 있게 한다. 헤더에 「기수 선택」 비활성 버튼이 있었는데, 그건
         원래 「2026 시즌」이던 것을 이름만 바꾼 것이었다(2026-09-11) — 축은 **연도**다.
-        작년 현황을 보려면 고를 수 있어야 한다 */
+        작년 현황을 보려면 선택할 수 있어야 한다 */
   const [year, setYear] = useState(() => new Date().getFullYear())
 
   const [classes, setClasses] = useState<ClassGroup[]>([])

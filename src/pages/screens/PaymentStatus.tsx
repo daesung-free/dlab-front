@@ -125,7 +125,7 @@ import './payment.css'
 
 /* ★ **현금은 선택지에서 뺐다**(디랩 피드백 1013, 5-10 — "현금을 받지 않습니다").
      지난 기록에 현금 결제가 있으면 **표시는 그대로** 된다 — 라벨 맵은 건드리지 않는다.
-     새로 고를 수만 없게 하는 것이 목적이다. */
+     새로 선택할 수만 없게 하는 것이 목적이다. */
 type Method = '카드' | '가상계좌' | '현금'
 type Kind = '등록비' | '교습비' | '특강비' | '급식비'
 
@@ -353,7 +353,7 @@ const UNPAID_COLUMNS: Column<ReceiptRow>[] = [
   },
   /* ★ 행마다 보내는 버튼을 두지 않는다. **한 학생이 여러 달 밀리면 행이 여러 개**라
        행 단위로 보내면 같은 학부모에게 여러 통이 간다 — 묶어 보내는 것이 맞다.
-       체크해서 위 「미납 안내 보내기」로 보낸다(고른 건을 학생으로 묶는다). */
+       체크해서 위 「미납 안내 보내기」로 보낸다(선택한 건을 학생으로 묶는다). */
 ]
 
 /* ══ 할인 정책 ══
@@ -561,7 +561,7 @@ function Content() {
 
   const load = useCallback(async () => {
     /* ★ 지점을 고르기 전에는 부르지 않는다. 예전에는 academyId 없이 먼저 던지고
-         고른 뒤 다시 던져서, **화면에 들어갈 때마다 400 이 두 건씩** 쌓였다.
+         선택한 뒤 다시 던져서, **화면에 들어갈 때마다 400 이 두 건씩** 쌓였다.
          화면은 결과적으로 정상으로 보여 아무도 몰랐다. */
     if (academyId === null) {
       setRows([])
@@ -1256,7 +1256,7 @@ function Content() {
         res = await createPaymentRequest({ billingId: id, payMethod: payReq.payMethod, sendSms: payReq.sendSms })
       } else if (payReq.kind === 'terminal') {
         if (!payReq.approvalNo.trim() || !payReq.cardName.trim() || !payReq.approvedAt) {
-          setActErr('승인번호 · 카드사 · 승인 시각을 모두 적어 주세요. 정산 대사에 쓰는 값입니다.')
+          setActErr('승인번호 · 카드사 · 승인 시각을 모두 입력해 주세요. 정산 대사에 쓰는 값입니다.')
           setActBusy(false)
           return
         }
@@ -1338,7 +1338,7 @@ function Content() {
             ? `청구를 취소하고 수납 ${cancelRow.payments.length}건도 함께 취소했습니다.`
             : '청구를 취소했습니다.',
           vbankLeft.length > 0
-            ? `⚠️ 가상계좌 ${vbankLeft.join(' · ')}가 해지되지 않았습니다. 해당 계좌로 입금될 수 있으므로 결제업체에 확인하세요.`
+            ? `⚠️ 가상계좌 ${vbankLeft.join(' · ')}가 해지되지 않았습니다. 해당 계좌로 입금될 수 있으므로 결제업체에 확인합니다.`
             : '',
         ]
           .filter(Boolean)
@@ -1597,7 +1597,7 @@ function Content() {
                   여기에 찍는다 — 안 찍으면 이 목록이 **영원히 안 줄어든다** */}
               <div className="note-box">
                 <div>
-                  이체 대기 중인 환불 내역입니다. 은행에서 이체한 후 [이체 완료]를 선택하세요. 완료 처리
+                  이체 대기 중인 환불 내역입니다. 은행에서 이체한 후 [이체 완료]를 선택합니다. 완료 처리
                   전까지 이 목록에 표시됩니다.
                 </div>
               </div>
@@ -1608,7 +1608,7 @@ function Content() {
                 masked={masked}
                 pageSize={15}
                 emptyText={
-                  academyId === null ? '지점을 먼저 선택하세요.' : '이체할 환불이 없습니다.'
+                  academyId === null ? '지점을 먼저 선택해 주세요.' : '이체할 환불이 없습니다.'
                 }
               />
             </div>
@@ -1831,7 +1831,7 @@ function Content() {
                     <Icon name="users" size={14} /> 교습비 일괄 청구
                   </button>
                   <MaskToggle masked={masked} onChange={setMasked} />
-                  {/* 서버 엑셀(2026-09-25). 결제수단을 둘 이상 고른 경우만 화면이 거르므로,
+                  {/* 서버 엑셀(2026-09-25). 결제수단을 둘 이상 선택한 경우만 화면이 거르므로,
                       그때는 파일이 화면보다 넓어진다 — 그 경우에만 화면 값으로 만든다 */}
                   <ExcelButton
                     filename="통합_매출장"
@@ -2070,7 +2070,7 @@ function Content() {
                                   <td>
                                     {r.source ?? '-'}
                                     {/* ★★ 마스터에 없는 코드다. **장학 취소 판정이 이 학생을
-                                        건너뛴다** — 오류도 안 나고 검토 목록에도 안 뜬다 */}
+                                        제외한다** — 오류도 안 나고 검토 목록에도 안 뜬다 */}
                                     {r.unregistered && (
                                       <span
                                         className="mk brandnew"
@@ -2172,10 +2172,10 @@ function Content() {
               </div>
               <div className="hint">
                 {issue.mode === 'monthly'
-                  ? '금액은 단가표와 그 달 교습일수로 계산됩니다. 아래에서 미리 확인하세요.'
+                  ? '금액은 단가표와 그 달 교습일수로 계산됩니다. 아래에서 미리 확인합니다.'
                   : issue.mode === 'admission'
                     ? '입학일부터 남은 교습일수로 그 달 교습비를 계산합니다. 1일 입학이 아니면 다음 달분도 함께 청구됩니다.'
-                    : '금액을 직접 적습니다. 교습비는 위쪽으로 등록해야 단가표와 어긋나지 않습니다.'}
+                    : '금액을 직접 입력합니다. 교습비는 위쪽으로 등록해야 단가표와 어긋나지 않습니다.'}
               </div>
             </div>
           </div>
@@ -2236,7 +2236,7 @@ function Content() {
                     />
                   </div>
                   {/* 월 청구는 율, 아래 그 밖 청구는 금액이다 — 서버 계약이 그렇게 갈려 있다 */}
-                  <div className="hint">할인율은 퍼센트로 적습니다. 비우면 할인 없이 청구됩니다.</div>
+                  <div className="hint">할인율은 퍼센트로 입력합니다. 비우면 할인 없이 청구됩니다.</div>
                 </div>
               </div>
 
@@ -2333,14 +2333,14 @@ function Content() {
                       onChange={(e) => setIssue({ ...issue, discountRate: e.target.value })}
                     />
                   </div>
-                  <div className="hint">할인율은 퍼센트로 적습니다. 비우면 할인 없이 청구됩니다.</div>
+                  <div className="hint">할인율은 퍼센트로 입력합니다. 비우면 할인 없이 청구됩니다.</div>
                 </div>
               </div>
               <div className="frow">
                 <label className="req">남은 교습일수</label>
                 <div>
-                  {/* ★ 서버 값을 그대로 쓰면 조용히 틀린다 — 서버는 그 달 교습일수 총합만 알고
-                         어느 날이 휴원일인지는 모른다. 데스크가 고칠 수 있어야 한다 */}
+                  {/* ★ 서버 값을 그대로 사용하면 조용히 틀린다 — 서버는 그 달 교습일수 총합만 알고
+                         어느 날이 휴원일인지는 모른다. 데스크가 수정할 수 있어야 한다 */}
                   <input
                     className="inp"
                     type="number"
@@ -2351,10 +2351,10 @@ function Content() {
                   />
                   <div className="hint">
                     {issue.admissionDate === ''
-                      ? '입학일을 고르면 일수가 채워집니다.'
+                      ? '입학일을 고르면 일수가 자동 입력됩니다.'
                       : remainDays === null
                         ? '불러오는 중…'
-                        : `기본값은 ${remainDays}일입니다. 필요한 경우 수정하세요.`}
+                        : `기본값은 ${remainDays}일입니다. 필요한 경우 수정합니다.`}
                   </div>
                 </div>
               </div>
@@ -2409,7 +2409,7 @@ function Content() {
                     onChange={(e) => setIssue({ ...issue, discountAmount: e.target.value })}
                   />
                   </div>
-                  <div className="hint">할인은 퍼센트가 아니라 금액으로 적습니다.</div>
+                  <div className="hint">할인은 퍼센트가 아니라 금액으로 입력합니다.</div>
                 </div>
               </div>
             </>
@@ -2478,7 +2478,7 @@ function Content() {
                     ))}
                   </select>
                   {/* 왜 둘뿐인지 적는다 — 전에 넷이던 것을 아는 사람이 「없어졌다」고 묻는다 */}
-                  <div className="hint">카드 결제창에서 네이버페이·카카오페이도 쓸 수 있습니다.</div>
+                  <div className="hint">카드 결제창에서 네이버페이·카카오페이도 사용할 수 있습니다.</div>
                 </div>
               </div>
               <div className="frow">
@@ -2590,7 +2590,7 @@ function Content() {
               <label>결제 주소</label>
               <div>
                 <input className="inp" readOnly value={payReqDone.payUrl} onFocus={(e) => e.currentTarget.select()} />
-                <div className="hint">학부모에게 전달하세요. 문자를 켜 두었으면 이미 나갔습니다.</div>
+                <div className="hint">학부모에게 전달합니다. 문자를 켜 두었으면 이미 나갔습니다.</div>
               </div>
             </div>
           )}
@@ -2646,7 +2646,7 @@ function Content() {
               />
               {/* 부분납이면 여러 건이 쌓인다. 미납액을 기본값으로 넣어 두고 고치게 한다 */}
               <div className="hint">
-                미납액 {pay.row.unpaid.toLocaleString()}원. 나눠 받으면 금액을 고쳐 적습니다.
+                미납액 {pay.row.unpaid.toLocaleString()}원. 나눠 받으면 금액을 수정해 입력합니다.
               </div>
             </div>
           </div>
@@ -2701,12 +2701,12 @@ function Content() {
                   ) : refund.done.status === 'ADDITIONAL_PAYMENT' ? (
                     <>
                       추가 납부가 필요한 금액은 <b>{wonOf(Math.abs(refund.done.refundAmount))}</b>입니다.
-                      학부모에게 추가 납부를 안내하세요.
+                      학부모에게 추가 납부를 안내해 주세요.
                     </>
                   ) : refund.done.status === 'PENDING' ? (
                     <>
                       <b>{wonOf(refund.done.refundAmount)}이 이체 대기로 등록되었습니다.</b> 아직 이체되지
-                      않았습니다. 은행에서 이체한 후 [이체 완료]를 선택하세요.
+                      않았습니다. 은행에서 이체한 후 [이체 완료]를 선택합니다.
                     </>
                   ) : (
                     <>
@@ -2736,13 +2736,13 @@ function Content() {
                     placeholder="예: 12"
                     onChange={(e) => setRefund({ ...refund, usedDays: e.target.value })}
                   />
-                  {/* ★★ **출석일수가 아니다.** 「다닌」·「수강한」이라고 쓰면 담당자가
+                  {/* ★★ **출석일수가 아니다.** 「다닌」·「수강한」이라고 사용하면 담당자가
                       출석부를 보고 결석을 뺀다 — **그러면 환불액이 틀린다.** 규정은
                       경과 비율이라 결석해도 줄지 않는다(0820 규정 원문 확인).
                       ★ 분모(교습일수)는 **관리자가 연 1회 등록한 값**을 서버가 읽는다 —
                       화면에서 받는 값이 아니다. 여기는 이용일수만 받는다 */}
                   <div className="hint">
-                    등록일부터 환불일까지의 일수를 입력하세요. 실제 출석 여부와 무관합니다.
+                    등록일부터 환불일까지의 일수가 필요합니다. 실제 출석 여부와 무관합니다.
                   </div>
                 </div>
               </div>
@@ -2982,7 +2982,7 @@ function Content() {
               />
               <div className="hint">
                 {rcp.purpose === 'PERSONAL'
-                  ? '학부모 휴대폰번호로 소득공제가 잡힙니다.'
+                  ? '학부모 휴대폰번호로 소득공제가 반영됩니다.'
                   : '사업자등록번호로 지출증빙이 발급됩니다.'}
               </div>
             </div>
@@ -3024,7 +3024,7 @@ function Content() {
                   <>청구 {cancelRow.billedAmount.toLocaleString()}원이 매출장에서 제외됩니다.</>
                 )}
                 {/* ★ 발급해 둔 가상계좌는 **기한까지 계속 입금을 받는다.** 함께 닫는다는 것을
-                    미리 말한다 — 안 적으면 「계좌는 어떻게 되나」를 따로 묻게 된다 */}
+                    미리 말한다 — 안 입력하면 「계좌는 어떻게 되나」를 따로 묻게 된다 */}
                 <div style={{ marginTop: 6 }}>
                   취소 시 발급된 가상계좌도 함께 해지됩니다.
                 </div>

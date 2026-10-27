@@ -111,7 +111,7 @@ function Content() {
 
   function add() {
     if (academyId === null) {
-      setNotice('먼저 지점을 고르세요.')
+      setNotice('먼저 지점을 선택해 주세요.')
       return
     }
     if (name.trim() === '') return
@@ -283,7 +283,7 @@ function Content() {
 
       {academyId === null && academyReady && (
         <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
-          위에서 지점을 먼저 고르세요.
+          위에서 지점을 먼저 선택해 주세요.
         </div>
       )}
       {loadError && (

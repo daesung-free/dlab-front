@@ -301,7 +301,7 @@ function Content() {
 
   /* ★ 좌석을 눌러 그 자리에 학생을 앉힌다(C-1·C-2).
      ★ **좌석 없는 학생만** 띄운다(`unassignedSeat`). 이미 앉은 학생을 고르면 서버가 막는데,
-       목록에 보여 놓고 고른 뒤에 막으면 **왜 안 되는지 모른다.**
+       목록에 보여 놓고 선택한 뒤에 막으면 **왜 안 되는지 모른다.**
      ★ 지점을 넘겨 부른다 — 안 넘기면 전 지점 학생이 섞여 **남의 지점 학생을 앉히게** 된다. */
   async function openAssign(
     seatId: number,
@@ -347,7 +347,7 @@ function Content() {
            전부-아니면-전무로 처리하므로, 중간에 실패해도 **한쪽만 자리를 잃는 일이 없다.**
            해제 → 배정으로 나눠 부르면 그 사고가 난다(2026-10-16 백엔드 확인). */
         const mate = swapMates.find((m) => String(m.enrollmentId) === assignTo.pick)
-        if (!mate) throw new Error('고른 학생의 자리를 찾지 못했습니다.')
+        if (!mate) throw new Error('선택한 학생의 자리를 찾지 못했습니다.')
         await assignSeatsBulk([
           { seatId: assignTo.seatId, enrollmentId: mate.enrollmentId! },
           { seatId: mate.seatId, enrollmentId: assignTo.occupant.enrollmentId },
@@ -501,7 +501,7 @@ function Content() {
                   {loading
                     ? '불러오는 중…'
                     : academyId === null
-                      ? '지점을 먼저 선택하세요.'
+                      ? '지점을 먼저 선택해 주세요.'
                       : '좌석 구역이 없습니다.'}
                 </div>
               ) : (
@@ -578,7 +578,7 @@ function Content() {
             <div className="card-sec-b">
               {!sel && (
                 <div className="mock-stub" style={{ padding: '34px 20px' }}>
-                  <div className="t">좌석을 선택하세요</div>
+                  <div className="t">선택된 좌석이 없습니다</div>
                   <div className="x">배치도에서 좌석을 누르면 배정 학생·재실 상태를 확인하고 해제할 수 있습니다.</div>
                 </div>
               )}
@@ -641,7 +641,7 @@ function Content() {
                   </div>
 
                   <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
-                    {/* ★ 좌석을 골라 **여기서 바로** 앉힌다(C-1·C-2). 전에는 막아 두고
+                    {/* ★ 좌석을 선택해 **여기서 바로** 앉힌다(C-1·C-2). 전에는 막아 두고
                         「배정 관리 화면에서 하라」고 했는데, **배치도를 보면서 고르는 것**이
                         이 화면의 일이다 — 자리를 보고 와서 다른 화면에서 번호로 찾게 했다 */}
                     {/* ★ 빈 자리는 **배정**, 찬 자리는 **자리 바꾸기**다.
@@ -728,7 +728,7 @@ function Content() {
               <button
                 className="btn"
                 disabled={busy || picked.length === 0}
-                title={picked.length === 0 ? '옮길 학생을 먼저 고르세요' : `${picked.length}명의 자리를 옮깁니다`}
+                title={picked.length === 0 ? '옮길 학생을 먼저 선택해 주세요' : `${picked.length}명의 자리를 옮깁니다`}
                 onClick={() => {
                   setMoveErr(null)
                   // 처음에는 지금 자리 그대로 둔다 — 실수로 전원이 움직이지 않게
@@ -771,7 +771,7 @@ function Content() {
           }
           sub={
             assignTo.occupant
-              ? '고른 학생과 자리를 맞바꿉니다. 한쪽만 바뀌는 일은 없습니다.'
+              ? '선택한 학생과 자리를 맞바꿉니다. 한쪽만 바뀌는 일은 없습니다.'
               : '좌석이 없는 학생만 나옵니다.'
           }
           confirmLabel={assignTo.occupant ? '자리 바꾸기' : '배정'}

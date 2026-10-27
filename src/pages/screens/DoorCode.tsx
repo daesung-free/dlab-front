@@ -95,7 +95,7 @@ function Content() {
       return
     }
     if (a !== b) {
-      setErr('두 번 입력한 번호가 다릅니다. 다시 확인해 주세요.')
+      setErr('두 번 입력한 번호가 다릅니다. 다시 확인합니다.')
       return
     }
     if (academyId === null) return
@@ -119,7 +119,7 @@ function Content() {
     return (
       <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
         <div>
-          <b>위에서 지점을 먼저 고르세요.</b> 도어락 번호는 지점마다 따로 저장합니다.
+          <b>위에서 지점을 먼저 선택해 주세요.</b> 도어락 번호는 지점마다 따로 저장합니다.
         </div>
       </div>
     )
@@ -173,7 +173,7 @@ function Content() {
       {open && (
         <Modal
           title="도어락 번호 교체"
-          sub="실제 도어락에 넣은 번호를 그대로 적어 주세요."
+          sub="실제 도어락에 넣은 번호를 그대로 입력해 주세요."
           confirmLabel="저장"
           busy={busy}
           error={err}
@@ -183,7 +183,7 @@ function Content() {
           <div className="note-box">
             <div>
               저장한 번호는 <b>다시 볼 수 없습니다.</b> 한 번 쓴 번호는 재사용할 수 없으니, 잘못
-              적으면 그 번호를 영구히 쓸 수 없게 됩니다 — 그래서 두 번 받습니다.
+              입력하면 그 번호를 영구히 쓸 수 없게 됩니다 — 그래서 두 번 받습니다.
             </div>
           </div>
           <div className="frow">

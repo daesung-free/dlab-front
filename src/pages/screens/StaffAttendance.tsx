@@ -152,7 +152,7 @@ function Content() {
 
       {!canEdit && (
         <div className="note-box">
-          <div>이 계정은 기록을 볼 수만 있습니다. 고치려면 담당자에게 권한을 요청해 주세요.</div>
+          <div>이 계정은 기록을 볼 수만 있습니다. 고치려면 담당자에게 권한을 요청합니다.</div>
         </div>
       )}
 
@@ -199,11 +199,11 @@ function EditModal({ row, onClose, onSaved }: { row: Row; onClose: () => void; o
 
   async function submit() {
     if (!/^\d{2}:\d{2}$/.test(time)) {
-      setErr('시각을 다시 확인해 주세요.')
+      setErr('시각을 다시 확인합니다.')
       return
     }
     if (!reason.trim()) {
-      setErr('수정 이유를 적어 주세요. 이유가 없으면 나중에 그 기록을 근거로 쓸 수 없습니다.')
+      setErr('수정 이유를 입력해 주세요. 이유가 없으면 나중에 그 기록을 근거로 쓸 수 없습니다.')
       return
     }
     setBusy(true)

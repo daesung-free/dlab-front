@@ -99,7 +99,7 @@ function standardColumns(
           r.amount === null ? <span style={{ color: 'var(--muted)' }}>-</span> : `${r.amount.toLocaleString()}원`
         ) : (
           // 학년 × 좌석유형으로 갈려 한 칸에 못 넣는다 — 아래 단가표가 실제 값이다
-          <span title="학년 · 좌석유형에 따라 갈립니다. 아래 단가표에서 확인하세요">
+          <span title="학년 · 좌석유형에 따라 갈립니다. 아래 단가표에서 확인합니다">
             {r.amountMin !== null && r.amountMax !== null
               ? `${r.amountMin.toLocaleString()} ~ ${r.amountMax.toLocaleString()}원`
               : '—'}
@@ -348,7 +348,7 @@ function Content() {
   /* 청구 기준 등록. **코드·항목·금액 방식이 필수**라 이름만 받는 창으로는 못 만든다 */
   const [newStd, setNewStd] = useState<NewStandard | null>(null)
   /* 수정 모드. null 이면 신규 등록이다 — 모달 하나를 둘 다 쓴다.
-     ★ 지금까지 **고칠 길이 아예 없어서** 금액·납기 오타를 중지 + 재등록으로만 처리했다.
+     ★ 지금까지 **수정할 길이 아예 없어서** 금액·납기 오타를 중지 + 재등록으로만 처리했다.
        코드가 중복이라 재등록이 막히는 경우가 있어 사실상 손을 못 댔다(디랩 피드백 1013) */
   const [editingStdId, setEditingStdId] = useState<number | null>(null)
   const [newStdErr, setNewStdErr] = useState<string | null>(null)
@@ -501,7 +501,7 @@ function Content() {
    */
   async function editMonth(mo: number, days: number) {
     if (academyId === null) {
-      setNotice('먼저 지점을 고르세요.')
+      setNotice('먼저 지점을 선택해 주세요.')
       return
     }
     const key = `${year}-${String(mo).padStart(2, '0')}`
@@ -530,13 +530,13 @@ function Content() {
   async function savePrice() {
     if (priceEdit === null) return
     if (academyId === null) {
-      setNotice('먼저 지점을 고르세요.')
+      setNotice('먼저 지점을 선택해 주세요.')
       return
     }
     const tuitionFee = Number(priceEdit.tuitionFee)
     const studyRoomFee = Number(priceEdit.studyRoomFee)
     if (!Number.isInteger(tuitionFee) || tuitionFee < 0 || !Number.isInteger(studyRoomFee) || studyRoomFee < 0) {
-      setPriceErr('금액은 0 이상 정수로 적어 주세요.')
+      setPriceErr('금액은 0 이상 정수로 입력해 주세요.')
       return
     }
     setBusy(true)
@@ -565,7 +565,7 @@ function Content() {
   async function copyStandards() {
     // 헤더 버튼은 지점을 안 골라도 창을 연다 — 조용히 멈추면 '복사'가 안 먹는 것처럼 보인다
     if (academyId === null) {
-      setNotice('먼저 위에서 지점을 고르세요.')
+      setNotice('먼저 위에서 지점을 선택해 주세요.')
       setCopyAsk(false)
       return
     }
@@ -593,8 +593,8 @@ function Content() {
     <>
       {copyAsk && (
         <Modal
-          title={`${year - 1}년 청구 기준을 ${year}년으로 복사할까요?`}
-          sub="같은 코드가 이미 있으면 건너뜁니다. 사용 중지된 기준도 그대로 옮깁니다."
+          title={`${year - 1}년 청구 기준을 ${year}년으로 복사하시겠습니까?`}
+          sub="같은 코드가 이미 있으면 제외됩니다. 사용 중지된 기준도 그대로 옮깁니다."
           confirmLabel="복사"
           busy={copyBusy}
           onConfirm={() => void copyStandards()}
@@ -602,7 +602,7 @@ function Content() {
         >
           <div className="note-box">
             <div>
-              금액은 작년 그대로 넘어갑니다. 올해 금액이 다르면 옮긴 뒤 고치세요. 위에서 고른 시즌({year})이 옮겨 갈
+              금액은 작년 그대로 이관됩니다. 올해 금액이 다르면 옮긴 뒤 고치세요. 위에서 선택한 시즌({year})이 옮겨 갈
               연도입니다.
             </div>
           </div>
@@ -670,7 +670,7 @@ function Content() {
                 disabled={editingStdId !== null}
                 onChange={(e) => setNewStd({ ...newStd, code: e.target.value })}
               />
-              <div className="hint">등록 후에는 바꿀 수 없습니다. 영문·숫자·하이픈을 씁니다.</div>
+              <div className="hint">등록 후에는 바꿀 수 없습니다. 영문·숫자·하이픈을 사용합니다.</div>
             </div>
           </div>
 
@@ -776,7 +776,7 @@ function Content() {
           <div className="note-box">
             <div>
               여기 금액이 비어 있으면 <b>그 학년·좌석의 월 청구를 발행할 수 없습니다.</b> 할인은 수납현황에서
-              따로 붙습니다 — 여기는 정가입니다.
+              따로 등록됩니다 — 여기는 정가입니다.
             </div>
           </div>
           <div className="frow">
@@ -795,7 +795,7 @@ function Content() {
                 ))}
               </select>
               {/* ★ 기존 행은 조합을 못 바꾼다 — 바꾸면 다른 조합을 덮어쓰게 된다 */}
-              {priceEdit.exists && <div className="hint">학년·좌석을 바꾸려면 그 조합을 따로 추가하세요.</div>}
+              {priceEdit.exists && <div className="hint">학년·좌석을 바꾸려면 그 조합을 따로 추가합니다.</div>}
             </div>
           </div>
           <div className="frow">
@@ -827,7 +827,7 @@ function Content() {
                 value={priceEdit.tuitionFee}
                 onChange={(e) => setPriceEdit({ ...priceEdit, tuitionFee: e.target.value })}
               />
-              <div className="hint">원 단위로 적습니다.</div>
+              <div className="hint">원 단위로 입력합니다.</div>
             </div>
           </div>
           <div className="frow">
@@ -848,7 +848,7 @@ function Content() {
       {monthEdit && (
         <Modal
           title={`${year}년 ${monthEdit.mo}월 교습일수`}
-          sub="달력 일수가 아니라 실제 수업일수입니다. 학원이 관리하는 값을 그대로 입력하세요."
+          sub="달력 일수가 아니라 실제 수업일수입니다. 학원이 관리하는 값을 그대로 입력합니다."
           confirmLabel="저장"
           busy={busy}
           error={monthErr}
@@ -885,7 +885,7 @@ function Content() {
             금액은 <b>① 청구기준(여기, 정가)</b> → <b>② 수납현황 &gt; 할인 정책(실제 청구액)</b> →{' '}
             <b>③ 결제(PG 트랜잭션)</b> 순으로 확정됩니다.
             <br />
-            <b>현재 ②가 빠져 있어 여기의 정가가 그대로 PG로 넘어갑니다.</b> 결제창에 할인 전 금액이 뜨는 원인이며,
+            <b>현재 ②가 빠져 있어 여기의 정가가 그대로 PG로 이관됩니다.</b> 결제창에 할인 전 금액이 뜨는 원인이며,
             할인 정책은 <b>수납현황 화면</b>에서 등록합니다.
           </div>
         </div>
@@ -1117,7 +1117,7 @@ export const adminBillingMockup: Mockup = {
   Content,
   actions: (
     <>
-      <button className="btn" onClick={() => copySignal.bump()} title="작년 청구 기준을 올해로 옮깁니다. 같은 코드는 건너뜁니다">
+      <button className="btn" onClick={() => copySignal.bump()} title="작년 청구 기준을 올해로 옮깁니다. 같은 코드는 제외됩니다">
         <Icon name="history" size={14} /> 전년도 기준 복사
       </button>
     </>

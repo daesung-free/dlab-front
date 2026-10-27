@@ -240,7 +240,7 @@ function Content() {
     setSaveMsg(
       at
         ? `${at} 임시저장했습니다. 이 컴퓨터에서만 다시 불러올 수 있습니다.`
-        : '임시저장하지 못했습니다. 브라우저 저장 공간을 확인해 주세요.',
+        : '임시저장하지 못했습니다. 브라우저 저장 공간을 확인합니다.',
     )
   }
 
@@ -353,7 +353,7 @@ function Content() {
           selected={selectedId ?? undefined}
           onSelect={setSelectedId}
           loading={listLoading}
-          emptyText={academyId === null ? '지점을 먼저 선택하세요.' : '해당하는 학생이 없습니다.'}
+          emptyText={academyId === null ? '지점을 먼저 선택해 주세요.' : '해당하는 학생이 없습니다.'}
         />
 
         <section className="panel">
@@ -373,7 +373,7 @@ function Content() {
                   마지막 상담 {selected.lastConsultedAt ?? '없음'}
                 </>
               ) : (
-                '학생을 선택하세요'
+                '선택된 학생이 없습니다'
               )
             }
             right={
@@ -497,7 +497,7 @@ function Content() {
                         className="ta"
                         value={content}
                         onChange={(e) => setContent(e.target.value)}
-                        placeholder="상담에서 다룬 내용을 기록하세요. (학생 상태, 학습 현황, 논의사항)"
+                        placeholder="상담 내용 — 학생 상태 · 학습 현황 · 논의사항"
                       />
                     </div>
 

@@ -284,7 +284,7 @@ function Content() {
     setBusy(true)
     setModalErr(null)
     /* ★★ 마스터 코드를 **항상 명시해서** 보낸다(2026-10-22, dlab-api #242 로 칸이 생겼다).
-       고른 게 없으면 `null` 이다 — 키를 빼면 수정 시 「유지」라, 대학을 마스터 밖 이름으로
+       선택한 게 없으면 `null` 이다 — 키를 빼면 수정 시 「유지」라, 대학을 마스터 밖 이름으로
        바꿨는데 **앞 대학의 코드가 남는다.** 이름은 바뀌었는데 집계는 앞 대학으로 간다. */
     const pickedDept = deptOpts.find((d) => d.name === deptTyped) ?? null
     const body: AdmissionResultInput = {
@@ -310,7 +310,7 @@ function Content() {
         draft.resultId === null
           ? '지원을 추가했습니다.'
           : stale
-            ? '수정했습니다. 다만 대학을 목록에 없는 이름으로 바꿨습니다 — 집계는 아직 이전 대학으로 잡힙니다. 목록에서 다시 선택하거나, 이 지원을 내리고 새로 등록해 주세요.'
+            ? '수정했습니다. 다만 대학을 목록에 없는 이름으로 바꿨습니다 — 집계는 아직 이전 대학으로 반영됩니다. 목록에서 다시 선택하거나, 이 지원을 내리고 새로 등록합니다.'
             : '수정했습니다. 이 줄은 이제 직원 확인 값입니다.',
       )
       table.reload()
@@ -602,7 +602,7 @@ function Content() {
                   {year}학년도 지원 <b>{table.serverPaging.totalElements}</b>건
                 </>
               }
-              emptyText={academyId === null ? '위에서 지점을 먼저 고르세요.' : '조건에 맞는 지원이 없습니다.'}
+              emptyText={academyId === null ? '위에서 지점을 먼저 선택해 주세요.' : '조건에 맞는 지원이 없습니다.'}
             />
           </div>
         ) : (
@@ -731,7 +731,7 @@ function Content() {
             <label className="req">대학</label>
             <div>
               {/* ★ 마스터를 먼저 보이고, 없으면 **이미 넣은 값**으로 거든다.
-                  둘 다 비어도 직접 쓰면 된다 — 자유 입력을 막지 않는다 */}
+                  둘 다 비어도 직접 사용하면 된다 — 자유 입력을 막지 않는다 */}
               <input
                 className="inp"
                 list="ar-uni"
@@ -792,7 +792,7 @@ function Content() {
             <label>계열</label>
             <div>
               {/* ★ 학과를 목록에서 고르면 **서버가 준 계열이 들어간다.** 그때는 손대지
-                  않게 막는다 — 고쳐 쓰면 통일하려고 만든 마스터가 무의미해진다 */}
+                  않게 막는다 — 수정해 사용하면 통일하려고 만든 마스터가 무의미해진다 */}
               <input
                 className="inp"
                 maxLength={30}
@@ -839,8 +839,8 @@ function Content() {
 
       {dropping && (
         <Modal
-          title={`${dropping.universityName} ${dropping.departmentName} 지원을 내릴까요?`}
-          sub="목록과 집계에서 빠집니다. 기록 자체는 지워지지 않고 남습니다."
+          title={`${dropping.universityName} ${dropping.departmentName} 지원을 내리시겠습니까?`}
+          sub="목록과 집계에서 제외됩니다. 기록 자체는 삭제되지 않고 유지됩니다."
           confirmLabel="내리기"
           danger
           busy={busy}
@@ -893,7 +893,7 @@ function ImportButton() {
       <button
         className="btn"
         disabled={academyId === null}
-        title={academyId === null ? '지점을 먼저 선택하세요' : undefined}
+        title={academyId === null ? '지점을 먼저 선택해 주세요' : undefined}
         onClick={() => {
           setOpen(true)
           setFile(null)
@@ -929,8 +929,8 @@ function ImportButton() {
                 }}
               />
               <div className="hint">
-                첫 줄에 칸 이름을 적습니다. <b>학번 · 구분(수시/정시) · 대학명 · 학과명</b>은 꼭 있어야 하고, 이름 · 전형명 ·
-                결과(합격/불합격/발표전/등록포기) · 메모는 있으면 함께 들어갑니다. 이름을 적으면 학번과 맞는지 확인합니다.
+                첫 줄에 칸 이름을 입력합니다. <b>학번 · 구분(수시/정시) · 대학명 · 학과명</b>은 꼭 있어야 하고, 이름 · 전형명 ·
+                결과(합격/불합격/발표전/등록포기) · 메모는 있으면 함께 들어갑니다. 이름을 입력하면 학번과 맞는지 확인합니다.
               </div>
             </div>
           </div>

@@ -127,7 +127,7 @@ function Content() {
       if (fromServer) return fromServer.toUpperCase()
       /* ★ 폴백을 **말없이** 쓰지 않는다. 서버가 묶음을 바꾸면 화면 표만 옛날 값으로 남아
          색이 조용히 갈라진다 — 「색이 왜 다르지」를 그때 추적할 수 있어야 한다 */
-      if (import.meta.env.DEV) console.warn(`[순찰] 서버가 '${code}' 의 묶음을 주지 않아 화면 기본값을 씁니다`)
+      if (import.meta.env.DEV) console.warn(`[순찰] 서버가 '${code}' 의 묶음을 주지 않아 화면 기본값을 사용합니다`)
       return CODE_GROUP[code] ?? 'INSIDE'
     },
     [defs],
@@ -525,7 +525,7 @@ function Content() {
               )}
               {removed > 0 && (
                 <span className="mk brandnew">
-                  지운 {removed}건은 저장해도 남습니다 — 「회차 비우기」로 비우고 다시 기록하세요
+                  지운 {removed}건은 저장해도 남습니다 — 「회차 비우기」로 비우고 다시 기록합니다
                 </span>
               )}
             </div>

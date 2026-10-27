@@ -153,7 +153,7 @@ const keyOf = (day: DayOfWeek, periodId: number) => `${day}:${periodId}`
 function Content() {
   const { academyId } = useAcademy()
   /* ★ 담임은 **보기만** 한다 — 칸을 눌러도 편집 모달을 열지 않는다. 열어 두면
-     고쳐 놓고 저장이 안 되는(버튼이 없는) 막다른 길이 된다 */
+     수정해 놓고 저장이 안 되는(버튼이 없는) 막다른 길이 된다 */
   const { teacherOnly, readOnly } = useAuth()
   const canEdit = !teacherOnly && !readOnly
   const year = new Date().getFullYear()
@@ -322,7 +322,7 @@ function Content() {
     }
     /* ★ 빈 목록은 서버가 거절한다 — 먼저 막아야 「저장이 안 된다」로 보이지 않는다 */
     if (body.length === 0) {
-      setError('저장할 항목이 없습니다. 칸을 선택해 과목을 먼저 입력하세요.')
+      setError('저장할 항목이 없습니다. 칸을 선택해 과목을 먼저 입력합니다.')
       return
     }
     setSaving(true)
@@ -509,7 +509,7 @@ function Content() {
           <div className="card-sec-b">
             {classes.length === 0 && (
               <div style={{ color: 'var(--muted)', fontSize: 13 }}>
-                {academyId === null ? '지점을 먼저 고르세요.' : '이 지점에 등록된 반이 없습니다.'}
+                {academyId === null ? '지점을 먼저 선택해 주세요.' : '이 지점에 등록된 반이 없습니다.'}
               </div>
             )}
             {periods.length === 0 && classes.length > 0 && (
@@ -568,7 +568,7 @@ function Content() {
                                   const srv = srvOf.get(keyOf(d, p.id))
                                   const has = filled(dr)
                                   /* ★ 강의실은 **서버가 정한 실제 적용 강의실**을 그린다. 새로 고른
-                                     칸은 아직 서버를 안 거쳤으므로 고른 값으로 보여준다 */
+                                     칸은 아직 서버를 안 거쳤으므로 선택한 값으로 보여준다 */
                                   const room =
                                     dr.roomId !== '' ? roomNo(dr.roomId) : (srv?.effectiveRoomNo ?? cls?.roomName ?? '')
                                   const tch = dr.teacherId !== '' ? teacherName(dr.teacherId) : ''
@@ -794,7 +794,7 @@ function Content() {
       {copying && (
         <Modal
           title={`${year - 1}년 편성을 ${year}년으로 복사합니다`}
-          sub="이미 있는 칸은 건너뜁니다"
+          sub="이미 있는 칸은 제외됩니다"
           confirmLabel="복사"
           busy={copying.busy}
           error={copying.err}
@@ -805,7 +805,7 @@ function Content() {
           {copying.result === null ? (
             <div className="note-box">
               <div>
-                <b>올해에 이미 있는 칸은 그대로 둡니다</b> — 복사 뒤 손으로 고친 편성이 되돌려지지 않습니다. 두 번
+                <b>올해에 이미 있는 칸은 유지됩니다</b> — 복사 뒤 손으로 고친 편성이 되돌려지지 않습니다. 두 번
                 눌러도 결과는 같습니다.
               </div>
             </div>

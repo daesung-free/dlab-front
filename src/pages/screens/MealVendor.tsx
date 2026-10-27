@@ -167,7 +167,7 @@ function Content() {
     setNotice(
       failed.length === 0
         ? `${done.length}개 지점에 ${year - 1}년 값을 넣었습니다 — ${done.join(' · ')}`
-        : `${done.length}개 지점은 됐고(${done.join(' · ')}), ${failed.length}개는 실패했습니다(${failed.join(' · ')}). 실패한 지점은 직접 정해 주세요.`,
+        : `${done.length}개 지점은 됐고(${done.join(' · ')}), ${failed.length}개는 실패했습니다(${failed.join(' · ')}). 실패한 지점은 직접 정합니다.`,
     )
     await load()
   }
@@ -350,13 +350,13 @@ function Content() {
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <b>{v.name}</b>
-                    {/* 배정은 연도별이라 해를 함께 적는다 — 안 적으면 "디온푸드 0개" 만 보인다 */}
+                    {/* 배정은 연도별이라 해를 함께 적는다 — 안 입력하면 "디온푸드 0개" 만 보인다 */}
                     <span className="mk supplement">{year}년 {used}곳</span>
                     <button
                       className="btn"
                       style={{ marginLeft: 'auto', padding: '2px 7px', fontSize: 11 }}
                       disabled={busy !== null}
-                      title="담당자·연락처를 고칩니다"
+                      title="담당자·연락처를 수정합니다"
                       onClick={() =>
                         setEditVendor({
                           id: v.id,
@@ -389,7 +389,7 @@ function Content() {
               )
             })}
             {vendors.length === 0 && !loading && (
-              <div style={{ color: 'var(--muted)', fontSize: 13 }}>등록된 업체가 없습니다. 먼저 업체를 등록하세요.</div>
+              <div style={{ color: 'var(--muted)', fontSize: 13 }}>등록된 업체가 없습니다. 먼저 업체를 등록합니다.</div>
             )}
           </div>
         </div>
@@ -565,7 +565,7 @@ function Content() {
 
       {dropping && (
         <Modal
-          title={`${dropping.name} 을(를) 목록에서 내릴까요?`}
+          title={`${dropping.name} 업체를 목록에서 내리시겠습니까?`}
           sub="배정된 지점이 없을 때만 내릴 수 있습니다."
           confirmLabel="내리기"
           danger
