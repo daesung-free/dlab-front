@@ -121,14 +121,26 @@ const AREAS: Area[] = [
   { name: '교무 명단 출력', perms: { SUPER_ADMIN: 'full', BRANCH_ADMIN: 'full', TEACHER: 'own', STAFF: 'read', READONLY: 'read' } },
   { name: '상담 일지·리포트', perms: { SUPER_ADMIN: 'full', BRANCH_ADMIN: 'full', TEACHER: 'own', STAFF: 'none', READONLY: 'none' } },
   {
+    /* ★★ **이 행이 아예 없었다.** 그래서 표를 봐도 「대기자 관리가 조회 전용에 열리는가」를
+           알 수 없었고, 담당자가 메뉴에서 체크했다가 403 을 봤다(2026-10-27 문의).
+       ★ 조회(목록·중복찾기·상세·상태이력·메모)만 열려 있다 — **상태 변경·메모 작성·
+         공유·원생 전환은 막힌다**(dlab-api #294). 그래서 READONLY 는 'read' 다. */
+    name: '대기자 관리',
+    note: '입학 상담 예약',
+    perms: { SUPER_ADMIN: 'full', BRANCH_ADMIN: 'full', TEACHER: 'none', STAFF: 'read', READONLY: 'read' },
+  },
+  {
     name: '질의응답 타임 관리',
     note: '노출 설정 · 간격',
     perms: { SUPER_ADMIN: 'full', BRANCH_ADMIN: 'full', TEACHER: 'own', STAFF: 'read', READONLY: 'none' },
   },
   {
-    name: '키오스크 단말 관리',
-    note: '등록 · 재시작 · 펌웨어',
-    perms: { SUPER_ADMIN: 'full', BRANCH_ADMIN: 'own', TEACHER: 'none', STAFF: 'read', READONLY: 'none' },
+    /* ★ 「등록·재시작·펌웨어」는 **만들지 않기로 했다**(2026-10-26) — 키오스크 레포 담당이고
+           서버에 경로가 없다. 우리 화면은 **통신 상태만** 본다(좌석 이탈/복귀 탭).
+       ★ 그 경로가 최고관리자 전용이라 지점 관리자도 403 이다 — 'own' 이 아니라 'none' 이다. */
+    name: '키오스크 통신 상태',
+    note: '최고관리자만 · 단말 설정은 범위 밖',
+    perms: { SUPER_ADMIN: 'read', BRANCH_ADMIN: 'none', TEACHER: 'none', STAFF: 'none', READONLY: 'none' },
   },
   { name: '기초 설정', perms: { SUPER_ADMIN: 'full', BRANCH_ADMIN: 'read', TEACHER: 'none', STAFF: 'none', READONLY: 'none' } },
   { name: '사용자·권한 관리', perms: { SUPER_ADMIN: 'full', BRANCH_ADMIN: 'own', TEACHER: 'none', STAFF: 'none', READONLY: 'none' } },
