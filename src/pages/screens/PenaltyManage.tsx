@@ -297,19 +297,28 @@ function Content() {
       { key: 'reason', header: '사유', value: (r) => r.reason ?? '-' },
       { key: 'grantedByName', header: '부여자', width: '90px', value: (r) => r.grantedByName ?? '-' },
       {
+        /* ★ 헤더를 검색 칩과 **같은 말**로 맞춘다 — 칩은 「부여 방식」인데 컬럼만 「방식」이면
+             같은 것인 줄 모른다. 실제로 「자동/수기 구분이 안 보인다」는 문의가 왔다(2026-10-27).
+           ★ **수기도 딱지를 붙인다.** 회색 작은 글씨로 두면 자동만 눈에 띄어
+             「전부 자동이구나」로 읽힌다 — 색을 갈라 한눈에 세지게 한다.
+           ★ 툴팁에서 `source: KIOSK` 를 뺐다. enum 은 우리 사정이다(CLAUDE.md 1-1). */
         key: 'source',
-        header: '방식',
-        width: '86px',
+        header: '부여 방식',
+        width: '92px',
         align: 'center',
         value: (r) => (r.source === 'MANUAL' ? '수기' : '자동'),
-        render: (r, shown) =>
-          r.source === 'MANUAL' ? (
-            <span style={{ color: 'var(--muted)', fontSize: 11.5 }}>{shown}</span>
-          ) : (
-            <span className="mk supplement" title={`source: ${r.source}`}>
-              {shown}
-            </span>
-          ),
+        render: (r, shown) => (
+          <span
+            className={`mk ${r.source === 'MANUAL' ? 'verified' : 'supplement'}`}
+            title={
+              r.source === 'MANUAL'
+                ? '선생님이 직접 준 점수입니다'
+                : '출결·루틴 결과에 따라 자동으로 붙은 점수입니다'
+            }
+          >
+            {shown}
+          </span>
+        ),
       },
       {
         /* 요구사항의 '학생별 내역 조회·수정'. 잘못 준 점수를 상점으로 상쇄하면
