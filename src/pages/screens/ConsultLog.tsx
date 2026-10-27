@@ -9,7 +9,11 @@ import { addDaysStr, toDateStr, todayStr } from '../../components/common'
 import { ApiError } from '../../api/client'
 import { AcademyExams } from '../../components/AcademyExams'
 import { getAcademyExam, listAcademyExams } from '../../api/grades'
-import { fetchStudentPenalties, type StudentPenalties } from '../../api/penalties'
+import {
+  PENALTY_SOURCE_LABEL,
+  fetchStudentPenalties,
+  type StudentPenalties,
+} from '../../api/penalties'
 import {
   ATTENDANCE_STATUS_LABEL,
   fetchAttendanceBoard,
@@ -710,6 +714,10 @@ function AttPenalty({ enrollmentId, studentNo }: { enrollmentId: number; student
                   <th style={{ width: 100 }}>일자</th>
                   <th>항목</th>
                   <th style={{ width: 70, textAlign: 'right' }}>점수</th>
+                  {/* ★ **자동으로 붙은 것과 선생님이 준 것은 상담에서 다루는 법이 다르다.**
+                         무단결석으로 키오스크가 깎은 것과, 담임이 사유를 적어 준 것을
+                         한 덩어리로 보면 「왜 이렇게 깎였냐」를 설명할 수 없다(2026-10-27 요청) */}
+                  <th style={{ width: 72, textAlign: 'center' }}>부여 방식</th>
                   <th>사유</th>
                 </tr>
               </thead>
@@ -720,6 +728,11 @@ function AttPenalty({ enrollmentId, studentNo }: { enrollmentId: number; student
                     <td>{r.itemName}</td>
                     <td style={{ textAlign: 'right', color: r.point < 0 ? 'var(--red)' : 'var(--mint-d)' }}>
                       {r.point > 0 ? `+${r.point}` : r.point}
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <span className={`mk ${r.source === 'MANUAL' ? 'verified' : 'supplement'}`}>
+                        {PENALTY_SOURCE_LABEL[r.source] ?? r.source}
+                      </span>
                     </td>
                     <td>{r.reason ?? '-'}</td>
                   </tr>
