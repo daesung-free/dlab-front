@@ -101,6 +101,9 @@ function Content() {
     return all.filter((r) => r.academyId === null || r.academyId === academyId)
   }, [list.data, academyId, selectable])
 
+  // 다른 지점 예약을 함께 조회할 때만 지점을 표시한다. 소속 지점 전용 화면은 유지한다.
+  const showAcademy = rows.some((r) => r.academyId !== null && r.academyId !== academyId)
+
   const byStatus = useMemo(() => {
     const m = new Map<ReservationStatus, ReservationRow[]>()
     for (const s of RESERVATION_FLOW) m.set(s, [])
@@ -219,6 +222,7 @@ function Content() {
                     style={{ width: '100%', textAlign: 'left', cursor: 'pointer' }}
                   >
                     <div className="lead-top">
+                      {showAcademy && r.academyName && <span className="cat na">{r.academyName}</span>}
                       <span className="nm">{r.studentName ?? '이름 없음'}</span>
                       {r.stdGrade && <span className="cat na">{STD_GRADE_LABEL[r.stdGrade] ?? r.stdGrade}</span>}
                     </div>
@@ -253,7 +257,7 @@ function Content() {
         })}
       </div>
 
-      {open && <Detail row={open} onClose={() => setOpen(null)} onChanged={list.reload} />}
+      {open && <Detail row={open} showAcademy={showAcademy} onClose={() => setOpen(null)} onChanged={list.reload} />}
     </div>
   )
 }
@@ -261,10 +265,12 @@ function Content() {
 /** 카드 하나. 상태·메모·이력·전환이 한 곳에 모여야 담당자가 전화를 걸면서 끝낼 수 있다 */
 function Detail({
   row,
+  showAcademy,
   onClose,
   onChanged,
 }: {
   row: ReservationRow
+  showAcademy: boolean
   onClose: () => void
   onChanged: () => void
 }) {
@@ -393,6 +399,12 @@ function Detail({
           </div>
         )}
 
+        {showAcademy && (d?.academyName ?? row.academyName) && (
+          <div className="frow ro">
+            <label>지점</label>
+            <div>{d?.academyName ?? row.academyName}</div>
+          </div>
+        )}
         <div className="frow ro">
           <label>연락처</label>
           <div>
