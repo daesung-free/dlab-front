@@ -56,6 +56,8 @@ export interface ReservationRow {
   year: number
   /** 지점. 서버가 못 걸러 주므로 이 값으로 화면에서 거른다 */
   academyId: number | null
+  /** 예약을 접수한 지점. 이전 서버 배포와도 호환한다. */
+  academyName?: string | null
   studentName: string | null
   studentTel: string | null
   parentTel: string | null
