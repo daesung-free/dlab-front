@@ -36,8 +36,9 @@ import './admission.css'
  * ⚠ 시안은 유입 경로를 '구글폼'으로 표기했으나, 요구사항정의서 F-4.2는
  *   D.Lab 사이트(디멤버) 입학예약폼 연동으로 정의한다. 명칭을 '입학예약폼'으로 통일했다.
  *
- * ★ **지점을 화면에서 거른다.** 목록 API 가 `academyId` 를 안 받아 전 지점이 섞여 온다.
- *   거르지 않으면 분당 담당자가 대구 지원자를 보고 전화한다(API_GAPS 40부).
+ * ★ 지점 선택이 가능한 계정만 선택 지점으로 좁힌다. 서버가 계정별 조회 범위를 보장한다.
+ *   지점 선택이 없는 계정은 서버 응답을 그대로 쓴다 — 전 지점 입학예약 조회를 별도로
+ *   허용한 연구소 계정까지 소속 지점으로 다시 줄이면 허용된 예약이 화면에서 사라진다.
  *
  * ★ 카드에 적을 값이 **접수 폼보다 적다.** 생년·출신학원·등원희망일·유입경로·입학기준은
  *   홈페이지가 받아 두지만 관리자 조회로 **안 온다** — 칸을 지우지 않고 <Unfilled/> 로 둔다.
@@ -93,13 +94,12 @@ function Content() {
   const params = useMemo(() => ({ year, keyword: keyword || undefined }), [year, keyword])
   const list = useServerData({ fetcher: listReservations, params })
 
-  /* 서버가 지점으로 못 걸러 주므로 여기서 거른다. 지점을 아직 못 고른 전 지점 권한
-     계정에는 전부 보여준다 — 그 상태에서 숨기면 "조회가 안 된다"로 읽힌다 */
+  /* 서버의 계정별 접근 범위는 유지하고, 지점을 선택할 수 있는 계정만 화면에서 좁힌다. */
   const rows = useMemo(() => {
     const all = list.data ?? []
-    if (academyId === null) return all
+    if (!selectable || academyId === null) return all
     return all.filter((r) => r.academyId === null || r.academyId === academyId)
-  }, [list.data, academyId])
+  }, [list.data, academyId, selectable])
 
   const byStatus = useMemo(() => {
     const m = new Map<ReservationStatus, ReservationRow[]>()
