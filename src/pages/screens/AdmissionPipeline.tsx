@@ -395,6 +395,7 @@ function Detail({
         sub={row.rsvCd ? `접수번호 ${row.rsvCd} · ${dateOnly(row.createdAt)} 접수` : `${dateOnly(row.createdAt)} 접수`}
         confirmLabel="상태 저장"
         confirmDisabled={readOnly}
+        hideCancel={readOnly}
         busy={busy}
         error={err}
         onConfirm={() => void submitStatus()}
