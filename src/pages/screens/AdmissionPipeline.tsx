@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Icon } from '../../components/Icon'
 import { Modal, Unfilled, useServerData } from '../../components/common'
 import { useAcademy } from '../../auth/AcademyContext'
+import { useAuth } from '../../auth/AuthContext'
 import {
   CONVERT_GRADE_LABEL,
   GENDER_LABEL,
@@ -274,6 +275,7 @@ function Detail({
   onClose: () => void
   onChanged: () => void
 }) {
+  const { readOnly } = useAuth()
   /* 훅은 조건 객체를 받는다 — id 하나짜리도 객체로 감싸고 useMemo 를 건다.
      매 렌더 새 객체면 무한 요청이 된다 */
   const idParams = useMemo(() => ({ id: row.id }), [row.id])
@@ -314,6 +316,7 @@ function Detail({
   const [copied, setCopied] = useState(false)
 
   async function makeLink() {
+    if (readOnly) return
     setLinkBusy(true)
     setLinkErr(null)
     setCopied(false)
@@ -332,6 +335,7 @@ function Detail({
   const d = detail.data
 
   async function submitStatus() {
+    if (readOnly) return
     if (status === row.status && !reason.trim()) {
       setErr('바꿀 상태를 고르거나 이유를 입력해 주세요.')
       return
@@ -353,6 +357,7 @@ function Detail({
   }
 
   async function submitMemo() {
+    if (readOnly) return
     const content = memoText.trim()
     if (!content) return
     setMemoBusy(true)
@@ -369,6 +374,7 @@ function Detail({
   }
 
   async function removeMemo(memoId: number) {
+    if (readOnly) return
     setMemoBusy(true)
     setErr(null)
     try {
@@ -388,6 +394,7 @@ function Detail({
         title={`${row.studentName ?? '이름 없음'} 입학 상담`}
         sub={row.rsvCd ? `접수번호 ${row.rsvCd} · ${dateOnly(row.createdAt)} 접수` : `${dateOnly(row.createdAt)} 접수`}
         confirmLabel="상태 저장"
+        confirmDisabled={readOnly}
         busy={busy}
         error={err}
         onConfirm={() => void submitStatus()}
@@ -485,19 +492,23 @@ function Detail({
         <div className="frow">
           <label>상태</label>
           <div>
-            <select className="inp" value={status} onChange={(e) => setStatus(e.target.value as ReservationStatus)}>
-              {RESERVATION_FLOW.map((s) => (
-                <option key={s} value={s}>
-                  {RESERVATION_STATUS_LABEL[s]}
-                </option>
-              ))}
-            </select>
-            <div className="hint">
-              지금은 <b>{row.statusName ?? RESERVATION_STATUS_LABEL[row.status]}</b> 입니다.
-            </div>
+            {readOnly ? (row.statusName ?? RESERVATION_STATUS_LABEL[row.status]) : (
+              <>
+                <select className="inp" value={status} onChange={(e) => setStatus(e.target.value as ReservationStatus)}>
+                  {RESERVATION_FLOW.map((s) => (
+                    <option key={s} value={s}>
+                      {RESERVATION_STATUS_LABEL[s]}
+                    </option>
+                  ))}
+                </select>
+                <div className="hint">
+                  지금은 <b>{row.statusName ?? RESERVATION_STATUS_LABEL[row.status]}</b> 입니다.
+                </div>
+              </>
+            )}
           </div>
         </div>
-        <div className="frow">
+        {!readOnly && <div className="frow">
           <label>이유</label>
           <div>
             <input
@@ -512,7 +523,7 @@ function Detail({
                 : '적지 않아도 저장됩니다.'}
             </div>
           </div>
-        </div>
+        </div>}
 
         <div className="frow">
           <label>원생 전환</label>
@@ -529,6 +540,8 @@ function Detail({
                   <>전환이 끝났습니다. <b>학번은 반을 배정할 때 매겨집니다.</b></>
                 )}
               </div>
+            ) : readOnly ? (
+              <div>전환 전</div>
             ) : row.status === 'CONFIRMED' ? (
               <>
                 <button className="btn" type="button" onClick={() => setConvert(true)}>
@@ -552,7 +565,7 @@ function Detail({
         <div className="frow">
           <label>메모</label>
           <div>
-            <div style={{ display: 'flex', gap: 6 }}>
+            {!readOnly && <div style={{ display: 'flex', gap: 6 }}>
               <input
                 className="inp"
                 placeholder="통화 내용 · 다음에 할 일"
@@ -568,7 +581,7 @@ function Detail({
               <button className="btn" type="button" disabled={memoBusy || !memoText.trim()} onClick={() => void submitMemo()}>
                 추가
               </button>
-            </div>
+            </div>}
             {memos.error && <div className="hint">{memos.error}</div>}
             {(memos.data ?? []).length === 0 && !memos.loading && <div className="hint">아직 메모가 없습니다.</div>}
             {(memos.data ?? []).map((m) => (
@@ -576,9 +589,9 @@ function Detail({
                 <span className="src">
                   {m.content} <span className="mk">{dateOnly(m.createdAt)}</span>
                 </span>
-                <button className="btn" type="button" disabled={memoBusy} onClick={() => setDelMemo(m.id)}>
+                {!readOnly && <button className="btn" type="button" disabled={memoBusy} onClick={() => setDelMemo(m.id)}>
                   삭제
-                </button>
+                </button>}
               </div>
             ))}
           </div>
@@ -586,7 +599,7 @@ function Detail({
 
         {/* ★ 학부모에게 보내는 **등록 안내 링크**. 누르면 상태가 바로 바뀌어 이 화면에
                반영된다 — 「등록 희망」은 입학 확정, 「등록 포기」는 미등록 */}
-        <div className="frow">
+        {!readOnly && <div className="frow">
           <label>등록 안내 링크</label>
           <div>
             {link === null ? (
@@ -629,7 +642,7 @@ function Detail({
             )}
             {linkErr !== null && <div className="hint" style={{ color: 'var(--red)' }}>{linkErr}</div>}
           </div>
-        </div>
+        </div>}
 
         <div className="frow">
           <label>상태 이력</label>
@@ -653,7 +666,7 @@ function Detail({
         </div>
       </Modal>
 
-      {delMemo !== null && (
+      {!readOnly && delMemo !== null && (
         <Modal
           title="메모 삭제"
           sub="지우면 되돌릴 수 없습니다."
@@ -666,7 +679,7 @@ function Detail({
         </Modal>
       )}
 
-      {convert && (
+      {!readOnly && convert && (
         <ConvertModal
           row={row}
           onClose={() => setConvert(false)}
