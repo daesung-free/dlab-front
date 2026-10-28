@@ -758,9 +758,10 @@ function ConvertModal({ row, onClose, onDone }: { row: ReservationRow; onClose: 
   )
 }
 
-export const admissionMockup: Mockup = {
-  Content,
-  actions: (
+function AdmissionActions() {
+  const { readOnly } = useAuth()
+  if (readOnly) return null
+  return (
     <>
       <button className="btn" disabled data-soon title="준비 중입니다">
         문자 자동발송 설정
@@ -769,5 +770,10 @@ export const admissionMockup: Mockup = {
         + 예약 수동등록
       </button>
     </>
-  ),
+  )
+}
+
+export const admissionMockup: Mockup = {
+  Content,
+  actions: <AdmissionActions />,
 }
