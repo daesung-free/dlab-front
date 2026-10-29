@@ -8,6 +8,7 @@ import {
   PENALTY_CATEGORY_LABEL,
   PENALTY_TRIGGER_LABEL,
   createPenaltyItem,
+  copyPenaltyItems,
   createPenaltyRule,
   deletePenaltyItem,
   deletePenaltyRule,
@@ -628,9 +629,11 @@ interface ItemDraft {
   itemName: string
   point: string
   category: PenaltyCategory
+  groupName: string
+  description: string
 }
 
-const EMPTY_DRAFT: ItemDraft = { id: null, itemName: '', point: '', category: 'DEMERIT' }
+const EMPTY_DRAFT: ItemDraft = { id: null, itemName: '', point: '', category: 'DEMERIT', groupName: '', description: '' }
 
 /**
  * 헤더 우측 액션 — 항목 관리 · 전년도 복사.
@@ -638,7 +641,7 @@ const EMPTY_DRAFT: ItemDraft = { id: null, itemName: '', point: '', category: 'D
  * ★ 본문과 분리된 컴포넌트다(위 `bumpItems` 주석 참고). 지점·연도는 여기서 직접 읽는다.
  */
 function PenaltyActions() {
-  const { academyId } = useAcademy()
+  const { academyId, academies } = useAcademy()
   const year = new Date().getFullYear()
 
   const [open, setOpen] = useState(false)
@@ -656,6 +659,7 @@ function PenaltyActions() {
   const [err, setErr] = useState<string | null>(null)
 
   const [copyOpen, setCopyOpen] = useState(false)
+  const [branchCopyOpen, setBranchCopyOpen] = useState(false)
   const [copyBusy, setCopyBusy] = useState(false)
   const [copyMsg, setCopyMsg] = useState<string | null>(null)
 
@@ -697,6 +701,8 @@ function PenaltyActions() {
         itemName: draft.itemName.trim(),
         point: Math.abs(Number(draft.point)),
         category: draft.category,
+        groupName: draft.groupName.trim(),
+        description: draft.description.trim(),
       }
       if (draft.id === null) await createPenaltyItem(body)
       else await updatePenaltyItem(draft.id, body)
@@ -859,9 +865,41 @@ function PenaltyActions() {
       >
         <Icon name="history" size={14} /> 항목 전년도 복사
       </button>
+      <button className="btn" disabled={academyId === null || academies.length < 2 || copyBusy}
+        onClick={() => { setCopyMsg(null); setBranchCopyOpen(true) }}>
+        <Icon name="history" size={14} /> 전 지점에 항목 복사
+      </button>
       <button className="btn" disabled={academyId === null} onClick={openManage}>
         <Icon name="settings" size={14} /> 상벌점 항목 관리
       </button>
+      {copyMsg && <span className="hint">{copyMsg}</span>}
+
+      {branchCopyOpen && (
+        <Modal title="전 지점 항목 복사" sub="현재 선택한 지점의 올해 항목을 다른 지점에 복사합니다. 같은 이름은 복사 대상에서 제외됩니다."
+          confirmLabel="전 지점에 복사" busy={copyBusy} onClose={() => setBranchCopyOpen(false)}
+          onConfirm={() => void (async () => {
+            if (academyId === null) return
+            setCopyBusy(true)
+            setCopyMsg(null)
+            try {
+              const results: string[] = []
+              for (const target of academies.filter((a) => a.id !== academyId)) {
+                const rows = await copyPenaltyItems({ sourceAcademyId: academyId, targetAcademyId: target.id, year })
+                results.push(`${target.acadNm} ${rows.length}개 추가`)
+              }
+              setCopyMsg(`복사 완료: ${results.join(' · ')}`)
+              setBranchCopyOpen(false)
+            } catch (e) {
+              setCopyMsg(e instanceof ApiError ? e.message : '복사에 실패했습니다. 완료된 지점은 중복 없이 다시 복사할 수 있습니다.')
+            } finally {
+              setCopyBusy(false)
+            }
+          })()}>
+          <div>원본: {academies.find((a) => a.id === academyId)?.acadNm ?? '현재 지점'}</div>
+          <div className="hint" style={{ marginTop: 8 }}>각 지점에서 이미 등록된 이름은 중복 생성하지 않습니다.</div>
+          {copyMsg && <div className="hint bad" style={{ marginTop: 10 }}>{copyMsg}</div>}
+        </Modal>
+      )}
 
       {open && (
         <Modal
@@ -883,21 +921,24 @@ function PenaltyActions() {
                 <tr>
                   <th>항목</th>
                   <th>구분</th>
+                  <th>분류</th>
                   <th>점수</th>
+                  <th>자동/수동</th>
+                  <th>비고</th>
                   <th />
                 </tr>
               </thead>
               <tbody>
                 {items === null && (
                   <tr>
-                    <td colSpan={4} style={{ textAlign: 'center', color: 'var(--muted)' }}>
+                    <td colSpan={7} style={{ textAlign: 'center', color: 'var(--muted)' }}>
                       불러오는 중…
                     </td>
                   </tr>
                 )}
                 {items?.length === 0 && (
                   <tr>
-                    <td colSpan={4} style={{ textAlign: 'center', color: 'var(--muted)' }}>
+                    <td colSpan={7} style={{ textAlign: 'center', color: 'var(--muted)' }}>
                       등록된 항목이 없습니다.
                     </td>
                   </tr>
@@ -906,10 +947,13 @@ function PenaltyActions() {
                   <tr key={it.id}>
                     <td>{it.itemName}</td>
                     <td>{PENALTY_CATEGORY_LABEL[it.category]}</td>
+                    <td>{it.groupName || '—'}</td>
                     {/* 서버 값 그대로. 덮어 그리면 저장값이 틀려도 화면은 멀쩡해 보인다 */}
                     <td style={{ color: it.point < 0 ? 'var(--red)' : 'var(--green)', fontWeight: 700 }}>
                       {it.point > 0 ? `+${it.point}` : it.point}점
                     </td>
+                    <td>{it.automatic ? '자동' : '수동'}</td>
+                    <td>{it.description || '—'}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>
                       <button
                         className="btn"
@@ -920,6 +964,8 @@ function PenaltyActions() {
                             itemName: it.itemName,
                             point: String(Math.abs(it.point)),
                             category: it.category,
+                            groupName: it.groupName ?? '',
+                            description: it.description ?? '',
                           })
                         }
                       >
@@ -955,13 +1001,27 @@ function PenaltyActions() {
             </div>
           </div>
           <div className="frow">
+            <label>분류 · 비고</label>
+            <div style={{ display: 'grid', gap: 6 }}>
+              <select className="sel" value={draft.groupName}
+                onChange={(e) => setDraft({ ...draft, groupName: e.target.value })}>
+                <option value="">분류 선택</option>
+                {(draft.category === 'MERIT'
+                  ? ['학습량', '기타', '성적우수', '콘텐츠']
+                  : ['출결', '태도', '전자기기', '제적', '기타', '콘텐츠']).map((name) => <option key={name} value={name}>{name}</option>)}
+              </select>
+              <input className="inp" placeholder="비고 / 적용 기준" value={draft.description}
+                onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
+            </div>
+          </div>
+          <div className="frow">
             <label className="req">구분 · 점수</label>
             <div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <select
                   className="sel"
                   value={draft.category}
-                  onChange={(e) => setDraft({ ...draft, category: e.target.value as PenaltyCategory })}
+                  onChange={(e) => setDraft({ ...draft, category: e.target.value as PenaltyCategory, groupName: '' })}
                 >
                   <option value="DEMERIT">벌점</option>
                   <option value="MERIT">상점</option>
