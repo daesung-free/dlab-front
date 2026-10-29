@@ -94,10 +94,22 @@ export function GuardianBlock({ enrollmentId }: { enrollmentId: number }) {
     setErr(null)
     setMsg(null)
     try {
-      await addGuardian(enrollmentId, { name: n, phone: p })
+      const g = await addGuardian(enrollmentId, { name: n, phone: p })
       setName('')
       setPhone('')
-      setMsg('보호자를 등록했습니다.')
+      /* ★★ **이미 등록된 번호면 입력한 이름이 버려진다**(확인 2026-10-29). 서버가
+           번호로 기존 보호자를 찾아 **연결만 더하고**, 그 행의 이름을 그대로 쓴다.
+         ★ 형제 등록에서는 **정상**이다 — 같은 분이니까.
+         ⚠️ **오타로 남의 번호를 넣었을 때가 문제다** — 그 보호자에게 **남의 자녀가
+           연결된다.** 「등록했습니다」만 띄우면 담당자는 자기가 적은 이름으로 들어간 줄
+           알고 넘어가고, 목록을 다시 안 본다.
+         ★ 그래서 **이름이 바뀐 것을 그 자리에서 말한다** — 번호를 잘못 넣었다면
+           이 한 줄에서 걸린다. */
+      setMsg(
+        g.name !== n
+          ? `이미 등록된 번호입니다. 「${g.name}」 님에게 이 학생이 연결되었습니다. 입력한 이름은 사용되지 않습니다 — 형제가 아니라면 번호를 확인해 주세요.`
+          : '보호자가 등록되었습니다.',
+      )
       await load()
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : '등록하지 못했습니다.')
@@ -248,7 +260,9 @@ export function GuardianBlock({ enrollmentId }: { enrollmentId: number }) {
           가입 시 본인 이름으로 대체됩니다.
           <br />
           <b>형제는 보호자를 공유합니다.</b> 이미 등록된 번호를 그대로 입력하면 그 보호자에게
-          연결됩니다. 이때 <b>이름은 먼저 등록된 값이 유지</b>되며 이 화면에서 수정할 수 없습니다.
+          연결됩니다. 이때 <b>입력한 이름은 사용되지 않고 먼저 등록된 이름이 유지</b>되므로,
+          등록 후 <b>목록의 이름을 확인해 주세요</b> — 다른 이름이 보이면 번호를 잘못 입력한
+          것입니다. 이름은 이 화면에서 수정할 수 없습니다.
         </div>
 
         {msg !== null && (
