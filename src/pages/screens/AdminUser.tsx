@@ -269,8 +269,8 @@ function MenuModal({ row, onClose, onSaved }: { row: AccountRow; onClose: () => 
       const res = await setAccountMenus(row.accountId, useOwn, useOwn ? codes : [])
       onSaved(
         res.restricted
-          ? `${row.loginId} 에게 메뉴 ${res.menus.length}개만 보이도록 저장했습니다. 다음 로그인부터 적용됩니다.`
-          : `${row.loginId} 의 개별 설정을 지웠습니다. 권한 기본값대로 보입니다.`,
+          ? `${row.loginId} 에게 메뉴 ${res.menus.length}개만 보이도록 저장했습니다. 해당 계정은 즉시 로그아웃됩니다.`
+          : `${row.loginId} 의 개별 설정을 삭제했습니다. 역할 기본값대로 표시되며, 해당 계정은 즉시 로그아웃됩니다.`,
       )
       return true
     } catch (e) {
@@ -510,7 +510,7 @@ function Content() {
     setActionMsg(null)
     try {
       await replaceRoles(row.accountId, next)
-      setActionMsg(`${row.loginId} 의 역할을 바꿨습니다.`)
+      setActionMsg(`${row.loginId} 의 역할을 변경했습니다. 해당 계정은 즉시 로그아웃됩니다.`)
       list.reload()
       return true
     } catch (err) {
@@ -909,7 +909,7 @@ function Content() {
       {roleEdit && (
         <Modal
           title={`${roleEdit.row.loginId} 의 역할`}
-          sub="지금 역할을 통째로 바꿉니다. 체크를 풀면 그 역할이 사라집니다."
+          sub="지금 역할을 통째로 변경합니다. 체크를 풀면 그 역할이 삭제되며, 저장하면 해당 계정은 즉시 로그아웃됩니다."
           confirmLabel="저장"
           busy={busy === roleEdit.row.accountId}
           confirmDisabled={roleEdit.picked.length === 0}
