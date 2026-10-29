@@ -10,8 +10,10 @@ import { SCREEN_MENU_CODES } from '../../data/menuCodes'
 import {
   getAccountMenus,
   listMenuCatalog,
+  previewAccountMenus,
   setAccountMenus,
   type MenuNode,
+  type MenuPreviewRow,
 } from '../../api/menus'
 import { ApiError } from '../../api/client'
 import {
@@ -226,6 +228,51 @@ function MenuModal({ row, onClose, onSaved }: { row: AccountRow; onClose: () => 
     }
   }, [row.accountId])
 
+  /* ── 결과 미리보기 ──────────────────────────────────────────────
+   * ★★ **「체크했는데 403」을 막는 자리다.** 체크는 **보이는 것만** 정하고 권한은 역할이
+   *   정하는데, 그 둘이 어긋나는 것을 담당자가 알 방법이 없었다 — 눌러 보고 알았다.
+   *
+   * ★ **계산은 서버가 한다**(`previewAccountMenus`). 화면이 다시 재면 규칙이 두 곳에
+   *   생겨 또 어긋난다 — 알림톡 수동 발송과 같은 구조다.
+   *
+   * ★ **체크가 멈춘 뒤 한 번만 보낸다.** 메뉴가 46개라 매 클릭마다 보내면 요청이 쏟아진다.
+   *   저장이 아니라 **결과 재계산**이므로 자주 불러도 안전하다. */
+  const [preview, setPreview] = useState<MenuPreviewRow[] | null>(null)
+  const [previewErr, setPreviewErr] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (catalog === null) return
+    let alive = true
+    const t = window.setTimeout(() => {
+      void previewAccountMenus(row.accountId, restricted, restricted ? [...picked] : [])
+        .then((r) => alive && (setPreview(r), setPreviewErr(null)))
+        .catch((e) => {
+          if (!alive) return
+          /* ★ 404 는 우리 사정이다 — 서버가 아직 안 올라온 환경에서 담당자에게
+               「경로를 찾을 수 없습니다」를 띄우지 않는다. 결과 열만 조용히 빠진다 */
+          setPreview(null)
+          setPreviewErr(
+            e instanceof ApiError && e.status === 404
+              ? null
+              : e instanceof ApiError
+                ? e.message
+                : '결과를 계산하지 못했습니다.',
+          )
+        })
+    }, 400)
+    return () => {
+      alive = false
+      window.clearTimeout(t)
+    }
+  }, [row.accountId, restricted, picked, catalog])
+
+  /** 코드 → 결과. 표를 그릴 때 한 건씩 찾는다 */
+  const resultOf = useMemo(() => {
+    const m = new Map<string, MenuPreviewRow>()
+    for (const r of preview ?? []) m.set(r.code, r)
+    return m
+  }, [preview])
+
   const groups = useMemo(() => {
     const all = (catalog ?? []).filter((m) => !m.actionOnly)
     return all
@@ -236,6 +283,30 @@ function MenuModal({ row, onClose, onSaved }: { row: AccountRow; onClose: () => 
   /* 화면이 없는 권한(알림 수신·출근 기록 수정). 메뉴와 섞으면 "눌러도 안 열리는 메뉴" 로
      읽히므로 아래에 따로 묶는다. 사이드바에서 빼는 일은 서버가 한다 */
   const actions = useMemo(() => (catalog ?? []).filter((m) => m.actionOnly), [catalog])
+
+  /** 결과 딱지. ★ `note` 는 서버 문장을 **그대로** 툴팁에 쓴다 */
+  function ResultTag({ code }: { code: string }) {
+    const r = resultOf.get(code)
+    if (r === undefined || !r.visible) return null
+    if (r.level === 'FULL') {
+      return (
+        <span className="mk verified" style={{ marginLeft: 'auto' }} title="이 역할에 열려 있습니다">
+          열림
+        </span>
+      )
+    }
+    /* ★ 「안 열린다」로 단정하지 않는다 — 서버도 목록으로 들고 있지 않아
+         「확인이 필요하다」가 사실이다. 문장은 서버가 준 것을 그대로 쓴다 */
+    return (
+      <span
+        className="mk brandnew"
+        style={{ marginLeft: 'auto' }}
+        title={r.note ?? '이 역할에는 열려 있지 않아 막힐 수 있습니다'}
+      >
+        막힐 수 있음
+      </span>
+    )
+  }
 
   /** 부모를 켜면 자식까지, 끄면 자식까지 — 각 코드가 독립이라 화면이 묶어준다 */
   function toggle(node: MenuNode, children: MenuNode[]) {
@@ -351,6 +422,37 @@ function MenuModal({ row, onClose, onSaved }: { row: AccountRow; onClose: () => 
             </button>
           </div>
 
+          {/* ★★ **체크한 것과 실제로 열리는 것이 다를 수 있다는 걸 목록 위에서 먼저 말한다.**
+                 딱지만 두면 46개를 훑어야 몇 개가 막히는지 안다 — 그 수를 먼저 보여준다. */}
+          {previewErr !== null && (
+            <div className="note-box" role="alert" style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
+              {previewErr}
+            </div>
+          )}
+          {restricted &&
+            (() => {
+              const shown = (preview ?? []).filter((r) => r.visible)
+              const risky = shown.filter((r) => r.level !== 'FULL')
+              if (shown.length === 0) return null
+              return (
+                <div
+                  className="note-box"
+                  style={{ marginBottom: 10, borderColor: risky.length > 0 ? 'var(--amber)' : undefined }}
+                >
+                  <div>
+                    저장하면 <b>{shown.length}개</b>가 이 계정 메뉴에 나옵니다.
+                    {risky.length > 0 && (
+                      <>
+                        {' '}
+                        그중 <b>{risky.length}개</b>는 <b>이 역할에 열려 있지 않아 들어갔을 때 막힐 수
+                        있습니다</b> — 권한 자체를 열려면 <b>역할</b>을 바꿔야 합니다.
+                      </>
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
+
           <div style={{ display: 'grid', gap: 10, maxHeight: 420, overflow: 'auto' }}>
             {groups.map(({ top, children }) => (
               <div
@@ -368,6 +470,7 @@ function MenuModal({ row, onClose, onSaved }: { row: AccountRow; onClose: () => 
                   />
                   <b>{top.name}</b>
                   {!SCREEN_CODES.has(top.code) && <span className="mk">화면 없음</span>}
+                  <ResultTag code={top.code} />
                 </label>
                 {children.length > 0 && (
                   <div style={{ display: 'grid', gap: 6, marginTop: 7, paddingLeft: 22 }}>
@@ -381,6 +484,7 @@ function MenuModal({ row, onClose, onSaved }: { row: AccountRow; onClose: () => 
                         />
                         {c.name}
                         {!SCREEN_CODES.has(c.code) && <span className="mk">화면 없음</span>}
+                        <ResultTag code={c.code} />
                       </label>
                     ))}
                   </div>
