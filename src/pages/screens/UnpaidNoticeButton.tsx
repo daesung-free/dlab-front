@@ -52,10 +52,19 @@ const UNPAID_EVENT = 'TUITION_UNPAID_NOTICE'
  *   뒤진다. 그쪽은 화면이 먼저 걸러 여기까지 오지 않는다.
  */
 const REASON_LABEL: Record<string, string> = {
-  NO_PHONE: '보호자 연락처가 없음',
+  /* ★★ **`NO_GUARDIAN` 과 `NO_PHONE` 은 할 일이 다르다**(2026-10-29 서버 확인).
+         보호자를 **등록**해야 하는 것과, 등록된 보호자에게 **번호를 채워야** 하는 것이다.
+         한 말로 묶으면 담당자가 학생 화면을 열어 놓고 무엇을 고칠지 모른다. */
+  NO_GUARDIAN: '보호자가 등록되지 않음',
+  NO_PHONE: '보호자 연락처가 비어 있음',
+  /* ★ 학생에게 보내는 알림에서만 나온다 — 학부모 알림에서는 이 사유가 나오지 않는다.
+       ⚠️ 한때 보호자 알림에도 이 사유가 붙어 **「앱 가입이 필요합니다」로 안내**됐는데,
+         실제로 해야 할 일은 **연락처 등록**이었다(서버가 고쳤다 · dlab-api #305). */
+  NO_ACCOUNT: '앱 계정이 없음',
   NOT_IN_ALLOWLIST: '이관 기간 수신 허용목록 밖',
   OPTED_OUT: '수신 거부',
   NOT_ENROLLED: '재원 상태가 아님',
+  OTHER_ACADEMY: '다른 지점 학생',
 }
 
 function noTargetReason(e: ApiError): string | null {
