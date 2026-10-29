@@ -41,6 +41,34 @@ import { searchStudents, type Student } from '../../api/students'
 /** 서버가 쓰는 미납 안내 이벤트 */
 const UNPAID_EVENT = 'TUITION_UNPAID_NOTICE'
 
+/**
+ * 「발송 대상이 없습니다」를 **왜 없는지**로 바꾼다.
+ *
+ * ★ 서버가 `error.data.summary` 로 사유별 인원을 준다(dlab-api #297).
+ *   그대로 「대상이 없습니다」만 띄우면 담당자는 **화면 고장으로 읽거나, 고칠 것을 못 찾는다.**
+ * ★ **사유를 우리 말로 바꾸지 않는다** — 서버가 종류를 늘리면 화면만 낡는다. 아는 것만
+ *   풀어 쓰고 모르는 코드는 **건수만** 보여준다.
+ * ⚠️ **후보 자체가 0명인 경우는 다른 문장이다** — 같은 문장을 주면 담당자가 수신 설정을
+ *   뒤진다. 그쪽은 화면이 먼저 걸러 여기까지 오지 않는다.
+ */
+const REASON_LABEL: Record<string, string> = {
+  NO_PHONE: '보호자 연락처가 없음',
+  NOT_IN_ALLOWLIST: '이관 기간 수신 허용목록 밖',
+  OPTED_OUT: '수신 거부',
+  NOT_ENROLLED: '재원 상태가 아님',
+}
+
+function noTargetReason(e: ApiError): string | null {
+  if (!/대상이 없습니다|NO_TARGET/.test(e.message)) return null
+  const summary = (e.data as { summary?: Record<string, number> } | undefined)?.summary
+  const parts = Object.entries(summary ?? {})
+    .filter(([, n]) => n > 0)
+    .map(([code, n]) => `${REASON_LABEL[code] ?? code} ${n}명`)
+  return parts.length > 0
+    ? `보낼 수 있는 보호자가 없습니다 — ${parts.join(' · ')}.`
+    : '보낼 수 있는 보호자가 없습니다. 보호자 연락처를 먼저 등록해 주세요.'
+}
+
 export interface UnpaidTarget {
   billingId: number
   studentNo: string | null
@@ -159,18 +187,16 @@ export function UnpaidNoticeButton({
       )
     } catch (e) {
       /* 404 는 우리 사정이다 — 「경로를 찾을 수 없습니다」를 담당자에게 띄우지 않는다 */
-      /* ★★ `MANUAL_SEND_NO_TARGET`(「발송 대상이 없습니다」)은 **그대로 띄우면 안 된다.**
-           선택한 학생이 분명히 있는데 그 말만 나오면 담당자는 화면 고장으로 읽는다.
-           실제 이유는 거의 **보호자 번호가 없어서**다 — 무엇을 채워야 하는지까지 적는다 */
-      const noTarget = e instanceof ApiError && /대상이 없습니다|NO_TARGET/.test(`${e.message}`)
+      /* ★★ **0명일 때 왜 0명인지를 보여준다**(dlab-api #297 · 2026-10-28 배포).
+           전에는 「발송 대상이 없습니다」 한 줄뿐이라 **담당자가 무엇을 고쳐야 하는지
+           알 방법이 없었다** — 연락처가 없어서인지, 허용목록 때문인지, 수신거부인지.
+           이제 서버가 `error.data.summary` 로 사유별 인원을 준다. */
       setErr(
         e instanceof ApiError && e.status === 404
           ? '미납 안내 발송은 준비 중입니다.'
-          : noTarget
-            ? '보낼 수 있는 보호자가 없습니다. 보호자 연락처를 먼저 등록해 주세요.'
-            : e instanceof ApiError
-              ? e.message
-              : '미리보기를 불러오지 못했습니다.',
+          : e instanceof ApiError
+            ? (noTargetReason(e) ?? e.message)
+            : '미리보기를 불러오지 못했습니다.',
       )
     } finally {
       setBusy(false)
@@ -269,10 +295,15 @@ export function UnpaidNoticeButton({
                   <div>
                     {allMissing ? (
                       <>
+                        {/* ★★ **발송 조건을 화면이 단정하지 않는다.** 이 문장이 하루 사이에
+                               두 번 틀렸다 — 「앱 가입 이후부터」(#290 으로 뒤집힘) →
+                               「연락처만 등록하면」(수동 발송은 여전히 `NO_ACCOUNT` 를 준다).
+                           ★ **연락처가 비어 있다는 것만** 말한다 — 그건 화면이 눈으로 아는
+                             사실이다. **무엇을 채우면 가는지는 서버가 사유로 알려준다**
+                             (0명일 때 `error.data.summary` · dlab-api #297). */}
                         선택한 <b>{people.length}명</b> 모두 <b>보호자 연락처가 없습니다.</b> 이
-                        안내는 보호자에게만 발송되므로 <b>현재 발송 대상이 없습니다.</b> 연락처는
-                        학원생 화면에서 등록할 수 있으나, 알림톡은{' '}
-                        <b>보호자 앱 가입 이후부터 발송</b>됩니다.
+                        안내는 보호자에게 발송되므로 <b>현재 발송 대상이 없습니다.</b> 연락처는
+                        학원생 화면에서 등록합니다.
                       </>
                     ) : (
                       <>

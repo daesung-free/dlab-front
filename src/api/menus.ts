@@ -90,6 +90,47 @@ export function getAccountMenus(accountId: number): Promise<AccountMenus> {
  *   "수납현황만 보여주려 했는데 청구기준 편집까지 열리는" 것을 막을 수 없다.
  * ★ 최고관리자만 호출된다.
  */
+/**
+ * 저장하면 **실제로 어떻게 열리는지** 미리 본다 — 본문은 `setAccountMenus` 와 같다.
+ *
+ * ★★ **결과 계산을 화면이 하지 않는다.** 규칙이 두 곳에 생기면 또 어긋난다 —
+ *   2026-10-14 담임 시간표 사고(메뉴는 열렸는데 교시·강의실 API 가 403)가 그래서 났다.
+ *   알림톡 수동 발송이 같은 구조이고(`previewManualSend`), 거기서는 「미리보기와 실제가
+ *   다른」 문제가 한 번도 없었다.
+ *
+ * ★ **저장하지 않으므로 체크마다 불러도 된다.** 다만 메뉴가 40개가 넘어 매 클릭마다
+ *   보내면 요청이 쏟아진다 — 화면이 **체크가 멈춘 뒤 한 번** 보낸다.
+ *
+ * ★ **전 메뉴가 온다**(46개). 체크한 것만 오는 게 아니라, 안 체크한 것도 `visible: false`
+ *   로 와서 **표를 그대로 그릴 수 있다.**
+ *
+ * ⚠️ **`level` 을 「안 열린다」로 읽지 않는다.** API 권한이 컨트롤러마다 흩어져 있어
+ *   **서버도 「어느 화면이 어느 역할에 열리는가」를 목록으로 들고 있지 않다** — 근거는
+ *   역할 기본 노출이고 둘을 손으로 맞춰 왔다. 그래서 `PARTIAL` 은 **「확인이 필요하다」**다.
+ *   화면은 `note` 를 **그대로** 쓴다 — 우리가 말을 바꾸면 서버가 사실을 고쳐도 화면만 낡는다.
+ */
+export interface MenuPreviewRow {
+  code: string
+  name: string
+  /** 그 계정 메뉴에 나오는가 */
+  visible: boolean
+  /** FULL = 전부 열린다 · PARTIAL = 막힐 수 있다(위 주석 참고) */
+  level: 'FULL' | 'PARTIAL' | string
+  /** 왜 그런지. ★ 서버 문장을 그대로 보여준다 */
+  note: string | null
+}
+
+export function previewAccountMenus(
+  accountId: number,
+  restricted: boolean,
+  menuCodes: string[],
+): Promise<MenuPreviewRow[]> {
+  return request<MenuPreviewRow[]>(`/api/v1/admin/staff/accounts/${accountId}/menus/preview`, {
+    method: 'POST',
+    body: { restricted, menuCodes },
+  })
+}
+
 export function setAccountMenus(
   accountId: number,
   restricted: boolean,

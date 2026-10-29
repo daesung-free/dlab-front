@@ -39,6 +39,16 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    /**
+     * 서버가 오류와 **함께** 내려준 값(`error.data`).
+     *
+     * ★ **왜 실패했는지를 건별로 알아야 하는 자리**가 있다 — 발송 대상이 0명일 때
+     *   「연락처가 없어서인가 · 허용목록 때문인가 · 수신거부인가」를 화면이 구분하려면
+     *   `message` 한 줄로는 안 된다. 담당자도 **무엇을 고쳐야 하는지 알 방법이 없다.**
+     * ★ **옵션이다.** 서버가 안 주면 `undefined` 다 — 기존 사용처는 그대로 돈다
+     *   (공통 모듈이라 기본 동작을 바꾸지 않는다 · CLAUDE.md 6).
+     */
+    readonly data?: unknown,
   ) {
     super(message)
     this.name = 'ApiError'
@@ -203,6 +213,7 @@ export async function requestEnvelope<T>(path: string, opts: RequestOptions = {}
       res.status,
       json.error?.code ?? 'UNKNOWN',
       readable(json.error?.message) ?? `요청이 실패했습니다 (HTTP ${res.status}).`,
+      (json.error as { data?: unknown } | undefined)?.data,
     )
   }
 
