@@ -35,7 +35,11 @@ import { searchStudents, type Student } from '../../api/students'
  * ★★ **「연락처를 등록하면 나간다」고 쓰지 않는다.** 학부모 대상 발송은 번호가 아니라
  *   **보호자 연락처**로 수신자를 찾는다 — 앱 계정이 없어도 번호가 있으면 발송된다
  *   (dlab-api #290 · 2026-10-26 배포). 그래서 **연락처가 없는 학생만** 제외된다.
- *   ⚠️ 앱 출시 전까지는 **수신 허용목록**이 걸려 있어 목록에 있는 번호로만 실제 발송된다.
+ *   ⚠️ 앱 출시 전까지는 **수신 허용목록**이 걸릴 수 있다. ★ **목록이 비면 전원 통과**다
+ *   (서버 코드로 확인 2026-10-29). 지금은 운영에 1개가 들어 있어 **적용 중**이지만,
+ *   **비우는 순간 전원 발송으로 바뀐다** — 그래서 화면은 **「목록에 있는 번호로만 나간다」고
+ *   단정하지 않는다.** ★ 대신 **미리보기 인원수**를 보게 한다. 미리보기와 발송이 같은
+ *   기준이라 **그 수가 서버 판정 그 자체**이고, 목록을 비우면 **그 수가 커진다.**
  */
 
 /** 서버가 쓰는 미납 안내 이벤트 */
@@ -52,10 +56,19 @@ const UNPAID_EVENT = 'TUITION_UNPAID_NOTICE'
  *   뒤진다. 그쪽은 화면이 먼저 걸러 여기까지 오지 않는다.
  */
 const REASON_LABEL: Record<string, string> = {
-  NO_PHONE: '보호자 연락처가 없음',
+  /* ★★ **`NO_GUARDIAN` 과 `NO_PHONE` 은 할 일이 다르다**(2026-10-29 서버 확인).
+         보호자를 **등록**해야 하는 것과, 등록된 보호자에게 **번호를 채워야** 하는 것이다.
+         한 말로 묶으면 담당자가 학생 화면을 열어 놓고 무엇을 고칠지 모른다. */
+  NO_GUARDIAN: '보호자가 등록되지 않음',
+  NO_PHONE: '보호자 연락처가 비어 있음',
+  /* ★ 학생에게 보내는 알림에서만 나온다 — 학부모 알림에서는 이 사유가 나오지 않는다.
+       ⚠️ 한때 보호자 알림에도 이 사유가 붙어 **「앱 가입이 필요합니다」로 안내**됐는데,
+         실제로 해야 할 일은 **연락처 등록**이었다(서버가 고쳤다 · dlab-api #305). */
+  NO_ACCOUNT: '앱 계정이 없음',
   NOT_IN_ALLOWLIST: '이관 기간 수신 허용목록 밖',
   OPTED_OUT: '수신 거부',
   NOT_ENROLLED: '재원 상태가 아님',
+  OTHER_ACADEMY: '다른 지점 학생',
 }
 
 function noTargetReason(e: ApiError): string | null {
@@ -406,7 +419,8 @@ export function UnpaidNoticeButton({
                   <table className="dt" style={{ width: '100%' }}>
                     <thead>
                       <tr>
-                        <th style={{ width: 110 }}>이름</th>
+                        <th style={{ width: 90 }}>학생</th>
+                        <th style={{ width: 100 }}>보호자</th>
                         <th>왜 빠지나</th>
                       </tr>
                     </thead>
@@ -416,6 +430,14 @@ export function UnpaidNoticeButton({
                         .map((b, i) => (
                           <tr key={i}>
                             <td>{b.studentName}</td>
+                            {/* ★ 수신자가 **정해지기 전에** 걸린 사유는 빠진 사람이 특정되지
+                                   않아 비어 온다. 「미지정」 같은 말을 넣지 않는다 —
+                                   **그런 보호자가 있는 줄 안다.** '-' 로 둔다 */}
+                            <td style={{ color: 'var(--muted)' }}>
+                              {b.receiverName !== null && b.receiverName !== undefined && b.receiverName !== ''
+                                ? b.receiverName
+                                : '-'}
+                            </td>
                             <td style={{ color: 'var(--red)' }}>{b.message}</td>
                           </tr>
                         ))}
