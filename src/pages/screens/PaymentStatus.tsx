@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { PaymentHistoryPrint } from './PaymentHistoryPrint'
 import {
   DataTable,
   ExcelButton,
@@ -1398,6 +1399,11 @@ function Content() {
     )
   }, [])
 
+  /* ★ 결제 내역 출력(디랩 `md/급식비.md` 4항) — **학부모에게 건네는 서류**다.
+       ★ **행이 아니라 학생 단위**로 띄운다. 요청이 *「결제일자순으로 모두 조회되어
+         한꺼번에」* 라 **한 청구만 뽑으면 요청을 만족하지 못한다.** */
+  const [printFor, setPrintFor] = useState<ReceiptRow | null>(null)
+
   /** 표 끝에 붙는 행 액션. 모듈 상수 COLUMNS 는 그대로 두고 여기서만 더한다 */
   const columnsWithAct: Column<ReceiptRow>[] = useMemo(
     () => [
@@ -1405,7 +1411,7 @@ function Content() {
       {
         key: 'act',
         header: '',
-        width: '152px',
+        width: '206px',
         align: 'center',
         value: () => '',
         render: (r) => (
@@ -1443,6 +1449,16 @@ function Content() {
               }}
             >
               결제
+            </button>
+            {/* ★ 학부모가 데스크에서 물어볼 때 바로 뽑는 것이라 **행마다** 둔다.
+                   ★ 미납만 있는 학생도 눌러야 한다 — 「낸 게 없다」도 答이다 */}
+            <button
+              className="btn"
+              style={{ padding: '4px 9px', fontSize: 11.5 }}
+              title="이 학생의 결제 내역을 결제일자순으로 출력합니다"
+              onClick={() => setPrintFor(r)}
+            >
+              출력
             </button>
             {/* ★ **현금영수증은 카드 수납에 못 낸다** — 카드사가 소득공제를 처리한다.
                 서버가 400 으로 막으므로 **아예 안 띄운다.** 띄워 두면 눌러보고 거절당한다.
@@ -1794,6 +1810,15 @@ function Content() {
                 </div>
               </div>
             </>
+          )}
+
+          {printFor !== null && academyId !== null && (
+            <PaymentHistoryPrint
+              academyId={academyId}
+              studentNo={printFor.studentNo}
+              studentName={printFor.studentName}
+              onClose={() => setPrintFor(null)}
+            />
           )}
 
           {tab === 'all' && (
