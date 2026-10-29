@@ -320,10 +320,29 @@ export interface ManualPreviewRequest {
 export interface ManualBlocked {
   studentName: string
   /**
+   * 빠진 **보호자** 이름.
+   *
+   * ★★ **없으면 한 학생의 보호자 둘이 다 막혔을 때 같은 학생 이름이 두 줄**이라
+   *   담당자가 「학생이 두 명인가」로 읽는다(dlab-api #305 에서 더했다).
+   *
+   * ⚠️ **`null` 일 수 있다** — 수신자가 **정해지기 전에** 걸린 사유가 그렇다
+   *   (`NO_GUARDIAN`·`NOT_ENROLLED`·`OTHER_ACADEMY`). 빠진 사람이 특정되지 않는다.
+   *   ★ 그때는 **비워 둔다** — 「미지정」 같은 말을 넣으면 **그런 보호자가 있는 줄 안다.**
+   */
+  receiverName?: string | null
+  /**
    * ★ **모르는 값이 올 수 있다**(그래서 `string` 을 열어 뒀다). 서버가 종류를 늘리면
    *   화면은 `message` 를 그대로 쓰면 된다 — 사유별 처리는 아는 것만 한다.
    */
-  reason: 'NO_PHONE' | 'OPTED_OUT' | 'NOT_ENROLLED' | 'NOT_IN_ALLOWLIST' | string
+  reason:
+    | 'NO_PHONE'
+    | 'OPTED_OUT'
+    | 'NOT_ENROLLED'
+    | 'NOT_IN_ALLOWLIST'
+    | 'NO_GUARDIAN'
+    | 'NO_ACCOUNT'
+    | 'OTHER_ACADEMY'
+    | string
   message: string
 }
 

@@ -415,7 +415,8 @@ export function UnpaidNoticeButton({
                   <table className="dt" style={{ width: '100%' }}>
                     <thead>
                       <tr>
-                        <th style={{ width: 110 }}>이름</th>
+                        <th style={{ width: 90 }}>학생</th>
+                        <th style={{ width: 100 }}>보호자</th>
                         <th>왜 빠지나</th>
                       </tr>
                     </thead>
@@ -425,6 +426,14 @@ export function UnpaidNoticeButton({
                         .map((b, i) => (
                           <tr key={i}>
                             <td>{b.studentName}</td>
+                            {/* ★ 수신자가 **정해지기 전에** 걸린 사유는 빠진 사람이 특정되지
+                                   않아 비어 온다. 「미지정」 같은 말을 넣지 않는다 —
+                                   **그런 보호자가 있는 줄 안다.** '-' 로 둔다 */}
+                            <td style={{ color: 'var(--muted)' }}>
+                              {b.receiverName !== null && b.receiverName !== undefined && b.receiverName !== ''
+                                ? b.receiverName
+                                : '-'}
+                            </td>
                             <td style={{ color: 'var(--red)' }}>{b.message}</td>
                           </tr>
                         ))}
