@@ -9,6 +9,7 @@ import {
   PLATFORM_LABEL,
   listAppConfigs,
   createTerms,
+  deleteTerms,
   listTerms,
   TERMS_CATALOG,
   setMaintenance,
@@ -221,6 +222,9 @@ function Content() {
   const [maintEdit, setMaintEdit] = useState<{ c: AppConfigDetail; message: string } | null>(null)
   /** 모달 안에서 보여줄 실패 메시지 */
   const [modalErr, setModalErr] = useState<string | null>(null)
+  /* 치울 약관. ★ 치울 수 있는지는 **서버가 정한다** — 화면은 동의 건수만 알고
+     거부한 사람 수는 모르므로, 동의율 0% 로 판정하면 거부자가 있는 약관도 열린다 */
+  const [delTerms, setDelTerms] = useState<Terms | null>(null)
   /* 약관은 고치는 게 아니라 **버전을 올려 새로 등록**한다 — 덮어쓰면 동의 근거가 사라진다 */
   const [newTerms, setNewTerms] = useState<{
     code: string
@@ -370,17 +374,19 @@ function Content() {
             setNewTerms(null)
           }}
         >
-          {/* ★ 고치는 API 가 없다. 오타 하나도 버전을 올려야 한다 — 문구를 덮어쓰면
-                 이미 동의한 사람들의 동의 근거가 사라지기 때문이다. */}
+          {/* ★ 고치는 API 는 여전히 없다 — 문구를 덮어쓰면 이미 동의한 사람들의 근거가
+                 바뀌기 때문이다. 치우기는 **아무도 응답하지 않은 약관에만** 열려 있다.
+                 ⚠️ 전에 「삭제할 수 없습니다」로 적어 뒀는데 치우기가 생겨 **사실이 아니게
+                 됐다** — 화면이 못 하는 일을 못 한다고 말하는 것도 틀린 말이다. */}
           <div className="note-box warn">
             <div className="ic">
               <Icon name="alert-triangle" size={17} />
             </div>
             <div>
-              <div className="tt">삭제하거나 수정할 수 없습니다</div>
+              <div className="tt">등록한 뒤에는 문구를 수정할 수 없습니다</div>
               <div className="tx">
-                한 번 등록한 약관은 <b>수정·삭제가 안 됩니다.</b> 같은 코드·버전으로 다시 등록하는 것도 막혀
-                있습니다. 오타를 고치려면 버전을 올려 새로 등록해야 합니다.
+                오타를 고치려면 <b>버전을 올려 새로 등록</b>해야 합니다. 같은 코드·버전으로 다시 등록하는
+                것도 막혀 있습니다. 아직 <b>아무도 응답하지 않은 약관</b>만 목록에서 치울 수 있습니다.
               </div>
             </div>
           </div>
@@ -494,6 +500,54 @@ function Content() {
                     : ' 필수로 등록하면 동의를 거부한 사람은 가입할 수 없습니다.'}
                 </div>
               )}
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {delTerms && (
+        <Modal
+          title={`'${delTerms.title}' ${delTerms.version}을(를) 치우시겠습니까?`}
+          sub="앱 가입 화면에서 더 이상 표시되지 않습니다."
+          confirmLabel="치우기"
+          danger
+          error={modalErr}
+          onConfirm={() => {
+            const t = delTerms
+            void run(
+              `'${t.title}' ${t.version}을(를) 치웠습니다. 앞으로 앱 가입 화면에 표시되지 않습니다.`,
+              `'${t.title}'을(를) 치우지 못했습니다.`,
+              () =>
+                deleteTerms(t.id).catch((e: unknown) => {
+                  /* ⚠️ **배포 전 임시 처리**(2026-10-30 시점). 서버에 이 경로가 아직 없어
+                       404 가 오고, 게이트웨이 문장을 그대로 띄우면 담당자가 할 수 있는 일이
+                       없다. ★ 배포되면 404 는 「그 약관이 이미 없다」는 뜻이 되므로
+                       이 가지를 걷어낸다. */
+                  if (e instanceof ApiError && e.status === 404) {
+                    throw new ApiError(404, e.code, '약관 치우기는 지금 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.')
+                  }
+                  throw e
+                }),
+            ).then((ok) => ok && setDelTerms(null))
+          }}
+          onClose={() => {
+            setModalErr(null)
+            setDelTerms(null)
+          }}
+        >
+          {/* ⚠️ 미동의도 「응답」이라 거부한 사람이 있으면 서버가 막는다. 담당자가
+              동의율 0% 를 보고 치워질 것으로 기대하는데 막히므로 미리 말해 둔다 */}
+          <div className="note-box warn">
+            <div className="ic">
+              <Icon name="alert-triangle" size={17} />
+            </div>
+            <div>
+              <div className="tt">아직 아무도 응답하지 않은 약관만 치울 수 있습니다</div>
+              <div className="tx">
+                <b>동의하지 않은 것도 응답에 들어갑니다.</b> 한 사람이라도 동의하거나 동의하지 않은
+                약관은 치울 수 없습니다 — 그 기록이 사라지면 「물어봤는데 거부했다」와 「물어본 적
+                없다」를 구분할 수 없습니다. 문구를 바꾸려면 버전을 올려 새로 등록해 주세요.
+              </div>
             </div>
           </div>
         </Modal>
@@ -941,22 +995,39 @@ function Content() {
                     {t.academyId === null && ' · 전 지점 공통'}
                   </div>
                 </span>
-                <span style={{ width: 160, display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                <span style={{ width: 210, display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
                   {(() => {
                     const u = usage?.terms.find((x) => x.termsId === t.id)
-                    return u ? (
+                    if (!u) return <Unfilled reason="이 약관의 동의 현황이 안 왔다" />
+                    /* ★ `rate` 는 **만료된 동의도 센다.** 유효 수가 다르면 그 차이를
+                       말해 줘야 한다 — 「동의 80%」만 보여주면 담당자는 그 사람들에게
+                       지금도 광고를 보낼 수 있다고 읽는다.
+                       ⚠️ 서버 배포 전에는 `effectiveAccounts` 가 안 온다 — 없으면
+                       **유효 비율을 말하지 않는다.** 0 으로 읽으면 전원이 다시 동의해야
+                       하는 것처럼 보인다. */
+                    const expired =
+                      u.effectiveAccounts !== undefined ? u.agreedAccounts - u.effectiveAccounts : 0
+                    return (
                       <span style={{ fontSize: 12.5, textAlign: 'right' }}>
                         <b>{u.rate}%</b>
                         <span style={{ color: 'var(--muted)' }}>
                           {' '}
                           · {u.agreedAccounts}/{u.targetAccounts}
                         </span>
+                        {expired > 0 && (
+                          <div style={{ fontSize: 11.5, color: 'var(--red)', marginTop: 2 }}>
+                            유효 {u.effectiveRate ?? 0}% · {expired}명은 다시 동의가 필요합니다
+                          </div>
+                        )}
                       </span>
-                    ) : (
-                      <Unfilled reason="이 약관의 동의 현황이 안 왔다" />
                     )
                   })()}
                 </span>
+                {/* ★ `disabled` 를 동의율로 걸지 않는다 — 화면은 거부한 사람 수를 모른다.
+                    누르면 서버가 판정하고, 막히면 그 문장을 그대로 보여준다 */}
+                <button className="btn" onClick={() => setDelTerms(t)} disabled={busy}>
+                  치우기
+                </button>
               </div>
             ))}
           </div>

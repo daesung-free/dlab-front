@@ -134,6 +134,22 @@ export function createTerms(body: TermsCreate): Promise<Terms> {
   return request<Terms>('/api/v1/admin/app-config/terms', { method: 'POST', body })
 }
 
+/**
+ * 약관 치우기.
+ *
+ * ★ **응답이 한 건도 없는 약관만 치워진다.** 있으면 400 이다 — 수정 API 가 없는 것과
+ *   같은 이유로, 이미 응답한 사람의 근거가 사라지는 길은 열려 있지 않다.
+ *
+ * ⚠️ **미동의도 「응답」이다.** 「물어봤는데 거부했다」와 「물어본 적 없다」는 다른 기록이다.
+ *
+ * ★ **치울 수 있는지를 화면이 판정하지 않는다.** 화면이 아는 것은 동의 **건수**뿐이고
+ *   거부한 사람 수는 모른다 — 동의율 0% 를 보고 「치울 수 있다」고 단정하면 거부자가
+ *   있는 약관에도 버튼이 열린다. **서버가 돌려준 문장을 그대로 보여준다.**
+ */
+export function deleteTerms(termsId: number): Promise<unknown> {
+  return request(`/api/v1/admin/app-config/terms/${termsId}`, { method: 'DELETE' })
+}
+
 export interface TermsStatus {
   termsId: number
   code: string
@@ -182,8 +198,22 @@ export interface TermsUsage {
   /** 분모 — 활성 앱 계정(학생 + 학부모) */
   targetAccounts: number
   agreedAccounts: number
-  /** 정수 % */
+  /** 정수 % — **`agreedAccounts` 기준이다.** 만료된 동의도 여기 들어간다 */
   rate: number
+  /**
+   * 그중 **지금 유효한** 동의 계정. 홍보·마케팅은 동의일부터 2년이 지나면 빠진다.
+   *
+   * ★ 만료 개념이 없는 약관은 `agreedAccounts` 와 **같은 값**이 온다 — 화면이
+   *   「이 약관은 만료가 있나」를 판단하지 않아도 되게 서버가 맞춰 준다. 화면이
+   *   판단하면 마케팅 코드가 화면에 박히고, **서버가 다른 약관에 만료를 붙이는 날
+   *   화면만 모른다.**
+   *
+   * ⚠️ 서버 배포 전에는 안 온다 — 없으면 유효 비율을 **말하지 않는다**(`rate` 만 쓴다).
+   *   없는 값을 0으로 읽으면 **전원이 다시 동의해야 하는 것처럼 보인다.**
+   */
+  effectiveAccounts?: number
+  /** `effectiveAccounts` 기준 정수 % */
+  effectiveRate?: number
 }
 
 /**
