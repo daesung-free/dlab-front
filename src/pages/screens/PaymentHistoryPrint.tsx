@@ -63,11 +63,17 @@ interface PrintRow {
 
 export function PaymentHistoryPrint({
   academyId,
+  enrollmentId,
   studentNo,
   studentName,
   onClose,
 }: {
   academyId: number
+  /**
+   * 등록 건 id. ⚠️ **옵솨이다** — 서버가 생답에 담기 전(2026-10-30 추가)엔 없다.
+   * 있으면 서버에 넘겨 **그 등록 건만** 받고, 없으면 학번으로 검색한다.
+   */
+  enrollmentId?: number
   studentNo: string | null
   studentName: string
   onClose: () => void
@@ -83,17 +89,29 @@ export function PaymentHistoryPrint({
     setErr(null)
     setRows(null)
     try {
-      /* ★ 서버에 학생 필터가 없어 **학번으로 검색**한 뒤 화면에서 한 번 더 거른다.
-           ⚠️ `keyword` 는 이름·청구항목도 훑으므로 **남의 행이 섞여 온다** — 거르지
-             않으면 **남의 결제가 학부모 손에 들어간다.** */
+      /* ★ **등록 건 id 가 있으면 그걸 보내 서버가 거르게 한다**(2026-10-30 에 열렸다).
+         ★ 학생 목록을 따로 부르지 않는다 — 학번으로 되짚으면 재등록한 학생의
+           **어느 기수인지를 화면이 짐작**하게 된다. */
       const all = await listReceiptStatus({
         year: y,
         academyId,
+        enrollmentId,
+        /* ★ `enrollmentId` 가 없는 동안의 검색어다. 내려가는 서버는 모를 파라미터를
+             그냥 무시하므로, 둘을 함께 보내도 안전하다 */
         keyword: studentNo ?? studentName,
       })
+      /* ⚠️ **화면 거르기를 걷어내지 않는다.** 서버가 배포되기 전엔 `enrollmentId` 가
+           무시되어 **`keyword` 결과가 그대로 오고**, `keyword` 는 이름·청구항목도 훑어
+           **남의 행이 섞여 온다** — 거르지 않으면 **남의 결제가 학부모 손에 들어간다.**
+           둘이 다 살아 있어도 남기는 행은 같으니 삼이 없다.
+         ★ 서버 배포가 확인되고 모든 행에 `enrollmentId` 가 오면 이 블록을 걷어낸다. */
       setRows(
         all.filter((r) =>
-          studentNo !== null ? r.studentNo === studentNo : r.studentName === studentName,
+          enrollmentId !== undefined && r.enrollmentId !== undefined
+            ? r.enrollmentId === enrollmentId
+            : studentNo !== null
+              ? r.studentNo === studentNo
+              : r.studentName === studentName,
         ),
       )
     } catch (e) {

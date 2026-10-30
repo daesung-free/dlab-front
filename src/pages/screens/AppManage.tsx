@@ -9,7 +9,9 @@ import {
   PLATFORM_LABEL,
   listAppConfigs,
   createTerms,
+  deleteTerms,
   listTerms,
+  TERMS_CATALOG,
   setMaintenance,
   updateAppVersions,
   getAppUsage,
@@ -220,6 +222,9 @@ function Content() {
   const [maintEdit, setMaintEdit] = useState<{ c: AppConfigDetail; message: string } | null>(null)
   /** 모달 안에서 보여줄 실패 메시지 */
   const [modalErr, setModalErr] = useState<string | null>(null)
+  /* 치울 약관. ★ 치울 수 있는지는 **서버가 정한다** — 화면은 동의 건수만 알고
+     거부한 사람 수는 모르므로, 동의율 0% 로 판정하면 거부자가 있는 약관도 열린다 */
+  const [delTerms, setDelTerms] = useState<Terms | null>(null)
   /* 약관은 고치는 게 아니라 **버전을 올려 새로 등록**한다 — 덮어쓰면 동의 근거가 사라진다 */
   const [newTerms, setNewTerms] = useState<{
     code: string
@@ -227,6 +232,8 @@ function Content() {
     title: string
     content: string
     required: boolean
+    /** 목록에 없는 약관을 넣을 때만 코드를 직접 입력한다 */
+    custom: boolean
   } | null>(null)
 
   const load = useCallback(async () => {
@@ -308,6 +315,16 @@ function Content() {
 
   const pushTerms = usage?.terms.find((x) => x.code === 'PUSH') ?? null
 
+  /** 등록 모달에서 고른 약관. 목록에 없는 코드를 직접 넣는 중이면 null 이다 */
+  const selectedCatalog = newTerms && !newTerms.custom
+    ? (TERMS_CATALOG.find((c) => c.code === newTerms.code) ?? null)
+    : null
+
+  /* ★ 아직 등록되지 않은 약관을 화면이 말해 준다 — 운영에는 테스트 약관 하나뿐이고
+       약관 행은 자동 적용이 안 돼 사람이 직접 넣어야 하는데, 지금 화면은 **빠진 게
+       있다는 사실 자체를 말하지 않았다.** 앱은 없는 약관을 그냥 안 띄운다. */
+  const missingTerms = TERMS_CATALOG.filter((c) => !terms.some((t) => t.code === c.code))
+
   if (!isSuper) {
     return (
       <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
@@ -357,29 +374,81 @@ function Content() {
             setNewTerms(null)
           }}
         >
-          {/* ★ 고치는 API 가 없다. 오타 하나도 버전을 올려야 한다 — 문구를 덮어쓰면
-                 이미 동의한 사람들의 동의 근거가 사라지기 때문이다. */}
+          {/* ★ 고치는 API 는 여전히 없다 — 문구를 덮어쓰면 이미 동의한 사람들의 근거가
+                 바뀌기 때문이다. 치우기는 **아무도 응답하지 않은 약관에만** 열려 있다.
+                 ⚠️ 전에 「삭제할 수 없습니다」로 적어 뒀는데 치우기가 생겨 **사실이 아니게
+                 됐다** — 화면이 못 하는 일을 못 한다고 말하는 것도 틀린 말이다. */}
           <div className="note-box warn">
             <div className="ic">
               <Icon name="alert-triangle" size={17} />
             </div>
             <div>
-              <div className="tt">삭제하거나 수정할 수 없습니다</div>
+              <div className="tt">등록한 뒤에는 문구를 수정할 수 없습니다</div>
               <div className="tx">
-                한 번 등록한 약관은 <b>수정·삭제가 안 됩니다.</b> 같은 코드·버전으로 다시 등록하는 것도 막혀
-                있습니다. 오타를 고치려면 버전을 올려 새로 등록해야 합니다.
+                오타를 고치려면 <b>버전을 올려 새로 등록</b>해야 합니다. 같은 코드·버전으로 다시 등록하는
+                것도 막혀 있습니다. 아직 <b>아무도 응답하지 않은 약관</b>만 목록에서 치울 수 있습니다.
               </div>
             </div>
           </div>
 
+          {/* ★ 자유 입력이었다. 수정·삭제가 안 되는 데다 앱은 코드로 약관을 찾기 때문에
+                 오타 하나가 **그 약관만 조용히 안 뜨게** 만든다 — 목록에서 고르게 한다. */}
           <div className="frow">
-            <label className="req">약관 코드</label>
-            <input
-              className="inp"
-              value={newTerms.code}
-              placeholder="예: SERVICE / PRIVACY"
-              onChange={(e) => setNewTerms({ ...newTerms, code: e.target.value })}
-            />
+            <label className="req">약관 종류</label>
+            <div>
+              <select
+                className="sel"
+                value={newTerms.custom ? '__custom__' : newTerms.code}
+                onChange={(e) => {
+                  const v = e.target.value
+                  if (v === '__custom__') {
+                    setNewTerms({ ...newTerms, custom: true, code: '' })
+                    return
+                  }
+                  const found = TERMS_CATALOG.find((c) => c.code === v)
+                  setNewTerms({
+                    ...newTerms,
+                    custom: false,
+                    code: v,
+                    /* 제목을 아직 손대지 않았으면 채운다. 고쳐 쓴 제목을 덮지는 않는다 */
+                    title:
+                      newTerms.title.trim() === '' ||
+                      TERMS_CATALOG.some((c) => c.title === newTerms.title)
+                        ? (found?.title ?? newTerms.title)
+                        : newTerms.title,
+                    required: found ? found.required : newTerms.required,
+                  })
+                }}
+              >
+                <option value="">선택해 주세요</option>
+                {TERMS_CATALOG.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.title} ({c.required ? '필수' : '선택'})
+                  </option>
+                ))}
+                <option value="__custom__">목록에 없는 약관 — 코드 직접 입력</option>
+              </select>
+              {newTerms.custom && (
+                <input
+                  className="inp"
+                  style={{ marginTop: 6 }}
+                  value={newTerms.code}
+                  placeholder="영문 대문자와 밑줄로 입력해 주세요 (예: MEAL_THIRD_PARTY)"
+                  onChange={(e) => setNewTerms({ ...newTerms, code: e.target.value })}
+                />
+              )}
+              {selectedCatalog?.confirmOnly && (
+                <div className="hint">
+                  동의가 아니라 <b>확인</b>을 받는 약관입니다. 본문을 「동의합니다」가 아니라{' '}
+                  <b>「확인하였습니다」</b>로 써 주세요.
+                </div>
+              )}
+              {selectedCatalog && !selectedCatalog.required && (
+                <div className="hint">
+                  선택 약관입니다. 동의하지 않아도 앱에 가입할 수 있습니다.
+                </div>
+              )}
+            </div>
           </div>
           <div className="frow">
             <label className="req">버전</label>
@@ -408,16 +477,78 @@ function Content() {
               onChange={(e) => setNewTerms({ ...newTerms, content: e.target.value })}
             />
           </div>
+          {/* ★ `.frow` 는 2열이다 — 체크박스와 안내를 형제로 두면 안내가 라벨 칸으로 떨어진다 */}
           <div className="frow">
             <label>필수 동의</label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5 }}>
-              <input
-                type="checkbox"
-                checked={newTerms.required}
-                onChange={(e) => setNewTerms({ ...newTerms, required: e.target.checked })}
-              />
-              동의하지 않으면 앱을 쓸 수 없습니다
-            </label>
+            <div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5 }}>
+                <input
+                  type="checkbox"
+                  checked={newTerms.required}
+                  onChange={(e) => setNewTerms({ ...newTerms, required: e.target.checked })}
+                />
+                {selectedCatalog?.confirmOnly
+                  ? '확인하지 않으면 앱을 쓸 수 없습니다'
+                  : '동의하지 않으면 앱을 쓸 수 없습니다'}
+              </label>
+              {selectedCatalog && selectedCatalog.required !== newTerms.required && (
+                <div className="hint" style={{ color: 'var(--red)' }}>
+                  {selectedCatalog.inAdmissionDoc ? '입학동의서 최종본에서 ' : ''}이 약관은{' '}
+                  <b>{selectedCatalog.required ? '필수' : '선택'}</b>입니다.
+                  {selectedCatalog.required
+                    ? ' 선택으로 등록하면 동의를 받지 않고 가입됩니다.'
+                    : ' 필수로 등록하면 동의를 거부한 사람은 가입할 수 없습니다.'}
+                </div>
+              )}
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {delTerms && (
+        <Modal
+          title={`'${delTerms.title}' ${delTerms.version}을(를) 치우시겠습니까?`}
+          sub="앱 가입 화면에서 더 이상 표시되지 않습니다."
+          confirmLabel="치우기"
+          danger
+          error={modalErr}
+          onConfirm={() => {
+            const t = delTerms
+            void run(
+              `'${t.title}' ${t.version}을(를) 치웠습니다. 앞으로 앱 가입 화면에 표시되지 않습니다.`,
+              `'${t.title}'을(를) 치우지 못했습니다.`,
+              () =>
+                deleteTerms(t.id).catch((e: unknown) => {
+                  /* ⚠️ **배포 전 임시 처리**(2026-10-30 시점). 서버에 이 경로가 아직 없어
+                       404 가 오고, 게이트웨이 문장을 그대로 띄우면 담당자가 할 수 있는 일이
+                       없다. ★ 배포되면 404 는 「그 약관이 이미 없다」는 뜻이 되므로
+                       이 가지를 걷어낸다. */
+                  if (e instanceof ApiError && e.status === 404) {
+                    throw new ApiError(404, e.code, '약관 치우기는 지금 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.')
+                  }
+                  throw e
+                }),
+            ).then((ok) => ok && setDelTerms(null))
+          }}
+          onClose={() => {
+            setModalErr(null)
+            setDelTerms(null)
+          }}
+        >
+          {/* ⚠️ 미동의도 「응답」이라 거부한 사람이 있으면 서버가 막는다. 담당자가
+              동의율 0% 를 보고 치워질 것으로 기대하는데 막히므로 미리 말해 둔다 */}
+          <div className="note-box warn">
+            <div className="ic">
+              <Icon name="alert-triangle" size={17} />
+            </div>
+            <div>
+              <div className="tt">아직 아무도 응답하지 않은 약관만 치울 수 있습니다</div>
+              <div className="tx">
+                <b>동의하지 않은 것도 응답에 들어갑니다.</b> 한 사람이라도 동의하거나 동의하지 않은
+                약관은 치울 수 없습니다 — 그 기록이 사라지면 「물어봤는데 거부했다」와 「물어본 적
+                없다」를 구분할 수 없습니다. 문구를 바꾸려면 버전을 올려 새로 등록해 주세요.
+              </div>
+            </div>
           </div>
         </Modal>
       )}
@@ -786,7 +917,7 @@ function Content() {
               <button
                 className="btn pri"
                 onClick={() =>
-                  setNewTerms({ code: '', version: '', title: '', content: '', required: true })
+                  setNewTerms({ code: '', version: '', title: '', content: '', required: true, custom: false })
                 }
               >
                 <Icon name="plus" size={14} /> 새 버전 등록
@@ -796,6 +927,50 @@ function Content() {
           <div className="card-sec-b" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {terms.length === 0 && !loading && (
               <span style={{ color: 'var(--muted)', fontSize: 12.5 }}>등록된 약관이 없습니다.</span>
+            )}
+
+            {/* ★ 없는 약관은 앱에서 그냥 안 뜬다 — 동의를 못 받고 있다는 것을 알 길이 없다 */}
+            {!loading && missingTerms.length > 0 && (
+              <div className="note-box warn">
+                <div className="ic">
+                  <Icon name="alert-triangle" size={17} />
+                </div>
+                <div>
+                  <div className="tt">
+                    아직 등록되지 않은 약관이 {missingTerms.length}개 있습니다
+                  </div>
+                  <div className="tx">
+                    등록되지 않은 약관은 앱 가입 화면에 표시되지 않아 <b>동의를 받지 못합니다.</b>{' '}
+                    다음 약관을 등록해 주세요.
+                    {/* ★ 푸시 수신 동의는 입학동의서 최종본에 없다 — 한 묶음으로 「최종본 기준」이라고
+                        적으면 화면이 사실이 아닌 것을 말하게 된다. 근거가 다른 것은 따로 센다. */}
+                    <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {missingTerms.map((c) => (
+                        <span key={c.code} className={`mk ${c.required ? 'brandnew' : 'supplement'}`}>
+                          {c.title} · {c.required ? '필수' : '선택'}
+                          {!c.inAdmissionDoc && ' · 입학동의서 밖'}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 지점-업체 매핑을 못 받아 아직 등록할 수 없다. 빠진 것으로 세면 계속 남는다 */}
+            {!loading && (
+              <div className="note-box">
+                <div className="ic">
+                  <Icon name="info" size={17} />
+                </div>
+                <div>
+                  <div className="tt">급식업체 제3자 제공 동의는 아직 등록할 수 없습니다</div>
+                  <div className="tx">
+                    계약한 업체명을 약관에 적어야 해서 <b>지점마다 내용이 다릅니다.</b> 지점별 업체명이
+                    정해지면 등록할 수 있습니다.
+                  </div>
+                </div>
+              </div>
             )}
             {terms.map((t) => (
               <div
@@ -820,22 +995,39 @@ function Content() {
                     {t.academyId === null && ' · 전 지점 공통'}
                   </div>
                 </span>
-                <span style={{ width: 160, display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                <span style={{ width: 210, display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
                   {(() => {
                     const u = usage?.terms.find((x) => x.termsId === t.id)
-                    return u ? (
+                    if (!u) return <Unfilled reason="이 약관의 동의 현황이 안 왔다" />
+                    /* ★ `rate` 는 **만료된 동의도 센다.** 유효 수가 다르면 그 차이를
+                       말해 줘야 한다 — 「동의 80%」만 보여주면 담당자는 그 사람들에게
+                       지금도 광고를 보낼 수 있다고 읽는다.
+                       ⚠️ 서버 배포 전에는 `effectiveAccounts` 가 안 온다 — 없으면
+                       **유효 비율을 말하지 않는다.** 0 으로 읽으면 전원이 다시 동의해야
+                       하는 것처럼 보인다. */
+                    const expired =
+                      u.effectiveAccounts !== undefined ? u.agreedAccounts - u.effectiveAccounts : 0
+                    return (
                       <span style={{ fontSize: 12.5, textAlign: 'right' }}>
                         <b>{u.rate}%</b>
                         <span style={{ color: 'var(--muted)' }}>
                           {' '}
                           · {u.agreedAccounts}/{u.targetAccounts}
                         </span>
+                        {expired > 0 && (
+                          <div style={{ fontSize: 11.5, color: 'var(--red)', marginTop: 2 }}>
+                            유효 {u.effectiveRate ?? 0}% · {expired}명은 다시 동의가 필요합니다
+                          </div>
+                        )}
                       </span>
-                    ) : (
-                      <Unfilled reason="이 약관의 동의 현황이 안 왔다" />
                     )
                   })()}
                 </span>
+                {/* ★ `disabled` 를 동의율로 걸지 않는다 — 화면은 거부한 사람 수를 모른다.
+                    누르면 서버가 판정하고, 막히면 그 문장을 그대로 보여준다 */}
+                <button className="btn" onClick={() => setDelTerms(t)} disabled={busy}>
+                  치우기
+                </button>
               </div>
             ))}
           </div>

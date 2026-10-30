@@ -16,6 +16,8 @@ import {
   deleteReservationMemo,
   formatYmd,
   getReservation,
+  getReservationFileUrl,
+  listReservationFiles,
   listReservationMemos,
   listReservations,
   listStatusLogs,
@@ -86,16 +88,32 @@ function dateOnly(s: string | null): string {
   return s ? s.slice(0, 10) : '-'
 }
 
+/** 첨부 크기. 파일명이 없어 **크기가 어느 서류인지 짐작하는 단서**라 한 자리까지 보여준다 */
+function fileSizeText(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)}MB`
+}
+
 function Content() {
   const { academyId, selectable } = useAcademy()
   const [year, setYear] = useState(() => new Date().getFullYear())
   const [keywordInput, setKeywordInput] = useState('')
   const [keyword, setKeyword] = useState('')
 
-  const params = useMemo(() => ({ year, keyword: keyword || undefined }), [year, keyword])
+  /* ★ 지점을 **서버에 보낸다**(2026-10-30 에 열렸다). 좁힐 때만 쓰는 파라미터라
+     아직 지점을 안 고른 상태(`null`)면 보내지 않는다 — 그러면 계정 스코프 그대로다. */
+  const params = useMemo(
+    () => ({ year, keyword: keyword || undefined, academyId: academyId ?? undefined }),
+    [year, keyword, academyId],
+  )
   const list = useServerData({ fetcher: listReservations, params })
 
-  /* 서버의 계정별 접근 범위는 유지하고, 지점을 선택할 수 있는 계정만 화면에서 좁힌다. */
+  /* ⚠️ 위 `academyId` 를 보내도 **화면 거르기를 걷어내지 않는다.** 서버가
+     배포되기 전엔 그 파라미터가 **그냥 무시되어 전 지점이 그대로 오고**(운용
+     실출로 200 · 거리지 않은 4건), 그럴 때 **분당 담당자가 대구 지원자에게
+     전화하게 된다.** 둘이 다 살아 있어도 걸러내는 집합은 같으니 삼이 없다.
+     ★ 서버 배포가 확인되면 이 블록을 걷어낸다. */
   const rows = useMemo(() => {
     const all = list.data ?? []
     if (!selectable || academyId === null) return all
@@ -296,6 +314,40 @@ function Detail({
     params: idParams,
     errorMessage: '상태 이력을 불러오지 못했습니다.',
   })
+  /* 첨부. **없는 것과 못 보는 것을 가른다** — 아래 `null` 주석 참고 */
+  const files = useServerData({
+    fetcher: ({ id }: { id: number }) =>
+      listReservationFiles(id).catch((e: unknown) => {
+        /* ⚠️ **404 는 서버에 이 경로가 아직 없는 동안의 임시 처리다**(2026-10-30 시점).
+             배포되면 404 는 진짜 오류이므로 이 가지를 걷어낸다 — 그때까지 오류를 띄우면
+             담당자가 고장으로 읽는다.
+           ★ 403 은 조회 전용 계정이다. 열람 범위가 아직 안 정해져 서버가 막아 뒀고,
+             못 보는 사람에게 「불러오지 못했습니다」는 할 일이 없는 문장이다.
+           ★ `null` 은 **「첨부 칸 자체를 그리지 않는다」**는 뜻이다 — 빈 배열(첨부가
+             없다)과 섞으면 「첨부 없음」으로 읽혀 **있는 파일을 없는 것으로 만든다.** */
+        if (e instanceof ApiError && (e.status === 404 || e.status === 403)) return null
+        throw e
+      }),
+    params: idParams,
+    errorMessage: '첨부를 불러오지 못했습니다.',
+  })
+
+  /** 내려받는 중인 첨부 id. 주소는 누를 때마다 새로 받는다 — 5분이면 만료된다 */
+  const [fileBusy, setFileBusy] = useState<number | null>(null)
+  const [fileErr, setFileErr] = useState<string | null>(null)
+
+  async function openFile(fileId: number) {
+    setFileBusy(fileId)
+    setFileErr(null)
+    try {
+      const { url } = await getReservationFileUrl(row.id, fileId)
+      window.open(url, '_blank', 'noopener')
+    } catch (e) {
+      setFileErr(why(e, '첨부를 열지 못했습니다.'))
+    } finally {
+      setFileBusy(null)
+    }
+  }
 
   const [status, setStatus] = useState<ReservationStatus>(row.status)
   const [reason, setReason] = useState('')
@@ -644,6 +696,47 @@ function Detail({
             {linkErr !== null && <div className="hint" style={{ color: 'var(--red)' }}>{linkErr}</div>}
           </div>
         </div>}
+
+        {files.data !== null && (
+          <div className="frow">
+            <label>첨부</label>
+            <div>
+              {/* ⚠️ 파일명이 규격에 없어 순번으로밖에 쓸 수 없다 — 담당자가 무엇인지
+                  모른 채 열어 봐야 하므로, 그게 우리 쪽 누락이 아님을 적어 둔다 */}
+              {files.error && <div className="hint">{files.error}</div>}
+              {files.data.length === 0 && !files.loading && (
+                <div className="hint">첨부된 파일이 없습니다.</div>
+              )}
+              {files.data.map((f, i) => (
+                <div key={f.id} className="lead-foot" style={{ marginTop: 6 }}>
+                  <span className="src">
+                    첨부 {i + 1}
+                    <span className="mk">{f.contentType ?? '형식 미확인'}</span>
+                    {f.byteSize !== null && <span className="mk">{fileSizeText(f.byteSize)}</span>}
+                    {f.createdAt && <span className="mk">{dateOnly(f.createdAt)}</span>}
+                  </span>
+                  <button
+                    className="btn"
+                    type="button"
+                    disabled={fileBusy !== null}
+                    onClick={() => void openFile(f.id)}
+                  >
+                    {fileBusy === f.id ? '여는 중…' : '열기'}
+                  </button>
+                </div>
+              ))}
+              {files.data.length > 1 && (
+                <div className="hint">
+                  파일 이름이 접수 폼으로 함께 오지 않아 <b>순번으로 표시됩니다.</b> 어느 서류인지는
+                  열어서 확인해 주세요.
+                </div>
+              )}
+              {fileErr !== null && (
+                <div className="hint" style={{ color: 'var(--red)' }}>{fileErr}</div>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="frow">
           <label>상태 이력</label>

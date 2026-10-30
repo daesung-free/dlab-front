@@ -9,7 +9,11 @@ import { request } from './client'
  * ★ **페이징이 없다.** 목록이 배열 그대로 온다 → `useServerData` 를 쓴다.
  *   `useServerTable` 을 쓰면 totalPages 가 1로 굳어 페이저와 정렬 헤더가 통째로 사라진다.
  *
- * ★ **지점 파라미터가 없다.** `academyId` 를 받지 않아 **전 지점이 섞여 온다** —
+ * ★ **지점 파라미터는 2026-10-30 에 생겼다**(`academyId`, 좁힐 때만).
+ *   ⚠️ 그러나 **배포 전엔 그냥 무시되어 전 지점이 그대로 온다** — 아래 화면
+ *   거르기를 남개 둔 이유다.
+ *
+ * ★ 전에는 `academyId` 를 전혀 받지 않아 **전 지점이 섞여 왔다** —
  *   응답 행의 `academyId` 로 화면에서 걸러야 한다. 서버에서 거르는 게 맞지만
  *   지금은 그 파라미터가 없다(API_GAPS 40부). 거르지 않으면 분당 담당자가
  *   대구 지원자를 보고 전화하게 된다.
@@ -144,11 +148,23 @@ export interface ReservationQuery {
   year: number
   status?: ReservationStatus
   keyword?: string
+  /**
+   * ★ **직점. 2026-10-30 에 서버가 받기 시작했다**(그전엔 화면이 거들렀다).
+   *
+   * ★ **좁힐 때만 쓴다** — 안 보내면 계정 스코프 그대로고, 지점 계정이
+   *   남의 지점을 보내면 거부된다.
+   *
+   * ⚠️ **생답이 배포되기 전엔 이 파라미터가 그냥 무시된다**(운용 실출로
+   *   토인 코드 없이 200 · 전 지점 그대로 온다). 그래서 화면은 **거르는 것을
+   *   그만두지 않는다** — 둔 곳이 다 살아 있어도 걸러내는 것은 같고,
+   *   한켠만 남기a34 **분당 담당자가 대구 지원자에게 전화하는** 창이 생긴다.
+   */
+  academyId?: number
 }
 
 export function listReservations(q: ReservationQuery): Promise<ReservationRow[]> {
   return request<ReservationRow[]>('/api/v1/admin/admission-reservations', {
-    query: { year: q.year, status: q.status, keyword: q.keyword },
+    query: { year: q.year, status: q.status, keyword: q.keyword, academyId: q.academyId },
   })
 }
 
@@ -219,6 +235,44 @@ export function shareReservation(reservationId: number): Promise<{ token: string
   return request<{ token: string; expiresAt: string | null }>(
     `/api/v1/admin/admission-reservations/${reservationId}/share`,
     { method: 'POST' },
+  )
+}
+
+/**
+ * 입학예약 첨부 한 건.
+ *
+ * ⚠️⚠️ **원본 파일명이 없다.** 홈페이지 수신 규격(`setStdFile`)이 `rsv_cd` 와 Base64
+ *   본문 둘만 받아 **파일명을 보낼 자리가 규격에 없다.** 성적표·생활기록부 같은
+ *   **종류 구분도 없다.** 그래서 화면은 「첨부 1」처럼 순번으로밖에 못 쓴다 —
+ *   여러 개 올리면 형식과 크기로만 갈린다. 규격 추가를 연구소에 요청해 둔 상태다.
+ */
+export interface AdmissionFile {
+  id: number
+  /** `image/png` 처럼 온다. 파일명이 없어 이것과 크기가 유일한 단서다 */
+  contentType: string | null
+  byteSize: number | null
+  createdAt: string | null
+}
+
+/**
+ * 첨부 목록.
+ *
+ * ★ **응답에 주소가 없다.** 열 때마다 `getReservationFileUrl` 을 따로 부른다 —
+ *   목록에 실으면 **안 열어 본 파일의 주소까지 한꺼번에 나가고**, 그 응답이 로그에
+ *   남으면 만료 전까지 누구나 열 수 있다(성적표에 성명·생년월일이 들어 있다).
+ */
+export function listReservationFiles(reservationId: number): Promise<AdmissionFile[]> {
+  return request<AdmissionFile[]>(`/api/v1/admin/admission-reservations/${reservationId}/files`)
+}
+
+/**
+ * 첨부 하나의 내려받기 주소. **5분 뒤 만료**된다(`expiresAt` 은 안 온다).
+ *
+ * ★ 누를 때마다 새로 받는다 — 받아 두고 재사용하면 5분 뒤 조용히 안 열린다.
+ */
+export function getReservationFileUrl(reservationId: number, fileId: number): Promise<{ url: string }> {
+  return request<{ url: string }>(
+    `/api/v1/admin/admission-reservations/${reservationId}/files/${fileId}/url`,
   )
 }
 
