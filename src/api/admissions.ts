@@ -9,7 +9,11 @@ import { request } from './client'
  * ★ **페이징이 없다.** 목록이 배열 그대로 온다 → `useServerData` 를 쓴다.
  *   `useServerTable` 을 쓰면 totalPages 가 1로 굳어 페이저와 정렬 헤더가 통째로 사라진다.
  *
- * ★ **지점 파라미터가 없다.** `academyId` 를 받지 않아 **전 지점이 섞여 온다** —
+ * ★ **지점 파라미터는 2026-10-30 에 생겼다**(`academyId`, 좁힐 때만).
+ *   ⚠️ 그러나 **배포 전엔 그냥 무시되어 전 지점이 그대로 온다** — 아래 화면
+ *   거르기를 남개 둔 이유다.
+ *
+ * ★ 전에는 `academyId` 를 전혀 받지 않아 **전 지점이 섞여 왔다** —
  *   응답 행의 `academyId` 로 화면에서 걸러야 한다. 서버에서 거르는 게 맞지만
  *   지금은 그 파라미터가 없다(API_GAPS 40부). 거르지 않으면 분당 담당자가
  *   대구 지원자를 보고 전화하게 된다.
@@ -144,11 +148,23 @@ export interface ReservationQuery {
   year: number
   status?: ReservationStatus
   keyword?: string
+  /**
+   * ★ **직점. 2026-10-30 에 서버가 받기 시작했다**(그전엔 화면이 거들렀다).
+   *
+   * ★ **좁힐 때만 쓴다** — 안 보내면 계정 스코프 그대로고, 지점 계정이
+   *   남의 지점을 보내면 거부된다.
+   *
+   * ⚠️ **생답이 배포되기 전엔 이 파라미터가 그냥 무시된다**(운용 실출로
+   *   토인 코드 없이 200 · 전 지점 그대로 온다). 그래서 화면은 **거르는 것을
+   *   그만두지 않는다** — 둔 곳이 다 살아 있어도 걸러내는 것은 같고,
+   *   한켠만 남기a34 **분당 담당자가 대구 지원자에게 전화하는** 창이 생긴다.
+   */
+  academyId?: number
 }
 
 export function listReservations(q: ReservationQuery): Promise<ReservationRow[]> {
   return request<ReservationRow[]>('/api/v1/admin/admission-reservations', {
-    query: { year: q.year, status: q.status, keyword: q.keyword },
+    query: { year: q.year, status: q.status, keyword: q.keyword, academyId: q.academyId },
   })
 }
 
