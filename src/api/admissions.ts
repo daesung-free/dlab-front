@@ -222,6 +222,44 @@ export function shareReservation(reservationId: number): Promise<{ token: string
   )
 }
 
+/**
+ * 입학예약 첨부 한 건.
+ *
+ * ⚠️⚠️ **원본 파일명이 없다.** 홈페이지 수신 규격(`setStdFile`)이 `rsv_cd` 와 Base64
+ *   본문 둘만 받아 **파일명을 보낼 자리가 규격에 없다.** 성적표·생활기록부 같은
+ *   **종류 구분도 없다.** 그래서 화면은 「첨부 1」처럼 순번으로밖에 못 쓴다 —
+ *   여러 개 올리면 형식과 크기로만 갈린다. 규격 추가를 연구소에 요청해 둔 상태다.
+ */
+export interface AdmissionFile {
+  id: number
+  /** `image/png` 처럼 온다. 파일명이 없어 이것과 크기가 유일한 단서다 */
+  contentType: string | null
+  byteSize: number | null
+  createdAt: string | null
+}
+
+/**
+ * 첨부 목록.
+ *
+ * ★ **응답에 주소가 없다.** 열 때마다 `getReservationFileUrl` 을 따로 부른다 —
+ *   목록에 실으면 **안 열어 본 파일의 주소까지 한꺼번에 나가고**, 그 응답이 로그에
+ *   남으면 만료 전까지 누구나 열 수 있다(성적표에 성명·생년월일이 들어 있다).
+ */
+export function listReservationFiles(reservationId: number): Promise<AdmissionFile[]> {
+  return request<AdmissionFile[]>(`/api/v1/admin/admission-reservations/${reservationId}/files`)
+}
+
+/**
+ * 첨부 하나의 내려받기 주소. **5분 뒤 만료**된다(`expiresAt` 은 안 온다).
+ *
+ * ★ 누를 때마다 새로 받는다 — 받아 두고 재사용하면 5분 뒤 조용히 안 열린다.
+ */
+export function getReservationFileUrl(reservationId: number, fileId: number): Promise<{ url: string }> {
+  return request<{ url: string }>(
+    `/api/v1/admin/admission-reservations/${reservationId}/files/${fileId}/url`,
+  )
+}
+
 export function listStatusLogs(reservationId: number): Promise<ReservationStatusLog[]> {
   return request<ReservationStatusLog[]>(`/api/v1/admin/admission-reservations/${reservationId}/status-logs`)
 }
