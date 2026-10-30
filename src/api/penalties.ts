@@ -174,6 +174,9 @@ export interface PenaltyItemRow {
   itemName: string
   category: PenaltyCategory
   point: number
+  groupName?: string | null
+  description?: string | null
+  automatic?: boolean
 }
 
 /** ★ `academyId` 가 **필수**다. 안 보내면 400("지점을 지정해야 합니다") — 부여용과 다르다 */
@@ -188,6 +191,12 @@ export interface PenaltyItemBody {
   /** 절댓값으로 보낸다. 저장은 `category` 를 따른다 */
   point: number
   category: PenaltyCategory
+  groupName?: string | null
+  description?: string | null
+}
+
+export function copyPenaltyItems(body: { sourceAcademyId: number; targetAcademyId: number; year: number }): Promise<PenaltyItemRow[]> {
+  return request<PenaltyItemRow[]>('/api/v1/admin/penalty-items/copy', { method: 'POST', body })
 }
 
 export function createPenaltyItem(body: PenaltyItemBody): Promise<PenaltyItemRow> {
