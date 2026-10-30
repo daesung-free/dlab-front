@@ -101,10 +101,19 @@ function Content() {
   const [keywordInput, setKeywordInput] = useState('')
   const [keyword, setKeyword] = useState('')
 
-  const params = useMemo(() => ({ year, keyword: keyword || undefined }), [year, keyword])
+  /* ★ 지점을 **서버에 보낸다**(2026-10-30 에 열렸다). 좁힐 때만 쓰는 파라미터라
+     아직 지점을 안 고른 상태(`null`)면 보내지 않는다 — 그러면 계정 스코프 그대로다. */
+  const params = useMemo(
+    () => ({ year, keyword: keyword || undefined, academyId: academyId ?? undefined }),
+    [year, keyword, academyId],
+  )
   const list = useServerData({ fetcher: listReservations, params })
 
-  /* 서버의 계정별 접근 범위는 유지하고, 지점을 선택할 수 있는 계정만 화면에서 좁힌다. */
+  /* ⚠️ 위 `academyId` 를 보내도 **화면 거르기를 걷어내지 않는다.** 서버가
+     배포되기 전엔 그 파라미터가 **그냥 무시되어 전 지점이 그대로 오고**(운용
+     실출로 200 · 거리지 않은 4건), 그럴 때 **분당 담당자가 대구 지원자에게
+     전화하게 된다.** 둘이 다 살아 있어도 걸러내는 집합은 같으니 삼이 없다.
+     ★ 서버 배포가 확인되면 이 블록을 걷어낸다. */
   const rows = useMemo(() => {
     const all = list.data ?? []
     if (!selectable || academyId === null) return all
