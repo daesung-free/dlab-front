@@ -66,6 +66,54 @@ export function listTerms(academyId?: number): Promise<Terms[]> {
   return request<Terms[]>('/api/v1/admin/app-config/terms', { query: { academyId } })
 }
 
+/**
+ * 앱이 가입 때 받는 약관 목록 — 디랩 입학동의서 최종본(2026-10-29) 기준 10종.
+ *
+ * ★ **코드를 자유 입력으로 두면 오타가 영구로 남는다.** 약관은 수정·삭제 API 가 없어
+ *   `PRIVCAY_REQUIRED` 로 한 번 등록하면 지울 수 없고, 앱은 그 코드를 못 찾아
+ *   **그 약관만 조용히 안 뜬다** — 동의를 못 받은 줄도 모르게 된다.
+ *
+ * ★ `required` 를 여기 둔 이유는 **최종본과 다르게 등록되는 것을 막기 위해서다.**
+ *   특히 `SENSITIVE`(민감정보)는 **선택**이다 — 최종본이 「동의를 거부할 수 있으며, 이
+ *   경우 대체 신청 방법을 안내합니다」라 필수로 등록하면 거부한 사람이 가입을 못 한다.
+ *
+ * ★ `confirmOnly` 는 「동의」가 아니라 「확인」을 받는 것이다. CCTV 안내는 동의 대상이
+ *   아니라 알렸다는 사실을 남기는 것이라, 「동의합니다」로 받으면 그 기록이 무엇인지
+ *   흐려진다.
+ *
+ * ⚠️ 급식업체 제3자 제공(`MEAL_THIRD_PARTY`)은 아직 없다 — 최종본이 「해당 지점과 계약한
+ *   업체명만 기재」라 **지점별 약관**이어야 하는데 지점-업체 매핑을 못 받았다.
+ */
+export interface TermsCatalogEntry {
+  code: string
+  /** 등록 모달 제목 칸에 미리 넣는 값. 고쳐서 등록해도 된다 */
+  title: string
+  required: boolean
+  /** 동의가 아니라 확인을 받는 약관 */
+  confirmOnly?: boolean
+  /**
+   * 입학동의서 최종본에 있는 약관인지.
+   *
+   * ★ 푸시 수신 동의는 **최종본에 없다** — 앱 설정이라 거기 섞어 「최종본 기준」이라고
+   *   말하면 사실이 아닌 것을 화면이 말하게 된다.
+   */
+  inAdmissionDoc?: boolean
+}
+
+export const TERMS_CATALOG: readonly TermsCatalogEntry[] = [
+  { code: 'PRIVACY_REQUIRED', title: '개인정보 수집·이용 동의 (입학신청·재원 필수)', required: true, inAdmissionDoc: true },
+  { code: 'PRIVACY_OPTIONAL', title: '개인정보 수집·이용 동의 (입학신청·재원 선택)', required: false, inAdmissionDoc: true },
+  { code: 'ADMISSION_GUIDE', title: '대입 진학지도 활용 동의', required: false, inAdmissionDoc: true },
+  { code: 'CERTIFICATE', title: '재원·졸업증명서 발급 동의', required: false, inAdmissionDoc: true },
+  { code: 'MARKETING', title: '홍보·마케팅 활용 동의', required: false, inAdmissionDoc: true },
+  { code: 'CCTV_NOTICE', title: 'CCTV 설치·운영 안내 확인', required: true, confirmOnly: true, inAdmissionDoc: true },
+  { code: 'SENSITIVE', title: '민감정보 수집·이용 동의', required: false, inAdmissionDoc: true },
+  { code: 'GUARDIAN_ADMISSION', title: '학부모·보호자 입학동의서', required: true, inAdmissionDoc: true },
+  { code: 'PHONE_SUBMIT', title: '휴대전화 제출 동의', required: true, inAdmissionDoc: true },
+  { code: 'NO_SMOKING', title: '학원 내 금연 서약', required: true, inAdmissionDoc: true },
+  { code: 'PUSH', title: '앱 푸시 수신 동의', required: false },
+]
+
 export interface TermsCreate {
   academyId?: number
   code: string
@@ -98,6 +146,26 @@ export interface TermsStatus {
    */
   agreed: boolean | null
   agreedAt: string | null
+  /**
+   * 동의한 날부터 2년이 지났다 — 홍보·마케팅(`MARKETING`)에만 붙는다.
+   *
+   * ★ 다른 약관은 보존 기준이 「목적 달성 시까지」처럼 날짜로 셀 수 없어 만료가 없다.
+   *   같은 2년을 적용하면 재학생의 필수 동의가 만료되어 앱이 막힌다.
+   *
+   * ★ 서버가 `agreed` 를 `false` 로 바꾸지 않는 이유: 동의한 사실 자체는 바뀌지 않았고
+   *   `false` 로 두면 **본인이 철회한 것과 구분되지 않는다** — 철회는 다시 묻지 않고
+   *   만료는 다시 물어야 하므로 안내할 말이 다르다.
+   *
+   * ⚠️ 서버 배포 전에는 안 온다 — 없을 때 「만료 아님」으로 읽히도록 `?? false` 로 쓴다.
+   */
+  expired?: boolean
+  /**
+   * 지금 유효한 동의인지(`agreed && !expired`).
+   *
+   * ★ **동의 여부를 그리는 곳은 이 값을 쓴다.** `agreed` 만 보고 「동의함」으로 그리면
+   *   만료된 사람에게 광고가 나가는 줄로 읽힌다 — 만료는 「다시 동의 필요」다.
+   */
+  effective?: boolean
 }
 
 /** 계정 하나의 동의 현황. **전체 동의율을 내는 경로는 없다**(API_GAPS 17-3) */
