@@ -1,4 +1,4 @@
-import { requestPaged } from './client'
+import { request, requestPaged } from './client'
 import type { Paged } from './types'
 
 /* 금일 수정 이력 (F-C-1) — GET /api/v1/admin/audit-logs
@@ -58,4 +58,17 @@ export interface AuditLogParams {
 }
 export function listAuditLogs(params: AuditLogParams): Promise<Paged<AuditLog>> {
   return requestPaged<AuditLog>('/api/v1/admin/audit-logs', { query: { ...params } })
+}
+
+/**
+ * 업무 영역 목록.
+ *
+ * ★★ **화면이 들고 있으면 반드시 뒤처진다.** 하드코딩된 8개가 서버의 12개를 못 따라가
+ *   **급식 신청·반·장학·출결 정정을 고를 수 없었다**(2026-10-30 발견). 담당자는 그
+ *   변경이 **기록되지 않는 줄 안다** — 실제로는 기록되는데 거를 수가 없던 것이다.
+ *
+ * ★ 서버가 **한국어 원래 이름**을 준다. 그대로 `entityType` 파라미터로 보낸다.
+ */
+export function listAuditAreas(): Promise<string[]> {
+  return request<string[]>('/api/v1/admin/audit-logs/areas')
 }
