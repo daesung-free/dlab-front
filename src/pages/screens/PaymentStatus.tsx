@@ -1815,6 +1815,7 @@ function Content() {
           {printFor !== null && academyId !== null && (
             <PaymentHistoryPrint
               academyId={academyId}
+              enrollmentId={printFor.enrollmentId}
               studentNo={printFor.studentNo}
               studentName={printFor.studentName}
               onClose={() => setPrintFor(null)}

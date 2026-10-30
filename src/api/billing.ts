@@ -58,6 +58,14 @@ export interface PaymentView {
 
 export interface ReceiptRow {
   billingId: number
+  /**
+   * 등록 건 id. **학생 id 가 아니다** — 학번은 해마다 초기화되고 재등록하면 등록 행이
+   * 또 생기므로, **어느 기수의 결제인가**를 가리는 값이다.
+   *
+   * ★ `enrollmentId` 필터에 그대로 넘긴다. ⚠️ **옵션이다** — 2026-10-30 에 응답에
+   *   더해져서, 서버가 배포되기 전엔 `undefined` 다. 없으면 학번으로 거른다(아래 참고).
+   */
+  enrollmentId?: number
   studentNo: string | null
   studentName: string
   /** 청구 이름 (예: "2026년 9월 교습비") */
@@ -123,6 +131,16 @@ export interface ReceiptParams {
   /** 결제수단 코드(CARD·VIRTUAL_ACCOUNT·CASH). 목록·합계·엑셀이 같은 값을 받는다 */
   method?: string
   unpaidOnly?: boolean
+  /**
+   * 등록 건 하나로 좁힌다(2026-10-30).
+   *
+   * ★ **학번이 아니라 등록 건 id 다** — 학번은 해마다 초기화되고 재등록하면 등록 행이
+   *   또 생긴다. 지점 범위가 **먼저** 걸리므로 남의 지점 id 를 넣어도 0건이다.
+   *
+   * ⚠️ **배포 전엔 그냥 무시된다** — 운영 실측으로 없는 id 를 넣어도 전체가 왔다.
+   *   그래서 보내는 쪽은 **화면 거르기를 함께 남긴다**(`PaymentHistoryPrint`).
+   */
+  enrollmentId?: number
 }
 
 export function listReceiptStatus(params: ReceiptParams): Promise<ReceiptRow[]> {
