@@ -70,8 +70,10 @@ export function PaymentHistoryPrint({
 }: {
   academyId: number
   /**
-   * 등록 건 id. ⚠️ **옵솨이다** — 서버가 생답에 담기 전(2026-10-30 추가)엔 없다.
-   * 있으면 서버에 넘겨 **그 등록 건만** 받고, 없으면 학번으로 검색한다.
+   * 등록 건 id. 이 값으로 **서버가 등록 건 하나만 내려준다.**
+   *
+   * ★ 학번이 아니다 — 학번은 해마다 초기화되고 재등록하면 등록 행이 또 생기므로,
+   *   **어느 기수의 결제인가**를 가리는 값이다.
    */
   enrollmentId?: number
   studentNo: string | null
@@ -89,31 +91,17 @@ export function PaymentHistoryPrint({
     setErr(null)
     setRows(null)
     try {
-      /* ★ **등록 건 id 가 있으면 그걸 보내 서버가 거르게 한다**(2026-10-30 에 열렸다).
-         ★ 학생 목록을 따로 부르지 않는다 — 학번으로 되짚으면 재등록한 학생의
-           **어느 기수인지를 화면이 짐작**하게 된다. */
-      const all = await listReceiptStatus({
-        year: y,
-        academyId,
-        enrollmentId,
-        /* ★ `enrollmentId` 가 없는 동안의 검색어다. 내려가는 서버는 모를 파라미터를
-             그냥 무시하므로, 둘을 함께 보내도 안전하다 */
-        keyword: studentNo ?? studentName,
-      })
-      /* ⚠️ **화면 거르기를 걷어내지 않는다.** 서버가 배포되기 전엔 `enrollmentId` 가
-           무시되어 **`keyword` 결과가 그대로 오고**, `keyword` 는 이름·청구항목도 훑어
-           **남의 행이 섞여 온다** — 거르지 않으면 **남의 결제가 학부모 손에 들어간다.**
-           둘이 다 살아 있어도 남기는 행은 같으니 삼이 없다.
-         ★ 서버 배포가 확인되고 모든 행에 `enrollmentId` 가 오면 이 블록을 걷어낸다. */
-      setRows(
-        all.filter((r) =>
-          enrollmentId !== undefined && r.enrollmentId !== undefined
-            ? r.enrollmentId === enrollmentId
-            : studentNo !== null
-              ? r.studentNo === studentNo
-              : r.studentName === studentName,
-        ),
-      )
+      /* ★ 서버가 **등록 건 하나로 좁혀 준다**(2026-10-30 배포 확인 — 모든 행에
+           `enrollmentId` 가 온다). 학생 목록을 따로 불러 학번으로 되짚지 않는다 —
+           학번은 해마다 초기화되고 재등록하면 등록 행이 또 생기므로, 되짚으면
+           **어느 기수의 결제인지를 화면이 짐작**하게 된다.
+         ⚠️ `academyId` 는 **빼면 400** 이다(「지점을 지정해야 합니다」) — 전 지점 권한
+           계정도 그렇다.
+         ★ 화면 두 겹 거르기는 걷어냈다. 전에는 `keyword` 로 학번을 검색한 뒤 다시
+           걸렀는데, `keyword` 가 이름·청구항목도 훑어 **남의 행이 섞여 왔기** 때문이다.
+           이제 섞여 올 행이 없다 — 두 벌로 남기면 서버가 범위를 바꿀 때 **화면만 옛
+           규칙으로** 남는다. */
+      setRows(await listReceiptStatus({ year: y, academyId, enrollmentId }))
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : '결제 내역을 불러오지 못했습니다.')
     } finally {
