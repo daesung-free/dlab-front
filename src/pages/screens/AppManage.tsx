@@ -10,6 +10,7 @@ import {
   listAppConfigs,
   createTerms,
   listTerms,
+  TERMS_CATALOG,
   setMaintenance,
   updateAppVersions,
   getAppUsage,
@@ -227,6 +228,8 @@ function Content() {
     title: string
     content: string
     required: boolean
+    /** 목록에 없는 약관을 넣을 때만 코드를 직접 입력한다 */
+    custom: boolean
   } | null>(null)
 
   const load = useCallback(async () => {
@@ -308,6 +311,16 @@ function Content() {
 
   const pushTerms = usage?.terms.find((x) => x.code === 'PUSH') ?? null
 
+  /** 등록 모달에서 고른 약관. 목록에 없는 코드를 직접 넣는 중이면 null 이다 */
+  const selectedCatalog = newTerms && !newTerms.custom
+    ? (TERMS_CATALOG.find((c) => c.code === newTerms.code) ?? null)
+    : null
+
+  /* ★ 아직 등록되지 않은 약관을 화면이 말해 준다 — 운영에는 테스트 약관 하나뿐이고
+       약관 행은 자동 적용이 안 돼 사람이 직접 넣어야 하는데, 지금 화면은 **빠진 게
+       있다는 사실 자체를 말하지 않았다.** 앱은 없는 약관을 그냥 안 띄운다. */
+  const missingTerms = TERMS_CATALOG.filter((c) => !terms.some((t) => t.code === c.code))
+
   if (!isSuper) {
     return (
       <div className="note-box" style={{ borderColor: 'var(--amber)' }}>
@@ -372,14 +385,64 @@ function Content() {
             </div>
           </div>
 
+          {/* ★ 자유 입력이었다. 수정·삭제가 안 되는 데다 앱은 코드로 약관을 찾기 때문에
+                 오타 하나가 **그 약관만 조용히 안 뜨게** 만든다 — 목록에서 고르게 한다. */}
           <div className="frow">
-            <label className="req">약관 코드</label>
-            <input
-              className="inp"
-              value={newTerms.code}
-              placeholder="예: SERVICE / PRIVACY"
-              onChange={(e) => setNewTerms({ ...newTerms, code: e.target.value })}
-            />
+            <label className="req">약관 종류</label>
+            <div>
+              <select
+                className="sel"
+                value={newTerms.custom ? '__custom__' : newTerms.code}
+                onChange={(e) => {
+                  const v = e.target.value
+                  if (v === '__custom__') {
+                    setNewTerms({ ...newTerms, custom: true, code: '' })
+                    return
+                  }
+                  const found = TERMS_CATALOG.find((c) => c.code === v)
+                  setNewTerms({
+                    ...newTerms,
+                    custom: false,
+                    code: v,
+                    /* 제목을 아직 손대지 않았으면 채운다. 고쳐 쓴 제목을 덮지는 않는다 */
+                    title:
+                      newTerms.title.trim() === '' ||
+                      TERMS_CATALOG.some((c) => c.title === newTerms.title)
+                        ? (found?.title ?? newTerms.title)
+                        : newTerms.title,
+                    required: found ? found.required : newTerms.required,
+                  })
+                }}
+              >
+                <option value="">선택해 주세요</option>
+                {TERMS_CATALOG.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.title} ({c.required ? '필수' : '선택'})
+                  </option>
+                ))}
+                <option value="__custom__">목록에 없는 약관 — 코드 직접 입력</option>
+              </select>
+              {newTerms.custom && (
+                <input
+                  className="inp"
+                  style={{ marginTop: 6 }}
+                  value={newTerms.code}
+                  placeholder="영문 대문자와 밑줄로 입력해 주세요 (예: MEAL_THIRD_PARTY)"
+                  onChange={(e) => setNewTerms({ ...newTerms, code: e.target.value })}
+                />
+              )}
+              {selectedCatalog?.confirmOnly && (
+                <div className="hint">
+                  동의가 아니라 <b>확인</b>을 받는 약관입니다. 본문을 「동의합니다」가 아니라{' '}
+                  <b>「확인하였습니다」</b>로 써 주세요.
+                </div>
+              )}
+              {selectedCatalog && !selectedCatalog.required && (
+                <div className="hint">
+                  선택 약관입니다. 동의하지 않아도 앱에 가입할 수 있습니다.
+                </div>
+              )}
+            </div>
           </div>
           <div className="frow">
             <label className="req">버전</label>
@@ -408,16 +471,30 @@ function Content() {
               onChange={(e) => setNewTerms({ ...newTerms, content: e.target.value })}
             />
           </div>
+          {/* ★ `.frow` 는 2열이다 — 체크박스와 안내를 형제로 두면 안내가 라벨 칸으로 떨어진다 */}
           <div className="frow">
             <label>필수 동의</label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5 }}>
-              <input
-                type="checkbox"
-                checked={newTerms.required}
-                onChange={(e) => setNewTerms({ ...newTerms, required: e.target.checked })}
-              />
-              동의하지 않으면 앱을 쓸 수 없습니다
-            </label>
+            <div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5 }}>
+                <input
+                  type="checkbox"
+                  checked={newTerms.required}
+                  onChange={(e) => setNewTerms({ ...newTerms, required: e.target.checked })}
+                />
+                {selectedCatalog?.confirmOnly
+                  ? '확인하지 않으면 앱을 쓸 수 없습니다'
+                  : '동의하지 않으면 앱을 쓸 수 없습니다'}
+              </label>
+              {selectedCatalog && selectedCatalog.required !== newTerms.required && (
+                <div className="hint" style={{ color: 'var(--red)' }}>
+                  {selectedCatalog.inAdmissionDoc ? '입학동의서 최종본에서 ' : ''}이 약관은{' '}
+                  <b>{selectedCatalog.required ? '필수' : '선택'}</b>입니다.
+                  {selectedCatalog.required
+                    ? ' 선택으로 등록하면 동의를 받지 않고 가입됩니다.'
+                    : ' 필수로 등록하면 동의를 거부한 사람은 가입할 수 없습니다.'}
+                </div>
+              )}
+            </div>
           </div>
         </Modal>
       )}
@@ -786,7 +863,7 @@ function Content() {
               <button
                 className="btn pri"
                 onClick={() =>
-                  setNewTerms({ code: '', version: '', title: '', content: '', required: true })
+                  setNewTerms({ code: '', version: '', title: '', content: '', required: true, custom: false })
                 }
               >
                 <Icon name="plus" size={14} /> 새 버전 등록
@@ -796,6 +873,50 @@ function Content() {
           <div className="card-sec-b" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {terms.length === 0 && !loading && (
               <span style={{ color: 'var(--muted)', fontSize: 12.5 }}>등록된 약관이 없습니다.</span>
+            )}
+
+            {/* ★ 없는 약관은 앱에서 그냥 안 뜬다 — 동의를 못 받고 있다는 것을 알 길이 없다 */}
+            {!loading && missingTerms.length > 0 && (
+              <div className="note-box warn">
+                <div className="ic">
+                  <Icon name="alert-triangle" size={17} />
+                </div>
+                <div>
+                  <div className="tt">
+                    아직 등록되지 않은 약관이 {missingTerms.length}개 있습니다
+                  </div>
+                  <div className="tx">
+                    등록되지 않은 약관은 앱 가입 화면에 표시되지 않아 <b>동의를 받지 못합니다.</b>{' '}
+                    다음 약관을 등록해 주세요.
+                    {/* ★ 푸시 수신 동의는 입학동의서 최종본에 없다 — 한 묶음으로 「최종본 기준」이라고
+                        적으면 화면이 사실이 아닌 것을 말하게 된다. 근거가 다른 것은 따로 센다. */}
+                    <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {missingTerms.map((c) => (
+                        <span key={c.code} className={`mk ${c.required ? 'brandnew' : 'supplement'}`}>
+                          {c.title} · {c.required ? '필수' : '선택'}
+                          {!c.inAdmissionDoc && ' · 입학동의서 밖'}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 지점-업체 매핑을 못 받아 아직 등록할 수 없다. 빠진 것으로 세면 계속 남는다 */}
+            {!loading && (
+              <div className="note-box">
+                <div className="ic">
+                  <Icon name="info" size={17} />
+                </div>
+                <div>
+                  <div className="tt">급식업체 제3자 제공 동의는 아직 등록할 수 없습니다</div>
+                  <div className="tx">
+                    계약한 업체명을 약관에 적어야 해서 <b>지점마다 내용이 다릅니다.</b> 지점별 업체명이
+                    정해지면 등록할 수 있습니다.
+                  </div>
+                </div>
+              </div>
             )}
             {terms.map((t) => (
               <div
