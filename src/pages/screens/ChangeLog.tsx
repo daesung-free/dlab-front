@@ -14,7 +14,7 @@ import {
 } from '../../components/common'
 import { Icon } from '../../components/Icon'
 import { useAcademy } from '../../auth/AcademyContext'
-import { listAuditLogs, type AuditAction, type AuditLog } from '../../api/auditLogs'
+import { listAuditAreas, listAuditLogs, type AuditAction, type AuditLog } from '../../api/auditLogs'
 import type { Mockup } from './types'
 import { createScreenSignal } from './screenSignal'
 import { AUDIT_AREAS, auditAreaLabel, changeFieldLabel, changeValueLabel } from '../../lib/changeLabels'
@@ -66,6 +66,7 @@ const FIELDS: Field[] = [
     name: 'area',
     label: '업무 영역',
     // ★ 값은 서버 원래 이름이다 — '사유신청'(붙여 씀)·'직원 계정' 으로 보내 항상 0건이었다
+    // ★ 선택지는 **서버 목록으로 갈아끼운다**(아래 `areaOptions`) — 여기 것은 못 받았을 때 쓴다
     options: AUDIT_AREAS,
   },
   {
@@ -252,6 +253,25 @@ function Content() {
 
   const table = useServerTable({ fetcher: listAuditLogs, params })
 
+  /* ★★ **업무 영역은 서버에서 받는다.** 화면이 들고 있던 8개가 서버의 12개를 못 따라가
+       **급식 신청·반·장학·출결 정정을 고를 수 없었다.** 담당자는 그 변경이 **기록되지
+       않는 줄 안다** — 실제로는 기록되는데 거를 수가 없던 것이다.
+     ★ **못 받으면 하드코딩 목록으로 버틴다** — 선택지가 통째로 사라지면 전체 조회밖에
+       못 하게 되어, 있던 기능까지 잃는다. */
+  const [serverAreas, setServerAreas] = useState<string[] | null>(null)
+  useEffect(() => {
+    void listAuditAreas()
+      .then(setServerAreas)
+      .catch(() => setServerAreas(null))
+  }, [])
+
+  const fields = useMemo<Field[]>(() => {
+    if (serverAreas === null) return FIELDS
+    /* ★ 라벨은 우리가 손본 것을 쓴다('학생' → '학생 정보'). 값은 서버가 준 그대로 보낸다 */
+    const opts = serverAreas.map((v) => ({ value: v, label: auditAreaLabel(v) }))
+    return FIELDS.map((f) => (f.type === 'select' && f.name === 'area' ? { ...f, options: opts } : f))
+  }, [serverAreas])
+
   /* 표시용 한 줄로 바꾼다. 서버는 UTC instant 를 주므로 한국 시각으로 환산한다 —
      문자열을 그냥 자르면 자정 근처 기록이 하루 밀린다. */
   const rows: LogRow[] = useMemo(
@@ -316,7 +336,7 @@ function Content() {
 
       <SearchForm
         key={formKey}
-        fields={FIELDS}
+        fields={fields}
         onSearch={setQuery}
         initial={query}
         presetKey="AUDIT_LOG"
