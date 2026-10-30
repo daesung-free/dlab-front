@@ -109,16 +109,11 @@ function Content() {
   )
   const list = useServerData({ fetcher: listReservations, params })
 
-  /* ⚠️ 위 `academyId` 를 보내도 **화면 거르기를 걷어내지 않는다.** 서버가
-     배포되기 전엔 그 파라미터가 **그냥 무시되어 전 지점이 그대로 오고**(운용
-     실출로 200 · 거리지 않은 4건), 그럴 때 **분당 담당자가 대구 지원자에게
-     전화하게 된다.** 둘이 다 살아 있어도 걸러내는 집합은 같으니 삼이 없다.
-     ★ 서버 배포가 확인되면 이 블록을 걷어낸다. */
-  const rows = useMemo(() => {
-    const all = list.data ?? []
-    if (!selectable || academyId === null) return all
-    return all.filter((r) => r.academyId === null || r.academyId === academyId)
-  }, [list.data, academyId, selectable])
+  /* ★ 지점은 **서버가 거른다**(2026-10-30 배포 확인 — `academyId=1` 로 4건이 3건이 됐다).
+     화면 거르기는 걷어냈다. 두 벌로 두면 **어느 쪽이 거른 것인지 알 수 없고**, 서버가
+     범위를 바꿀 때 화면만 옛 규칙으로 남는다.
+     ★ `academyId` 가 `null`(아직 안 고름)이면 안 보내므로 계정 스코프 그대로다. */
+  const rows = list.data ?? []
 
   // 다른 지점 예약을 함께 조회할 때만 지점을 표시한다. 소속 지점 전용 화면은 유지한다.
   const showAcademy = rows.some((r) => r.academyId !== null && r.academyId !== academyId)
@@ -318,14 +313,15 @@ function Detail({
   const files = useServerData({
     fetcher: ({ id }: { id: number }) =>
       listReservationFiles(id).catch((e: unknown) => {
-        /* ⚠️ **404 는 서버에 이 경로가 아직 없는 동안의 임시 처리다**(2026-10-30 시점).
-             배포되면 404 는 진짜 오류이므로 이 가지를 걷어낸다 — 그때까지 오류를 띄우면
-             담당자가 고장으로 읽는다.
-           ★ 403 은 조회 전용 계정이다. 열람 범위가 아직 안 정해져 서버가 막아 뒀고,
-             못 보는 사람에게 「불러오지 못했습니다」는 할 일이 없는 문장이다.
+        /* ★ 403 은 조회 전용 계정이다. 열람 범위(담임만 / 행정 포함 / 학부모)가 아직
+             안 정해져 서버가 막아 뒀고, 못 보는 사람에게 「불러오지 못했습니다」는
+             할 일이 없는 문장이다.
            ★ `null` 은 **「첨부 칸 자체를 그리지 않는다」**는 뜻이다 — 빈 배열(첨부가
-             없다)과 섞으면 「첨부 없음」으로 읽혀 **있는 파일을 없는 것으로 만든다.** */
-        if (e instanceof ApiError && (e.status === 404 || e.status === 403)) return null
+             없다)과 섞으면 「첨부 없음」으로 읽혀 **있는 파일을 없는 것으로 만든다.**
+           ★ **404 를 삼키는 가지는 걷어냈다**(2026-10-30 서버 배포 확인). 경로가 없는
+             동안의 임시 처리였는데, 지금 404 는 **그 예약이 없다는 진짜 오류**다 —
+             삼키면 칸이 조용히 사라지고 담당자는 「이 사람은 첨부가 없네」로 읽는다. */
+        if (e instanceof ApiError && e.status === 403) return null
         throw e
       }),
     params: idParams,

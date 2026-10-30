@@ -198,8 +198,15 @@ export interface TermsUsage {
   /** 분모 — 활성 앱 계정(학생 + 학부모) */
   targetAccounts: number
   agreedAccounts: number
-  /** 정수 % — **`agreedAccounts` 기준이다.** 만료된 동의도 여기 들어간다 */
-  rate: number
+  /**
+   * 정수 % — **`agreedAccounts` 기준이다.** 만료된 동의도 여기 들어간다.
+   *
+   * ⚠️⚠️ **`targetAccounts` 가 0 이면 `null` 이다**(2026-10-30 운영 실측).
+   *   나눌 분모가 없으니 비율이 **없는 것**이고, 서버가 0 으로 꾸며 주지 않는다.
+   * ★ **`0%` 로 그리면 안 된다** — 「아무도 동의하지 않았다」로 읽히는데 사실은
+   *   **물어볼 사람이 없다**는 뜻이다. 둘은 담당자가 할 일이 다르다.
+   */
+  rate: number | null
   /**
    * 그중 **지금 유효한** 동의 계정. 홍보·마케팅은 동의일부터 2년이 지나면 빠진다.
    *
@@ -212,8 +219,8 @@ export interface TermsUsage {
    *   없는 값을 0으로 읽으면 **전원이 다시 동의해야 하는 것처럼 보인다.**
    */
   effectiveAccounts?: number
-  /** `effectiveAccounts` 기준 정수 % */
-  effectiveRate?: number
+  /** `effectiveAccounts` 기준 정수 %. `rate` 와 같은 이유로 분모가 0 이면 `null` 이다 */
+  effectiveRate?: number | null
 }
 
 /**
@@ -228,10 +235,12 @@ export interface AppUsage {
   studentAccounts: number
   /** 가입했지만 아직 승인 전 */
   pendingStudents: number
-  studentSignupRate: number
+  /** ⚠️ 분모(재원생)가 0 이면 `null` 이다 — `TermsUsage.rate` 주석 참고 */
+  studentSignupRate: number | null
   parentAccounts: number
   studentsWithParent: number
-  parentLinkRate: number
+  /** ⚠️ 분모가 0 이면 `null` 이다 */
+  parentLinkRate: number | null
   terms: TermsUsage[]
 }
 
