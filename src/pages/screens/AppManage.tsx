@@ -196,6 +196,18 @@ const API_BANNER_COLUMNS: Column<Notice>[] = [
   },
 ]
 
+/**
+ * 분자/분모를 한 줄로. ⚠️ **분모가 0 이면 서버가 바로 `rate: null` 을 주는데**,
+ * 그걸 그대로 `{rate}%` 로 씩 **「%」만 그려진다** — 2026-10-30 운용 화면에
+ * 「% · 0/0」이 그려지고 있었다.
+ *
+ * ★ **`0%` 로 메꾸지 않는다.** 「아무도 동의하지 않았다」와 「물어볼 사람이
+ *   없다」는 다른 상황이고, 담당자가 할 일도 다르다.
+ */
+function rateText(rate: number | null | undefined): string {
+  return rate === null || rate === undefined ? '대상 없음' : `${rate}%`
+}
+
 /* ── 약관 ── */
 
 
@@ -517,17 +529,7 @@ function Content() {
             void run(
               `'${t.title}' ${t.version}을(를) 치웠습니다. 앞으로 앱 가입 화면에 표시되지 않습니다.`,
               `'${t.title}'을(를) 치우지 못했습니다.`,
-              () =>
-                deleteTerms(t.id).catch((e: unknown) => {
-                  /* ⚠️ **배포 전 임시 처리**(2026-10-30 시점). 서버에 이 경로가 아직 없어
-                       404 가 오고, 게이트웨이 문장을 그대로 띄우면 담당자가 할 수 있는 일이
-                       없다. ★ 배포되면 404 는 「그 약관이 이미 없다」는 뜻이 되므로
-                       이 가지를 걷어낸다. */
-                  if (e instanceof ApiError && e.status === 404) {
-                    throw new ApiError(404, e.code, '약관 치우기는 지금 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.')
-                  }
-                  throw e
-                }),
+              () => deleteTerms(t.id),
             ).then((ok) => ok && setDelTerms(null))
           }}
           onClose={() => {
@@ -659,7 +661,7 @@ function Content() {
           </div>
           {usage ? (
             <>
-              <div className="v">{usage.studentSignupRate}%</div>
+              <div className="v">{rateText(usage.studentSignupRate)}</div>
               <div className="d">
                 재원생 {usage.enrolledStudents}명 중 {usage.studentAccounts}명
                 {usage.pendingStudents > 0 && ` · 승인 대기 ${usage.pendingStudents}`}
@@ -681,7 +683,7 @@ function Content() {
           {/* 푸시 수신 동의는 약관 코드 PUSH 의 동의율이다. 분모는 활성 앱 계정(학생 + 학부모) */}
           {pushTerms ? (
             <>
-              <div className="v">{pushTerms.rate}%</div>
+              <div className="v">{rateText(pushTerms.rate)}</div>
               <div className="d">
                 앱 계정 {pushTerms.targetAccounts}개 중 {pushTerms.agreedAccounts}개 · 미동의자는 알림톡으로
               </div>
@@ -1009,14 +1011,14 @@ function Content() {
                       u.effectiveAccounts !== undefined ? u.agreedAccounts - u.effectiveAccounts : 0
                     return (
                       <span style={{ fontSize: 12.5, textAlign: 'right' }}>
-                        <b>{u.rate}%</b>
+                        <b>{rateText(u.rate)}</b>
                         <span style={{ color: 'var(--muted)' }}>
                           {' '}
                           · {u.agreedAccounts}/{u.targetAccounts}
                         </span>
                         {expired > 0 && (
                           <div style={{ fontSize: 11.5, color: 'var(--red)', marginTop: 2 }}>
-                            유효 {u.effectiveRate ?? 0}% · {expired}명은 다시 동의가 필요합니다
+                            유효 {rateText(u.effectiveRate)} · {expired}명은 다시 동의가 필요합니다
                           </div>
                         )}
                       </span>
