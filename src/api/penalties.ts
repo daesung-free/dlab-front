@@ -219,12 +219,27 @@ export function deletePenaltyItem(itemId: number): Promise<void> {
 
 /* ─────────── 자동 부여 규칙 (/penalty-rules) ─────────── */
 
-export type PenaltyTriggerType = 'ATTENDANCE' | 'DAILY_ROUTINE' | 'REGULAR_SCHEDULE'
+export type PenaltyTriggerType = 'ATTENDANCE' | 'DAILY_ROUTINE' | 'REGULAR_SCHEDULE' | 'APPROVAL'
 
+/**
+ * 어디서 자동 부여가 시작되는가.
+ *
+ * ★ **`APPROVAL` 은 2026-10-30 서버 배포로 늘어난 값이다** — 사유 신청이 승인되면
+ *   벌점이 붙는다(규칙을 켠 뒤부터).
+ *
+ * ⚠️ **이 상수는 선택지를 만드는 데 쓰인다**(`PenaltyManage` 의 규칙 추가 모달).
+ *   서버가 값을 더했는데 여기 없으면 **그 값으로 거를 수 없어 건수가 화면에서 사라진다**
+ *   — 0건으로 보이는 게 아니라 **고를 수 없어** 안 보이므로 아무도 이상해하지 않는다.
+ *   수정 이력의 업무 영역이 그래서 「반」 49건을 못 보고 있었다.
+ *
+ * ★ 목록 경로가 열리면 서버에서 받아 갈아끼운다 — 상수는 반드시 뒤처진다.
+ *   `docs/SCREEN_CONTRACT.md` 2-11 참고.
+ */
 export const PENALTY_TRIGGER_LABEL: Record<PenaltyTriggerType, string> = {
   ATTENDANCE: '출결',
   DAILY_ROUTINE: '데일리 루틴',
   REGULAR_SCHEDULE: '정기 일정',
+  APPROVAL: '사유 신청 승인',
 }
 
 export interface PenaltyRuleRow {
